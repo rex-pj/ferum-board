@@ -54,9 +54,19 @@ impl MigrationTrait for Migration {
                             .primary_key()
                             .extra("DEFAULT gen_random_uuid()"),
                     )
-                    .col(ColumnDef::new(Users::Username).text().not_null().unique_key())
+                    .col(
+                        ColumnDef::new(Users::Username)
+                            .text()
+                            .not_null()
+                            .unique_key(),
+                    )
                     .col(ColumnDef::new(Users::Email).text().not_null().unique_key())
-                    .col(ColumnDef::new(Users::IsEmailVerified).boolean().not_null().default(false))
+                    .col(
+                        ColumnDef::new(Users::IsEmailVerified)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
                     .col(ColumnDef::new(Users::DisplayName).text().null())
                     .col(ColumnDef::new(Users::PasswordHash).text().null())
                     .col(
@@ -71,27 +81,82 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .extra("DEFAULT 'new'"),
                     )
-                    .col(ColumnDef::new(Users::IsGlobalMod).boolean().not_null().default(false))
-                    .col(ColumnDef::new(Users::TrustScore).integer().not_null().default(0))
-                    .col(ColumnDef::new(Users::PostCount).integer().not_null().default(0))
-                    .col(ColumnDef::new(Users::DaysVisited).integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(Users::IsGlobalMod)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
+                        ColumnDef::new(Users::TrustScore)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Users::PostCount)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Users::DaysVisited)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(Users::Bio).text().null())
                     .col(ColumnDef::new(Users::Website).text().null())
-                    .col(ColumnDef::new(Users::IsBanned).boolean().not_null().default(false))
-                    .col(ColumnDef::new(Users::BannedUntil).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Users::IsBanned)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
+                        ColumnDef::new(Users::BannedUntil)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(ColumnDef::new(Users::BanReason).text().null())
-                    .col(ColumnDef::new(Users::WarnCount).integer().not_null().default(0))
-                    .col(ColumnDef::new(Users::FailedLoginCount).integer().not_null().default(0))
-                    .col(ColumnDef::new(Users::LockedUntil).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Users::WarnCount)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Users::FailedLoginCount)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Users::LockedUntil)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(Users::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null()
                             .extra("DEFAULT now()"),
                     )
-                    .col(ColumnDef::new(Users::UpdatedAt).timestamp_with_time_zone().null())
-                    .col(ColumnDef::new(Users::DeletedAt).timestamp_with_time_zone().null())
-                    .col(ColumnDef::new(Users::LastSeenAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Users::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(Users::DeletedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(Users::LastSeenAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await

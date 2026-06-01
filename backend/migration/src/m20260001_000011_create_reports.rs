@@ -55,7 +55,11 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Reports::ModeratorNotes).text().null())
                     .col(ColumnDef::new(Reports::ResolvedById).uuid().null())
-                    .col(ColumnDef::new(Reports::ResolvedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Reports::ResolvedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(Reports::CreatedAt)
                             .timestamp_with_time_zone()

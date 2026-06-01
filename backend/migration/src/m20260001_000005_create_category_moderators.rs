@@ -36,7 +36,11 @@ impl MigrationTrait for Migration {
                             .primary_key()
                             .extra("DEFAULT gen_random_uuid()"),
                     )
-                    .col(ColumnDef::new(CategoryModerators::CategoryId).uuid().not_null())
+                    .col(
+                        ColumnDef::new(CategoryModerators::CategoryId)
+                            .uuid()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(CategoryModerators::UserId).uuid().not_null())
                     .col(
                         ColumnDef::new(CategoryModerators::AssignedAt)
@@ -44,7 +48,11 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .extra("DEFAULT now()"),
                     )
-                    .col(ColumnDef::new(CategoryModerators::AssignedById).uuid().null())
+                    .col(
+                        ColumnDef::new(CategoryModerators::AssignedById)
+                            .uuid()
+                            .null(),
+                    )
                     .index(
                         Index::create()
                             .name("uq_cat_mods_category_user")
@@ -90,7 +98,12 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(CategoryModerators::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(CategoryModerators::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await
     }
 }

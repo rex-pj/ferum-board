@@ -44,9 +44,22 @@ impl MigrationTrait for Migration {
                             .custom(NotificationKindEnum::Type)
                             .not_null(),
                     )
-                    .col(ColumnDef::new(Notifications::Payload).json_binary().not_null())
-                    .col(ColumnDef::new(Notifications::IsRead).boolean().not_null().default(false))
-                    .col(ColumnDef::new(Notifications::ReadAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Notifications::Payload)
+                            .json_binary()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Notifications::IsRead)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
+                        ColumnDef::new(Notifications::ReadAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(Notifications::CreatedAt)
                             .timestamp_with_time_zone()
@@ -79,7 +92,12 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(Notifications::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(Notifications::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await
     }
 }

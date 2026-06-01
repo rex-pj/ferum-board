@@ -49,12 +49,30 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Posts::ParentId).uuid().null())
                     .col(ColumnDef::new(Posts::ContentMd).text().not_null())
                     .col(ColumnDef::new(Posts::ContentHtml).text().not_null())
-                    .col(ColumnDef::new(Posts::IsDeleted).boolean().not_null().default(false))
-                    .col(ColumnDef::new(Posts::DeletedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Posts::IsDeleted)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
+                        ColumnDef::new(Posts::DeletedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(ColumnDef::new(Posts::DeletedById).uuid().null())
-                    .col(ColumnDef::new(Posts::EditedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Posts::EditedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(ColumnDef::new(Posts::EditedById).uuid().null())
-                    .col(ColumnDef::new(Posts::EditCount).integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(Posts::EditCount)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(
                         ColumnDef::new(Posts::CreatedAt)
                             .timestamp_with_time_zone()

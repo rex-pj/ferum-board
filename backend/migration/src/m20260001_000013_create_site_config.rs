@@ -27,7 +27,12 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(SiteConfig::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(SiteConfig::Key).text().not_null().primary_key())
+                    .col(
+                        ColumnDef::new(SiteConfig::Key)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
                     .col(ColumnDef::new(SiteConfig::Value).text().not_null())
                     .col(
                         ColumnDef::new(SiteConfig::UpdatedAt)
@@ -69,7 +74,12 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(SiteConfig::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(SiteConfig::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await
     }
 }

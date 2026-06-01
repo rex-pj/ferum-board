@@ -44,14 +44,22 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(UserAvatars::FileKey).string_len(512).not_null())
+                    .col(
+                        ColumnDef::new(UserAvatars::FileKey)
+                            .string_len(512)
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(UserAvatars::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null()
                             .extra("DEFAULT now()"),
                     )
-                    .col(ColumnDef::new(UserAvatars::UpdatedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(UserAvatars::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_user_avatars_user_id")
@@ -81,14 +89,22 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(ThreadThumbnails::FileKey).string_len(512).not_null())
+                    .col(
+                        ColumnDef::new(ThreadThumbnails::FileKey)
+                            .string_len(512)
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(ThreadThumbnails::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null()
                             .extra("DEFAULT now()"),
                     )
-                    .col(ColumnDef::new(ThreadThumbnails::UpdatedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(ThreadThumbnails::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_thread_thumbnails_thread_id")
@@ -136,10 +152,20 @@ impl MigrationTrait for Migration {
             )
             .await?;
         manager
-            .drop_table(Table::drop().table(ThreadThumbnails::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(ThreadThumbnails::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
-            .drop_table(Table::drop().table(UserAvatars::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(UserAvatars::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         Ok(())
     }

@@ -47,16 +47,29 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(Webhooks::Secret).text().null())
-                    .col(ColumnDef::new(Webhooks::IsActive).boolean().not_null().default(true))
+                    .col(
+                        ColumnDef::new(Webhooks::IsActive)
+                            .boolean()
+                            .not_null()
+                            .default(true),
+                    )
                     .col(
                         ColumnDef::new(Webhooks::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null()
                             .extra("DEFAULT now()"),
                     )
-                    .col(ColumnDef::new(Webhooks::UpdatedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Webhooks::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(ColumnDef::new(Webhooks::CreatedById).uuid().null())
-                    .col(ColumnDef::new(Webhooks::LastTriggeredAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Webhooks::LastTriggeredAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(Webhooks::FailureCount)
                             .integer()

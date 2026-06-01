@@ -1,0 +1,16 @@
+pub mod audit_logs;
+pub mod bookmarks;
+pub mod categories;
+pub mod category_moderators;
+pub mod notifications;
+pub mod posts;
+pub mod reactions;
+pub mod reports;
+pub mod site_config;
+pub mod stored_files;
+pub mod thread_thumbnails;
+pub mod threads;
+pub mod user_avatars;
+pub mod user_preferences;
+pub mod users;
+pub mod webhooks;

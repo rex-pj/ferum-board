@@ -14,6 +14,24 @@
 	let { data }: { data: any } = $props();
 
 	const groups: ForumIndexGroup[] = $derived(data.groups ?? []);
+
+	// Track expanded/collapsed state for each category using plain object
+	let expandedCategories: Record<string, boolean> = $state({});
+
+	// Initialize all categories as expanded by default
+	$effect(() => {
+		if (groups.length > 0) {
+			groups.forEach((group) => {
+				if (!(group.id in expandedCategories)) {
+					expandedCategories[group.id] = true;
+				}
+			});
+		}
+	});
+
+	function toggleCategory(categoryId: string) {
+		expandedCategories[categoryId] = !expandedCategories[categoryId];
+	}
 </script>
 
 <div class="fr-content-layout">
@@ -40,8 +58,21 @@
 			{#each groups as group}
 				<section class="fr-forum-group mb-4">
 					<!-- Category header row -->
-					<div class="fr-forum-group-header">
-						<div class="d-flex align-items-center gap-2 min-w-0">
+					<button
+						type="button"
+						class="fr-forum-group-header"
+						onclick={() => toggleCategory(group.id)}
+						aria-expanded={expandedCategories[group.id] ?? true}
+					>
+						<div class="d-flex align-items-center gap-2 min-w-0 flex-grow-1">
+							<span class="fr-collapse-indicator flex-shrink-0">
+								<i
+									class="fa-solid fa-chevron-down"
+									style="transition: transform 0.2s ease; transform: {expandedCategories[group.id] ?? true
+										? 'rotate(0deg)'
+										: 'rotate(-90deg)'};"
+								></i>
+							</span>
 							{#if group.color}
 								<span
 									class="rounded-circle flex-shrink-0"
@@ -50,52 +81,54 @@
 							{:else}
 								<i class="fa-solid fa-layer-group" style="font-size:0.875rem; opacity:0.5; flex-shrink:0;"></i>
 							{/if}
-							<a href={ROUTES.CATEGORY(group.slug)} class="fr-forum-group-title text-truncate">
+							<span class="fr-forum-group-title text-truncate" style="color: inherit; text-decoration: none;">
 								{group.name}
-							</a>
+							</span>
 						</div>
-						<span class="fr-forum-group-count flex-shrink-0">
+						<span class="fr-forum-group-count flex-shrink-0" style="color: inherit;">
 							<i class="fa-regular fa-comment me-1"></i>{group.thread_count.toLocaleString()}
 						</span>
-					</div>
+					</button>
 
-					{#if group.description}
-						<p class="fr-forum-group-desc">{group.description}</p>
-					{/if}
+					{#if expandedCategories[group.id] ?? true}
+						{#if group.description}
+							<p class="fr-forum-group-desc">{group.description}</p>
+						{/if}
 
-					<!-- Subcategory chips -->
-					{#if group.subcategories.length > 0}
-						<div class="fr-subcategory-row">
-							{#each group.subcategories as sub}
-								<a href={ROUTES.CATEGORY(sub.slug)} class="fr-subcategory-chip">
-									{#if sub.color}
-										<span
-											class="rounded-circle flex-shrink-0"
-											style="width:7px; height:7px; background:{sub.color};"
-										></span>
-									{/if}
-									<span class="text-truncate">{sub.name}</span>
-									<span class="fr-sub-count">{sub.thread_count.toLocaleString()}</span>
+						<!-- Subcategory chips -->
+						{#if group.subcategories.length > 0}
+							<div class="fr-subcategory-row">
+								{#each group.subcategories as sub}
+									<a href={ROUTES.CATEGORY(sub.slug)} class="fr-subcategory-chip">
+										{#if sub.color}
+											<span
+												class="rounded-circle flex-shrink-0"
+												style="width:7px; height:7px; background:{sub.color};"
+											></span>
+										{/if}
+										<span class="text-truncate">{sub.name}</span>
+										<span class="fr-sub-count">{sub.thread_count.toLocaleString()}</span>
+									</a>
+								{/each}
+							</div>
+						{/if}
+
+						<!-- Recent threads (max 5) -->
+						{#if group.recent_threads.length > 0}
+							<div class="fr-feed mt-2">
+								{#each group.recent_threads as thread}
+									<ThreadCard {thread} />
+								{/each}
+							</div>
+							<div class="fr-forum-group-footer">
+								<a href={ROUTES.CATEGORY(group.slug)} class="fr-view-all-link">
+									View all threads in {group.name}
+									<i class="fa-solid fa-arrow-right ms-1" style="font-size:0.7rem;"></i>
 								</a>
-							{/each}
-						</div>
-					{/if}
-
-					<!-- Recent threads (max 5) -->
-					{#if group.recent_threads.length > 0}
-						<div class="fr-feed mt-2">
-							{#each group.recent_threads as thread}
-								<ThreadCard {thread} />
-							{/each}
-						</div>
-						<div class="fr-forum-group-footer">
-							<a href={ROUTES.CATEGORY(group.slug)} class="fr-view-all-link">
-								View all threads in {group.name}
-								<i class="fa-solid fa-arrow-right ms-1" style="font-size:0.7rem;"></i>
-							</a>
-						</div>
-					{:else}
-						<p class="fr-forum-group-empty">No threads yet.</p>
+							</div>
+						{:else}
+							<p class="fr-forum-group-empty">No threads yet.</p>
+						{/if}
 					{/if}
 				</section>
 			{/each}
@@ -164,8 +197,30 @@
 		gap: 0.75rem;
 		padding: 0.75rem 1rem;
 		background: var(--bs-tertiary-bg);
+		border: none;
 		border-bottom: 1px solid var(--bs-border-color);
 		min-width: 0;
+		width: 100%;
+		cursor: pointer;
+		text-align: left;
+		transition: background-color 0.15s ease;
+	}
+
+	.fr-forum-group-header:hover {
+		background: color-mix(in srgb, var(--bs-tertiary-bg) 95%, var(--bs-primary) 5%);
+	}
+
+	.fr-forum-group-header:active {
+		background: color-mix(in srgb, var(--bs-tertiary-bg) 90%, var(--bs-primary) 10%);
+	}
+
+	.fr-collapse-indicator {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		color: var(--bs-secondary-color);
 	}
 
 	.fr-forum-group-title {
@@ -176,7 +231,7 @@
 	}
 
 	.fr-forum-group-title:hover {
-		text-decoration: underline;
+		text-decoration: none;
 	}
 
 	.fr-forum-group-count {

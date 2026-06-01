@@ -60,23 +60,59 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .extra("DEFAULT 'open'"),
                     )
-                    .col(ColumnDef::new(Threads::IsPinned).boolean().not_null().default(false))
-                    .col(ColumnDef::new(Threads::IsSolved).boolean().not_null().default(false))
+                    .col(
+                        ColumnDef::new(Threads::IsPinned)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
+                    .col(
+                        ColumnDef::new(Threads::IsSolved)
+                            .boolean()
+                            .not_null()
+                            .default(false),
+                    )
                     // BestAnswerId FK added in migration 007 after posts table exists
                     .col(ColumnDef::new(Threads::BestAnswerId).uuid().null())
-                    .col(ColumnDef::new(Threads::ViewCount).integer().not_null().default(0))
-                    .col(ColumnDef::new(Threads::ReplyCount).integer().not_null().default(0))
-                    .col(ColumnDef::new(Threads::LastPostAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Threads::ViewCount)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Threads::ReplyCount)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Threads::LastPostAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(Threads::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null()
                             .extra("DEFAULT now()"),
                     )
-                    .col(ColumnDef::new(Threads::UpdatedAt).timestamp_with_time_zone().null())
-                    .col(ColumnDef::new(Threads::DeletedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Threads::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(Threads::DeletedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(ColumnDef::new(Threads::DeletedById).uuid().null())
-                    .col(ColumnDef::new(Threads::SearchVector).custom(Alias::new("tsvector")).null())
+                    .col(
+                        ColumnDef::new(Threads::SearchVector)
+                            .custom(Alias::new("tsvector"))
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(Threads::CustomFields)
                             .json_binary()

@@ -1,5 +1,5 @@
-use sea_orm_migration::prelude::*;
 use sea_orm_migration::prelude::extension::postgres::Type;
+use sea_orm_migration::prelude::*;
 
 use crate::enums::{
     notification_kind::NotificationKindEnum, post_policy::PostPolicyEnum,
@@ -23,7 +23,11 @@ impl MigrationTrait for Migration {
             .create_type(
                 Type::create()
                     .as_enum(UserRoleEnum::Type)
-                    .values([UserRoleEnum::Member, UserRoleEnum::Moderator, UserRoleEnum::Admin])
+                    .values([
+                        UserRoleEnum::Member,
+                        UserRoleEnum::Moderator,
+                        UserRoleEnum::Admin,
+                    ])
                     .to_owned(),
             )
             .await?;
@@ -47,7 +51,11 @@ impl MigrationTrait for Migration {
             .create_type(
                 Type::create()
                     .as_enum(ThreadStatusEnum::Type)
-                    .values([ThreadStatusEnum::Open, ThreadStatusEnum::Locked, ThreadStatusEnum::Deleted])
+                    .values([
+                        ThreadStatusEnum::Open,
+                        ThreadStatusEnum::Locked,
+                        ThreadStatusEnum::Deleted,
+                    ])
                     .to_owned(),
             )
             .await?;
@@ -127,25 +135,60 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_type(Type::drop().name(PostPolicyEnum::Type).if_exists().to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(PostPolicyEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
-            .drop_type(Type::drop().name(ViewPolicyEnum::Type).if_exists().to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(ViewPolicyEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
-            .drop_type(Type::drop().name(ReportStatusEnum::Type).if_exists().to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(ReportStatusEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
-            .drop_type(Type::drop().name(NotificationKindEnum::Type).if_exists().to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(NotificationKindEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
-            .drop_type(Type::drop().name(ReactionKindEnum::Type).if_exists().to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(ReactionKindEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
-            .drop_type(Type::drop().name(ThreadStatusEnum::Type).if_exists().to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(ThreadStatusEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
-            .drop_type(Type::drop().name(TrustLevelEnum::Type).if_exists().to_owned())
+            .drop_type(
+                Type::drop()
+                    .name(TrustLevelEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
             .drop_type(Type::drop().name(UserRoleEnum::Type).if_exists().to_owned())

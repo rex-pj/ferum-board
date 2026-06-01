@@ -31,7 +31,12 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(UserPreferences::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(UserPreferences::UserId).uuid().not_null().primary_key())
+                    .col(
+                        ColumnDef::new(UserPreferences::UserId)
+                            .uuid()
+                            .not_null()
+                            .primary_key(),
+                    )
                     .col(
                         ColumnDef::new(UserPreferences::Theme)
                             .text()
@@ -68,7 +73,11 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .extra("DEFAULT '{}'"),
                     )
-                    .col(ColumnDef::new(UserPreferences::UpdatedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(UserPreferences::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_user_preferences_user_id")
@@ -83,7 +92,12 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(UserPreferences::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(UserPreferences::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await
     }
 }

@@ -1,3 +1,10 @@
+# ─── sccache ──────────────────────────────────────────────────────────────────
+# Caches compiled artifacts across cargo clean / CI runs.
+# Install: winget install Mozilla.sccache
+# Uncomment the line below AFTER installing sccache:
+# [build]
+# rustc-wrapper = "sccache"
+
 # ─── Fast linker ─────────────────────────────────────────────────────────────
 # rust-lld ships with every rustup toolchain (≥ 1.70) — no extra install needed.
 # It replaces the default MSVC link.exe for the link step, which is typically

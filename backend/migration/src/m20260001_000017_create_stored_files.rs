@@ -36,9 +36,18 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(StoredFiles::ContentType).string_len(128).not_null())
+                    .col(
+                        ColumnDef::new(StoredFiles::ContentType)
+                            .string_len(128)
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(StoredFiles::Data).binary().not_null())
-                    .col(ColumnDef::new(StoredFiles::Size).big_integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(StoredFiles::Size)
+                            .big_integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(
                         ColumnDef::new(StoredFiles::RefCount)
                             .integer()
@@ -66,7 +75,12 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(StoredFiles::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(StoredFiles::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await
     }
 }

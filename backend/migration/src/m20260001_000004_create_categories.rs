@@ -45,10 +45,20 @@ impl MigrationTrait for Migration {
                             .extra("DEFAULT gen_random_uuid()"),
                     )
                     .col(ColumnDef::new(Categories::ParentId).uuid().null())
-                    .col(ColumnDef::new(Categories::Slug).text().not_null().unique_key())
+                    .col(
+                        ColumnDef::new(Categories::Slug)
+                            .text()
+                            .not_null()
+                            .unique_key(),
+                    )
                     .col(ColumnDef::new(Categories::Name).text().not_null())
                     .col(ColumnDef::new(Categories::Description).text().null())
-                    .col(ColumnDef::new(Categories::Position).integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(Categories::Position)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(
                         ColumnDef::new(Categories::ViewPolicy)
                             .custom(ViewPolicyEnum::Type)
@@ -68,7 +78,11 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .extra("DEFAULT now()"),
                     )
-                    .col(ColumnDef::new(Categories::UpdatedAt).timestamp_with_time_zone().null())
+                    .col(
+                        ColumnDef::new(Categories::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(ColumnDef::new(Categories::CreatedById).uuid().null())
                     .col(ColumnDef::new(Categories::UpdatedById).uuid().null())
                     .foreign_key(
@@ -99,7 +113,12 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(Categories::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(Categories::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await
     }
 }

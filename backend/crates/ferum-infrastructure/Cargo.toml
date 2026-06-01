@@ -1,0 +1,54 @@
+[package]
+name = "ferum-infrastructure"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+s3 = ["dep:aws-sdk-s3", "dep:aws-config", "dep:aws-credential-types"]
+meilisearch = ["dep:meilisearch-sdk"]
+default = []
+
+[dependencies]
+ferum-domain = { path = "../ferum-domain" }
+ferum-application = { path = "../ferum-application" }
+
+async-trait = "0.1"
+axum = { version = "0.8", features = ["macros", "multipart"] }
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dashmap = "6"
+hex = "0.4"
+hmac = "0.12"
+mime = "0.3"
+pulldown-cmark = { version = "0.13", features = ["html"] }
+ammonia = "4"
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sea-orm = { version = "1", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+    "with-uuid",
+    "with-chrono",
+    "with-json",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+slug = "0.1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4", "serde"] }
+bcrypt = "0.15"
+jsonwebtoken = "9"
+lettre = { version = "0.11", default-features = false, features = ["tokio1", "tokio1-rustls-tls", "smtp-transport", "builder"] }
+
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+aws-credential-types = { version = "1", optional = true }
+meilisearch-sdk = { version = "0.28", optional = true }
+anyhow = "1.0.102"
