@@ -1,0 +1,13 @@
+# ─── Fast linker ─────────────────────────────────────────────────────────────
+# rust-lld ships with every rustup toolchain (≥ 1.70) — no extra install needed.
+# It replaces the default MSVC link.exe for the link step, which is typically
+# the longest single phase in a large Rust build.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+
+# On Linux, use mold (fastest) if available, otherwise lld.
+# Install: apt install mold  OR  apt install lld
+# Comment out if neither is installed on the build machine.
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]

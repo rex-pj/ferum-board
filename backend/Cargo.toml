@@ -1,0 +1,128 @@
+[workspace]
+members = [".", "migration"]
+resolver = "2"
+
+[package]
+name = "ferum-board"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ferum-board"
+path = "src/main.rs"
+
+[features]
+s3 = ["dep:aws-sdk-s3", "dep:aws-config", "dep:aws-credential-types"]
+meilisearch = ["dep:meilisearch-sdk"]
+# Dev:  cargo run                                  (local-disk + Postgres FTS)
+# Prod: cargo build --release --features s3,meilisearch
+default = []
+
+[dependencies]
+# Web framework
+axum = { version = "0.8", features = ["macros", "multipart"] }
+tower = { version = "0.5" }
+tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
+
+# Database
+sea-orm = { version = "1", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+    "with-uuid",
+    "with-chrono",
+    "with-json",
+] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Validation
+validator = { version = "0.19", features = ["derive"] }
+
+# Auth
+jsonwebtoken = "9"
+bcrypt = "0.15"
+
+# Email
+lettre = { version = "0.11", features = ["tokio1", "tokio1-rustls-tls", "smtp-transport", "builder"] }
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# IDs + time
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Config
+config = "0.14"
+dotenvy = "0.15"
+
+# Async trait
+async-trait = "0.1"
+
+# HTML sanitization
+ammonia = "4"
+
+# Markdown
+pulldown-cmark = { version = "0.13", features = ["html"] }
+
+# File handling
+bytes = "1"
+mime = "0.3"
+tokio-util = { version = "0.7", features = ["io"] }
+
+# In-memory fallbacks
+dashmap = "6"
+
+# Async streams
+tokio-stream = { version = "0.1", features = ["sync"] }
+
+# HTTP client (webhook dispatch)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# HMAC-SHA256 (webhook signatures)
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+
+# Redis
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# S3-compatible object storage (optional — enabled by the "s3" feature)
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+aws-credential-types = { version = "1", optional = true }
+
+# Meilisearch (optional — enabled by the "meilisearch" feature)
+meilisearch-sdk = { version = "0.28", optional = true }
+
+# String utilities
+slug = "0.1"
+
+# Regex (used for image extraction from HTML)
+regex = "1"
+
+[profile.dev]
+# Minimal debug info keeps the linker fast; backtraces still work.
+debug = "line-tables-only"
+# Raise codegen parallelism — the default is already 256 in dev, but
+# being explicit prevents it from being inherited as 1 from release.
+codegen-units = 256
+
+# Compile every *dependency* at opt-level 1 instead of 0.
+# This cuts dep compile time by ~30-50% while keeping your own code
+# at opt-level 0 for fast incremental rebuilds.
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
