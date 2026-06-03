@@ -105,7 +105,7 @@ impl PostUseCase {
                 post.author_username = Some(user.username.clone());
                 post.author_display_name = user.display_name.clone();
                 post.author_avatar_url = user.avatar_url.clone();
-                post.author_role = Some(format!("{:?}", user.role).to_lowercase());
+                post.author_role = user.primary_role_slug.clone();
             }
             post.reactions = reaction_counts.get(&post.id).cloned().unwrap_or_default();
             post.my_reactions = my_reactions.get(&post.id).cloned().unwrap_or_default();
@@ -194,7 +194,12 @@ impl PostUseCase {
             return Err(AppError::unprocessable("Post content exceeds 100 KB limit"));
         }
         let post = self.posts.find_by_id(id).await?.ok_or(AppError::NotFound)?;
-        PermissionChecker::can_edit_post(actor, &post)?;
+        let thread = self
+            .threads
+            .find_by_id(post.thread_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        PermissionChecker::can_edit_post(actor, &post, thread.category_id)?;
 
         let content_html = render_content(&content_md).await?;
         self.posts
@@ -204,7 +209,12 @@ impl PostUseCase {
 
     pub async fn delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         let post = self.posts.find_by_id(id).await?.ok_or(AppError::NotFound)?;
-        PermissionChecker::can_delete_post(actor, &post)?;
+        let thread = self
+            .threads
+            .find_by_id(post.thread_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        PermissionChecker::can_delete_post(actor, &post, thread.category_id)?;
         self.posts.soft_delete(id, actor.id).await?;
 
         self.threads

@@ -83,8 +83,7 @@
 				<span>
 					by <a
 						href={ROUTES.USER_PROFILE(thread.author.username)}
-						class="fw-semibold text-decoration-none"
-						style="color: inherit;"
+						class="fw-semibold text-decoration-none author-link"
 					>{thread.author.display_name ?? thread.author.username}</a>
 				</span>
 			{/if}
@@ -107,5 +106,9 @@
 		border-radius: 4px;
 		flex-shrink: 0;
 		margin-top: 2px;
+	}
+
+	.author-link {
+		color: inherit;
 	}
 </style>

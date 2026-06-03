@@ -6,14 +6,17 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::constants::{JWT_EXPIRY_SECS, REFRESH_TOKEN_TTL_SECS};
-use crate::ports::{
-    AccessTokenClaims, BulkSeedService, CacheService, PasswordHasher, TokenService,
-};
+use crate::ports::{AccessTokenClaims, BulkSeedService, CacheService, PasswordHasher, TokenService};
 use crate::shared::AppError;
-use ferum_domain::models::user::{TrustLevel, User, UserRole};
+use ferum_domain::models::user::{TrustLevel, User};
 use ferum_domain::repositories::{NewUser, SiteConfigRepository, UserRepository};
+use ferum_domain::repositories::role_repository::RoleRepository;
+use ferum_domain::repositories::user_role_repository::UserRoleRepository;
+
 pub struct SetupUseCase {
     users: Arc<dyn UserRepository>,
+    roles: Arc<dyn RoleRepository>,
+    user_roles: Arc<dyn UserRoleRepository>,
     hasher: Arc<dyn PasswordHasher>,
     tokens: Arc<dyn TokenService>,
     cache: Arc<dyn CacheService>,
@@ -25,6 +28,8 @@ pub struct SetupUseCase {
 impl SetupUseCase {
     pub fn new(
         users: Arc<dyn UserRepository>,
+        roles: Arc<dyn RoleRepository>,
+        user_roles: Arc<dyn UserRoleRepository>,
         hasher: Arc<dyn PasswordHasher>,
         tokens: Arc<dyn TokenService>,
         cache: Arc<dyn CacheService>,
@@ -33,6 +38,8 @@ impl SetupUseCase {
     ) -> Self {
         Self {
             users,
+            roles,
+            user_roles,
             hasher,
             tokens,
             cache,
@@ -50,8 +57,6 @@ impl SetupUseCase {
         let _lock = self.setup_lock.lock().await;
 
         if !self.needs_setup().await? {
-            // Return 404 so the endpoint reveals nothing about the system state
-            // to an attacker who didn't know setup was already done.
             return Err(AppError::NotFound);
         }
 
@@ -61,19 +66,12 @@ impl SetupUseCase {
             ));
         }
         if !crate::validators::validate_password(&cmd.admin_password) {
-            return Err(AppError::unprocessable(
-                crate::validators::PASSWORD_REQUIREMENTS,
-            ));
+            return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
         }
         if self.users.find_by_email(&cmd.admin_email).await?.is_some() {
             return Err(AppError::Conflict("email_taken".to_string()));
         }
-        if self
-            .users
-            .find_by_username(&cmd.admin_username)
-            .await?
-            .is_some()
-        {
+        if self.users.find_by_username(&cmd.admin_username).await?.is_some() {
             return Err(AppError::Conflict("username_taken".to_string()));
         }
 
@@ -84,43 +82,35 @@ impl SetupUseCase {
                 username: cmd.admin_username,
                 email: cmd.admin_email,
                 password_hash: Some(hash),
-                role: UserRole::Admin,
             })
             .await?;
 
         self.users.set_email_verified(user.id).await?;
-        self.users
-            .set_trust_level(user.id, TrustLevel::Member)
+        self.users.set_trust_level(user.id, TrustLevel::Member).await?;
+
+        // Assign admin role via user_roles (the RBAC way)
+        let admin_role = self
+            .roles
+            .find_by_slug("admin")
+            .await?
+            .ok_or_else(|| AppError::internal("admin role not found — run migrations first".to_string()))?;
+
+        self.user_roles
+            .assign(user.id, admin_role.id, None, user.id, None)
             .await?;
 
         let user = self.users.find_by_id(user.id).await?.unwrap_or(user);
 
         if let Some(cfg) = cmd.config {
             let mut map = std::collections::HashMap::new();
-            if let Some(v) = cfg.site_name {
-                map.insert("site_name".to_string(), v);
-            }
-            if let Some(v) = cfg.site_tagline {
-                map.insert("site_tagline".to_string(), v);
-            }
-            if let Some(v) = cfg.primary_color {
-                map.insert("primary_color".to_string(), v);
-            }
-            if let Some(v) = cfg.registration_open {
-                map.insert("registration_open".to_string(), v.to_string());
-            }
-            if let Some(v) = cfg.smtp_host {
-                map.insert("smtp_host".to_string(), v);
-            }
-            if let Some(v) = cfg.smtp_port {
-                map.insert("smtp_port".to_string(), v.to_string());
-            }
-            if let Some(v) = cfg.smtp_user {
-                map.insert("smtp_user".to_string(), v);
-            }
-            if let Some(v) = cfg.smtp_pass {
-                map.insert("smtp_pass".to_string(), v);
-            }
+            if let Some(v) = cfg.site_name { map.insert("site_name".to_string(), v); }
+            if let Some(v) = cfg.site_tagline { map.insert("site_tagline".to_string(), v); }
+            if let Some(v) = cfg.primary_color { map.insert("primary_color".to_string(), v); }
+            if let Some(v) = cfg.registration_open { map.insert("registration_open".to_string(), v.to_string()); }
+            if let Some(v) = cfg.smtp_host { map.insert("smtp_host".to_string(), v); }
+            if let Some(v) = cfg.smtp_port { map.insert("smtp_port".to_string(), v.to_string()); }
+            if let Some(v) = cfg.smtp_user { map.insert("smtp_user".to_string(), v); }
+            if let Some(v) = cfg.smtp_pass { map.insert("smtp_pass".to_string(), v); }
             if !map.is_empty() {
                 self.site_config.set_many(&map).await?;
             }
@@ -130,12 +120,11 @@ impl SetupUseCase {
             self.bulk_seed.seed_bulk(user.id).await?;
         }
 
+        let trust_str = format!("{:?}", user.trust_level).to_lowercase();
         let claims = AccessTokenClaims {
             sub: user.id,
             username: user.username.clone(),
-            role: format!("{:?}", user.role).to_lowercase(),
-            trust_level: format!("{:?}", user.trust_level).to_lowercase(),
-            is_global_mod: user.is_global_mod,
+            trust_level: trust_str,
             is_banned: user.is_banned,
             banned_until: user.banned_until.map(|t| t.timestamp()),
             exp: (Utc::now() + chrono::Duration::seconds(JWT_EXPIRY_SECS as i64)).timestamp(),
@@ -150,11 +139,7 @@ impl SetupUseCase {
             )
             .await?;
 
-        Ok(SetupResult {
-            user,
-            access_token,
-            refresh_token,
-        })
+        Ok(SetupResult { user, access_token, refresh_token })
     }
 }
 

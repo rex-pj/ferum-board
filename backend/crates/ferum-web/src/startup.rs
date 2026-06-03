@@ -15,6 +15,7 @@ use ferum_application::usecases::moderation_usecase::ModerationUseCase;
 use ferum_application::usecases::notification_usecase::NotificationUseCase;
 use ferum_application::usecases::post_usecase::PostUseCase;
 use ferum_application::usecases::reaction_usecase::ReactionUseCase;
+use ferum_application::usecases::role_usecase::RoleUseCase;
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_application::usecases::setup_usecase::SetupUseCase;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
@@ -35,11 +36,13 @@ use ferum_infrastructure::{
     notification::{SseBroadcaster, SseNotificationBus},
     rate_limit::{InMemoryRateLimiter, NullRateLimiter, RedisRateLimiter},
     repositories::{
-        PgAuditLogRepository, PgBookmarkRepository, PgCategoryModeratorRepository,
-        PgCategoryRepository, PgNotificationRepository, PgPostRepository, PgReactionRepository,
-        PgReportRepository, PgSiteConfigRepository, PgStoredFileRepository, PgThreadRepository,
-        PgUserRepository, PgWebhookRepository,
+        PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository,
+        PgNotificationRepository, PgPermissionRepository, PgPostRepository,
+        PgReactionRepository, PgReportRepository, PgRoleRepository, PgSiteConfigRepository,
+        PgStoredFileRepository, PgThreadRepository, PgUserRepository, PgUserRoleRepository,
+        PgWebhookRepository,
     },
+    role_permission_cache::RolePermissionCache,
     search::PostgresFtsService,
     storage::DatabaseStorageService,
 };
@@ -91,7 +94,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let broadcaster = Arc::new(SseBroadcaster::new());
     let sse_bus: Arc<dyn NotificationBus> = Arc::new(SseNotificationBus::new(broadcaster.clone()));
 
-    // ─── Storage (declared early — needed by JobExecutor) ────────────────────
+    // ─── Storage ────────────────────────────────────────────────────────────
     #[cfg(feature = "s3")]
     let storage: Arc<dyn StorageService> = match &config.s3_endpoint {
         Some(endpoint) => {
@@ -101,35 +104,27 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             let bucket = config.s3_bucket.as_deref().unwrap_or("ferum-board");
             let cdn_base = config.cdn_base_url.as_deref().unwrap_or(endpoint);
             Arc::new(
-                S3StorageService::new(
-                    endpoint,
-                    access_key,
-                    secret_key,
-                    bucket,
-                    "us-east-1",
-                    cdn_base,
-                )
-                .await,
+                S3StorageService::new(endpoint, access_key, secret_key, bucket, "us-east-1", cdn_base)
+                    .await,
             )
         }
         None => {
-            tracing::info!(
-                "S3_ENDPOINT not set — using database storage (files stored in PostgreSQL)"
-            );
+            tracing::info!("S3_ENDPOINT not set — using database storage");
             Arc::new(DatabaseStorageService::new(pg_write.clone()))
         }
     };
     #[cfg(not(feature = "s3"))]
     let storage: Arc<dyn StorageService> = {
-        tracing::info!("S3 feature disabled — using database storage (files stored in PostgreSQL)");
+        tracing::info!("S3 feature disabled — using database storage");
         Arc::new(DatabaseStorageService::new(pg_write.clone()))
     };
 
-    // ─── Repositories (declared early — needed by JobExecutor) ───────────────
+    // ─── Repositories ────────────────────────────────────────────────────────
     let user_repo = Arc::new(PgUserRepository::new(pg_write.clone()));
+    let role_repo = Arc::new(PgRoleRepository::new(pg_write.clone()));
+    let permission_repo = Arc::new(PgPermissionRepository::new(pg_write.clone()));
+    let user_role_repo = Arc::new(PgUserRoleRepository::new(pg_write.clone()));
     let category_repo = Arc::new(PgCategoryRepository::new(pg_write.clone()));
-    let cat_mod_repo: Arc<dyn ferum_domain::repositories::CategoryModeratorRepository> =
-        Arc::new(PgCategoryModeratorRepository::new(pg_write.clone()));
     let thread_repo = Arc::new(PgThreadRepository::new(pg_write.clone()));
     let post_repo = Arc::new(PgPostRepository::new(pg_write.clone()));
     let reaction_repo = Arc::new(PgReactionRepository::new(pg_write.clone()));
@@ -141,16 +136,17 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let stored_file_repo: Arc<dyn ferum_domain::repositories::StoredFileRepository> =
         Arc::new(PgStoredFileRepository::new(pg_write.clone()));
 
+    // ─── RolePermissionCache (in-memory, loaded from DB after migrations) ────
+    let role_permission_cache = Arc::new(RolePermissionCache::new(pg_write.clone()));
+    role_permission_cache.load().await?;
+    tracing::info!("Role permission cache loaded");
+
     // ─── Search ──────────────────────────────────────────────────────────────
     #[cfg(feature = "meilisearch")]
     let search_svc: Arc<dyn SearchService> = match &config.meilisearch_url {
         Some(url) => {
             tracing::info!("MEILISEARCH_URL set — using Meilisearch");
-            Arc::new(MeilisearchService::new(
-                url,
-                config.meilisearch_key.as_deref(),
-                "threads",
-            ))
+            Arc::new(MeilisearchService::new(url, config.meilisearch_key.as_deref(), "threads"))
         }
         None => Arc::new(PostgresFtsService::new(pg_read.clone())),
     };
@@ -177,28 +173,17 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 .await
                 .map(|s| -> Arc<dyn CacheService> { Arc::new(s) })
                 .unwrap_or_else(|e| {
-                    tracing::warn!(
-                        "Redis cache connect failed ({}), falling back to in-memory",
-                        e
-                    );
+                    tracing::warn!("Redis cache connect failed ({}), falling back to in-memory", e);
                     Arc::new(InMemoryCacheService::new())
                 });
             let rate_limiter = RedisRateLimiter::new(url)
                 .await
                 .map(|s| -> Arc<dyn RateLimiter> { Arc::new(s) })
                 .unwrap_or_else(|e| {
-                    tracing::warn!(
-                        "Redis rate limiter connect failed ({}), falling back to in-memory",
-                        e
-                    );
+                    tracing::warn!("Redis rate limiter connect failed ({}), falling back to in-memory", e);
                     Arc::new(InMemoryRateLimiter::new())
                 });
-            (
-                cache,
-                rate_limiter,
-                Arc::new(InlineJobRunner::new(executor)),
-                sse_bus,
-            )
+            (cache, rate_limiter, Arc::new(InlineJobRunner::new(executor)), sse_bus)
         }
         None => {
             tracing::warn!("REDIS_URL not set — in-memory fallbacks (single-instance only)");
@@ -218,7 +203,6 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         }
     };
 
-    // ─── Rate limit toggle ───────────────────────────────────────────────────
     let rate_limiter: Arc<dyn RateLimiter> = if config.rate_limit_enabled {
         rate_limiter_raw
     } else {
@@ -256,16 +240,20 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     let admin = Arc::new(AdminUseCase::new(
         category_repo.clone(),
-        Arc::new(PgCategoryModeratorRepository::new(pg_write.clone())),
+        role_repo.clone(),
+        user_role_repo.clone(),
         user_repo.clone(),
         Arc::new(PgAuditLogRepository::new(pg_write.clone())),
         cache.clone(),
     ));
 
-    let category = Arc::new(CategoryUseCase::new(
-        category_repo.clone(),
-        thread_repo.clone(),
+    let role = Arc::new(RoleUseCase::new(
+        role_repo.clone(),
+        permission_repo.clone(),
+        user_role_repo.clone(),
     ));
+
+    let category = Arc::new(CategoryUseCase::new(category_repo.clone(), thread_repo.clone()));
 
     let thread = Arc::new(ThreadUseCase::new(
         thread_repo.clone(),
@@ -328,7 +316,9 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let hasher3 = Arc::new(BcryptPasswordHasher);
     let bulk_seed = Arc::new(PgBulkSeedService::new(pg_write.clone()));
     let setup = Arc::new(SetupUseCase::new(
-        user_repo,
+        user_repo.clone(),
+        role_repo,
+        user_role_repo.clone(),
         hasher3,
         token_service.clone(),
         cache.clone(),
@@ -354,10 +344,12 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         moderation,
         search,
         user,
+        role,
         webhook,
         site_config,
-        cat_mod_repo,
         stored_files: stored_file_repo,
+        user_role_repo,
+        role_permission_cache,
         token_service,
         cache,
         rate_limiter,
@@ -394,10 +386,7 @@ pub async fn maybe_run_headless_setup(config: &Config, state: &AppState) -> anyh
         })
         .await?;
 
-    tracing::info!(
-        "Headless setup complete — admin account created for '{}'",
-        username
-    );
+    tracing::info!("Headless setup complete — admin account created for '{}'", username);
     Ok(())
 }
 

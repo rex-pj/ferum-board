@@ -7,6 +7,8 @@
 		{ href: ROUTES.ADMIN.USERS, icon: 'fa-users', label: 'Users' },
 		{ href: ROUTES.ADMIN.CATEGORIES, icon: 'fa-folder', label: 'Categories' },
 		{ href: ROUTES.ADMIN.THREADS, icon: 'fa-comments', label: 'Threads' },
+		{ href: ROUTES.ADMIN.ROLES, icon: 'fa-shield-halved', label: 'Roles' },
+		{ href: ROUTES.ADMIN.PERMISSIONS, icon: 'fa-key', label: 'Permissions' },
 		{ href: ROUTES.ADMIN.REPORTS, icon: 'fa-flag', label: 'Reports' },
 		{ href: ROUTES.ADMIN.LOG, icon: 'fa-scroll', label: 'Audit Log' },
 		{ href: ROUTES.ADMIN.SETTINGS, icon: 'fa-gear', label: 'Settings' }

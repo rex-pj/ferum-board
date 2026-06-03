@@ -134,16 +134,16 @@
 
 				<!-- Avatar row -->
 				<div class="d-flex align-items-center gap-3 mb-4 pb-4 border-bottom">
-					<div style="flex-shrink:0;">
+					<div class="flex-shrink-0">
 						<Avatar src={avatarUrl} username={u?.username ?? ''} size={72} />
 					</div>
 					<div>
-						<div class="fw-semibold mb-1" style="color: var(--bs-body-color);">
+						<div class="fw-semibold mb-1 text-body">
 							{u?.display_name ?? u?.username}
 						</div>
 						<div class="small text-muted mb-2">@{u?.username}</div>
 						<div class="d-flex gap-2 flex-wrap">
-							<label class="btn btn-outline-secondary btn-sm" style="cursor:pointer; min-height:44px; display:inline-flex; align-items:center;">
+							<label class="btn btn-outline-secondary btn-sm tap-btn">
 								{#if avatarUploading}
 									<span class="spinner-border spinner-border-sm me-1"></span>Uploading…
 								{:else}
@@ -160,8 +160,7 @@
 							{#if avatarUrl}
 								<button
 									type="button"
-									class="btn btn-outline-danger btn-sm"
-									style="min-height:44px;"
+									class="btn btn-outline-danger btn-sm tap-btn"
 									disabled={avatarUploading}
 									onclick={removeAvatar}
 								>
@@ -309,7 +308,6 @@
 					<button
 						type="submit"
 						class="btn btn-primary"
-						style="min-height:44px;"
 						disabled={savingPassword || passwordMismatch || newPassword.length < 8 || confirmPassword.length < 8}
 					>
 						{#if savingPassword}<span class="spinner-border spinner-border-sm me-2"></span>{/if}
@@ -321,10 +319,10 @@
 
 		<div class="card border-0 bg-body-tertiary">
 			<div class="card-body py-3">
-				<p class="small fw-semibold text-muted text-uppercase mb-2" style="letter-spacing:.05em;">
+				<p class="small fw-semibold text-muted text-uppercase mb-2 tips-heading">
 					Tips for a strong password
 				</p>
-				<ul class="small mb-0 ps-3" style="color: var(--bs-secondary-color); line-height: 1.8;">
+				<ul class="small mb-0 ps-3 text-muted tips-list">
 					<li>Use at least 8 characters</li>
 					<li>Mix letters, numbers &amp; symbols</li>
 					<li>Don't reuse passwords from other sites</li>
@@ -373,8 +371,7 @@
 							] as opt (opt.value)}
 								<button
 									type="button"
-									class="btn {selectedTheme === opt.value ? 'btn-primary' : 'btn-outline-secondary'} d-flex flex-column align-items-center justify-content-center gap-1"
-									style="min-width:80px; min-height:70px;"
+									class="btn {selectedTheme === opt.value ? 'btn-primary' : 'btn-outline-secondary'} d-flex flex-column align-items-center justify-content-center gap-1 theme-btn"
 									onclick={() => (selectedTheme = opt.value as Theme)}
 								>
 									<i class="fa-solid {opt.icon}"></i>
@@ -395,8 +392,7 @@
 							] as opt (opt.value)}
 								<button
 									type="button"
-									class="btn {selectedFontSize === opt.value ? 'btn-primary' : 'btn-outline-secondary'}"
-									style="min-height:44px; min-width:90px;"
+									class="btn {selectedFontSize === opt.value ? 'btn-primary' : 'btn-outline-secondary'} size-btn"
 									onclick={() => (selectedFontSize = opt.value)}
 								>
 									{opt.label}
@@ -415,19 +411,18 @@
 							] as opt (opt.value)}
 								<button
 									type="button"
-									class="btn {selectedLayout === opt.value ? 'btn-primary' : 'btn-outline-secondary'} d-flex flex-column align-items-center justify-content-center gap-1"
-									style="min-width:110px; min-height:80px;"
+									class="btn {selectedLayout === opt.value ? 'btn-primary' : 'btn-outline-secondary'} d-flex flex-column align-items-center justify-content-center gap-1 layout-btn"
 									onclick={() => (selectedLayout = opt.value)}
 								>
 									<i class="fa-solid {opt.icon}"></i>
 									<span class="small fw-semibold">{opt.label}</span>
-									<span class="x-small" style="font-size:0.7rem; opacity:0.75;">{opt.desc}</span>
+									<span class="layout-desc">{opt.desc}</span>
 								</button>
 							{/each}
 						</div>
 					</div>
 
-					<button type="submit" class="btn btn-primary" style="min-height:44px;" disabled={savingPrefs}>
+					<button type="submit" class="btn btn-primary" disabled={savingPrefs}>
 						{#if savingPrefs}<span class="spinner-border spinner-border-sm me-2"></span>{/if}
 						Save Preferences
 					</button>
@@ -443,27 +438,23 @@
 		<div class="fr-panel">
 			<div class="fr-panel-header">Your Account</div>
 			<div class="px-3 py-3 d-flex align-items-center gap-3">
-				<div style="flex-shrink:0;">
+				<div class="flex-shrink-0">
 					<Avatar src={avatarUrl} username={u.username} size={40} />
 				</div>
-				<div style="min-width:0;">
-					<div class="fw-semibold text-truncate" style="color: var(--bs-body-color);">
+				<div class="panel-user-body">
+					<div class="fw-semibold text-truncate text-body">
 						{u.display_name ?? u.username}
 					</div>
 					<div class="small text-muted text-truncate">@{u.username}</div>
 					<div class="d-flex gap-1 mt-1 flex-wrap">
-						<Badge role={u.role} />
+						{#if u.primary_role_slug}<Badge role={u.primary_role_slug} />{/if}
 						<Badge trust={u.trust_level} />
 					</div>
 				</div>
 			</div>
-			<div class="fr-panel-stat border-top" style="border-top: 1px solid var(--bs-border-color);">
-				<span style="color: var(--bs-secondary-color);">Email</span>
-				<span
-					class="small text-truncate ms-2"
-					style="color: var(--bs-body-color); max-width:140px;"
-					title={u.email}
-				>{u.email}</span>
+			<div class="fr-panel-stat border-top">
+				<span class="text-muted">Email</span>
+				<span class="small text-truncate ms-2 text-body email-value" title={u.email}>{u.email}</span>
 			</div>
 		</div>
 	{/if}
@@ -472,24 +463,38 @@
 		<div class="fr-panel-header">Quick Links</div>
 		<div class="fr-panel-body">
 			<a href={ROUTES.NOTIFICATIONS} class="fr-panel-row">
-				<i class="fa-solid fa-bell fa-sm" style="width:1rem; opacity:0.5; flex-shrink:0;"></i>
-				<span style="color: var(--bs-body-color); font-size: 0.8125rem;">Notifications</span>
+				<i class="fa-solid fa-bell fa-sm detail-icon"></i>
+				<span class="text-body panel-link-label">Notifications</span>
 			</a>
 			<a href={ROUTES.BOOKMARKS} class="fr-panel-row">
-				<i class="fa-solid fa-bookmark fa-sm" style="width:1rem; opacity:0.5; flex-shrink:0;"></i>
-				<span style="color: var(--bs-body-color); font-size: 0.8125rem;">Bookmarks</span>
+				<i class="fa-solid fa-bookmark fa-sm detail-icon"></i>
+				<span class="text-body panel-link-label">Bookmarks</span>
 			</a>
 			{#if u}
 				<a href={ROUTES.USER_PROFILE(u.username)} class="fr-panel-row">
-					<i class="fa-regular fa-user fa-sm" style="width:1rem; opacity:0.5; flex-shrink:0;"></i>
-					<span style="color: var(--bs-body-color); font-size: 0.8125rem;">Public Profile</span>
+					<i class="fa-regular fa-user fa-sm detail-icon"></i>
+					<span class="text-body panel-link-label">Public Profile</span>
 				</a>
 			{/if}
 			<a href={ROUTES.HOME} class="fr-panel-row">
-				<i class="fa-solid fa-house fa-sm" style="width:1rem; opacity:0.5; flex-shrink:0;"></i>
-				<span style="color: var(--bs-body-color); font-size: 0.8125rem;">Home Feed</span>
+				<i class="fa-solid fa-house fa-sm detail-icon"></i>
+				<span class="text-body panel-link-label">Home Feed</span>
 			</a>
 		</div>
 	</div>
 </aside>
 </div>
+
+<style>
+	.tap-btn         { min-height: var(--fr-tap-target); }
+	.tips-heading    { letter-spacing: 0.05em; }
+	.tips-list       { line-height: 1.8; }
+	.theme-btn       { min-width: 80px; min-height: 70px; }
+	.size-btn        { min-height: var(--fr-tap-target); min-width: 90px; }
+	.layout-btn      { min-width: 110px; min-height: 80px; }
+	.layout-desc     { font-size: 0.7rem; opacity: 0.75; }
+	.panel-user-body { min-width: 0; }
+	.email-value     { max-width: 140px; }
+	.detail-icon     { width: 1rem; opacity: 0.5; flex-shrink: 0; }
+	.panel-link-label { font-size: 0.8125rem; }
+</style>

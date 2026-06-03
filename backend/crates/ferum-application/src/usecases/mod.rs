@@ -7,6 +7,7 @@ pub mod moderation_usecase;
 pub mod notification_usecase;
 pub mod post_usecase;
 pub mod reaction_usecase;
+pub mod role_usecase;
 pub mod search_usecase;
 pub mod setup_usecase;
 pub mod thread_usecase;

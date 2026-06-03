@@ -147,7 +147,7 @@
 					username={post.author.username}
 					displayName={post.author.display_name}
 					avatarUrl={post.author.avatar_url}
-					role={post.author.role}
+					role={post.author.primary_role_slug}
 					date={post.created_at}
 				/>
 				{#if isBestAnswer}
@@ -169,8 +169,7 @@
 				<div class="d-flex gap-2 mt-2">
 					<button
 						type="button"
-						class="btn btn-primary btn-sm"
-						style="min-height:44px;"
+						class="btn btn-primary btn-sm edit-btn"
 						disabled={editSaving || !editDraft.trim()}
 						onclick={saveEdit}
 					>
@@ -181,8 +180,7 @@
 					</button>
 					<button
 						type="button"
-						class="btn btn-outline-secondary btn-sm"
-						style="min-height:44px;"
+						class="btn btn-outline-secondary btn-sm edit-btn"
 						disabled={editSaving}
 						onclick={() => (editMode = false)}
 					>
@@ -257,5 +255,9 @@
 	}
 	.post-content :global(a) {
 		word-break: break-word;
+	}
+
+	.edit-btn {
+		min-height: var(--fr-tap-target);
 	}
 </style>

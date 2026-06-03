@@ -57,6 +57,10 @@ pub async fn get_me_handler(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
 ) -> HandlerResult<impl IntoResponse> {
+    use crate::view_models::role::{RoleResponse, UserRoleResponse};
+    use std::collections::HashMap;
+    use uuid::Uuid;
+
     let auth = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
     let user = state
         .auth
@@ -65,5 +69,27 @@ pub async fn get_me_handler(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    Ok(Json(DataResponse::new(UserResponse::from(user))))
+    // Include full role assignments so frontend can compute permissions and category scope
+    let assignments = state.user_role_repo.list_for_user(auth.id).await.unwrap_or_default();
+    let all_roles = state.role.list_roles().await.unwrap_or_default();
+    let role_map: HashMap<Uuid, RoleResponse> =
+        all_roles.into_iter().map(|r| (r.id, RoleResponse::from(r))).collect();
+
+    let mut resp = UserResponse::from(user);
+    resp.roles = Some(
+        assignments
+            .into_iter()
+            .filter_map(|a| {
+                role_map.get(&a.role_id).cloned().map(|role| UserRoleResponse {
+                    id: a.id,
+                    role,
+                    category_id: a.category_id,
+                    expires_at: a.expires_at,
+                    created_at: a.created_at,
+                })
+            })
+            .collect(),
+    );
+
+    Ok(Json(DataResponse::new(resp)))
 }

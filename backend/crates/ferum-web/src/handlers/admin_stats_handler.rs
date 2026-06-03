@@ -11,20 +11,12 @@ use crate::view_models::auth::UserResponse;
 use crate::view_models::user::UserSummaryResponse;
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
 use ferum_application::shared::AppError;
-use ferum_application::usecases::admin_usecase::AdminUpdateUserCmd;
-use ferum_domain::models::user::UserRole;
 
 #[derive(Deserialize)]
 pub struct UserListQuery {
     pub page: Option<u64>,
     pub per_page: Option<u64>,
     pub q: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateUserRoleRequest {
-    pub role: Option<String>,
-    pub is_global_mod: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -70,41 +62,36 @@ pub async fn admin_get_user_handler(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
     let user = state.admin.get_user(actor, id).await?;
-    Ok(Json(DataResponse::new(UserResponse::from(user))))
-}
+    // Fetch roles for full user detail view
+    let roles = state.role.list_user_roles(actor, id).await.unwrap_or_default();
+    let role_map: std::collections::HashMap<uuid::Uuid, crate::view_models::role::RoleResponse> =
+        state
+            .role
+            .list_roles()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| (r.id, crate::view_models::role::RoleResponse::from(r)))
+            .collect();
 
-pub async fn admin_update_user_handler(
-    State(state): State<AppState>,
-    Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
-    Json(body): Json<UpdateUserRoleRequest>,
-) -> HandlerResult<impl IntoResponse> {
-    let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    let role = body
-        .role
-        .as_deref()
-        .map(|r| match r {
-            "admin" => Ok(UserRole::Admin),
-            "moderator" => Ok(UserRole::Moderator),
-            "member" => Ok(UserRole::Member),
-            _ => Err(AppError::unprocessable(
-                "Invalid role. Use: member, moderator, admin",
-            )),
-        })
-        .transpose()?;
-
-    let user = state
-        .admin
-        .update_user_role(
-            actor,
-            id,
-            AdminUpdateUserCmd {
-                role,
-                is_global_mod: body.is_global_mod,
-            },
-        )
-        .await?;
-    Ok(Json(DataResponse::new(UserResponse::from(user))))
+    let mut resp = UserResponse::from(user);
+    resp.roles = Some(
+        roles
+            .into_iter()
+            .filter_map(|a| {
+                role_map.get(&a.role_id).cloned().map(|role| {
+                    crate::view_models::role::UserRoleResponse {
+                        id: a.id,
+                        role,
+                        category_id: a.category_id,
+                        expires_at: a.expires_at,
+                        created_at: a.created_at,
+                    }
+                })
+            })
+            .collect(),
+    );
+    Ok(Json(DataResponse::new(resp)))
 }
 
 pub async fn admin_ban_user_handler(

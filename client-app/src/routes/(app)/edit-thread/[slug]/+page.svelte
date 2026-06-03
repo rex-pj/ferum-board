@@ -10,12 +10,13 @@
 	import ThumbnailPicker from '$lib/components/molecules/ThumbnailPicker.svelte';
 	import { ROUTES } from '$lib/routes';
 	import { toast } from '$lib/stores/toast';
+	import { isModerator } from '$lib/utils/permissions';
 
 	let { data, form }: { data: any; form: any } = $props();
 
 	const thread = $derived(data.thread);
 	const firstPost = $derived(data.firstPost);
-	const isMod = $derived(data.user?.role === 'admin' || data.user?.role === 'moderator');
+	const isMod = $derived(isModerator(data.user));
 	const topLevel = $derived((data.categories ?? []).filter((c: any) => !c.parent_id));
 	const subCats = $derived((data.categories ?? []).filter((c: any) => !!c.parent_id));
 	const currentCategory = $derived(
@@ -153,7 +154,7 @@
 			{:else}
 				<input type="hidden" name="category_id" value={thread?.category_id ?? ''} />
 				<div class="form-control-plaintext text-body-secondary">
-					<i class="fa-solid fa-folder me-1" style="opacity:0.5;"></i>
+					<i class="fa-solid fa-folder me-1 opacity-50"></i>
 					{currentCategory?.name ?? thread?.category_slug ?? '—'}
 				</div>
 			{/if}
@@ -186,7 +187,6 @@
 						<button
 							type="submit"
 							class="btn btn-outline-danger btn-sm"
-							style="min-height:36px;"
 							disabled={removingThumbnail}
 						>
 							{#if removingThumbnail}
@@ -211,7 +211,6 @@
 			<button
 				type="submit"
 				class="btn btn-primary"
-				style="min-height:44px;"
 				disabled={submitting || !title.trim()}
 			>
 				{#if submitting}

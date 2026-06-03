@@ -8,11 +8,9 @@ use crate::constants::{
     ACCOUNT_LOCKOUT_ATTEMPTS, ACCOUNT_LOCKOUT_DURATION_MINUTES, PASSWORD_RESET_TOKEN_TTL_SECS,
     REFRESH_TOKEN_TTL_SECS,
 };
-use crate::ports::{
-    AccessTokenClaims, CacheService, ForumJob, JobQueue, PasswordHasher, TokenService,
-};
+use crate::ports::{AccessTokenClaims, CacheService, ForumJob, JobQueue, PasswordHasher, TokenService};
 use crate::shared::AppError;
-use ferum_domain::models::user::{TrustLevel, User, UserRole};
+use ferum_domain::models::user::{TrustLevel, User};
 use ferum_domain::repositories::user_repository::{NewUser, UserRepository};
 
 pub struct AuthUseCase {
@@ -31,31 +29,21 @@ impl AuthUseCase {
         cache: Arc<dyn CacheService>,
         jobs: Arc<dyn JobQueue>,
     ) -> Self {
-        Self {
-            users,
-            hasher,
-            tokens,
-            cache,
-            jobs,
-        }
+        Self { users, hasher, tokens, cache, jobs }
     }
 
     // ─── Register ─────────────────────────────────────────────────────────────
 
     pub async fn register(&self, cmd: RegisterCmd) -> Result<User, AppError> {
-        // Validate username + password
         if !crate::validators::validate_username(&cmd.username) {
             return Err(AppError::unprocessable(
                 "Username must be 3–30 chars, alphanumeric/underscore/hyphen",
             ));
         }
         if !crate::validators::validate_password(&cmd.password) {
-            return Err(AppError::unprocessable(
-                crate::validators::PASSWORD_REQUIREMENTS,
-            ));
+            return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
         }
 
-        // Uniqueness checks
         if self.users.find_by_email(&cmd.email).await?.is_some() {
             return Err(AppError::Conflict("email_taken".to_string()));
         }
@@ -70,14 +58,10 @@ impl AuthUseCase {
                 username: cmd.username,
                 email: cmd.email.clone(),
                 password_hash: Some(hash),
-                role: UserRole::Member,
             })
             .await?;
 
-        // Enqueue verification email
-        let token = self
-            .tokens
-            .mint_email_token(user.id, "email_verification")?;
+        let token = self.tokens.mint_email_token(user.id, "email_verification")?;
         self.jobs
             .enqueue(ForumJob::SendEmailVerification {
                 user_id: user.id,
@@ -97,20 +81,12 @@ impl AuthUseCase {
             .verify_email_token(token, "email_verification")
             .map_err(|_| AppError::forbidden("invalid_or_expired_token"))?;
 
-        let user = self
-            .users
-            .find_by_id(user_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
+        let user = self.users.find_by_id(user_id).await?.ok_or(AppError::NotFound)?;
 
-        if user.is_email_verified {
-            return Ok(());
+        if !user.is_email_verified {
+            self.users.set_email_verified(user_id).await?;
+            self.users.set_trust_level(user_id, TrustLevel::Basic).await?;
         }
-
-        self.users.set_email_verified(user_id).await?;
-        self.users
-            .set_trust_level(user_id, TrustLevel::Basic)
-            .await?;
 
         Ok(())
     }
@@ -120,7 +96,6 @@ impl AuthUseCase {
     pub async fn login(&self, cmd: LoginCmd) -> Result<LoginResult, AppError> {
         let user_opt = self.users.find_by_email(&cmd.email).await?;
 
-        // Always run bcrypt to prevent timing-based email enumeration.
         if user_opt.is_none() {
             let _ = self
                 .hasher
@@ -128,11 +103,9 @@ impl AuthUseCase {
                 .await;
             return Err(AppError::Unauthorized);
         }
-        let user = user_opt.unwrap();
+        let mut user = user_opt.unwrap();
 
-        // Lockout check
         if user.is_account_locked() {
-            // Still run bcrypt to prevent timing-based email enumeration.
             let _ = self
                 .hasher
                 .verify(&cmd.password, "$2b$12$invalidhashpaddinginvalidhashpa")
@@ -140,19 +113,14 @@ impl AuthUseCase {
             return Err(AppError::forbidden("account_locked"));
         }
 
-        // Password verification — always run even if user has no password set so
-        // response time is identical whether the email exists or not.
-        let hash = user
-            .password_hash
-            .as_deref()
-            .unwrap_or("$2b$12$invalidhashpaddinginvalidhashpa");
+        let hash = user.password_hash.as_deref().unwrap_or("$2b$12$invalidhashpaddinginvalidhashpa");
         let valid = self.hasher.verify(&cmd.password, hash).await?;
 
         if user.password_hash.is_none() || !valid {
             let count = self.users.increment_failed_login(user.id).await?;
             if count >= ACCOUNT_LOCKOUT_ATTEMPTS {
-                let until =
-                    Utc::now() + chrono::Duration::minutes(ACCOUNT_LOCKOUT_DURATION_MINUTES as i64);
+                let until = Utc::now()
+                    + chrono::Duration::minutes(ACCOUNT_LOCKOUT_DURATION_MINUTES as i64);
                 self.users.lock_until(user.id, until).await?;
                 return Err(AppError::forbidden("account_locked"));
             }
@@ -169,22 +137,26 @@ impl AuthUseCase {
             return Err(AppError::forbidden("account_suspended"));
         }
 
-        // Issue tokens
+        // ── Lazy trust level promotion ────────────────────────────────────────
+        if let Some(new_level) = evaluate_trust_promotion(&user) {
+            self.users.set_trust_level(user.id, new_level).await?;
+            user.trust_level = new_level;
+        }
+
+        let trust_str = format!("{:?}", user.trust_level).to_lowercase();
         let claims = AccessTokenClaims {
             sub: user.id,
             username: user.username.clone(),
-            role: format!("{:?}", user.role).to_lowercase(),
-            trust_level: format!("{:?}", user.trust_level).to_lowercase(),
-            is_global_mod: user.is_global_mod,
+            trust_level: trust_str,
             is_banned: user.is_banned,
             banned_until: user.banned_until.map(|t| t.timestamp()),
-            exp: (Utc::now() + chrono::Duration::seconds(crate::constants::JWT_EXPIRY_SECS as i64))
-                .timestamp(),
+            exp: (Utc::now()
+                + chrono::Duration::seconds(crate::constants::JWT_EXPIRY_SECS as i64))
+            .timestamp(),
         };
         let access_token = self.tokens.mint_access_token(&claims)?;
         let refresh_token = self.tokens.mint_refresh_token(user.id)?;
 
-        // Cache refresh token
         self.cache
             .set(
                 &refresh_token_key(user.id, &refresh_token),
@@ -193,11 +165,7 @@ impl AuthUseCase {
             )
             .await?;
 
-        Ok(LoginResult {
-            user,
-            access_token,
-            refresh_token,
-        })
+        Ok(LoginResult { user, access_token, refresh_token })
     }
 
     // ─── Refresh ──────────────────────────────────────────────────────────────
@@ -206,35 +174,29 @@ impl AuthUseCase {
         &self,
         refresh_token: &str,
     ) -> Result<RefreshResult, AppError> {
-        // Verify the JWT signature and expiry first (cheap, no I/O).
         let user_id = self.tokens.verify_refresh_token(refresh_token)?;
 
-        // Confirm the token is still in cache (not revoked by logout).
         let key = refresh_token_key(user_id, refresh_token);
         if !self.cache.exists(&key).await {
             return Err(AppError::Unauthorized);
         }
 
-        let user = self
-            .users
-            .find_by_id(user_id)
-            .await?
-            .ok_or(AppError::Unauthorized)?;
+        let user = self.users.find_by_id(user_id).await?.ok_or(AppError::Unauthorized)?;
 
         if user.is_currently_banned() {
             return Err(AppError::forbidden("account_suspended"));
         }
 
+        let trust_str = format!("{:?}", user.trust_level).to_lowercase();
         let claims = AccessTokenClaims {
             sub: user.id,
             username: user.username.clone(),
-            role: format!("{:?}", user.role).to_lowercase(),
-            trust_level: format!("{:?}", user.trust_level).to_lowercase(),
-            is_global_mod: user.is_global_mod,
+            trust_level: trust_str,
             is_banned: user.is_banned,
             banned_until: user.banned_until.map(|t| t.timestamp()),
-            exp: (Utc::now() + chrono::Duration::seconds(crate::constants::JWT_EXPIRY_SECS as i64))
-                .timestamp(),
+            exp: (Utc::now()
+                + chrono::Duration::seconds(crate::constants::JWT_EXPIRY_SECS as i64))
+            .timestamp(),
         };
         let access_token = self.tokens.mint_access_token(&claims)?;
 
@@ -244,9 +206,7 @@ impl AuthUseCase {
     // ─── Logout ───────────────────────────────────────────────────────────────
 
     pub async fn logout(&self, user_id: Uuid, refresh_token: &str) -> Result<(), AppError> {
-        self.cache
-            .del(&refresh_token_key(user_id, refresh_token))
-            .await?;
+        self.cache.del(&refresh_token_key(user_id, refresh_token)).await?;
         Ok(())
     }
 
@@ -256,13 +216,9 @@ impl AuthUseCase {
         if let Some(user) = self.users.find_by_email(email).await? {
             let token = self.tokens.mint_email_token(user.id, "password_reset")?;
             self.jobs
-                .enqueue(ForumJob::SendPasswordResetEmail {
-                    email: user.email,
-                    token,
-                })
+                .enqueue(ForumJob::SendPasswordResetEmail { email: user.email, token })
                 .await?;
         }
-        // Always return Ok to prevent user enumeration
         Ok(())
     }
 
@@ -270,9 +226,7 @@ impl AuthUseCase {
 
     pub async fn reset_password(&self, cmd: ResetPasswordCmd) -> Result<(), AppError> {
         if !crate::validators::validate_password(&cmd.new_password) {
-            return Err(AppError::unprocessable(
-                crate::validators::PASSWORD_REQUIREMENTS,
-            ));
+            return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
         }
 
         let user_id = self
@@ -280,16 +234,10 @@ impl AuthUseCase {
             .verify_email_token(&cmd.token, "password_reset")
             .map_err(|_| AppError::forbidden("invalid_or_expired_token"))?;
 
-        // Single-use: atomically claim the token (SET NX). If the key already
-        // exists a concurrent request beat us to it — reject immediately.
         let used_key = format!("used_token:{}", cmd.token);
         let claimed = self
             .cache
-            .set_nx(
-                &used_key,
-                "1",
-                Duration::from_secs(PASSWORD_RESET_TOKEN_TTL_SECS + 60),
-            )
+            .set_nx(&used_key, "1", Duration::from_secs(PASSWORD_RESET_TOKEN_TTL_SECS + 60))
             .await?;
         if !claimed {
             return Err(AppError::forbidden("token_already_used"));
@@ -299,6 +247,32 @@ impl AuthUseCase {
         self.users.set_password_hash(user_id, hash).await?;
 
         Ok(())
+    }
+}
+
+// ─── Lazy trust level promotion ───────────────────────────────────────────────
+// Runs synchronously during login. No background job needed.
+
+fn evaluate_trust_promotion(user: &User) -> Option<TrustLevel> {
+    match user.trust_level {
+        TrustLevel::Basic => {
+            // Promote to Member: ≥30 posts AND ≥15 days visited
+            if user.post_count >= 30 && user.days_visited >= 15 {
+                Some(TrustLevel::Member)
+            } else {
+                None
+            }
+        }
+        TrustLevel::Member => {
+            // Promote to Regular: ≥500 posts AND ≥100 days AND trust_score ≥80
+            if user.post_count >= 500 && user.days_visited >= 100 && user.trust_score >= 80 {
+                Some(TrustLevel::Regular)
+            } else {
+                None
+            }
+        }
+        // Leader is manually assigned; New/Regular/Leader don't auto-promote here
+        _ => None,
     }
 }
 

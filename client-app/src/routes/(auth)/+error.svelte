@@ -48,26 +48,39 @@
 
 <div class="text-center py-2">
 	<div
-		class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3"
-		style="width: 3.5rem; height: 3.5rem; background: color-mix(in srgb, {config.color} 10%, transparent); border: 1px solid color-mix(in srgb, {config.color} 22%, transparent); font-size: 1.25rem; color: {config.color};"
+		class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 err-icon"
+		style="--err-color: {config.color}"
 	>
 		<i class="fa-solid {config.icon}"></i>
 	</div>
 
-	<div class="text-muted fw-bold mb-1" style="font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;">
+	<div class="text-muted fw-bold mb-1 err-label">
 		Error {$page.status}
 	</div>
-	<h1 class="h5 fw-bold mb-2" style="letter-spacing: -0.02em;">{config.title}</h1>
-	<p class="text-secondary mb-4" style="font-size: 0.9rem; line-height: 1.6;">
+	<h1 class="h5 fw-bold mb-2 err-title">{config.title}</h1>
+	<p class="text-secondary mb-4 err-desc">
 		{config.description}
 	</p>
 
 	<div class="d-flex gap-2 justify-content-center flex-wrap">
-		<button type="button" class="btn btn-outline-secondary btn-sm" style="min-height: 44px; padding: 0 1rem;" onclick={() => history.back()}>
+		<button type="button" class="btn btn-outline-secondary btn-sm err-btn" onclick={() => history.back()}>
 			<i class="fa-solid fa-arrow-left me-2"></i>Go back
 		</button>
-		<a href={ROUTES.LOGIN} class="btn btn-primary btn-sm" style="min-height: 44px; padding: 0 1rem;">
+		<a href={ROUTES.LOGIN} class="btn btn-primary btn-sm err-btn">
 			<i class="fa-solid fa-right-to-bracket me-2"></i>Sign in
 		</a>
 	</div>
 </div>
+
+<style>
+	.err-icon {
+		width: 3.5rem; height: 3.5rem; font-size: 1.25rem;
+		background: color-mix(in srgb, var(--err-color) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--err-color) 22%, transparent);
+		color: var(--err-color);
+	}
+	.err-label { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; }
+	.err-title { letter-spacing: -0.02em; }
+	.err-desc  { font-size: 0.9rem; line-height: 1.6; }
+	.err-btn   { min-height: var(--fr-tap-target); padding: 0 1rem; }
+</style>

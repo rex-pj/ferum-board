@@ -207,7 +207,7 @@
 
 	.tp-zone--over {
 		border-style: solid;
-		background: rgba(99, 102, 241, 0.07);
+		background: rgba(var(--bs-primary-rgb), 0.07);
 	}
 
 	.tp-zone-icon {

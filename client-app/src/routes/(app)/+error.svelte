@@ -46,30 +46,44 @@
 	);
 </script>
 
-<div class="d-flex align-items-center justify-content-center px-4" style="min-height: 60vh;">
-	<div class="text-center" style="max-width: 440px; width: 100%;">
+<div class="d-flex align-items-center justify-content-center px-4 err-shell">
+	<div class="text-center err-content">
 		<div
-			class="d-inline-flex align-items-center justify-content-center rounded-circle mb-4"
-			style="width: 4.5rem; height: 4.5rem; background: color-mix(in srgb, {config.color} 10%, transparent); border: 1px solid color-mix(in srgb, {config.color} 22%, transparent); font-size: 1.5rem; color: {config.color};"
+			class="d-inline-flex align-items-center justify-content-center rounded-circle mb-4 err-icon"
+			style="--err-color: {config.color}"
 		>
 			<i class="fa-solid {config.icon}"></i>
 		</div>
 
-		<div class="text-muted fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;">
+		<div class="text-muted fw-bold mb-1 err-label">
 			Error {$page.status}
 		</div>
-		<h1 class="h4 fw-bold mb-2" style="letter-spacing: -0.02em;">{config.title}</h1>
-		<p class="text-secondary mb-4" style="font-size: 0.9375rem; line-height: 1.65; max-width: 320px; margin: 0 auto 1.5rem;">
+		<h1 class="h4 fw-bold mb-2 err-title">{config.title}</h1>
+		<p class="text-secondary err-desc">
 			{config.description}
 		</p>
 
 		<div class="d-flex gap-2 justify-content-center flex-wrap">
-			<button type="button" class="btn btn-outline-secondary" style="min-height: 44px;" onclick={() => history.back()}>
+			<button type="button" class="btn btn-outline-secondary" onclick={() => history.back()}>
 				<i class="fa-solid fa-arrow-left me-2"></i>Go back
 			</button>
-			<a href={ROUTES.HOME} class="btn btn-primary" style="min-height: 44px;">
+			<a href={ROUTES.HOME} class="btn btn-primary">
 				<i class="fa-solid fa-house me-2"></i>Home
 			</a>
 		</div>
 	</div>
 </div>
+
+<style>
+	.err-shell  { min-height: 60vh; }
+	.err-content { max-width: 440px; width: 100%; }
+	.err-icon {
+		width: 4.5rem; height: 4.5rem; font-size: 1.5rem;
+		background: color-mix(in srgb, var(--err-color) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--err-color) 22%, transparent);
+		color: var(--err-color);
+	}
+	.err-label { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; }
+	.err-title { letter-spacing: -0.02em; }
+	.err-desc  { font-size: 0.9375rem; line-height: 1.65; max-width: 320px; margin: 0 auto 1.5rem; }
+</style>

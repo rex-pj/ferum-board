@@ -5,6 +5,8 @@ use validator::Validate;
 
 use ferum_domain::models::user::User;
 
+use super::role::UserRoleResponse;
+
 // ─── Requests ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Validate)]
@@ -38,15 +40,17 @@ pub struct ResetPasswordRequest {
 
 // ─── Responses ────────────────────────────────────────────────────────────────
 
+/// Returned by GET /api/users/me and auth flows.
+/// `roles` is populated separately by the handler after fetching user_roles.
 #[derive(Serialize)]
 pub struct UserResponse {
     pub id: Uuid,
     pub username: String,
     pub email: String,
     pub display_name: Option<String>,
-    pub role: String,
+    /// Slug of the user's highest-priority global role (for badge display).
+    pub primary_role_slug: Option<String>,
     pub trust_level: String,
-    pub is_global_mod: bool,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
     pub website: Option<String>,
@@ -55,6 +59,9 @@ pub struct UserResponse {
     pub ban_reason: Option<String>,
     pub banned_until: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    /// Populated when the caller needs full role info (e.g. GET /api/users/me).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roles: Option<Vec<UserRoleResponse>>,
 }
 
 impl From<User> for UserResponse {
@@ -64,9 +71,8 @@ impl From<User> for UserResponse {
             username: u.username,
             email: u.email,
             display_name: u.display_name,
-            role: format!("{:?}", u.role).to_lowercase(),
+            primary_role_slug: u.primary_role_slug,
             trust_level: format!("{:?}", u.trust_level).to_lowercase(),
-            is_global_mod: u.is_global_mod,
             avatar_url: u.avatar_url,
             bio: u.bio,
             website: u.website,
@@ -75,6 +81,7 @@ impl From<User> for UserResponse {
             ban_reason: u.ban_reason,
             banned_until: u.banned_until,
             created_at: u.created_at,
+            roles: None, // populated by handler when needed
         }
     }
 }

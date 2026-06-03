@@ -5,11 +5,12 @@
 	import { unreadCount, startSSE, stopNotifications } from '$lib/stores/notifications';
 	import { onMount, onDestroy } from 'svelte';
 
+	import { isAdmin, isModerator, type UserWithRoles } from '$lib/utils/permissions';
+
 	interface Props {
-		user?: {
+		user?: UserWithRoles & {
 			username: string;
 			display_name?: string | null;
-			role: string;
 			avatar_url?: string | null;
 		} | null;
 		siteName?: string;
@@ -64,9 +65,9 @@
 	<!-- Brand -->
 	<a href={ROUTES.HOME} class="fr-topbar-brand">
 		{#if logoUrl}
-			<img src={logoUrl} alt={siteName} style="height:24px; width:auto; object-fit:contain; flex-shrink:0;" />
+			<img src={logoUrl} alt={siteName} class="brand-logo" />
 		{:else}
-			<i class="fa-solid fa-feather-pointed" style="color: var(--bs-primary);"></i>
+			<i class="fa-solid fa-feather-pointed text-primary"></i>
 		{/if}
 		{siteName}
 	</a>
@@ -108,10 +109,7 @@
 			<a href={ROUTES.NOTIFICATIONS} class="fr-icon-btn position-relative" aria-label="Notifications">
 				<i class="fa-solid fa-bell"></i>
 				{#if $unreadCount > 0}
-					<span
-						class="position-absolute badge rounded-pill bg-danger"
-						style="font-size:0.55rem; top:7px; right:5px; padding:2px 4px; min-width:0; line-height:1.2;"
-					>
+					<span class="position-absolute badge rounded-pill bg-danger notif-badge">
 						{$unreadCount > 99 ? '99+' : $unreadCount}
 					</span>
 				{/if}
@@ -126,8 +124,7 @@
 			<!-- User avatar dropdown -->
 			<div class="dropdown">
 				<button
-					class="btn p-0 border-0 bg-transparent d-flex align-items-center"
-					style="min-height: var(--fr-tap-target); width: var(--fr-tap-target);"
+					class="btn p-0 border-0 bg-transparent d-flex align-items-center avatar-btn"
 					type="button"
 					data-bs-toggle="dropdown"
 					aria-expanded="false"
@@ -135,32 +132,32 @@
 				>
 					<Avatar src={user.avatar_url} username={user.username} size={32} />
 				</button>
-				<ul class="dropdown-menu dropdown-menu-end" style="min-width: 192px;">
+				<ul class="dropdown-menu dropdown-menu-end user-menu">
 					<li>
 						<a class="dropdown-item" href={ROUTES.USER_PROFILE(user.username)}>
-							<i class="fa-regular fa-user me-2" style="width:1rem; opacity:0.6;"></i>
+							<i class="fa-regular fa-user me-2 fr-dd-icon"></i>
 							{user.display_name ?? user.username}
 						</a>
 					</li>
 					<li>
 						<a class="dropdown-item" href={ROUTES.ACCOUNT}>
-							<i class="fa-solid fa-gear me-2" style="width:1rem; opacity:0.6;"></i>
+							<i class="fa-solid fa-gear me-2 fr-dd-icon"></i>
 							Settings
 						</a>
 					</li>
-					{#if user.role === 'moderator' || user.role === 'admin'}
+					{#if isModerator(user)}
 						<li><hr class="dropdown-divider my-1" /></li>
 						<li>
 							<a class="dropdown-item" href={ROUTES.MOD.REPORTS}>
-								<i class="fa-solid fa-shield-halved me-2" style="width:1rem; opacity:0.6;"></i>
+								<i class="fa-solid fa-shield-halved me-2 fr-dd-icon"></i>
 								Mod Panel
 							</a>
 						</li>
 					{/if}
-					{#if user.role === 'admin'}
+					{#if isAdmin(user)}
 						<li>
 							<a class="dropdown-item" href={ROUTES.ADMIN.DASHBOARD}>
-								<i class="fa-solid fa-chart-line me-2" style="width:1rem; opacity:0.6;"></i>
+								<i class="fa-solid fa-chart-line me-2 fr-dd-icon"></i>
 								Admin
 							</a>
 						</li>
@@ -169,7 +166,7 @@
 					<li>
 						<form method="POST" action={ROUTES.LOGOUT}>
 							<button class="dropdown-item text-danger w-100" type="submit">
-								<i class="fa-solid fa-right-from-bracket me-2" style="width:1rem;"></i>
+								<i class="fa-solid fa-right-from-bracket me-2 fr-dd-icon"></i>
 								Sign out
 							</button>
 						</form>
@@ -177,14 +174,37 @@
 				</ul>
 			</div>
 		{:else}
-			<a
-				class="btn btn-sm d-none d-sm-inline-flex"
-				href={ROUTES.LOGIN}
-				style="border: 1px solid var(--bs-border-color); color: var(--bs-body-color); background: transparent;"
-			>
+			<a class="btn btn-sm d-none d-sm-inline-flex fr-btn-ghost" href={ROUTES.LOGIN}>
 				Sign in
 			</a>
 			<a class="btn btn-primary btn-sm" href={ROUTES.REGISTER}>Get started</a>
 		{/if}
 	</div>
 </header>
+
+<style>
+	.brand-logo {
+		height: 24px;
+		width: auto;
+		object-fit: contain;
+		flex-shrink: 0;
+	}
+
+	.notif-badge {
+		font-size: 0.55rem;
+		top: 7px;
+		right: 5px;
+		padding: 2px 4px;
+		min-width: 0;
+		line-height: 1.2;
+	}
+
+	.avatar-btn {
+		min-height: var(--fr-tap-target);
+		width: var(--fr-tap-target);
+	}
+
+	.user-menu {
+		min-width: 192px;
+	}
+</style>

@@ -1,20 +1,25 @@
+use std::collections::{HashMap, HashSet};
+
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::models::user::{TrustLevel, UserRole};
+use crate::models::user::TrustLevel;
 
-/// Extracted from JWT by the auth middleware.
+/// Extracted from JWT + resolved role/permissions by the auth middleware.
 /// Carried in request extensions as `Option<AuthUser>`.
 /// None = unauthenticated guest.
 #[derive(Clone, Debug)]
 pub struct AuthUser {
     pub id: Uuid,
     pub username: String,
-    pub role: UserRole,
     pub trust_level: TrustLevel,
-    pub is_global_mod: bool,
     pub is_banned: bool,
     pub banned_until: Option<DateTime<Utc>>,
+    /// Permissions from global (non-category-scoped) role assignments.
+    pub permissions: HashSet<String>,
+    /// Permissions scoped to a specific category.
+    /// key = category_id, value = set of permission keys granted in that category.
+    pub category_permissions: HashMap<Uuid, HashSet<String>>,
 }
 
 impl AuthUser {
@@ -23,5 +28,23 @@ impl AuthUser {
             return false;
         }
         self.banned_until.map(|t| t > Utc::now()).unwrap_or(true)
+    }
+
+    /// Returns true if the user has a global (non-scoped) permission.
+    pub fn has_perm(&self, key: &str) -> bool {
+        self.permissions.contains(key)
+    }
+
+    /// Returns true if the user has the permission globally OR scoped to the given category.
+    pub fn has_perm_in(&self, key: &str, category_id: Uuid) -> bool {
+        self.has_perm(key)
+            || self
+                .category_permissions
+                .get(&category_id)
+                .map_or(false, |p| p.contains(key))
+    }
+
+    pub fn meets_trust(&self, required: TrustLevel) -> bool {
+        self.trust_level >= required
     }
 }

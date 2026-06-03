@@ -21,6 +21,8 @@ mod m20260001_000016_create_bookmarks;
 mod m20260001_000017_create_stored_files;
 mod m20260001_000018_create_file_links;
 mod m20260001_000019_perf_indexes;
+mod m20260001_000020_create_rbac;
+mod m20260001_000021_drop_legacy_role;
 
 pub struct Migrator;
 
@@ -47,6 +49,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260001_000017_create_stored_files::Migration),
             Box::new(m20260001_000018_create_file_links::Migration),
             Box::new(m20260001_000019_perf_indexes::Migration),
+            Box::new(m20260001_000020_create_rbac::Migration),
+            Box::new(m20260001_000021_drop_legacy_role::Migration),
         ]
     }
 }

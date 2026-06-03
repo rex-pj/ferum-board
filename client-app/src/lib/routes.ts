@@ -15,7 +15,6 @@ export const ROUTES = {
 	LOGIN: '/login',
 	REGISTER: '/register',
 	FORGOT_PASSWORD: '/forgot-password',
-	RESET_PASSWORD: '/reset-password',
 	LOGOUT: '/logout',
 
 	// App (authenticated)
@@ -30,7 +29,6 @@ export const ROUTES = {
 	MOD: {
 		REPORTS: '/mod/reports',
 		THREADS: '/mod/threads',
-		USER: (username: string) => `/mod/users/${username}`,
 		LOG: '/mod/log'
 	},
 
@@ -45,9 +43,9 @@ export const ROUTES = {
 		THREADS: '/admin/threads',
 		REPORTS: '/admin/reports',
 		LOG: '/admin/log',
-		SETTINGS: '/admin/settings'
+		SETTINGS: '/admin/settings',
+		ROLES: '/admin/roles',
+		ROLE: (id: string) => `/admin/roles/${id}`,
+		PERMISSIONS: '/admin/permissions'
 	},
-
-	// Media files (CAS — content-addressed, cache-immutable)
-	FILE: (key: string) => `/files/${key}` as const,
 } as const;

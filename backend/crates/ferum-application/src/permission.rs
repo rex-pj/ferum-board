@@ -1,12 +1,11 @@
-#![allow(dead_code)]
-
 use chrono::Utc;
 use uuid::Uuid;
 
 use crate::shared::AppError;
 use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 use ferum_domain::models::post::Post;
-use ferum_domain::models::user::{TrustLevel, UserRole};
+use ferum_domain::models::role::perm;
+use ferum_domain::models::user::TrustLevel;
 use ferum_domain::AuthUser;
 
 pub struct PermissionChecker;
@@ -19,7 +18,7 @@ impl PermissionChecker {
             ViewPolicy::Public => Ok(()),
             ViewPolicy::MembersOnly => {
                 let u = user.ok_or(AppError::Unauthorized)?;
-                if u.role >= UserRole::Moderator || u.trust_level >= TrustLevel::Basic {
+                if u.has_perm(perm::POST_CREATE) || u.meets_trust(TrustLevel::Basic) {
                     Ok(())
                 } else {
                     Err(AppError::forbidden("trust_level_insufficient"))
@@ -27,7 +26,8 @@ impl PermissionChecker {
             }
             ViewPolicy::StaffOnly => {
                 let u = user.ok_or_else(|| AppError::NotFound)?;
-                if u.role >= UserRole::Moderator {
+                // Staff = has any moderation or admin permission
+                if u.has_perm(perm::MOD_WARN) || u.has_perm(perm::ADMIN_USERS) {
                     Ok(())
                 } else {
                     Err(AppError::NotFound)
@@ -39,21 +39,32 @@ impl PermissionChecker {
     // ─── Post creation ────────────────────────────────────────────────────────
 
     pub fn can_create_post(user: &AuthUser, category: &Category) -> Result<(), AppError> {
-        Self::require_role(user, UserRole::Member)?;
         Self::require_not_banned(user)?;
 
-        if category.view_policy == ViewPolicy::StaffOnly && user.role < UserRole::Moderator {
+        if category.view_policy == ViewPolicy::StaffOnly
+            && !user.has_perm(perm::MOD_WARN)
+            && !user.has_perm(perm::ADMIN_USERS)
+        {
             return Err(AppError::NotFound);
         }
 
-        let min_trust = match category.post_policy {
+        if category.post_policy == PostPolicy::Closed {
+            return Err(AppError::forbidden("category_closed"));
+        }
+
+        if !user.has_perm_in(perm::POST_CREATE, category.id) {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+
+        // Category post_policy provides the trust gate (admin-configurable per category).
+        // Staff (users with moderation permissions in this category) bypass the trust gate.
+        let category_min = match category.post_policy {
             PostPolicy::Members => TrustLevel::Basic,
             PostPolicy::Trusted => TrustLevel::Member,
             PostPolicy::StaffOnly => TrustLevel::Leader,
-            PostPolicy::Closed => return Err(AppError::forbidden("category_closed")),
+            PostPolicy::Closed => unreachable!(),
         };
-
-        if user.role < UserRole::Moderator && user.trust_level < min_trust {
+        if !user.has_perm_in(perm::MOD_WARN, category.id) && !user.meets_trust(category_min) {
             return Err(AppError::forbidden("trust_level_insufficient"));
         }
 
@@ -62,19 +73,24 @@ impl PermissionChecker {
 
     // ─── Post editing ─────────────────────────────────────────────────────────
 
-    pub fn can_edit_post(user: &AuthUser, post: &Post) -> Result<(), AppError> {
+    pub fn can_edit_post(user: &AuthUser, post: &Post, category_id: Uuid) -> Result<(), AppError> {
         Self::require_not_banned(user)?;
 
         if post.is_deleted {
             return Err(AppError::NotFound);
         }
 
-        if user.role >= UserRole::Moderator {
+        // Moderators with post.edit_any in this category can edit any post
+        if user.has_perm_in(perm::THREAD_EDIT_ANY, category_id) {
             return Ok(());
         }
 
         if post.author_id != user.id {
             return Err(AppError::forbidden("not_author"));
+        }
+
+        if !user.has_perm(perm::POST_EDIT_OWN) {
+            return Err(AppError::forbidden("permission_denied"));
         }
 
         if !post.is_editable_by_author(Utc::now()) {
@@ -86,79 +102,158 @@ impl PermissionChecker {
 
     // ─── Post deletion ────────────────────────────────────────────────────────
 
-    pub fn can_delete_post(user: &AuthUser, post: &Post) -> Result<(), AppError> {
+    pub fn can_delete_post(user: &AuthUser, post: &Post, category_id: Uuid) -> Result<(), AppError> {
         Self::require_not_banned(user)?;
 
         if post.is_deleted {
             return Err(AppError::NotFound);
         }
 
-        if user.role >= UserRole::Moderator || post.author_id == user.id {
+        if user.has_perm_in(perm::POST_DELETE_ANY, category_id) {
             return Ok(());
         }
 
-        Err(AppError::forbidden("not_author"))
+        if post.author_id == user.id && user.has_perm(perm::POST_DELETE_OWN) {
+            return Ok(());
+        }
+
+        Err(AppError::forbidden("permission_denied"))
     }
 
-    // ─── Moderation ───────────────────────────────────────────────────────────
+    // ─── Thread moderation ────────────────────────────────────────────────────
 
-    pub fn can_moderate(
-        user: &AuthUser,
-        category_id: Uuid,
-        assigned_category_ids: &[Uuid],
-    ) -> Result<(), AppError> {
-        if user.role == UserRole::Admin {
-            return Ok(());
+    pub fn can_pin(user: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        if user.has_perm_in(perm::THREAD_PIN, category_id) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
         }
-        if user.role == UserRole::Moderator
-            && (user.is_global_mod || assigned_category_ids.contains(&category_id))
-        {
-            return Ok(());
-        }
-        Err(AppError::forbidden("not_moderator_of_category"))
     }
 
-    /// True for global moderators and admins regardless of category.
-    /// Use this when the operation isn't scoped to a specific category (e.g.
-    /// viewing the cross-category report queue).
-    pub fn can_moderate_any(user: &AuthUser) -> Result<(), AppError> {
-        if user.role == UserRole::Admin || (user.role == UserRole::Moderator && user.is_global_mod)
-        {
-            return Ok(());
+    pub fn can_lock(user: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        if user.has_perm_in(perm::THREAD_LOCK, category_id) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
         }
-        Err(AppError::forbidden("not_global_moderator_or_admin"))
+    }
+
+    pub fn can_move(user: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        if user.has_perm_in(perm::THREAD_MOVE, category_id) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    // ─── Moderation (cross-category) ─────────────────────────────────────────
+
+    pub fn can_view_reports(user: &AuthUser, category_id: Option<Uuid>) -> Result<(), AppError> {
+        let ok = match category_id {
+            Some(cat_id) => user.has_perm_in(perm::MOD_VIEW_REPORTS, cat_id),
+            None => user.has_perm(perm::MOD_VIEW_REPORTS),
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    pub fn can_resolve_report(user: &AuthUser, category_id: Option<Uuid>) -> Result<(), AppError> {
+        let ok = match category_id {
+            Some(cat_id) => user.has_perm_in(perm::MOD_RESOLVE, cat_id),
+            None => user.has_perm(perm::MOD_RESOLVE),
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    pub fn can_warn(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::MOD_WARN) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    pub fn can_ban_temp(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::MOD_BAN_TEMP) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    pub fn can_ban_permanent(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::ADMIN_BAN_PERMANENT) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    // ─── Upload ───────────────────────────────────────────────────────────────
+
+    pub fn can_upload(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
+        if !user.has_perm(perm::FILE_UPLOAD) {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+        // Default min_trust for file.upload is Member (matches seeded DB value).
+        // Staff bypass this gate.
+        if !user.has_perm(perm::MOD_WARN) && !user.meets_trust(TrustLevel::Member) {
+            return Err(AppError::forbidden("trust_level_insufficient"));
+        }
+        Ok(())
     }
 
     // ─── Admin ────────────────────────────────────────────────────────────────
 
-    pub fn can_admin(user: &AuthUser) -> Result<(), AppError> {
-        if user.role == UserRole::Admin {
+    pub fn can_manage_users(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::ADMIN_USERS) {
             Ok(())
         } else {
-            Err(AppError::forbidden("not_admin"))
+            Err(AppError::forbidden("permission_denied"))
         }
     }
 
-    // ─── Upload / link ────────────────────────────────────────────────────────
-
-    pub fn can_upload(user: &AuthUser) -> Result<(), AppError> {
-        Self::require_not_banned(user)?;
-        if user.role >= UserRole::Moderator || user.trust_level >= TrustLevel::Member {
+    pub fn can_manage_categories(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::ADMIN_CATEGORIES) {
             Ok(())
         } else {
-            Err(AppError::forbidden("trust_level_insufficient"))
+            Err(AppError::forbidden("permission_denied"))
         }
     }
 
-    // ─── Private helpers ──────────────────────────────────────────────────────
-
-    pub fn require_role(user: &AuthUser, min: UserRole) -> Result<(), AppError> {
-        if user.role >= min {
+    pub fn can_manage_roles(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::ADMIN_ROLES) {
             Ok(())
         } else {
-            Err(AppError::forbidden("insufficient_role"))
+            Err(AppError::forbidden("permission_denied"))
         }
     }
+
+    pub fn can_manage_config(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::ADMIN_CONFIG) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    pub fn can_manage_webhooks(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::ADMIN_WEBHOOKS) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
 
     pub fn require_not_banned(user: &AuthUser) -> Result<(), AppError> {
         if user.is_currently_banned() {

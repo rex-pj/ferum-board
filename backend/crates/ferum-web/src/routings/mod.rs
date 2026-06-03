@@ -25,6 +25,7 @@ use crate::handlers::{
     post_handler::*,
     profile_handler::*,
     reaction_handler::*,
+    role_handler::*,
     search_handler::search_handler,
     setup_handler::{run_setup_handler, setup_status_handler},
     site_config_handler::*,
@@ -73,14 +74,22 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
     // Extended admin routes
     let admin_user_routes = Router::new()
         .route("/", get(admin_list_users_handler))
-        .route(
-            "/{id}",
-            get(admin_get_user_handler).patch(admin_update_user_handler),
-        )
+        .route("/{id}", get(admin_get_user_handler))
         .route(
             "/{id}/ban",
             post(admin_ban_user_handler).delete(admin_unban_user_handler),
-        );
+        )
+        .route("/{id}/roles", post(assign_user_role_handler))
+        .route("/{id}/roles/{role_id}", delete(revoke_user_role_handler));
+
+    let admin_role_routes = Router::new()
+        .route("/", get(list_roles_handler).post(create_role_handler))
+        .route("/{id}", patch(update_role_handler).delete(delete_role_handler))
+        .route(
+            "/{id}/permissions",
+            get(get_role_permissions_handler).put(set_role_permissions_handler),
+        )
+        .route("/permissions", get(list_all_permissions_handler));
 
     let admin_routes = Router::new()
         .route("/stats", get(admin_stats_handler))
@@ -107,7 +116,8 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
             patch(update_webhook_handler).delete(delete_webhook_handler),
         )
         .nest("/categories", admin_category_routes)
-        .nest("/users", admin_user_routes);
+        .nest("/users", admin_user_routes)
+        .nest("/roles", admin_role_routes);
 
     // Public category routes
     let category_routes = Router::new()
@@ -185,7 +195,7 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
         .route("/reports/{id}", patch(resolve_report_handler))
         .route("/users/{id}/warn", post(warn_user_handler))
         .route("/users/{id}/ban", post(temp_ban_handler))
-        .route("/audit-log", get(list_audit_log_handler));
+        .route("/audit-log", get(list_mod_audit_log_handler));
 
     let setup_routes = Router::new()
         .route("/status", get(setup_status_handler))

@@ -1,4 +1,4 @@
-﻿<svelte:head>
+<svelte:head>
 	<title>{data.profile?.display_name ?? data.profile?.username ?? 'User'} | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="description" content={data.profile?.bio ?? `${data.profile?.username}'s profile on Ferum Board`} />
 	<meta property="og:title" content="{data.profile?.display_name ?? data.profile?.username ?? 'User'} | {data.siteName ?? 'Ferum Board'}" />
@@ -17,35 +17,50 @@
 
 	const profile = data.profile;
 
-	const TRUST_DESCRIPTIONS: Record<string, string> = {
-		new:    'New member — getting started',
-		basic:  'Basic member — verified and active',
-		member: 'Trusted member of the community',
-		leader: 'Community leader with elevated trust',
+	const TRUST_LABELS: Record<string, string> = {
+		new:     'New',
+		basic:   'Basic',
+		member:  'Member',
+		regular: 'Regular',
+		leader:  'Leader',
 	};
+
+	const TRUST_DESCRIPTIONS: Record<string, string> = {
+		new:     'New member — getting started',
+		basic:   'Basic member — verified and active',
+		member:  'Trusted member of the community',
+		regular: 'Regular contributor',
+		leader:  'Community leader with elevated trust',
+	};
+
+	// Matches the hue derivation in Avatar.svelte for a consistent per-user colour
+	const profileHue = profile
+		? profile.username.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0) % 360
+		: 0;
 </script>
 
 <div class="fr-content-layout">
-<!-- Profile main column -->
+
+<!-- ── Main column ─────────────────────────────────────────── -->
 <div class="fr-feed-col">
 	{#if profile}
-		<!-- Profile header -->
-		<div class="d-flex align-items-start gap-3 gap-sm-4 mb-4">
-			<Avatar src={profile.avatar_url} username={profile.username} size={80} />
-			<div class="flex-grow-1 min-w-0">
-				<div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
-					<div>
-						<h1 class="h4 mb-1 text-truncate">{profile.display_name ?? profile.username}</h1>
-						<div class="d-flex align-items-center gap-2 flex-wrap">
-							<span class="text-muted small">@{profile.username}</span>
-							{#if profile.role && profile.role !== 'member'}
-								<Badge role={profile.role} />
-							{/if}
-							{#if profile.is_global_mod}
-								<span class="badge bg-warning text-dark">Global Mod</span>
-							{/if}
-						</div>
-					</div>
+
+		<!-- Profile hero card -->
+		<div class="card mb-4 fr-profile-card">
+			<!-- Gradient banner -->
+			<div class="fr-profile-banner" style="--profile-hue:{profileHue}"></div>
+
+			<!-- Avatar: absolutely positioned so it is never in the card's flex flow
+			     and can never be clipped by sibling paint order -->
+			<div class="fr-profile-avatar-abs">
+				<Avatar src={profile.avatar_url} username={profile.username} size={80} />
+			</div>
+
+			<!-- Name, badges, bio, stats — padding-top clears the avatar overlap -->
+			<div class="px-3 px-sm-4 pb-3 pb-sm-4 fr-profile-body">
+				<!-- Name + Edit Profile in the same row -->
+				<div class="d-flex align-items-start justify-content-between gap-2 flex-wrap mb-1">
+					<h1 class="h4 fw-bold mb-0">{profile.display_name ?? profile.username}</h1>
 					{#if data.user?.username === profile.username}
 						<a href={ROUTES.ACCOUNT} class="btn btn-outline-secondary btn-sm flex-shrink-0">
 							<i class="fa-solid fa-pen me-1"></i>Edit Profile
@@ -53,27 +68,55 @@
 					{/if}
 				</div>
 
-				<!-- Meta row: joined + post count -->
-				<div class="d-flex align-items-center gap-3 flex-wrap mt-2 small text-muted">
-					<span><i class="fa-regular fa-calendar me-1"></i>Joined <Timestamp date={profile.created_at} /></span>
-					<span><i class="fa-regular fa-comment me-1"></i>{(profile.post_count ?? 0).toLocaleString()} posts</span>
+				<div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+					<span class="text-muted small">@{profile.username}</span>
+					{#if profile.primary_role_slug && profile.primary_role_slug !== 'member'}
+						<Badge role={profile.primary_role_slug} />
+					{/if}
+					<Badge trust={profile.trust_level} label={TRUST_LABELS[profile.trust_level] ?? profile.trust_level} />
 				</div>
 
 				{#if profile.bio}
-					<p class="mb-0 mt-2" style="color: var(--bs-body-color);">{profile.bio}</p>
+					<p class="text-body-secondary small lh-base mb-1">{profile.bio}</p>
 				{/if}
 				{#if profile.website}
-					<a href={profile.website} rel="nofollow noopener" class="small mt-1 d-inline-block text-break">
-						<i class="fa-solid fa-link me-1"></i>{profile.website}
+					<a href={profile.website} rel="nofollow noopener" class="small text-break d-inline-flex align-items-center gap-1 mb-1">
+						<i class="fa-solid fa-link fa-xs"></i>{profile.website}
 					</a>
 				{/if}
+
+				<!-- Stats strip -->
+				<div class="fr-profile-stats mt-3">
+					<div class="fr-profile-stat-item">
+						<span class="fw-semibold small text-body">{(profile.post_count ?? 0).toLocaleString()}</span>
+						<span class="fr-stat-label">Posts</span>
+					</div>
+					{#if profile.trust_score != null}
+						<div class="fr-profile-stat-item">
+							<span class="fw-semibold small text-body">
+								<i class="fa-solid fa-star fa-xs text-warning"></i> {profile.trust_score}
+							</span>
+							<span class="fr-stat-label">Trust</span>
+						</div>
+					{/if}
+					<div class="fr-profile-stat-item">
+						<span class="fw-semibold small text-body"><Timestamp date={profile.created_at} /></span>
+						<span class="fr-stat-label">Joined</span>
+					</div>
+				</div>
 			</div>
 		</div>
 
-		<!-- Divider -->
-		<hr class="my-4" />
-
 		<!-- Thread list -->
+		<div class="d-flex align-items-center mb-3">
+			<h2 class="h6 fw-semibold mb-0" style="color:var(--bs-secondary-color)">
+				<i class="fa-regular fa-comment-dots me-2"></i>Threads
+				{#if data.threadTotal > 0}
+					<span class="badge bg-secondary ms-1 fw-normal" style="font-size:0.7rem">{data.threadTotal.toLocaleString()}</span>
+				{/if}
+			</h2>
+		</div>
+
 		{#if data.threads && data.threads.length > 0}
 			<div class="d-flex flex-column gap-3">
 				{#each data.threads as thread (thread.id)}
@@ -112,50 +155,134 @@
 				<div class="fr-empty-icon">
 					<i class="fa-regular fa-comment-dots"></i>
 				</div>
-				<h2 class="fr-empty-title">No posts yet</h2>
-				<p class="fr-empty-sub">This user hasn't posted anything yet.</p>
+				<h2 class="fr-empty-title">No threads yet</h2>
+				<p class="fr-empty-sub">This user hasn't started any threads yet.</p>
 			</div>
 		{/if}
+
 	{:else}
 		<div class="alert alert-warning">User not found.</div>
 	{/if}
 </div>
 
-<!-- Right panel -->
+<!-- ── Right panel ──────────────────────────────────────────── -->
 {#if profile}
 <aside class="fr-right-panel">
-	<!-- Trust level + score combined -->
+
+	<!-- Stats card -->
 	<div class="fr-panel">
-		<div class="fr-panel-header">Trust Level</div>
-		<div class="px-3 py-3">
-			<div class="d-flex align-items-center justify-content-between mb-2">
-				<Badge trust={profile.trust_level} label={profile.trust_level} />
-				{#if profile.trust_score != null}
-					<span class="small fw-semibold" style="color: var(--bs-body-color);">
-						<i class="fa-solid fa-star me-1 text-warning"></i>{profile.trust_score} pts
-					</span>
-				{/if}
+		<div class="fr-panel-header">Stats</div>
+		<div class="fr-panel-stat">
+			<span class="text-muted small"><i class="fa-regular fa-comment me-2 opacity-50"></i>Posts</span>
+			<span class="fw-semibold small">{(profile.post_count ?? 0).toLocaleString()}</span>
+		</div>
+		{#if profile.trust_score != null}
+			<div class="fr-panel-stat">
+				<span class="text-muted small"><i class="fa-solid fa-star me-2 text-warning opacity-75"></i>Trust score</span>
+				<span class="fw-semibold small">{profile.trust_score}</span>
 			</div>
+		{/if}
+		<div class="fr-panel-stat">
+			<span class="text-muted small"><i class="fa-regular fa-calendar me-2 opacity-50"></i>Joined</span>
+			<span class="fw-semibold small"><Timestamp date={profile.created_at} /></span>
+		</div>
+	</div>
+
+	<!-- Member status card -->
+	<div class="fr-panel">
+		<div class="fr-panel-header">Member status</div>
+		<div class="px-3 py-3 d-flex flex-column gap-2">
+			<div class="d-flex align-items-center justify-content-between">
+				<span class="text-muted small">Trust level</span>
+				<Badge trust={profile.trust_level} label={TRUST_LABELS[profile.trust_level] ?? profile.trust_level} />
+			</div>
+			{#if profile.primary_role_slug && profile.primary_role_slug !== 'member'}
+				<div class="d-flex align-items-center justify-content-between">
+					<span class="text-muted small">Role</span>
+					<Badge role={profile.primary_role_slug} />
+				</div>
+			{/if}
 			{#if TRUST_DESCRIPTIONS[profile.trust_level]}
-				<p class="small mb-0 text-muted" style="line-height: 1.5;">
+				<p class="mb-0 mt-1 lh-base" style="font-size:0.75rem;color:var(--bs-secondary-color)">
 					{TRUST_DESCRIPTIONS[profile.trust_level]}
 				</p>
 			{/if}
 		</div>
 	</div>
 
-	<!-- Role (non-member only) -->
-	{#if profile.role && profile.role !== 'member'}
-		<div class="fr-panel">
-			<div class="fr-panel-header">Role</div>
-			<div class="px-3 py-3">
-				<Badge role={profile.role} />
-				{#if profile.is_global_mod}
-					<p class="small mt-2 mb-0 text-muted">Global moderator across all categories.</p>
-				{/if}
-			</div>
-		</div>
-	{/if}
 </aside>
 {/if}
+
 </div>
+
+<style>
+	/* ── Banner ───────────────────────────────────────────────── */
+	.fr-profile-banner {
+		height: 88px;
+		background: linear-gradient(
+			135deg,
+			hsl(calc(var(--profile-hue) + 20), 55%, 38%) 0%,
+			hsl(var(--profile-hue), 65%, 52%) 100%
+		);
+		border-top-left-radius: 7px; /* matches card border-radius minus border */
+		border-top-right-radius: 7px;
+	}
+
+	:global([data-bs-theme='dark']) .fr-profile-banner {
+		filter: brightness(0.55) saturate(1.3);
+	}
+
+	/* ── Avatar (absolute — never in flex flow, never clipped by siblings) ── */
+	.fr-profile-card {
+		position: relative; /* Bootstrap already sets this; explicit for clarity */
+	}
+
+	.fr-profile-avatar-abs {
+		position: absolute;
+		left: 1.25rem;
+		/* banner = 88px, avatar = 80px → center avatar on banner bottom edge */
+		top: calc(88px - 40px); /* = 48px */
+		width: 80px;
+		height: 80px;
+		border-radius: 50%;
+		overflow: hidden;
+		line-height: 0;
+		z-index: 1;
+		box-shadow: 0 0 0 3px var(--bs-body-bg), 0 2px 8px rgba(0, 0, 0, 0.25);
+	}
+
+	/* Content area: top padding = avatar overlap (40px) + gap (12px) */
+	.fr-profile-body {
+		padding-top: 52px;
+	}
+
+	/* ── Stats strip ──────────────────────────────────────────── */
+	.fr-profile-stats {
+		display: flex;
+		border: 1px solid var(--bs-border-color);
+		border-radius: var(--bs-border-radius-sm);
+		overflow: hidden;
+	}
+
+	.fr-profile-stat-item {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.1rem;
+		padding: 0.5rem 0.375rem;
+	}
+
+	.fr-profile-stat-item + .fr-profile-stat-item {
+		border-left: 1px solid var(--bs-border-color);
+	}
+
+	.fr-stat-label {
+		font-size: 0.6875rem;
+		color: var(--bs-secondary-color);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		font-weight: 500;
+	}
+</style>

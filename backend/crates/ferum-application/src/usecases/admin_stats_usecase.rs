@@ -17,7 +17,7 @@ impl AdminStatsUseCase {
     }
 
     pub async fn dashboard(&self, actor: &AuthUser) -> Result<DashboardStats, AppError> {
-        PermissionChecker::can_admin(actor)?;
+        PermissionChecker::can_manage_users(actor)?;
 
         use sea_orm::{DbBackend, FromQueryResult, Statement};
 

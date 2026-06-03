@@ -14,7 +14,7 @@
 
 {#if form?.success}
 	<div class="text-center py-3">
-		<div class="fr-auth-icon-circle mx-auto mb-3" style="background: color-mix(in srgb, #10b981 10%, var(--bs-body-bg)); border-color: color-mix(in srgb, #10b981 25%, var(--bs-border-color)); color: #10b981;">
+		<div class="fr-auth-icon-circle mx-auto mb-3 icon-success">
 			<i class="fa-solid fa-envelope-circle-check"></i>
 		</div>
 		<h2 class="fr-auth-heading mb-1">Check your inbox</h2>
@@ -112,3 +112,11 @@
 		Already have an account? <a href={ROUTES.LOGIN} class="fw-medium">Sign in</a>
 	</p>
 {/if}
+
+<style>
+	.icon-success {
+		background: color-mix(in srgb, #10b981 10%, var(--bs-body-bg));
+		border-color: color-mix(in srgb, #10b981 25%, var(--bs-border-color));
+		color: #10b981;
+	}
+</style>

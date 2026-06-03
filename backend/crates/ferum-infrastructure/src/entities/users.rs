@@ -13,9 +13,7 @@ pub struct Model {
     pub is_email_verified: bool,
     pub display_name: Option<String>,
     pub password_hash: Option<String>,
-    pub role: UserRole,
     pub trust_level: TrustLevel,
-    pub is_global_mod: bool,
     pub trust_score: i32,
     pub post_count: i32,
     pub days_visited: i32,
@@ -45,24 +43,13 @@ pub enum Relation {
     Reactions,
     #[sea_orm(has_many = "super::notifications::Entity")]
     Notifications,
-    #[sea_orm(has_many = "super::category_moderators::Entity")]
-    CategoryModerators,
+    #[sea_orm(has_many = "super::user_roles::Entity")]
+    UserRoles,
     #[sea_orm(has_one = "super::user_avatars::Entity")]
     UserAvatar,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-#[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, Hash)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "user_role")]
-pub enum UserRole {
-    #[sea_orm(string_value = "member")]
-    Member,
-    #[sea_orm(string_value = "moderator")]
-    Moderator,
-    #[sea_orm(string_value = "admin")]
-    Admin,
-}
 
 #[derive(
     Clone,

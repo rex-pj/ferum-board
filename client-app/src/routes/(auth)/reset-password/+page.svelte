@@ -17,7 +17,7 @@
 
 {#if !token}
 	<div class="text-center py-3">
-		<div class="fr-auth-icon-circle mx-auto mb-3" style="background: color-mix(in srgb, #f59e0b 10%, var(--bs-body-bg)); border-color: color-mix(in srgb, #f59e0b 25%, var(--bs-border-color)); color: #f59e0b;">
+		<div class="fr-auth-icon-circle mx-auto mb-3 icon-warning">
 			<i class="fa-solid fa-triangle-exclamation"></i>
 		</div>
 		<h2 class="fr-auth-heading mb-1">Link invalid or expired</h2>
@@ -26,7 +26,7 @@
 	</div>
 {:else if form?.success}
 	<div class="text-center py-3">
-		<div class="fr-auth-icon-circle mx-auto mb-3" style="background: color-mix(in srgb, #10b981 10%, var(--bs-body-bg)); border-color: color-mix(in srgb, #10b981 25%, var(--bs-border-color)); color: #10b981;">
+		<div class="fr-auth-icon-circle mx-auto mb-3 icon-success">
 			<i class="fa-solid fa-circle-check"></i>
 		</div>
 		<h2 class="fr-auth-heading mb-1">Password updated</h2>
@@ -93,3 +93,16 @@
 		</button>
 	</form>
 {/if}
+
+<style>
+	.icon-warning {
+		background: color-mix(in srgb, #f59e0b 10%, var(--bs-body-bg));
+		border-color: color-mix(in srgb, #f59e0b 25%, var(--bs-border-color));
+		color: #f59e0b;
+	}
+	.icon-success {
+		background: color-mix(in srgb, #10b981 10%, var(--bs-body-bg));
+		border-color: color-mix(in srgb, #10b981 25%, var(--bs-border-color));
+		color: #10b981;
+	}
+</style>

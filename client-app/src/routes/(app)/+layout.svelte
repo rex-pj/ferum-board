@@ -33,16 +33,12 @@
 		</aside>
 
 		<div
-			class="offcanvas offcanvas-start"
+			class="offcanvas offcanvas-start mobile-sidebar"
 			tabindex="-1"
 			id="frSidebar"
 			aria-labelledby="frSidebarLabel"
-			style="width: var(--fr-sidebar-width); background: var(--fr-sidebar-bg); border-right: 1px solid var(--fr-sidebar-border);"
 		>
-			<div
-				class="offcanvas-header"
-				style="height: var(--fr-topbar-height); border-bottom: 1px solid var(--bs-border-color); padding: 0 1rem;"
-			>
+			<div class="offcanvas-header sidebar-header">
 				<span class="fw-bold" id="frSidebarLabel">{data?.siteName ?? 'Ferum Board'}</span>
 				<button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
 			</div>
@@ -58,3 +54,17 @@
 
 	<SiteFooter siteName={data?.siteName} logoUrl={data?.logoUrl} />
 </div>
+
+<style>
+	.mobile-sidebar {
+		width: var(--fr-sidebar-width);
+		background: var(--fr-sidebar-bg);
+		border-right: 1px solid var(--fr-sidebar-border);
+	}
+
+	.sidebar-header {
+		height: var(--fr-topbar-height);
+		border-bottom: 1px solid var(--bs-border-color);
+		padding: 0 1rem;
+	}
+</style>

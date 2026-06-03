@@ -105,7 +105,7 @@
 		>
 			<i class="fa-solid fa-webhook fa-sm me-1"></i>Webhooks
 			{#if webhooks.length > 0}
-				<span class="badge bg-secondary ms-1" style="font-size:0.65rem;">{webhooks.length}</span>
+				<span class="badge bg-secondary ms-1" class="badge-xs">{webhooks.length}</span>
 			{/if}
 		</button>
 	</li>
@@ -126,13 +126,13 @@
 				<div class="d-flex flex-column align-items-center gap-1">
 					<div
 						class="border rounded p-2 d-flex align-items-center justify-content-center"
-						style="width:80px; height:56px; background: var(--bs-tertiary-bg);"
+						class="logo-preview"
 					>
 						{#if logoObjectUrl || currentLogoUrl}
 							<img
 								src={logoObjectUrl || currentLogoUrl}
 								alt="Current logo"
-								style="max-width:64px; max-height:40px; object-fit:contain;"
+								class="logo-img"
 							/>
 						{:else}
 							<i class="fa-solid fa-image fa-lg text-muted"></i>
@@ -142,12 +142,12 @@
 				</div>
 
 				<!-- Upload + remove forms -->
-				<div class="d-flex flex-column flex-grow-1" style="gap:6px">
+				<div class="d-flex flex-column flex-grow-1 gap-sm">
 					<form
 						method="POST"
 						action="?/uploadLogo"
 						enctype="multipart/form-data"
-						style="margin:0"
+						class="m-0"
 						use:enhance={() => {
 							uploadingLogo = true;
 							return async ({ result, update }) => {
@@ -162,7 +162,7 @@
 							};
 						}}
 					>
-						<div class="input-group" style="max-width:380px;">
+						<div class="input-group input-md">
 							<input
 								type="file"
 								name="file"
@@ -173,7 +173,6 @@
 							<button
 								type="submit"
 								class="btn btn-outline-primary"
-								style="min-height:44px;"
 								disabled={uploadingLogo || !logoFile}
 							>
 								{#if uploadingLogo}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
@@ -182,13 +181,13 @@
 						</div>
 					</form>
 
-					<div class="form-text" style="margin:0">Accepted: JPEG, PNG, WebP, GIF · Max 2 MB</div>
+					<div class="form-text mb-0">Accepted: JPEG, PNG, WebP, GIF · Max 2 MB</div>
 
 					{#if currentLogoUrl}
 						<form
 							method="POST"
 							action="?/removeLogo"
-							style="margin:0"
+							class="m-0"
 							use:enhance={() => {
 								removingLogo = true;
 								return async ({ result, update }) => {
@@ -204,7 +203,6 @@
 							<button
 								type="submit"
 								class="btn btn-sm btn-outline-danger"
-								style="min-height:36px;"
 								disabled={removingLogo}
 								onclick={(e) => { if (!confirm('Remove the logo?')) e.preventDefault(); }}
 							>
@@ -227,13 +225,13 @@
 				<div class="d-flex flex-column align-items-center gap-1">
 					<div
 						class="border rounded p-2 d-flex align-items-center justify-content-center"
-						style="width:48px; height:48px; background: var(--bs-tertiary-bg);"
+						class="favicon-preview"
 					>
 						{#if faviconObjectUrl || currentFaviconUrl}
 							<img
 								src={faviconObjectUrl || currentFaviconUrl}
 								alt="Current favicon"
-								style="max-width:32px; max-height:32px; object-fit:contain;"
+								class="favicon-img"
 							/>
 						{:else}
 							<i class="fa-solid fa-image fa-lg text-muted"></i>
@@ -243,12 +241,12 @@
 				</div>
 
 				<!-- Upload + remove forms -->
-				<div class="d-flex flex-column flex-grow-1" style="gap:6px">
+				<div class="d-flex flex-column flex-grow-1 gap-sm">
 					<form
 						method="POST"
 						action="?/uploadFavicon"
 						enctype="multipart/form-data"
-						style="margin:0"
+						class="m-0"
 						use:enhance={() => {
 							uploadingFavicon = true;
 							return async ({ result, update }) => {
@@ -264,7 +262,7 @@
 							};
 						}}
 					>
-						<div class="input-group" style="max-width:380px;">
+						<div class="input-group input-md">
 							<input
 								type="file"
 								name="file"
@@ -275,7 +273,6 @@
 							<button
 								type="submit"
 								class="btn btn-outline-primary"
-								style="min-height:44px;"
 								disabled={uploadingFavicon || !faviconFile}
 							>
 								{#if uploadingFavicon}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
@@ -284,13 +281,13 @@
 						</div>
 					</form>
 
-					<div class="form-text" style="margin:0">Accepted: ICO, SVG, PNG, GIF, JPEG · Max 512 KB</div>
+					<div class="form-text mb-0">Accepted: ICO, SVG, PNG, GIF, JPEG · Max 512 KB</div>
 
 					{#if currentFaviconUrl}
 						<form
 							method="POST"
 							action="?/removeFavicon"
-							style="margin:0"
+							class="m-0"
 							use:enhance={() => {
 								removingFavicon = true;
 								return async ({ result, update }) => {
@@ -307,7 +304,6 @@
 							<button
 								type="submit"
 								class="btn btn-sm btn-outline-danger"
-								style="min-height:36px;"
 								disabled={removingFavicon}
 								onclick={(e) => { if (!confirm('Remove the custom favicon?')) e.preventDefault(); }}
 							>
@@ -382,11 +378,11 @@
 						</div>
 						<div class="form-text">Set automatically when you upload a logo above, or enter an external URL here.</div>
 						{#if logoUrlInput && !logoPreviewError}
-							<div class="mt-2 d-flex align-items-center gap-3 p-2 rounded" style="background: var(--bs-tertiary-bg); width: fit-content;">
+							<div class="mt-2 d-flex align-items-center gap-3 p-2 rounded logo-url-preview">
 								<img
 									src={logoUrlInput}
 									alt="Logo preview"
-									style="max-height:40px; max-width:200px; object-fit:contain;"
+									class="logo-url-img"
 									onerror={() => (logoPreviewError = true)}
 									onload={() => (logoPreviewError = false)}
 								/>
@@ -407,9 +403,8 @@
 								type="color"
 								id="primary_color"
 								name="primary_color"
-								class="form-control form-control-color"
+								class="form-control form-control-color color-picker"
 								bind:value={colorInput}
-								style="width:60px; height:44px;"
 							/>
 							<div class="d-flex align-items-center gap-2">
 								<button
@@ -532,8 +527,7 @@
 								<input type="hidden" name="is_active" value={hook.is_active ? 'false' : 'true'} />
 								<button
 									type="submit"
-									class="btn btn-sm btn-outline-secondary"
-									style="min-height:44px;"
+									class="btn btn-sm btn-outline-secondary webhook-btn"
 									title={hook.is_active ? 'Disable webhook' : 'Re-enable webhook'}
 								>
 									{hook.is_active ? 'Disable' : 'Re-enable'}
@@ -552,8 +546,7 @@
 								<input type="hidden" name="id" value={hook.id} />
 								<button
 									type="submit"
-									class="btn btn-sm btn-outline-danger"
-									style="min-height:44px;"
+									class="btn btn-sm btn-outline-danger webhook-btn"
 									onclick={(e) => {
 										if (!confirm('Delete this webhook?')) e.preventDefault();
 									}}
@@ -567,7 +560,7 @@
 			{/each}
 		</div>
 	{:else}
-		<div class="text-muted small mb-4 py-3 text-center border rounded" style="border-style: dashed !important;">
+		<div class="text-muted small mb-4 py-3 text-center border rounded border-dashed">
 			No webhooks configured yet.
 		</div>
 	{/if}
@@ -638,7 +631,6 @@
 				<button
 					type="submit"
 					class="btn btn-primary mt-3"
-					style="min-height:44px;"
 					disabled={creatingWebhook || !newWebhookUrl}
 				>
 					{#if creatingWebhook}<span class="spinner-border spinner-border-sm me-2"></span>{/if}
@@ -648,3 +640,49 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.badge-xs { font-size: 0.65rem; }
+
+	.logo-preview {
+		width: 80px;
+		height: 56px;
+		background: var(--bs-tertiary-bg);
+	}
+
+	.logo-img {
+		max-width: 64px;
+		max-height: 40px;
+		object-fit: contain;
+	}
+
+	.favicon-preview {
+		width: 48px;
+		height: 48px;
+		background: var(--bs-tertiary-bg);
+	}
+
+	.favicon-img {
+		max-width: 32px;
+		max-height: 32px;
+		object-fit: contain;
+	}
+
+	.gap-sm { gap: 6px; }
+	.input-md { max-width: 380px; }
+
+	.logo-url-preview {
+		background: var(--bs-tertiary-bg);
+		width: fit-content;
+	}
+
+	.logo-url-img {
+		max-height: 40px;
+		max-width: 200px;
+		object-fit: contain;
+	}
+
+	.color-picker { width: 60px; height: 44px; }
+	.webhook-btn { min-height: var(--fr-tap-target); }
+	.border-dashed { border-style: dashed !important; }
+</style>

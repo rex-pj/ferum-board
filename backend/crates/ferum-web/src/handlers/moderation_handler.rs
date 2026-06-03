@@ -109,7 +109,7 @@ pub async fn temp_ban_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn list_audit_log_handler(
+pub async fn list_mod_audit_log_handler(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
     Query(q): Query<AuditLogQuery>,
@@ -120,13 +120,7 @@ pub async fn list_audit_log_handler(
     use uuid::Uuid;
 
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    // Verify mod or admin
-    let assigned = state
-        .cat_mod_repo
-        .list_category_ids_for_user(actor.id)
-        .await?;
-    PermissionChecker::can_moderate(actor, Uuid::nil(), &assigned)
-        .or_else(|_| PermissionChecker::can_admin(actor))?;
+    PermissionChecker::can_view_reports(actor, None)?;
 
     let page = q.page.unwrap_or(1).max(1);
     let per_page = q.per_page.unwrap_or(30);

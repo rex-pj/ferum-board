@@ -24,7 +24,7 @@
 </script>
 
 <div class="d-flex align-items-center gap-2 mb-4">
-	<i class="fa-solid fa-flag" style="font-size:1.1rem;opacity:.55;"></i>
+	<i class="fa-solid fa-flag fr-page-icon"></i>
 	<h1 class="h5 mb-0">Pending Reports</h1>
 	{#if (data.meta?.total ?? 0) > 0}
 		<span class="badge rounded-pill bg-danger ms-1">{data.meta.total}</span>
@@ -38,7 +38,7 @@
 <div class="card">
 	<div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
 		<form method="GET" class="d-flex align-items-center gap-2 flex-grow-1 flex-wrap">
-			<select name="target_type" class="form-select form-select-sm" style="width:auto;">
+			<select name="target_type" class="form-select form-select-sm w-auto">
 				<option value="" selected={!data.target_type}>All targets</option>
 				<option value="post" selected={data.target_type === 'post'}>Posts only</option>
 				<option value="thread" selected={data.target_type === 'thread'}>Threads only</option>
@@ -76,7 +76,7 @@
 								<code class="ms-1">{report.thread_id.slice(0, 8)}…</code>
 							{/if}
 						</td>
-						<td class="small" style="max-width:300px;">
+						<td class="small reason-col">
 							<span class="text-truncate d-block" title={report.reason}>{report.reason}</span>
 						</td>
 						<td class="small"><code>{report.reporter_id.slice(0, 8)}…</code></td>
@@ -156,3 +156,7 @@
 </div>
 
 <Pagination {currentPage} {totalPages} buildHref={pageHref} />
+
+<style>
+	.reason-col { max-width: 300px; }
+</style>

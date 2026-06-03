@@ -48,8 +48,8 @@
 
 <div class="fr-err-shell">
 	<header class="fr-err-header">
-		<a href={ROUTES.HOME} class="fr-err-brand">
-			<i class="fa-solid fa-layer-group"></i>
+		<a href={ROUTES.HOME} class="fr-brand-link">
+			<i class="fa-solid fa-layer-group text-primary"></i>
 			Ferum Board
 		</a>
 	</header>
@@ -103,18 +103,6 @@
 		flex-shrink: 0;
 	}
 
-	.fr-err-brand {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-weight: 700;
-		font-size: 0.9375rem;
-		color: var(--bs-body-color);
-		text-decoration: none;
-		transition: color 0.1s;
-	}
-	.fr-err-brand:hover { color: var(--bs-primary); }
-	.fr-err-brand i { color: var(--bs-primary); }
 
 	.fr-err-body {
 		flex: 1;

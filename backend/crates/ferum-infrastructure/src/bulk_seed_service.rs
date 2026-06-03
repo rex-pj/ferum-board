@@ -15,7 +15,7 @@ use crate::entities::{
     reactions::{self, ReactionKind},
     threads::{self, ThreadStatus},
     user_preferences,
-    users::{self, TrustLevel, UserRole},
+    users::{self, TrustLevel},
 };
 use ferum_application::ports::BulkSeedService;
 use ferum_application::shared::AppError;
@@ -162,9 +162,7 @@ impl PgBulkSeedService {
                     is_email_verified: Set(true),
                     display_name: Set(Some("Moderator".into())),
                     password_hash: Set(Some(hash.into())),
-                    role: Set(UserRole::Moderator),
                     trust_level: Set(TrustLevel::Member),
-                    is_global_mod: Set(true),
                     trust_score: Set(80),
                     post_count: Set(12),
                     ..Default::default()
@@ -176,9 +174,7 @@ impl PgBulkSeedService {
                     is_email_verified: Set(true),
                     display_name: Set(Some("Alice".into())),
                     password_hash: Set(Some(hash.into())),
-                    role: Set(UserRole::Member),
                     trust_level: Set(TrustLevel::Member),
-                    is_global_mod: Set(false),
                     trust_score: Set(40),
                     post_count: Set(8),
                     ..Default::default()
@@ -190,9 +186,7 @@ impl PgBulkSeedService {
                     is_email_verified: Set(true),
                     display_name: Set(Some("Bob".into())),
                     password_hash: Set(Some(hash.into())),
-                    role: Set(UserRole::Member),
                     trust_level: Set(TrustLevel::Basic),
-                    is_global_mod: Set(false),
                     trust_score: Set(10),
                     post_count: Set(2),
                     ..Default::default()
@@ -591,7 +585,6 @@ impl PgBulkSeedService {
                 is_email_verified: Set(true),
                 display_name: Set(Some(format!("User {i}"))),
                 password_hash: Set(Some(hash.into())),
-                role: Set(UserRole::Member),
                 trust_level: Set(trust_levels[(i - 1) % 5].clone()),
                 trust_score: Set(((i * 7) % 100) as i32),
                 post_count: Set(((i * 3) % 30) as i32),

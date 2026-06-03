@@ -111,7 +111,7 @@
 <!-- ─── Step 1: Welcome ───────────────────────────────────────────────────────── -->
 {#if step === 1}
   <div class="text-center mb-4">
-    <div class="text-success mb-3" style="font-size: 3rem;">
+    <div class="text-success mb-3 step-icon">
       <i class="fa-solid fa-circle-check"></i>
     </div>
     <h2 class="h5 mb-1">Database schema ready</h2>
@@ -252,9 +252,8 @@
         <input
           type="color"
           id="primary_color"
-          class="form-control form-control-color"
+          class="form-control form-control-color color-swatch"
           bind:value={config.primary_color}
-          style="max-width: 3rem;"
         />
         <input
           type="text"
@@ -265,8 +264,7 @@
     </div>
     <div class="col-md-6 d-flex align-items-end">
       <div
-        class="form-check form-switch mb-0 mt-3 mt-md-0"
-        style="min-height: 2.5rem; padding-top: 0.5rem;"
+        class="form-check form-switch mb-0 mt-3 mt-md-0 reg-switch"
       >
         <input
           class="form-check-input"
@@ -374,9 +372,8 @@
     <div class="d-flex align-items-start gap-3">
       <input
         type="checkbox"
-        class="form-check-input mt-1 flex-shrink-0"
+        class="form-check-input mt-1 flex-shrink-0 seed-checkbox"
         bind:checked={seedExampleData}
-        style="min-width: 1.25rem; min-height: 1.25rem;"
         onclick={(e) => e.stopPropagation()}
       />
       <div>
@@ -443,7 +440,7 @@
   <!-- ─── Step 5: Done ──────────────────────────────────────────────────────────── -->
 {:else if step === 5}
   <div class="text-center py-3">
-    <div class="text-success mb-3" style="font-size: 3.5rem;">
+    <div class="text-success mb-3 done-icon">
       <i class="fa-solid fa-circle-check"></i>
     </div>
     <h2 class="h5 mb-2">Installation complete!</h2>
@@ -455,3 +452,11 @@
     </div>
   </div>
 {/if}
+
+<style>
+  .step-icon  { font-size: 3rem; }
+  .done-icon  { font-size: 3.5rem; }
+  .color-swatch { max-width: 3rem; }
+  .reg-switch { min-height: 2.5rem; padding-top: 0.5rem; }
+  .seed-checkbox { min-width: 1.25rem; min-height: 1.25rem; }
+</style>

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::entities::{user_avatars, user_preferences, users};
 use ferum_application::shared::AppError;
-use ferum_domain::models::user::{TrustLevel, User, UserPreferences, UserRole};
+use ferum_domain::models::user::{TrustLevel, User, UserPreferences};
 use ferum_domain::repositories::user_repository::{NewUser, UpdateUser, UserRepository};
 
 pub struct PgUserRepository {
@@ -26,12 +26,16 @@ const USER_SELECT: &str = r#"
     SELECT
         u.id, u.username, u.email, u.is_email_verified,
         u.display_name, u.password_hash,
-        u.role::TEXT AS role, u.trust_level::TEXT AS trust_level,
-        u.is_global_mod, u.trust_score, u.post_count, u.days_visited,
+        u.trust_level::TEXT AS trust_level,
+        u.trust_score, u.post_count, u.days_visited,
         u.bio, u.website, u.is_banned, u.banned_until, u.ban_reason,
         u.warn_count, u.failed_login_count, u.locked_until,
         u.created_at, u.updated_at, u.deleted_at, u.last_seen_at,
-        ua.file_key AS avatar_key
+        ua.file_key AS avatar_key,
+        (SELECT r.slug FROM user_roles ur
+             JOIN roles r ON r.id = ur.role_id
+             WHERE ur.user_id = u.id AND ur.category_id IS NULL
+             ORDER BY r.position ASC LIMIT 1) AS primary_role_slug
     FROM users u
     LEFT JOIN user_avatars ua ON ua.user_id = u.id
 "#;
@@ -44,9 +48,7 @@ struct UserRow {
     is_email_verified: bool,
     display_name: Option<String>,
     password_hash: Option<String>,
-    role: String,
     trust_level: String,
-    is_global_mod: bool,
     trust_score: i32,
     post_count: i32,
     days_visited: i32,
@@ -63,6 +65,7 @@ struct UserRow {
     deleted_at: Option<DateTime<FixedOffset>>,
     last_seen_at: Option<DateTime<FixedOffset>>,
     avatar_key: Option<String>,
+    primary_role_slug: Option<String>,
 }
 
 fn row_to_domain(row: UserRow) -> User {
@@ -73,11 +76,6 @@ fn row_to_domain(row: UserRow) -> User {
         is_email_verified: row.is_email_verified,
         display_name: row.display_name,
         password_hash: row.password_hash,
-        role: match row.role.as_str() {
-            "moderator" => UserRole::Moderator,
-            "admin" => UserRole::Admin,
-            _ => UserRole::Member,
-        },
         trust_level: match row.trust_level.as_str() {
             "basic" => TrustLevel::Basic,
             "member" => TrustLevel::Member,
@@ -85,7 +83,7 @@ fn row_to_domain(row: UserRow) -> User {
             "leader" => TrustLevel::Leader,
             _ => TrustLevel::New,
         },
-        is_global_mod: row.is_global_mod,
+        primary_role_slug: row.primary_role_slug,
         trust_score: row.trust_score,
         post_count: row.post_count,
         days_visited: row.days_visited,
@@ -105,55 +103,6 @@ fn row_to_domain(row: UserRow) -> User {
     }
 }
 
-// Used only for create() which has no avatar yet.
-fn entity_to_domain(m: users::Model, avatar_key: Option<String>) -> User {
-    User {
-        id: m.id,
-        username: m.username,
-        email: m.email,
-        is_email_verified: m.is_email_verified,
-        display_name: m.display_name,
-        password_hash: m.password_hash,
-        role: match m.role {
-            users::UserRole::Member => UserRole::Member,
-            users::UserRole::Moderator => UserRole::Moderator,
-            users::UserRole::Admin => UserRole::Admin,
-        },
-        trust_level: match m.trust_level {
-            users::TrustLevel::New => TrustLevel::New,
-            users::TrustLevel::Basic => TrustLevel::Basic,
-            users::TrustLevel::Member => TrustLevel::Member,
-            users::TrustLevel::Regular => TrustLevel::Regular,
-            users::TrustLevel::Leader => TrustLevel::Leader,
-        },
-        is_global_mod: m.is_global_mod,
-        trust_score: m.trust_score,
-        post_count: m.post_count,
-        days_visited: m.days_visited,
-        avatar_url: avatar_key.map(|k| format!("/files/{k}")),
-        bio: m.bio,
-        website: m.website,
-        is_banned: m.is_banned,
-        banned_until: m.banned_until.map(|t| t.with_timezone(&Utc)),
-        ban_reason: m.ban_reason,
-        warn_count: m.warn_count,
-        failed_login_count: m.failed_login_count,
-        locked_until: m.locked_until.map(|t| t.with_timezone(&Utc)),
-        created_at: m.created_at.with_timezone(&Utc),
-        updated_at: m.updated_at.map(|t| t.with_timezone(&Utc)),
-        deleted_at: m.deleted_at.map(|t| t.with_timezone(&Utc)),
-        last_seen_at: m.last_seen_at.map(|t| t.with_timezone(&Utc)),
-    }
-}
-
-fn domain_role_to_entity(role: &UserRole) -> users::UserRole {
-    match role {
-        UserRole::Member => users::UserRole::Member,
-        UserRole::Moderator => users::UserRole::Moderator,
-        UserRole::Admin => users::UserRole::Admin,
-    }
-}
-
 fn domain_trust_to_entity(level: &TrustLevel) -> users::TrustLevel {
     match level {
         TrustLevel::New => users::TrustLevel::New,
@@ -166,7 +115,6 @@ fn domain_trust_to_entity(level: &TrustLevel) -> users::TrustLevel {
 
 #[async_trait]
 impl UserRepository for PgUserRepository {
-    // Single JOIN query: 1 roundtrip (was 2).
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, AppError> {
         let sql = format!("{USER_SELECT} WHERE u.id = $1");
         let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [id.into()]);
@@ -176,7 +124,6 @@ impl UserRepository for PgUserRepository {
             .map(row_to_domain))
     }
 
-    // Single JOIN query: 1 roundtrip (was 2).
     async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<User>, AppError> {
         if ids.is_empty() {
             return Ok(vec![]);
@@ -194,7 +141,6 @@ impl UserRepository for PgUserRepository {
             .collect())
     }
 
-    // Single JOIN query: 1 roundtrip (was 2).
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
         let sql = format!("{USER_SELECT} WHERE u.email = $1");
         let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [email.into()]);
@@ -204,7 +150,6 @@ impl UserRepository for PgUserRepository {
             .map(row_to_domain))
     }
 
-    // Single JOIN query: 1 roundtrip (was 2).
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, AppError> {
         let sql = format!("{USER_SELECT} WHERE u.username = $1");
         let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [username.into()]);
@@ -215,20 +160,18 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn create(&self, cmd: NewUser) -> Result<User, AppError> {
+        let id = Uuid::new_v4();
         let model = users::ActiveModel {
-            id: Set(Uuid::new_v4()),
+            id: Set(id),
             username: Set(cmd.username),
             email: Set(cmd.email),
-            role: Set(domain_role_to_entity(&cmd.role)),
             password_hash: Set(cmd.password_hash),
             ..Default::default()
         };
-        let inserted = model.insert(&self.db).await?;
-        Ok(entity_to_domain(inserted, None))
+        model.insert(&self.db).await?;
+        self.find_by_id(id).await?.ok_or(AppError::NotFound)
     }
 
-    // Direct update without pre-read: 2 roundtrips (was 3).
-    // warn_count_delta uses a separate update_many to avoid reading current value.
     async fn update(&self, id: Uuid, patch: UpdateUser) -> Result<User, AppError> {
         if let Some(delta) = patch.warn_count_delta {
             users::Entity::update_many()
@@ -263,12 +206,6 @@ impl UserRepository for PgUserRepository {
         if let Some(v) = patch.ban_reason {
             active.ban_reason = Set(v);
         }
-        if let Some(v) = patch.role {
-            active.role = Set(domain_role_to_entity(&v));
-        }
-        if let Some(v) = patch.is_global_mod {
-            active.is_global_mod = Set(v);
-        }
         if let Some(v) = patch.last_seen_at {
             active.last_seen_at = Set(Some(v.fixed_offset()));
         }
@@ -277,11 +214,9 @@ impl UserRepository for PgUserRepository {
             active.update(&self.db).await?;
         }
 
-        // JOIN fetch replaces the old entity_to_domain + fetch_avatar_key roundtrip.
         self.find_by_id(id).await?.ok_or(AppError::NotFound)
     }
 
-    // UPDATE...RETURNING: 1 roundtrip (was 2).
     async fn increment_failed_login(&self, id: Uuid) -> Result<i32, AppError> {
         #[derive(Debug, FromQueryResult)]
         struct FailedCount {
@@ -349,13 +284,26 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn count_admins(&self) -> Result<u64, AppError> {
-        Ok(users::Entity::find()
-            .filter(users::Column::Role.eq(users::UserRole::Admin))
-            .count(&self.db)
-            .await?)
+        // Count users who have the admin role assigned globally via user_roles table
+        #[derive(FromQueryResult)]
+        struct CountRow {
+            cnt: i64,
+        }
+        let row = CountRow::find_by_statement(Statement::from_string(
+            DbBackend::Postgres,
+            r#"
+                SELECT COUNT(DISTINCT ur.user_id)::BIGINT AS cnt
+                FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id
+                WHERE r.slug = 'admin' AND ur.category_id IS NULL
+            "#,
+        ))
+        .one(&self.db)
+        .await?
+        .ok_or_else(|| AppError::internal("count query failed".to_string()))?;
+        Ok(row.cnt as u64)
     }
 
-    // Single JOIN query for data (was users SELECT + avatar batch): 2 roundtrips (COUNT + data).
     async fn list_paginated(
         &self,
         page: u64,
@@ -364,7 +312,6 @@ impl UserRepository for PgUserRepository {
     ) -> Result<(Vec<User>, u64), AppError> {
         let offset = page.saturating_sub(1) * per_page;
 
-        // COUNT query (still needed for pagination metadata).
         let mut count_query = users::Entity::find().order_by_desc(users::Column::CreatedAt);
         if let Some(q) = search.filter(|s| !s.is_empty()) {
             count_query = count_query.filter(
@@ -376,7 +323,6 @@ impl UserRepository for PgUserRepository {
         }
         let total = count_query.count(&self.db).await?;
 
-        // Data query via JOIN — no separate avatar batch needed.
         let (where_clause, values): (String, Vec<Value>) =
             if let Some(q) = search.filter(|s| !s.is_empty()) {
                 let pattern = format!("%{q}%");

@@ -16,8 +16,9 @@ export const load: LayoutServerLoad = async ({ cookies, fetch }) => {
 	if (!userRes?.ok) redirect(302, ROUTES.LOGIN);
 
 	const json = await userRes!.json();
-	const role = json.data?.role;
-	if (role !== 'moderator' && role !== 'admin') {
+	const roles: any[] = json.data?.roles ?? [];
+	const canMod = roles.some((r) => r.role?.slug === 'moderator' || r.role?.slug === 'admin');
+	if (!canMod) {
 		error(403, 'Access denied');
 	}
 

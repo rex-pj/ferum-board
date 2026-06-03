@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		role?: 'member' | 'moderator' | 'admin';
+		role?: string;
 		trust?: 'new' | 'basic' | 'member' | 'regular' | 'leader';
 		label?: string;
 		class?: string;

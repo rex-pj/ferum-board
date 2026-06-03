@@ -12,9 +12,9 @@ pub struct User {
     pub is_email_verified: bool,
     pub display_name: Option<String>,
     pub password_hash: Option<String>,
-    pub role: UserRole,
     pub trust_level: TrustLevel,
-    pub is_global_mod: bool,
+    /// Slug of the user's highest-priority global role (lowest position value). Used for badge display.
+    pub primary_role_slug: Option<String>,
     pub trust_score: i32,
     pub post_count: i32,
     pub days_visited: i32,
@@ -51,19 +51,6 @@ impl User {
             return false;
         }
         self.banned_until.map(|t| t > Utc::now()).unwrap_or(true)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, Copy)]
-pub enum UserRole {
-    Member = 0,
-    Moderator = 1,
-    Admin = 2,
-}
-
-impl UserRole {
-    pub fn is_staff(&self) -> bool {
-        matches!(self, UserRole::Moderator | UserRole::Admin)
     }
 }
 

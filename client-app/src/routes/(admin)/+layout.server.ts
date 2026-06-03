@@ -16,7 +16,9 @@ export const load: LayoutServerLoad = async ({ cookies, fetch }) => {
 	if (!userRes?.ok) redirect(302, ROUTES.LOGIN);
 
 	const json = await userRes!.json();
-	if (json.data?.role !== 'admin') {
+	const roles: any[] = json.data?.roles ?? [];
+	const isAdmin = roles.some((r) => r.role?.slug === 'admin' && !r.category_id);
+	if (!isAdmin) {
 		error(403, 'Admin access required');
 	}
 

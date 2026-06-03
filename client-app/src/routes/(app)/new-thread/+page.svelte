@@ -81,7 +81,7 @@
 		<div class="mb-4">
 			<div class="fw-semibold mb-2">
 				Thumbnail
-				<span class="text-secondary fw-normal ms-1" style="font-size:0.875rem;">(optional)</span>
+				<span class="text-secondary fw-normal ms-1 small">(optional)</span>
 			</div>
 			<ThumbnailPicker name="thumbnail" />
 		</div>
@@ -95,7 +95,6 @@
 			<button
 				type="submit"
 				class="btn btn-primary"
-				style="min-height:44px;"
 				disabled={submitting || !title.trim() || !selectedCategory || !content.trim()}
 			>
 				{#if submitting}

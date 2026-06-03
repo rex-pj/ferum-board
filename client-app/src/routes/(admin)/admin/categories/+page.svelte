@@ -19,7 +19,7 @@
 </script>
 
 <div class="d-flex align-items-center gap-2 mb-4">
-	<i class="fa-solid fa-folder-tree" style="font-size:1.1rem;opacity:.55;"></i>
+	<i class="fa-solid fa-folder-tree fr-page-icon"></i>
 	<h1 class="h5 mb-0">Categories</h1>
 	<button class="btn btn-primary btn-sm ms-auto" onclick={() => (showCreateForm = !showCreateForm)}>
 		<i class="fa-solid fa-plus me-1"></i>New Category

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::models::user::{TrustLevel, User, UserPreferences, UserRole};
+use crate::models::user::{TrustLevel, User, UserPreferences};
 use crate::AppError;
 
 #[async_trait]
@@ -21,6 +21,7 @@ pub trait UserRepository: Send + Sync {
     async fn set_email_verified(&self, id: Uuid) -> Result<(), AppError>;
     async fn set_trust_level(&self, id: Uuid, level: TrustLevel) -> Result<(), AppError>;
     async fn set_password_hash(&self, id: Uuid, hash: String) -> Result<(), AppError>;
+    /// Count users who have the admin role assigned globally (used during setup).
     async fn count_admins(&self) -> Result<u64, AppError>;
     async fn list_paginated(
         &self,
@@ -39,7 +40,6 @@ pub struct NewUser {
     pub username: String,
     pub email: String,
     pub password_hash: Option<String>,
-    pub role: UserRole,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -50,8 +50,6 @@ pub struct UpdateUser {
     pub is_banned: Option<bool>,
     pub banned_until: Option<Option<DateTime<Utc>>>,
     pub ban_reason: Option<Option<String>>,
-    pub role: Option<UserRole>,
-    pub is_global_mod: Option<bool>,
     pub last_seen_at: Option<DateTime<Utc>>,
     pub warn_count_delta: Option<i32>,
 }

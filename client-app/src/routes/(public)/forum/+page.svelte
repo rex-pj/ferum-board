@@ -49,7 +49,7 @@
   <div class="fr-feed-col">
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" class="mb-3">
-      <ol class="breadcrumb" style="font-size: 0.8125rem;">
+      <ol class="breadcrumb breadcrumb-sm">
         <li class="breadcrumb-item"><a href={ROUTES.HOME}>Home</a></li>
         <li class="breadcrumb-item active">Forum</li>
       </ol>
@@ -97,22 +97,13 @@
                   style="width:12px; height:12px; background:{group.color};"
                 ></span>
               {:else}
-                <i
-                  class="fa-solid fa-layer-group"
-                  style="font-size:0.875rem; opacity:0.5; flex-shrink:0;"
-                ></i>
+                <i class="fa-solid fa-layer-group group-icon"></i>
               {/if}
-              <span
-                class="fr-forum-group-title text-truncate"
-                style="color: inherit; text-decoration: none;"
-              >
+              <span class="fr-forum-group-title text-truncate inherit-color">
                 {group.name}
               </span>
             </div>
-            <span
-              class="fr-forum-group-count flex-shrink-0"
-              style="color: inherit;"
-            >
+            <span class="fr-forum-group-count flex-shrink-0 inherit-color">
               <i class="fa-regular fa-comment me-1"
               ></i>{group.thread_count.toLocaleString()}
             </span>
@@ -156,10 +147,7 @@
               <div class="fr-forum-group-footer">
                 <a href={ROUTES.CATEGORY(group.slug)} class="fr-view-all-link">
                   View all threads in {group.name}
-                  <i
-                    class="fa-solid fa-arrow-right ms-1"
-                    style="font-size:0.7rem;"
-                  ></i>
+                  <i class="fa-solid fa-arrow-right ms-1 arrow-icon"></i>
                 </a>
               </div>
             {:else}
@@ -185,16 +173,10 @@
                   style="width:8px; height:8px; background:{group.color};"
                 ></span>
               {:else}
-                <i
-                  class="fa-solid fa-hashtag"
-                  style="font-size:0.75rem; width:0.875rem; text-align:center; opacity:0.5;"
-                ></i>
+                <i class="fa-solid fa-hashtag panel-hash"></i>
               {/if}
               <span class="text-truncate">{group.name}</span>
-              <span
-                class="ms-auto"
-                style="font-size:0.75rem; color:var(--bs-tertiary-color); flex-shrink:0;"
-              >
+              <span class="ms-auto panel-count">
                 {group.thread_count.toLocaleString()}
               </span>
             </a>
@@ -218,12 +200,7 @@
             <a href={ROUTES.REGISTER} class="btn btn-primary btn-sm"
               >Get started</a
             >
-            <a
-              href={ROUTES.LOGIN}
-              class="btn btn-sm"
-              style="border:1px solid var(--bs-border-color); color:var(--bs-body-color);"
-              >Sign in</a
-            >
+            <a href={ROUTES.LOGIN} class="btn btn-sm fr-btn-ghost">Sign in</a>
           </div>
         </div>
       </div>
@@ -234,7 +211,7 @@
 <style>
   .fr-forum-group {
     border: 1px solid var(--bs-border-color);
-    border-radius: 8px;
+    border-radius: var(--bs-border-radius);
     overflow: hidden;
     background: var(--bs-body-bg);
   }
@@ -317,7 +294,7 @@
     align-items: center;
     gap: 0.3rem;
     padding: 0.2rem 0.6rem;
-    border-radius: 999px;
+    border-radius: var(--bs-border-radius-pill);
     border: 1px solid var(--bs-border-color);
     font-size: 0.75rem;
     color: var(--bs-body-color);
@@ -342,7 +319,6 @@
   }
 
   .fr-forum-group :global(.fr-thread-row) {
-    border-radius: 0;
     border-left: none;
     border-right: none;
     border-top: none;
@@ -373,5 +349,30 @@
     font-size: 0.8125rem;
     color: var(--bs-tertiary-color);
     margin: 0;
+  }
+
+  .breadcrumb-sm { font-size: 0.8125rem; }
+
+  .group-icon {
+    font-size: 0.875rem;
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+
+  .inherit-color { color: inherit; }
+
+  .arrow-icon { font-size: 0.7rem; }
+
+  .panel-hash {
+    font-size: 0.75rem;
+    width: 0.875rem;
+    text-align: center;
+    opacity: 0.5;
+  }
+
+  .panel-count {
+    font-size: 0.75rem;
+    color: var(--bs-tertiary-color);
+    flex-shrink: 0;
   }
 </style>

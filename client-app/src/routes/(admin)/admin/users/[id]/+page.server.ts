@@ -5,34 +5,58 @@ const API = process.env.API_URL ?? 'http://localhost:8080';
 
 export const load: PageServerLoad = async ({ cookies, fetch, params }) => {
 	const token = cookies.get('token')!;
-	const res = await fetch(`${API}/api/admin/users/${params.id}`, {
-		headers: { Authorization: `Bearer ${token}` }
-	});
-	const json = await res.json();
-	return { user: json.data };
+	const [userRes, rolesRes] = await Promise.all([
+		fetch(`${API}/api/admin/users/${params.id}`, {
+			headers: { Authorization: `Bearer ${token}` }
+		}),
+		fetch(`${API}/api/admin/roles`, {
+			headers: { Authorization: `Bearer ${token}` }
+		})
+	]);
+	const userJson = await userRes.json();
+	const rolesJson = rolesRes.ok ? await rolesRes.json() : { data: [] };
+	return { user: userJson.data, allRoles: rolesJson.data ?? [] };
 };
 
 export const actions: Actions = {
-	updateRole: async ({ request, cookies, fetch, params }) => {
+	assignRole: async ({ request, cookies, fetch, params }) => {
 		const token = cookies.get('token')!;
 		const data = await request.formData();
-		const body: Record<string, unknown> = {
-			role: data.get('role') as string
-		};
-		const globalMod = data.get('is_global_mod');
-		if (globalMod !== null) body.is_global_mod = globalMod === 'true';
+		const role_id = data.get('role_id') as string;
+		const category_id = (data.get('category_id') as string) || null;
 
-		const res = await fetch(`${API}/api/admin/users/${params.id}`, {
-			method: 'PATCH',
+		if (!role_id) return fail(400, { error: 'role_id is required.' });
+
+		const res = await fetch(`${API}/api/admin/users/${params.id}/roles`, {
+			method: 'POST',
 			headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-			body: JSON.stringify(body)
+			body: JSON.stringify({ role_id, category_id: category_id ?? undefined })
 		});
 
 		if (!res.ok) {
 			const err = await res.json().catch(() => ({}));
-			return fail(res.status, { error: err?.error?.message ?? 'Failed to update user.' });
+			return fail(res.status, { error: err?.error?.message ?? 'Failed to assign role.' });
 		}
-		return { success: 'User updated.' };
+		return { success: 'Role assigned.' };
+	},
+
+	revokeRole: async ({ request, cookies, fetch, params }) => {
+		const token = cookies.get('token')!;
+		const data = await request.formData();
+		const role_id = data.get('role_id') as string;
+
+		if (!role_id) return fail(400, { error: 'role_id is required.' });
+
+		const res = await fetch(`${API}/api/admin/users/${params.id}/roles/${role_id}`, {
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${token}` }
+		});
+
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			return fail(res.status, { error: err?.error?.message ?? 'Failed to revoke role.' });
+		}
+		return { success: 'Role revoked.' };
 	},
 
 	ban: async ({ request, cookies, fetch, params }) => {

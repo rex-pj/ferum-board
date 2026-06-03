@@ -7,18 +7,22 @@ use crate::permission::PermissionChecker;
 use crate::ports::CacheService;
 use crate::shared::AppError;
 use ferum_domain::models::audit_log::AuditLog;
-use ferum_domain::models::category::{Category, CategoryModerator, PostPolicy, ViewPolicy};
+use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
+use ferum_domain::models::role::UserRoleAssignment;
+use ferum_domain::models::user::User;
 use ferum_domain::repositories::audit_log_repository::AuditLogRepository;
-use ferum_domain::repositories::category_moderator_repository::CategoryModeratorRepository;
 use ferum_domain::repositories::category_repository::{
     CategoryRepository, NewCategory, UpdateCategory,
 };
+use ferum_domain::repositories::role_repository::RoleRepository;
 use ferum_domain::repositories::user_repository::UserRepository;
+use ferum_domain::repositories::user_role_repository::UserRoleRepository;
 use ferum_domain::AuthUser;
 
 pub struct AdminUseCase {
     pub categories: Arc<dyn CategoryRepository>,
-    pub category_mods: Arc<dyn CategoryModeratorRepository>,
+    pub roles: Arc<dyn RoleRepository>,
+    pub user_roles: Arc<dyn UserRoleRepository>,
     pub users: Arc<dyn UserRepository>,
     pub audit_log: Arc<dyn AuditLogRepository>,
     pub cache: Arc<dyn CacheService>,
@@ -27,24 +31,19 @@ pub struct AdminUseCase {
 impl AdminUseCase {
     pub fn new(
         categories: Arc<dyn CategoryRepository>,
-        category_mods: Arc<dyn CategoryModeratorRepository>,
+        roles: Arc<dyn RoleRepository>,
+        user_roles: Arc<dyn UserRoleRepository>,
         users: Arc<dyn UserRepository>,
         audit_log: Arc<dyn AuditLogRepository>,
         cache: Arc<dyn CacheService>,
     ) -> Self {
-        Self {
-            categories,
-            category_mods,
-            users,
-            audit_log,
-            cache,
-        }
+        Self { categories, roles, user_roles, users, audit_log, cache }
     }
 
     // ─── Categories ───────────────────────────────────────────────────────────
 
     pub async fn list_categories(&self, actor: &AuthUser) -> Result<Vec<Category>, AppError> {
-        PermissionChecker::can_admin(actor)?;
+        PermissionChecker::can_manage_categories(actor)?;
         self.categories.list_all().await
     }
 
@@ -53,7 +52,7 @@ impl AdminUseCase {
         actor: &AuthUser,
         cmd: CreateCategoryCmd,
     ) -> Result<Category, AppError> {
-        PermissionChecker::can_admin(actor)?;
+        PermissionChecker::can_manage_categories(actor)?;
 
         if crate::validators::is_reserved_slug(&cmd.slug) {
             return Err(AppError::unprocessable("slug_reserved"));
@@ -63,11 +62,7 @@ impl AdminUseCase {
         }
 
         if let Some(parent_id) = cmd.parent_id {
-            let parent = self
-                .categories
-                .find_by_id(parent_id)
-                .await?
-                .ok_or(AppError::NotFound)?;
+            let parent = self.categories.find_by_id(parent_id).await?.ok_or(AppError::NotFound)?;
             if parent.parent_id.is_some() {
                 return Err(AppError::unprocessable("Max 2 levels of category nesting"));
             }
@@ -94,12 +89,9 @@ impl AdminUseCase {
         id: Uuid,
         cmd: UpdateCategoryCmd,
     ) -> Result<Category, AppError> {
-        PermissionChecker::can_admin(actor)?;
+        PermissionChecker::can_manage_categories(actor)?;
 
-        self.categories
-            .find_by_id(id)
-            .await?
-            .ok_or(AppError::NotFound)?;
+        self.categories.find_by_id(id).await?.ok_or(AppError::NotFound)?;
 
         if let Some(ref slug) = cmd.slug {
             if crate::validators::is_reserved_slug(slug) {
@@ -131,40 +123,39 @@ impl AdminUseCase {
     }
 
     pub async fn delete_category(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
-        PermissionChecker::can_admin(actor)?;
-        self.categories
-            .find_by_id(id)
-            .await?
-            .ok_or(AppError::NotFound)?;
+        PermissionChecker::can_manage_categories(actor)?;
+        self.categories.find_by_id(id).await?.ok_or(AppError::NotFound)?;
         self.categories.delete(id).await
     }
 
-    // ─── Moderator assignment ─────────────────────────────────────────────────
+    // ─── Category-scoped moderator assignment (via user_roles) ────────────────
 
-    pub async fn list_category_moderators_with_users(
+    pub async fn list_category_moderators(
         &self,
         actor: &AuthUser,
         category_id: Uuid,
-    ) -> Result<Vec<(CategoryModerator, ferum_domain::models::user::User)>, AppError> {
-        PermissionChecker::can_admin(actor)?;
-        self.categories
-            .find_by_id(category_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        let mods = self.category_mods.list_by_category(category_id).await?;
+    ) -> Result<Vec<(UserRoleAssignment, User)>, AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.categories.find_by_id(category_id).await?.ok_or(AppError::NotFound)?;
 
-        let user_ids: Vec<Uuid> = mods.iter().map(|m| m.user_id).collect();
+        let mod_role = self
+            .roles
+            .find_by_slug("moderator")
+            .await?
+            .ok_or_else(|| AppError::internal("moderator role not found".to_string()))?;
+
+        let assignments = self.user_roles.list_for_category(mod_role.id, Some(category_id)).await?;
+
+        let user_ids: Vec<Uuid> = assignments.iter().map(|a| a.user_id).collect();
         let users = self.users.find_many_by_ids(&user_ids).await?;
-        let user_map: std::collections::HashMap<Uuid, _> =
+        let user_map: std::collections::HashMap<Uuid, User> =
             users.into_iter().map(|u| (u.id, u)).collect();
 
-        mods.into_iter()
-            .map(|m| {
-                let user = user_map
-                    .get(&m.user_id)
-                    .cloned()
-                    .ok_or(AppError::NotFound)?;
-                Ok((m, user))
+        assignments
+            .into_iter()
+            .map(|a| {
+                let user = user_map.get(&a.user_id).cloned().ok_or(AppError::NotFound)?;
+                Ok((a, user))
             })
             .collect()
     }
@@ -174,31 +165,18 @@ impl AdminUseCase {
         actor: &AuthUser,
         category_id: Uuid,
         user_id: Uuid,
-    ) -> Result<CategoryModerator, AppError> {
-        PermissionChecker::can_admin(actor)?;
-        self.categories
-            .find_by_id(category_id)
+    ) -> Result<UserRoleAssignment, AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.categories.find_by_id(category_id).await?.ok_or(AppError::NotFound)?;
+        self.users.find_by_id(user_id).await?.ok_or(AppError::NotFound)?;
+
+        let mod_role = self
+            .roles
+            .find_by_slug("moderator")
             .await?
-            .ok_or(AppError::NotFound)?;
+            .ok_or_else(|| AppError::internal("moderator role not found".to_string()))?;
 
-        let user = self
-            .users
-            .find_by_id(user_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        if !user.role.is_staff() {
-            return Err(AppError::unprocessable(
-                "User must have role moderator or admin to be assigned as category moderator",
-            ));
-        }
-
-        if self.category_mods.is_assigned(category_id, user_id).await? {
-            return Err(AppError::Conflict("already_assigned".to_string()));
-        }
-
-        self.category_mods
-            .assign(category_id, user_id, actor.id)
-            .await
+        self.user_roles.assign(user_id, mod_role.id, Some(category_id), actor.id, None).await
     }
 
     pub async fn revoke_moderator(
@@ -207,8 +185,17 @@ impl AdminUseCase {
         category_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), AppError> {
-        PermissionChecker::can_admin(actor)?;
-        self.category_mods.revoke(category_id, user_id).await
+        PermissionChecker::can_manage_users(actor)?;
+        let mod_role = self
+            .roles
+            .find_by_slug("moderator")
+            .await?
+            .ok_or_else(|| AppError::internal("moderator role not found".to_string()))?;
+
+        self.user_roles.revoke(user_id, mod_role.id, Some(category_id)).await?;
+        // Invalidate user roles cache
+        self.cache.del(&format!("user:roles:{}", user_id)).await.ok();
+        Ok(())
     }
 
     // ─── User management ──────────────────────────────────────────────────────
@@ -219,53 +206,14 @@ impl AdminUseCase {
         page: u64,
         per_page: u64,
         search: Option<&str>,
-    ) -> Result<(Vec<ferum_domain::models::user::User>, u64), AppError> {
-        PermissionChecker::can_admin(actor)?;
+    ) -> Result<(Vec<User>, u64), AppError> {
+        PermissionChecker::can_manage_users(actor)?;
         self.users.list_paginated(page, per_page, search).await
     }
 
-    pub async fn get_user(
-        &self,
-        actor: &AuthUser,
-        id: Uuid,
-    ) -> Result<ferum_domain::models::user::User, AppError> {
-        PermissionChecker::can_admin(actor)?;
+    pub async fn get_user(&self, actor: &AuthUser, id: Uuid) -> Result<User, AppError> {
+        PermissionChecker::can_manage_users(actor)?;
         self.users.find_by_id(id).await?.ok_or(AppError::NotFound)
-    }
-
-    pub async fn update_user_role(
-        &self,
-        actor: &AuthUser,
-        id: Uuid,
-        cmd: AdminUpdateUserCmd,
-    ) -> Result<ferum_domain::models::user::User, AppError> {
-        PermissionChecker::can_admin(actor)?;
-        self.users.find_by_id(id).await?.ok_or(AppError::NotFound)?;
-        let updated = self
-            .users
-            .update(
-                id,
-                ferum_domain::repositories::user_repository::UpdateUser {
-                    role: cmd.role,
-                    is_global_mod: cmd.is_global_mod,
-                    ..Default::default()
-                },
-            )
-            .await?;
-        self.audit_log
-            .append(AuditLog::user_action(
-                actor.id,
-                "user.role_changed",
-                "user",
-                id,
-                Some(serde_json::json!({
-                    "new_role": cmd.role.map(|r| format!("{:?}", r).to_lowercase()),
-                    "new_is_global_mod": cmd.is_global_mod,
-                })),
-            ))
-            .await
-            .ok();
-        Ok(updated)
     }
 
     pub async fn permanent_ban(
@@ -274,7 +222,7 @@ impl AdminUseCase {
         id: Uuid,
         reason: String,
     ) -> Result<(), AppError> {
-        PermissionChecker::can_admin(actor)?;
+        PermissionChecker::can_ban_permanent(actor)?;
         self.users.find_by_id(id).await?.ok_or(AppError::NotFound)?;
         self.users
             .update(
@@ -287,25 +235,17 @@ impl AdminUseCase {
                 },
             )
             .await?;
-        // Immediate enforcement: block all existing access tokens and revoke
-        // all refresh tokens so the user cannot re-authenticate.
         self.cache
-            .set(
-                &format!("user:banned:{}", id),
-                "1",
-                Duration::from_secs(365 * 24 * 3600),
-            )
+            .set(&format!("user:banned:{}", id), "1", Duration::from_secs(365 * 24 * 3600))
             .await
             .ok();
-        self.cache
-            .del_prefix(&format!("refresh:{}:", id))
-            .await
-            .ok();
+        self.cache.del_prefix(&format!("refresh:{}:", id)).await.ok();
+        self.cache.del(&format!("user:roles:{}", id)).await.ok();
         Ok(())
     }
 
     pub async fn unban(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
-        PermissionChecker::can_admin(actor)?;
+        PermissionChecker::can_ban_permanent(actor)?;
         self.users.find_by_id(id).await?.ok_or(AppError::NotFound)?;
         self.users
             .update(
@@ -321,15 +261,21 @@ impl AdminUseCase {
         self.cache.del(&format!("user:banned:{}", id)).await.ok();
         Ok(())
     }
+
+    pub async fn list_audit_log(
+        &self,
+        actor: &AuthUser,
+        actor_id: Option<Uuid>,
+        target_type: Option<&str>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<AuditLog>, u64), AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.audit_log.list(actor_id, target_type, page, per_page.min(50)).await
+    }
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Default)]
-pub struct AdminUpdateUserCmd {
-    pub role: Option<ferum_domain::models::user::UserRole>,
-    pub is_global_mod: Option<bool>,
-}
 
 #[derive(Debug)]
 pub struct CreateCategoryCmd {

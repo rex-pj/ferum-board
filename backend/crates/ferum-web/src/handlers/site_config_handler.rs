@@ -35,7 +35,7 @@ pub async fn get_site_config_handler(
     Extension(auth_user): Extension<Option<AuthUser>>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    PermissionChecker::can_admin(actor)?;
+    PermissionChecker::can_manage_config(actor)?;
     let config = state.site_config.get_all().await?;
     Ok(Json(DataResponse::new(config)))
 }
@@ -46,7 +46,7 @@ pub async fn update_site_config_handler(
     Json(body): Json<HashMap<String, String>>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    PermissionChecker::can_admin(actor)?;
+    PermissionChecker::can_manage_config(actor)?;
 
     let allowed_keys = [
         "site_name",
@@ -77,7 +77,7 @@ pub async fn upload_favicon_handler(
     mut multipart: Multipart,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    PermissionChecker::can_admin(actor)?;
+    PermissionChecker::can_manage_config(actor)?;
 
     let mut file_bytes: Option<bytes::Bytes> = None;
     let mut content_type = String::new();
@@ -160,7 +160,7 @@ pub async fn upload_logo_handler(
     mut multipart: Multipart,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    PermissionChecker::can_admin(actor)?;
+    PermissionChecker::can_manage_config(actor)?;
 
     let mut file_bytes: Option<bytes::Bytes> = None;
     let mut content_type = String::new();
@@ -238,7 +238,7 @@ pub async fn delete_logo_handler(
     Extension(auth_user): Extension<Option<AuthUser>>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    PermissionChecker::can_admin(actor)?;
+    PermissionChecker::can_manage_config(actor)?;
 
     if let Some(key) = state
         .site_config
@@ -263,7 +263,7 @@ pub async fn delete_favicon_handler(
     Extension(auth_user): Extension<Option<AuthUser>>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    PermissionChecker::can_admin(actor)?;
+    PermissionChecker::can_manage_config(actor)?;
 
     if let Some(key) = state
         .site_config

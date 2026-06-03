@@ -24,7 +24,6 @@
   --bs-tertiary-color:    #9ca3af;
   --bs-secondary-bg:      #f3f4f6;
   --bs-tertiary-bg:       #f9fafb;
-  --bs-body-tertiary-bg:  #f9fafb;
 
   /* Borders */
   --bs-border-color:               #e5e7eb;
@@ -63,7 +62,6 @@
   --bs-tertiary-color:    #64748b;
   --bs-secondary-bg:      #1a1d27;
   --bs-tertiary-bg:       #141721;
-  --bs-body-tertiary-bg:  #141721;
   --bs-border-color:      #1f2330;
   --bs-border-color-translucent: rgba(255, 255, 255, 0.07);
   --bs-link-color:        #818cf8;
@@ -109,18 +107,24 @@ body {
   gap: 0.75rem;
 }
 
+.fr-brand-link,
 .fr-topbar-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--bs-body-color);
   text-decoration: none;
+  transition: color 0.1s;
+}
+.fr-brand-link:hover,
+.fr-topbar-brand:hover { color: var(--bs-primary); }
+
+.fr-topbar-brand {
   white-space: nowrap;
   flex-shrink: 0;
 }
-.fr-topbar-brand:hover { color: var(--bs-primary); }
 
 .fr-topbar-search {
   flex: 1;
@@ -172,13 +176,19 @@ body {
   padding: 0.5rem;
 }
 
-.fr-nav-section {
-  padding: 0.625rem 0.75rem 0.25rem;
+/* Shared "section label" typography (caps, small, muted) */
+.fr-label-caps,
+.fr-nav-section,
+.fr-panel-header {
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--bs-tertiary-color);
+}
+
+.fr-nav-section {
+  padding: 0.625rem 0.75rem 0.25rem;
 }
 
 .fr-nav-link {
@@ -219,9 +229,10 @@ body {
 }
 .fr-nav-link.active .fr-nav-icon { opacity: 1; }
 
-.fr-nav-dot {
-  width: 8px;
-  height: 8px;
+.fr-nav-dot,
+.fr-notif-read-dot {
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -256,7 +267,8 @@ body {
   background: var(--bs-secondary-bg);
   color: var(--bs-body-color);
 }
-.fr-icon-btn:focus-visible {
+.fr-icon-btn:focus-visible,
+.fr-password-toggle:focus-visible {
   outline: 2px solid var(--bs-primary);
   outline-offset: 1px;
 }
@@ -293,7 +305,7 @@ body {
   outline: none;
   background: var(--bs-body-bg);
   border-color: var(--bs-primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
 }
 .fr-search-input::placeholder { color: var(--bs-tertiary-color); }
 
@@ -307,16 +319,20 @@ body {
   overflow: hidden;
 }
 
-.fr-thread-row {
+.fr-thread-row,
+.fr-notif-row {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.6875rem 1rem;
   border-bottom: 1px solid var(--bs-border-color);
   transition: background 0.08s;
 }
-.fr-thread-row:last-child { border-bottom: none; }
-.fr-thread-row:hover { background: var(--bs-tertiary-bg); }
+.fr-thread-row:last-child,
+.fr-notif-row:last-child { border-bottom: none; }
+.fr-thread-row:hover,
+.fr-notif-row:hover { background: var(--bs-tertiary-bg); }
+
+.fr-thread-row { padding: 0.6875rem 1rem; }
 
 .fr-thread-body {
   flex: 1;
@@ -369,16 +385,7 @@ body {
 /* ================================================================
    NOTIFICATION ROWS
 ================================================================ */
-.fr-notif-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--bs-border-color);
-  transition: background 0.08s;
-}
-.fr-notif-row:last-child { border-bottom: none; }
-.fr-notif-row:hover { background: var(--bs-tertiary-bg); }
+.fr-notif-row { padding: 0.75rem 1rem; }
 
 .fr-notif-unread {
   background: color-mix(in srgb, var(--bs-primary) 5%, transparent);
@@ -416,10 +423,6 @@ body {
 }
 
 .fr-notif-read-dot {
-  flex-shrink: 0;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
   background: var(--bs-border-color);
   margin-top: 0.5rem;
 }
@@ -553,7 +556,7 @@ body {
 .form-control:focus,
 .form-select:focus {
   border-color: var(--bs-primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
 }
 
 /* Badges */
@@ -571,21 +574,15 @@ a.nav-link {
 ================================================================ */
 
 /* Narrow content: forms, articles, settings (max 720px) */
-.fr-page-narrow {
-  padding: 1.5rem;
-  max-width: 720px;
-}
-
 /* Wide content: thread detail + reading (max 860px) */
-.fr-page-reading {
-  padding: 1.5rem;
-  max-width: 860px;
-}
-
 /* Full width: admin tables, data-heavy pages */
+.fr-page-narrow,
+.fr-page-reading,
 .fr-page-full {
   padding: 1.5rem;
 }
+.fr-page-narrow { max-width: 720px; }
+.fr-page-reading { max-width: 860px; }
 
 @media (max-width: 767.98px) {
   .fr-page-narrow,
@@ -690,10 +687,6 @@ a.nav-link {
   color: var(--bs-secondary-color);
   background: var(--bs-secondary-bg);
 }
-.fr-password-toggle:focus-visible {
-  outline: 2px solid var(--bs-primary);
-  outline-offset: 1px;
-}
 
 /* Icon circle for contextual pages (forgot password, etc.) */
 .fr-auth-icon-circle {
@@ -749,11 +742,6 @@ a.nav-link {
 
 .fr-panel-header {
   padding: 0.5rem 0.875rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--bs-tertiary-color);
   border-bottom: 1px solid var(--bs-border-color);
 }
 
@@ -786,4 +774,40 @@ a.fr-panel-row:hover {
 }
 .fr-panel-stat + .fr-panel-stat {
   border-top: 1px solid var(--bs-border-color);
+}
+
+/* ================================================================
+   SHARED UTILITIES
+================================================================ */
+
+/* Page heading icon (admin/mod list pages) */
+.fr-page-icon {
+  font-size: 1.1rem;
+  opacity: 0.55;
+}
+
+/* Dropdown menu item icon alignment */
+.fr-dd-icon {
+  width: 1rem;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* Ghost / outline button for unauthenticated CTAs */
+.fr-btn-ghost {
+  border: 1px solid var(--bs-border-color);
+  color: var(--bs-body-color);
+  background: transparent;
+}
+.fr-btn-ghost:hover {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  border-color: var(--bs-border-color);
+}
+
+/* Color-dot (nav category, forum group) */
+.fr-color-dot {
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
 }

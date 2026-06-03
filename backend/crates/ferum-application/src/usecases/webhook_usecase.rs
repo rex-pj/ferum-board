@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use crate::permission::PermissionChecker;
 use crate::shared::AppError;
-use ferum_domain::models::user::UserRole;
 use ferum_domain::models::webhook::Webhook;
 use ferum_domain::repositories::webhook_repository::{
     NewWebhook, UpdateWebhook, WebhookRepository,
@@ -19,15 +19,8 @@ impl WebhookUseCase {
         Self { webhooks }
     }
 
-    fn require_admin(actor: &AuthUser) -> Result<(), AppError> {
-        if actor.role != UserRole::Admin {
-            return Err(AppError::forbidden("admin_required"));
-        }
-        Ok(())
-    }
-
     pub async fn list(&self, actor: &AuthUser) -> Result<Vec<Webhook>, AppError> {
-        Self::require_admin(actor)?;
+        PermissionChecker::can_manage_webhooks(actor)?;
         self.webhooks.list().await
     }
 
@@ -38,7 +31,7 @@ impl WebhookUseCase {
         events: Vec<String>,
         secret: Option<String>,
     ) -> Result<Webhook, AppError> {
-        Self::require_admin(actor)?;
+        PermissionChecker::can_manage_webhooks(actor)?;
         validate_webhook_url(&url)?;
         if events.is_empty() {
             return Err(AppError::unprocessable(
@@ -64,7 +57,7 @@ impl WebhookUseCase {
         secret: Option<String>,
         is_active: Option<bool>,
     ) -> Result<Webhook, AppError> {
-        Self::require_admin(actor)?;
+        PermissionChecker::can_manage_webhooks(actor)?;
         if let Some(ref u) = url {
             validate_webhook_url(u)?;
         }
@@ -86,7 +79,7 @@ impl WebhookUseCase {
     }
 
     pub async fn delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
-        Self::require_admin(actor)?;
+        PermissionChecker::can_manage_webhooks(actor)?;
         self.webhooks
             .find_by_id(id)
             .await?

@@ -14,15 +14,15 @@ use ferum_application::usecases::moderation_usecase::ModerationUseCase;
 use ferum_application::usecases::notification_usecase::NotificationUseCase;
 use ferum_application::usecases::post_usecase::PostUseCase;
 use ferum_application::usecases::reaction_usecase::ReactionUseCase;
+use ferum_application::usecases::role_usecase::RoleUseCase;
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_application::usecases::setup_usecase::SetupUseCase;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
-use ferum_domain::repositories::{
-    CategoryModeratorRepository, SiteConfigRepository, StoredFileRepository,
-};
+use ferum_domain::repositories::{SiteConfigRepository, StoredFileRepository, UserRoleRepository};
 use ferum_infrastructure::notification::SseBroadcaster;
+use ferum_infrastructure::role_permission_cache::RolePermissionCache;
 
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -41,10 +41,12 @@ pub struct AppState {
     pub moderation: Arc<ModerationUseCase>,
     pub search: Arc<SearchUseCase>,
     pub user: Arc<UserUseCase>,
+    pub role: Arc<RoleUseCase>,
     pub webhook: Arc<WebhookUseCase>,
     pub site_config: Arc<dyn SiteConfigRepository>,
-    pub cat_mod_repo: Arc<dyn CategoryModeratorRepository>,
     pub stored_files: Arc<dyn StoredFileRepository>,
+    pub user_role_repo: Arc<dyn UserRoleRepository>,
+    pub role_permission_cache: Arc<RolePermissionCache>,
     pub token_service: Arc<dyn TokenService>,
     pub cache: Arc<dyn CacheService>,
     pub rate_limiter: Arc<dyn RateLimiter>,

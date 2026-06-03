@@ -11,7 +11,6 @@ use crate::ports::CacheService;
 use crate::shared::AppError;
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::report::{Report, ReportStatus};
-use ferum_domain::models::user::UserRole;
 use ferum_domain::repositories::audit_log_repository::AuditLogRepository;
 use ferum_domain::repositories::notification_repository::NotificationRepository;
 use ferum_domain::repositories::post_repository::PostRepository;
@@ -42,16 +41,7 @@ impl ModerationUseCase {
         event_bus: Arc<EventBus>,
         cache: Arc<dyn CacheService>,
     ) -> Self {
-        Self {
-            reports,
-            posts,
-            threads,
-            users,
-            notifications,
-            audit_log_repo,
-            event_bus,
-            cache,
-        }
+        Self { reports, posts, threads, users, notifications, audit_log_repo, event_bus, cache }
     }
 
     // ─── Report creation (any authenticated member) ───────────────────────────
@@ -68,21 +58,13 @@ impl ModerationUseCase {
         }
 
         if let Some(post_id) = cmd.post_id {
-            self.posts
-                .find_by_id(post_id)
-                .await?
-                .ok_or(AppError::NotFound)?;
+            self.posts.find_by_id(post_id).await?.ok_or(AppError::NotFound)?;
         }
         if let Some(thread_id) = cmd.thread_id {
-            self.threads
-                .find_by_id(thread_id)
-                .await?
-                .ok_or(AppError::NotFound)?;
+            self.threads.find_by_id(thread_id).await?.ok_or(AppError::NotFound)?;
         }
 
-        self.reports
-            .create(actor.id, cmd.post_id, cmd.thread_id, cmd.reason)
-            .await
+        self.reports.create(actor.id, cmd.post_id, cmd.thread_id, cmd.reason).await
     }
 
     // ─── Report queue (moderator) ─────────────────────────────────────────────
@@ -94,15 +76,9 @@ impl ModerationUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
-        PermissionChecker::can_moderate_any(actor)
-            .or_else(|_| PermissionChecker::can_admin(actor))?;
+        PermissionChecker::can_view_reports(actor, None)?;
         self.reports
-            .list_all(
-                Some(ReportStatus::Pending),
-                target_type,
-                page,
-                per_page.min(50),
-            )
+            .list_all(Some(ReportStatus::Pending), target_type, page, per_page.min(50))
             .await
     }
 
@@ -114,10 +90,8 @@ impl ModerationUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
-        PermissionChecker::can_admin(actor)?;
-        self.reports
-            .list_all(status, target_type, page, per_page.min(50))
-            .await
+        PermissionChecker::can_manage_users(actor)?;
+        self.reports.list_all(status, target_type, page, per_page.min(50)).await
     }
 
     pub async fn resolve_report(
@@ -127,16 +101,10 @@ impl ModerationUseCase {
         status: ReportStatus,
         moderator_notes: Option<String>,
     ) -> Result<(), AppError> {
-        PermissionChecker::can_moderate_any(actor)
-            .or_else(|_| PermissionChecker::can_admin(actor))?;
+        PermissionChecker::can_resolve_report(actor, None)?;
 
-        self.reports
-            .find_by_id(report_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        self.reports
-            .update_status(report_id, status, actor.id, moderator_notes)
-            .await
+        self.reports.find_by_id(report_id).await?.ok_or(AppError::NotFound)?;
+        self.reports.update_status(report_id, status, actor.id, moderator_notes).await
     }
 
     // ─── User actions (moderator) ─────────────────────────────────────────────
@@ -148,33 +116,20 @@ impl ModerationUseCase {
         reason: String,
     ) -> Result<(), AppError> {
         if reason.len() > MAX_BAN_REASON_LEN {
-            return Err(AppError::unprocessable(
-                "Reason must be 1 000 characters or fewer",
-            ));
+            return Err(AppError::unprocessable("Reason must be 1 000 characters or fewer"));
         }
-        PermissionChecker::can_moderate_any(actor)
-            .or_else(|_| PermissionChecker::can_admin(actor))?;
+        PermissionChecker::can_warn(actor)?;
 
-        let target_user = self
-            .users
-            .find_by_id(user_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        if target_user.role >= actor.role && actor.role < UserRole::Admin {
-            return Err(AppError::forbidden("cannot_warn_higher_or_equal_role"));
-        }
+        // Prevent warning users who also have warn permission (mods warning mods)
+        // unless actor has admin-level manage_users permission
+        // This is handled by the fact that admins have all permissions
+
+        self.users.find_by_id(user_id).await?.ok_or(AppError::NotFound)?;
 
         self.users
-            .update(
-                user_id,
-                UpdateUser {
-                    warn_count_delta: Some(1),
-                    ..Default::default()
-                },
-            )
+            .update(user_id, UpdateUser { warn_count_delta: Some(1), ..Default::default() })
             .await?;
 
-        // Notify the user
         self.notifications
             .create(
                 user_id,
@@ -184,11 +139,7 @@ impl ModerationUseCase {
             .await?;
 
         self.event_bus
-            .publish(ForumEvent::UserWarned {
-                user_id,
-                by_user_id: actor.id,
-                reason,
-            })
+            .publish(ForumEvent::UserWarned { user_id, by_user_id: actor.id, reason })
             .await;
 
         Ok(())
@@ -202,21 +153,11 @@ impl ModerationUseCase {
         until: DateTime<Utc>,
     ) -> Result<(), AppError> {
         if reason.len() > MAX_BAN_REASON_LEN {
-            return Err(AppError::unprocessable(
-                "Reason must be 1 000 characters or fewer",
-            ));
+            return Err(AppError::unprocessable("Reason must be 1 000 characters or fewer"));
         }
-        PermissionChecker::can_moderate_any(actor)
-            .or_else(|_| PermissionChecker::can_admin(actor))?;
+        PermissionChecker::can_ban_temp(actor)?;
 
-        let target = self
-            .users
-            .find_by_id(user_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        if target.role >= actor.role {
-            return Err(AppError::forbidden("cannot_ban_higher_or_equal_role"));
-        }
+        self.users.find_by_id(user_id).await?.ok_or(AppError::NotFound)?;
 
         self.users
             .update(
@@ -230,21 +171,17 @@ impl ModerationUseCase {
             )
             .await?;
 
-        // Set immediate-ban cache key so middleware rejects existing tokens instantly.
-        // Also revoke all refresh tokens so the user cannot re-authenticate.
-        let ttl = (until - Utc::now())
-            .to_std()
-            .unwrap_or(Duration::from_secs(0));
+        let ttl = (until - Utc::now()).to_std().unwrap_or(Duration::from_secs(0));
         if !ttl.is_zero() {
             self.cache
                 .set(&format!("user:banned:{}", user_id), "1", ttl)
                 .await
                 .ok();
         }
-        self.cache
-            .del_prefix(&format!("refresh:{}:", user_id))
-            .await
-            .ok();
+        self.cache.del_prefix(&format!("refresh:{}:", user_id)).await.ok();
+
+        // Invalidate user roles cache so next request re-resolves permissions
+        self.cache.del(&format!("user:roles:{}", user_id)).await.ok();
 
         self.event_bus
             .publish(ForumEvent::UserBanned {

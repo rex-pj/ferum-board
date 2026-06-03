@@ -22,14 +22,14 @@
 </script>
 
 <div class="d-flex align-items-center gap-2 mb-4">
-	<i class="fa-solid fa-scroll" style="font-size:1.1rem;opacity:.55;"></i>
+	<i class="fa-solid fa-scroll fr-page-icon"></i>
 	<h1 class="h5 mb-0">Audit Log</h1>
 </div>
 
 <div class="card">
 	<div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
 		<form method="GET" class="d-flex align-items-center gap-2 flex-grow-1 flex-wrap">
-			<div class="input-group input-group-sm" style="max-width:260px;">
+			<div class="input-group input-group-sm filter-search">
 				<span class="input-group-text"><i class="fa-solid fa-user"></i></span>
 				<input
 					type="search"
@@ -39,7 +39,7 @@
 					value={data.actor_id}
 				/>
 			</div>
-			<select name="target_type" class="form-select form-select-sm" style="width:auto;">
+			<select name="target_type" class="form-select form-select-sm w-auto">
 				<option value="" selected={!data.target_type}>All targets</option>
 				<option value="Thread" selected={data.target_type === 'Thread'}>Thread</option>
 				<option value="Post" selected={data.target_type === 'Post'}>Post</option>
@@ -94,3 +94,7 @@
 </div>
 
 <Pagination {currentPage} {totalPages} buildHref={pageHref} />
+
+<style>
+	.filter-search { max-width: 260px; }
+</style>

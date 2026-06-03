@@ -305,9 +305,8 @@ pub async fn pin_thread_handler(
     Json(body): Json<serde_json::Value>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    let assigned = get_assigned(&state, actor.id).await?;
     let pin = body.get("pinned").and_then(|v| v.as_bool()).unwrap_or(true);
-    let thread = state.thread.pin(actor, id, &assigned, pin).await?;
+    let thread = state.thread.pin(actor, id, pin).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
 
@@ -318,9 +317,8 @@ pub async fn lock_thread_handler(
     Json(body): Json<serde_json::Value>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    let assigned = get_assigned(&state, actor.id).await?;
     let lock = body.get("locked").and_then(|v| v.as_bool()).unwrap_or(true);
-    let thread = state.thread.lock(actor, id, &assigned, lock).await?;
+    let thread = state.thread.lock(actor, id, lock).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
 
@@ -331,11 +329,7 @@ pub async fn move_thread_handler(
     Json(body): Json<MoveThreadRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    let assigned = get_assigned(&state, actor.id).await?;
-    let thread = state
-        .thread
-        .move_to(actor, id, &assigned, body.category_id)
-        .await?;
+    let thread = state.thread.move_to(actor, id, body.category_id).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
 
@@ -346,11 +340,7 @@ pub async fn solve_thread_handler(
     Json(body): Json<MarkSolvedRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
-    let assigned = get_assigned(&state, actor.id).await?;
-    let thread = state
-        .thread
-        .mark_solved(actor, id, body.best_answer_id, &assigned)
-        .await?;
+    let thread = state.thread.mark_solved(actor, id, body.best_answer_id).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
 
@@ -412,8 +402,3 @@ pub async fn delete_thumbnail_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// ─── Private helpers ───────────────────────────────────────────────────────────
-
-async fn get_assigned(state: &AppState, user_id: Uuid) -> Result<Vec<Uuid>, AppError> {
-    state.cat_mod_repo.list_category_ids_for_user(user_id).await
-}

@@ -13,8 +13,8 @@ use crate::shared::AppError;
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::generate_thread_slug;
 use ferum_domain::events::ForumEvent;
+use ferum_domain::models::role::perm;
 use ferum_domain::models::thread::{Thread, ThreadStatus};
-use ferum_domain::models::user::UserRole;
 use ferum_domain::repositories::category_repository::CategoryRepository;
 use ferum_domain::repositories::post_repository::PostRepository;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
@@ -68,7 +68,9 @@ impl ThreadUseCase {
     }
 
     fn require_author_or_mod(actor: &AuthUser, thread: &Thread) -> Result<(), AppError> {
-        if thread.author_id != actor.id && actor.role < UserRole::Moderator {
+        if thread.author_id != actor.id
+            && !actor.has_perm_in(perm::THREAD_DELETE_ANY, thread.category_id)
+        {
             return Err(AppError::forbidden("not_author"));
         }
         Ok(())
@@ -270,7 +272,9 @@ impl ThreadUseCase {
         let is_author_within_window = thread.author_id == actor.id
             && Utc::now() - thread.created_at <= chrono::Duration::hours(POST_EDIT_WINDOW_HOURS);
 
-        if !is_author_within_window && actor.role < UserRole::Moderator {
+        if !is_author_within_window
+            && !actor.has_perm_in(perm::THREAD_EDIT_ANY, thread.category_id)
+        {
             return Err(AppError::forbidden("edit_window_expired"));
         }
 
@@ -310,7 +314,6 @@ impl ThreadUseCase {
         &self,
         actor: &AuthUser,
         id: Uuid,
-        assigned: &[Uuid],
         pin: bool,
     ) -> Result<Thread, AppError> {
         let thread = self
@@ -318,7 +321,7 @@ impl ThreadUseCase {
             .find_by_id(id)
             .await?
             .ok_or(AppError::NotFound)?;
-        PermissionChecker::can_moderate(actor, thread.category_id, assigned)?;
+        PermissionChecker::can_pin(actor, thread.category_id)?;
         self.threads
             .update(
                 id,
@@ -334,7 +337,6 @@ impl ThreadUseCase {
         &self,
         actor: &AuthUser,
         id: Uuid,
-        assigned: &[Uuid],
         lock: bool,
     ) -> Result<Thread, AppError> {
         let thread = self
@@ -342,12 +344,8 @@ impl ThreadUseCase {
             .find_by_id(id)
             .await?
             .ok_or(AppError::NotFound)?;
-        PermissionChecker::can_moderate(actor, thread.category_id, assigned)?;
-        let status = if lock {
-            ThreadStatus::Locked
-        } else {
-            ThreadStatus::Open
-        };
+        PermissionChecker::can_lock(actor, thread.category_id)?;
+        let status = if lock { ThreadStatus::Locked } else { ThreadStatus::Open };
         self.threads
             .update(
                 id,
@@ -363,7 +361,6 @@ impl ThreadUseCase {
         &self,
         actor: &AuthUser,
         id: Uuid,
-        assigned: &[Uuid],
         target_category_id: Uuid,
     ) -> Result<Thread, AppError> {
         let thread = self
@@ -371,7 +368,7 @@ impl ThreadUseCase {
             .find_by_id(id)
             .await?
             .ok_or(AppError::NotFound)?;
-        PermissionChecker::can_moderate(actor, thread.category_id, assigned)?;
+        PermissionChecker::can_move(actor, thread.category_id)?;
         self.categories
             .find_by_id(target_category_id)
             .await?
@@ -392,12 +389,11 @@ impl ThreadUseCase {
         actor: &AuthUser,
         id: Uuid,
         best_answer_id: Uuid,
-        assigned: &[Uuid],
     ) -> Result<Thread, AppError> {
         let thread = self.find_live_thread(id).await?;
 
         if thread.author_id != actor.id {
-            PermissionChecker::can_moderate(actor, thread.category_id, assigned)?;
+            PermissionChecker::can_lock(actor, thread.category_id)?;
         }
         PermissionChecker::require_not_banned(actor)?;
 

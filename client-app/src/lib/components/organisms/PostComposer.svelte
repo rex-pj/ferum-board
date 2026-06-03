@@ -84,12 +84,11 @@
 		</button>
 
 		{#if tab === 'write'}
-			<div class="vr mx-1" style="height:20px; opacity:0.25;"></div>
+			<div class="vr mx-1 toolbar-sep"></div>
 			{#each tools as tool}
 				<button
 					type="button"
-					class="btn btn-sm btn-link text-muted text-decoration-none p-1"
-					style="min-width:30px; min-height:30px; line-height:1;"
+					class="btn btn-sm btn-link text-muted text-decoration-none p-1 tool-btn"
 					title={tool.title}
 					aria-label={tool.title}
 					{disabled}
@@ -110,12 +109,11 @@
 			{minlength}
 			{disabled}
 			rows="8"
-			class="form-control border-0 rounded-0 rounded-bottom font-monospace"
-			style="resize:vertical;"
+			class="form-control border-0 rounded-0 rounded-bottom font-monospace composer-textarea"
 			required
 		></textarea>
 	{:else}
-		<div class="p-3 prose" style="min-height:200px;">
+		<div class="p-3 prose preview-area">
 			{#if preview}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html preview}
@@ -129,3 +127,24 @@
 <div class="text-muted small mt-1">
 	<i class="fa-brands fa-markdown me-1"></i>Markdown supported
 </div>
+
+<style>
+	.toolbar-sep {
+		height: 20px;
+		opacity: 0.25;
+	}
+
+	.tool-btn {
+		min-width: 30px;
+		min-height: 30px;
+		line-height: 1;
+	}
+
+	.composer-textarea {
+		resize: vertical;
+	}
+
+	.preview-area {
+		min-height: 200px;
+	}
+</style>

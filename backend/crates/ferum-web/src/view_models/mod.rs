@@ -10,6 +10,7 @@ pub mod notification;
 pub mod post;
 pub mod reaction;
 pub mod report;
+pub mod role;
 pub mod search;
 pub mod setup;
 pub mod thread;

@@ -37,18 +37,18 @@
 {#if totalPages > 1}
 	<nav aria-label="Pagination" class={navClass}>
 		{#if compact}
-			<div class="d-flex align-items-center gap-2" style="font-size:0.8125rem; color:var(--bs-secondary-color);">
+			<div class="d-flex align-items-center gap-2 compact-nav">
 				{#if currentPage > 1}
 					<a href={buildHref(currentPage - 1)} class="fr-page-link" aria-label="Previous page">
-						<i class="fa-solid fa-chevron-left" style="font-size:0.6875rem;"></i> Prev
+						<i class="fa-solid fa-chevron-left chevron-icon"></i> Prev
 					</a>
-					<span style="opacity:0.35;">|</span>
+					<span class="nav-sep">|</span>
 				{/if}
-				<span>Page <strong style="color:var(--bs-body-color);">{currentPage}</strong> of {totalPages}</span>
+				<span>Page <strong class="page-num">{currentPage}</strong> of {totalPages}</span>
 				{#if currentPage < totalPages}
-					<span style="opacity:0.35;">|</span>
+					<span class="nav-sep">|</span>
 					<a href={buildHref(currentPage + 1)} class="fr-page-link" aria-label="Next page">
-						Next <i class="fa-solid fa-chevron-right" style="font-size:0.6875rem;"></i>
+						Next <i class="fa-solid fa-chevron-right chevron-icon"></i>
 					</a>
 				{/if}
 			</div>
@@ -69,7 +69,7 @@
 				{#each pages() as p}
 					{#if p === null}
 						<li class="page-item disabled" aria-hidden="true">
-							<span class="page-link" style="pointer-events:none;">…</span>
+							<span class="page-link pe-none">…</span>
 						</li>
 					{:else}
 						<li class="page-item" class:active={p === currentPage}>
@@ -103,6 +103,23 @@
 		transition: color 0.15s;
 	}
 	.fr-page-link:hover {
+		color: var(--bs-body-color);
+	}
+
+	.compact-nav {
+		font-size: 0.8125rem;
+		color: var(--bs-secondary-color);
+	}
+
+	.chevron-icon {
+		font-size: 0.6875rem;
+	}
+
+	.nav-sep {
+		opacity: 0.35;
+	}
+
+	.page-num {
 		color: var(--bs-body-color);
 	}
 </style>

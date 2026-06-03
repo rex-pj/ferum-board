@@ -83,21 +83,21 @@
 	<div class="fr-panel">
 		<div class="fr-panel-header">Search Tips</div>
 		<div class="fr-panel-body">
-			<div class="fr-panel-row" style="align-items: flex-start; flex-direction: column; gap: 0.25rem; min-height: auto; padding-top: 0.5rem; padding-bottom: 0.5rem;">
-				<span class="small" style="color: var(--bs-body-color); font-weight: 500;">
-					<i class="fa-solid fa-quote-left fa-xs me-1" style="color: var(--bs-primary);"></i>Exact phrase
+			<div class="fr-panel-row tip-row">
+				<span class="small fw-medium text-body">
+					<i class="fa-solid fa-quote-left fa-xs me-1" class="text-primary"></i>Exact phrase
 				</span>
 				<span class="small text-muted">Put words in "double quotes"</span>
 			</div>
-			<div class="fr-panel-row" style="align-items: flex-start; flex-direction: column; gap: 0.25rem; min-height: auto; padding-top: 0.5rem; padding-bottom: 0.5rem;">
-				<span class="small" style="color: var(--bs-body-color); font-weight: 500;">
-					<i class="fa-solid fa-keyboard fa-xs me-1" style="color: var(--bs-primary);"></i>Short keywords
+			<div class="fr-panel-row tip-row">
+				<span class="small fw-medium text-body">
+					<i class="fa-solid fa-keyboard fa-xs me-1" class="text-primary"></i>Short keywords
 				</span>
 				<span class="small text-muted">Use 2–4 keywords for the best results</span>
 			</div>
-			<div class="fr-panel-row" style="align-items: flex-start; flex-direction: column; gap: 0.25rem; min-height: auto; padding-top: 0.5rem; padding-bottom: 0.5rem;">
-				<span class="small" style="color: var(--bs-body-color); font-weight: 500;">
-					<i class="fa-solid fa-folder fa-xs me-1" style="color: var(--bs-primary);"></i>Browse categories
+			<div class="fr-panel-row tip-row">
+				<span class="small fw-medium text-body">
+					<i class="fa-solid fa-folder fa-xs me-1" class="text-primary"></i>Browse categories
 				</span>
 				<span class="small text-muted">Can't find it? Browse by category below</span>
 			</div>
@@ -111,8 +111,8 @@
 			<div class="fr-panel-body">
 				{#each topCategories as cat}
 					<a href={ROUTES.CATEGORY(cat.slug)} class="fr-panel-row">
-						<i class="fa-solid fa-folder fa-sm" style="width:1rem; opacity:0.5; flex-shrink:0;"></i>
-						<span class="text-truncate" style="color: var(--bs-body-color); font-size: 0.8125rem;">{cat.name}</span>
+						<i class="fa-solid fa-folder fa-sm detail-icon"></i>
+						<span class="text-truncate text-body cat-name">{cat.name}</span>
 					</a>
 				{/each}
 			</div>
@@ -127,8 +127,22 @@
 	{:else}
 		<div class="d-grid gap-2">
 			<a href={ROUTES.REGISTER} class="btn btn-primary btn-sm">Get started</a>
-			<a href={ROUTES.LOGIN} class="btn btn-sm" style="border: 1px solid var(--bs-border-color); color: var(--bs-body-color);">Sign in</a>
+			<a href={ROUTES.LOGIN} class="btn btn-sm fr-btn-ghost">Sign in</a>
 		</div>
 	{/if}
 </aside>
 </div>
+
+<style>
+	.tip-row {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 0.25rem;
+		min-height: auto;
+		padding-top: 0.5rem;
+		padding-bottom: 0.5rem;
+	}
+
+	.detail-icon { width: 1rem; opacity: 0.5; flex-shrink: 0; }
+	.cat-name { font-size: 0.8125rem; }
+</style>

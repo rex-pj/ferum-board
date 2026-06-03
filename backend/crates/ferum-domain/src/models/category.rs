@@ -19,15 +19,6 @@ pub struct Category {
     pub updated_by_id: Option<Uuid>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CategoryModerator {
-    pub id: Uuid,
-    pub category_id: Uuid,
-    pub user_id: Uuid,
-    pub assigned_at: DateTime<Utc>,
-    pub assigned_by_id: Option<Uuid>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Copy)]
 pub enum ViewPolicy {
     Public,

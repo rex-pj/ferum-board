@@ -17,7 +17,7 @@
 	<footer class="fr-footer border-top mt-auto">
 		<div class="container-fluid px-4">
 			<div class="fr-footer-compact">
-				<a href={ROUTES.HOME} class="fr-footer-brand-link">
+				<a href={ROUTES.HOME} class="fr-brand-link">
 					{#if logoUrl}
 						<img src={logoUrl} alt={siteName} class="fr-footer-logo-img" />
 					{:else}
@@ -40,7 +40,7 @@
 
 				<!-- Brand -->
 				<div class="fr-footer-brand-col">
-					<a href={ROUTES.HOME} class="fr-footer-brand-link">
+					<a href={ROUTES.HOME} class="fr-brand-link">
 						{#if logoUrl}
 							<img src={logoUrl} alt={siteName} class="fr-footer-logo-img" />
 						{:else}
@@ -57,7 +57,7 @@
 
 				<!-- Browse -->
 				<div>
-					<h6 class="fr-footer-heading">Browse</h6>
+					<h6 class="fr-label-caps fr-footer-heading">Browse</h6>
 					<ul class="fr-footer-links">
 						<li>
 							<a href={ROUTES.HOME} class="fr-footer-link">
@@ -79,7 +79,7 @@
 
 				<!-- Account -->
 				<div>
-					<h6 class="fr-footer-heading">Account</h6>
+					<h6 class="fr-label-caps fr-footer-heading">Account</h6>
 					<ul class="fr-footer-links">
 						<li>
 							<a href={ROUTES.LOGIN} class="fr-footer-link">
@@ -101,7 +101,7 @@
 
 				<!-- Help -->
 				<div>
-					<h6 class="fr-footer-heading">Help</h6>
+					<h6 class="fr-label-caps fr-footer-heading">Help</h6>
 					<ul class="fr-footer-links">
 						<li>
 							<a href={ROUTES.SEARCH} class="fr-footer-link">
@@ -142,17 +142,6 @@
 		background: var(--bs-tertiary-bg);
 		color: var(--bs-secondary-color);
 	}
-
-	/* Shared brand link */
-	.fr-footer-brand-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.9375rem;
-		color: var(--bs-body-color);
-		text-decoration: none;
-	}
-	.fr-footer-brand-link:hover { color: var(--bs-primary); }
 
 	/* Logo: image path */
 	.fr-footer-logo-img {
@@ -215,11 +204,6 @@
 	}
 
 	.fr-footer-heading {
-		font-size: 0.6875rem;
-		font-weight: 600;
-		letter-spacing: 0.07em;
-		text-transform: uppercase;
-		color: var(--bs-tertiary-color);
 		margin: 0 0 0.625rem;
 	}
 

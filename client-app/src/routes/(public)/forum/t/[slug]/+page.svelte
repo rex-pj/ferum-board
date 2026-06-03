@@ -13,6 +13,7 @@
 	import Timestamp from '$lib/components/atoms/Timestamp.svelte';
 	import { ROUTES } from '$lib/routes';
 	import { toast } from '$lib/stores/toast';
+	import { isModerator, isModeratorOf } from '$lib/utils/permissions';
 
 	let { data, form }: { data: any; form: any } = $props();
 
@@ -35,9 +36,7 @@
 
 	const canManageThumbnail = $derived(
 		!!data.user &&
-		(data.user.id === thread?.author_id ||
-			data.user.role === 'admin' ||
-			data.user.role === 'moderator')
+		(data.user.id === thread?.author_id || isModerator(data.user))
 	);
 
 	function paginationPages(current: number, total: number): (number | null)[] {
@@ -94,7 +93,7 @@
 
 <div class="fr-content-layout">
 <!-- Main reading column -->
-<div class="fr-feed-col" style="min-width: 0;">
+<div class="fr-feed-col feed-col">
 	<nav aria-label="breadcrumb" class="mb-3">
 		<ol class="breadcrumb">
 			<li class="breadcrumb-item"><a href={ROUTES.HOME}>Home</a></li>
@@ -103,7 +102,7 @@
 					<a href={ROUTES.CATEGORY(data.category.slug)}>{data.category.name}</a>
 				</li>
 			{/if}
-			<li class="breadcrumb-item active text-truncate" style="max-width:300px;">{thread?.title}</li>
+			<li class="breadcrumb-item active text-truncate breadcrumb-title">{thread?.title}</li>
 		</ol>
 	</nav>
 
@@ -150,7 +149,7 @@
 					</button>
 				</form>
 			{/if}
-			{#if data.user?.role === 'admin' || data.user?.role === 'moderator'}
+			{#if isModeratorOf(data.user, thread?.category_id)}
 				<div class="dropdown">
 					<button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
 						Mod
@@ -192,7 +191,7 @@
 				<img src="{thumbnailUrl}?_t={thumbnailCacheBust}" alt="Thread thumbnail" class="th-img" />
 			{:else}
 				<div class="th-empty">
-					<i class="fa-regular fa-image" style="font-size:2rem; opacity:0.3;"></i>
+					<i class="fa-regular fa-image empty-img-icon"></i>
 				</div>
 			{/if}
 
@@ -221,7 +220,7 @@
 							}}
 						>
 							<input type="hidden" name="thread_id" value={thread.id} />
-							<label class="btn btn-sm btn-light" style="cursor:pointer; min-width:90px;">
+							<label class="btn btn-sm btn-light upload-label">
 								{#if thumbnailUploading}
 									<span class="spinner-border spinner-border-sm me-1"></span>Uploading…
 								{:else}
@@ -390,43 +389,43 @@
 		<div class="fr-panel-body">
 			{#if thread?.author}
 				<div class="fr-panel-row">
-					<i class="fa-regular fa-user" style="width:1rem; opacity:0.5; flex-shrink:0;"></i>
-					<span style="color: var(--bs-secondary-color);">Author</span>
-					<a href={ROUTES.USER_PROFILE(thread.author.username)} class="ms-auto fw-medium text-truncate" style="max-width:110px; color: var(--bs-body-color);">
+					<i class="fa-regular fa-user detail-icon"></i>
+					<span class="text-muted">Author</span>
+					<a href={ROUTES.USER_PROFILE(thread.author.username)} class="ms-auto fw-medium text-truncate detail-link">
 						{thread.author.display_name ?? thread.author.username}
 					</a>
 				</div>
 			{/if}
 			{#if thread?.created_at}
 				<div class="fr-panel-row">
-					<i class="fa-regular fa-clock" style="width:1rem; opacity:0.5; flex-shrink:0;"></i>
-					<span style="color: var(--bs-secondary-color);">Posted</span>
+					<i class="fa-regular fa-clock detail-icon"></i>
+					<span class="text-muted">Posted</span>
 					<span class="ms-auto"><Timestamp date={thread.created_at} /></span>
 				</div>
 			{/if}
 		</div>
 		<div class="fr-panel-stat">
-			<span style="color: var(--bs-secondary-color);"><i class="fa-regular fa-eye me-1"></i>Views</span>
-			<span class="fw-semibold" style="color: var(--bs-body-color);">{(thread?.view_count ?? 0).toLocaleString()}</span>
+			<span class="text-muted"><i class="fa-regular fa-eye me-1"></i>Views</span>
+			<span class="fw-semibold text-body">{(thread?.view_count ?? 0).toLocaleString()}</span>
 		</div>
 		<div class="fr-panel-stat">
-			<span style="color: var(--bs-secondary-color);"><i class="fa-regular fa-comment me-1"></i>Replies</span>
-			<span class="fw-semibold" style="color: var(--bs-body-color);">{(thread?.reply_count ?? 0).toLocaleString()}</span>
+			<span class="text-muted"><i class="fa-regular fa-comment me-1"></i>Replies</span>
+			<span class="fw-semibold text-body">{(thread?.reply_count ?? 0).toLocaleString()}</span>
 		</div>
 		{#if thread?.is_pinned || thread?.is_solved || thread?.status === 'locked'}
-			<div class="fr-panel-stat" style="gap: 0.375rem; justify-content: flex-start;">
+			<div class="fr-panel-stat flag-stat">
 				{#if thread.is_pinned}
-					<span class="badge" style="background: var(--bs-primary); font-weight:500; font-size:0.7rem;">
+					<span class="badge bg-primary badge-sm">
 						<i class="fa-solid fa-thumbtack me-1"></i>Pinned
 					</span>
 				{/if}
 				{#if thread.is_solved}
-					<span class="badge bg-success" style="font-weight:500; font-size:0.7rem;">
+					<span class="badge bg-success badge-sm">
 						<i class="fa-solid fa-circle-check me-1"></i>Solved
 					</span>
 				{/if}
 				{#if thread?.status === 'locked'}
-					<span class="badge bg-warning text-dark" style="font-weight:500; font-size:0.7rem;">
+					<span class="badge bg-warning text-dark badge-sm">
 						<i class="fa-solid fa-lock me-1"></i>Locked
 					</span>
 				{/if}
@@ -439,11 +438,11 @@
 		<div class="fr-panel">
 			<div class="fr-panel-header">Category</div>
 			<div class="px-3 py-2">
-				<a href={ROUTES.CATEGORY(data.category.slug)} class="fw-semibold text-decoration-none d-block mb-1" style="color: var(--bs-body-color);">
-					<i class="fa-solid fa-folder me-1" style="opacity:0.5;"></i>{data.category.name}
+				<a href={ROUTES.CATEGORY(data.category.slug)} class="fw-semibold text-decoration-none d-block mb-1 text-body">
+					<i class="fa-solid fa-folder me-1 opacity-50"></i>{data.category.name}
 				</a>
 				{#if data.category.description}
-					<p class="small mb-0" style="color: var(--bs-secondary-color); line-height: 1.5;">{data.category.description}</p>
+					<p class="small mb-0 text-muted cat-desc">{data.category.description}</p>
 				{/if}
 			</div>
 		</div>
@@ -457,7 +456,7 @@
 	{:else}
 		<div class="d-grid gap-2">
 			<a href={ROUTES.REGISTER} class="btn btn-primary btn-sm">Get started</a>
-			<a href={ROUTES.LOGIN} class="btn btn-sm" style="border: 1px solid var(--bs-border-color); color: var(--bs-body-color);">Sign in</a>
+			<a href={ROUTES.LOGIN} class="btn btn-sm fr-btn-ghost">Sign in</a>
 		</div>
 	{/if}
 </aside>
@@ -465,7 +464,7 @@
 
 <!-- Report modal -->
 {#if reportPostId}
-	<div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);" role="dialog" aria-modal="true" aria-labelledby="reportModalLabel">
+	<div class="modal d-block modal-backdrop-dark" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="reportModalLabel">
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -555,4 +554,15 @@
 		display: flex;
 		gap: 0.5rem;
 	}
+
+	.feed-col { min-width: 0; }
+	.breadcrumb-title { max-width: 300px; }
+	.empty-img-icon { font-size: 2rem; opacity: 0.3; }
+	.upload-label { cursor: pointer; min-width: 90px; }
+	.detail-icon { width: 1rem; opacity: 0.5; flex-shrink: 0; }
+	.detail-link { max-width: 110px; color: var(--bs-body-color); }
+	.flag-stat { gap: 0.375rem; justify-content: flex-start; }
+	.badge-sm { font-weight: 500; font-size: 0.7rem; }
+	.cat-desc { line-height: 1.5; }
+	.modal-backdrop-dark { background: rgba(0, 0, 0, 0.4); }
 </style>

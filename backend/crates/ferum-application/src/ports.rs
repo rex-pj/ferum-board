@@ -32,9 +32,7 @@ pub trait TokenService: Send + Sync {
 pub struct AccessTokenClaims {
     pub sub: Uuid,
     pub username: String,
-    pub role: String,
     pub trust_level: String,
-    pub is_global_mod: bool,
     pub is_banned: bool,
     /// Unix timestamp of ban expiry; None means permanent ban.
     pub banned_until: Option<i64>,

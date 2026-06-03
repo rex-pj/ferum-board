@@ -38,11 +38,6 @@ pub struct UpdateCategoryRequest {
     pub color: Option<Option<String>>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct AssignModeratorRequest {
-    pub user_id: Uuid,
-}
-
 fn default_view_policy() -> String {
     "public".to_string()
 }
@@ -112,16 +107,6 @@ impl From<Category> for CategoryResponse {
             created_at: c.created_at,
         }
     }
-}
-
-#[derive(Serialize)]
-pub struct CategoryModeratorResponse {
-    pub category_id: Uuid,
-    pub user_id: Uuid,
-    pub username: String,
-    pub display_name: Option<String>,
-    pub assigned_by: Option<Uuid>,
-    pub assigned_at: DateTime<Utc>,
 }
 
 // ─── Forum index responses ─────────────────────────────────────────────────────

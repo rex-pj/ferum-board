@@ -32,7 +32,7 @@
 	<div class="fr-feed-col">
 		<!-- Breadcrumb -->
 		<nav aria-label="breadcrumb" class="mb-3">
-			<ol class="breadcrumb" style="font-size: 0.8125rem;">
+			<ol class="breadcrumb breadcrumb-sm">
 				<li class="breadcrumb-item"><a href={ROUTES.HOME}>Home</a></li>
 				{#if data.parentCategory}
 					<li class="breadcrumb-item">
@@ -113,16 +113,16 @@
 					{#if cat?.color}
 						<span class="rounded-circle flex-shrink-0" style="width:10px; height:10px; background:{cat.color};"></span>
 					{/if}
-					<span class="fw-semibold" style="font-size:0.9375rem;">{cat?.name}</span>
+					<span class="fw-semibold cat-name">{cat?.name}</span>
 				</div>
 				{#if cat?.description}
-					<p class="small mb-0" style="color: var(--bs-secondary-color); line-height: 1.6;">{cat.description}</p>
+					<p class="small mb-0 text-muted cat-desc">{cat.description}</p>
 				{/if}
 			</div>
 			{#if data.meta?.total}
-				<div class="fr-panel-stat" style="border-top: 1px solid var(--bs-border-color);">
-					<span style="color: var(--bs-secondary-color);">Threads</span>
-					<span class="fw-semibold" style="color: var(--bs-body-color);">{data.meta.total.toLocaleString()}</span>
+				<div class="fr-panel-stat border-top">
+					<span class="text-muted">Threads</span>
+					<span class="fw-semibold text-body">{data.meta.total.toLocaleString()}</span>
 				</div>
 			{/if}
 		</div>
@@ -137,7 +137,7 @@
 							{#if sub.color}
 								<span class="rounded-circle flex-shrink-0" style="width:8px; height:8px; background:{sub.color};"></span>
 							{:else}
-								<i class="fa-solid fa-hashtag" style="font-size:0.75rem; width:0.875rem; text-align:center; opacity:0.5;"></i>
+								<i class="fa-solid fa-hashtag panel-hash"></i>
 							{/if}
 							<span class="text-truncate">{sub.name}</span>
 						</a>
@@ -156,7 +156,7 @@
 							{#if sib.color}
 								<span class="rounded-circle flex-shrink-0" style="width:8px; height:8px; background:{sib.color};"></span>
 							{:else}
-								<i class="fa-solid fa-hashtag" style="font-size:0.75rem; width:0.875rem; text-align:center; opacity:0.5;"></i>
+								<i class="fa-solid fa-hashtag panel-hash"></i>
 							{/if}
 							<span class="text-truncate">{sib.name}</span>
 						</a>
@@ -166,3 +166,15 @@
 		{/if}
 	</aside>
 </div>
+
+<style>
+	.breadcrumb-sm { font-size: 0.8125rem; }
+	.cat-name { font-size: 0.9375rem; }
+	.cat-desc { line-height: 1.6; }
+	.panel-hash {
+		font-size: 0.75rem;
+		width: 0.875rem;
+		text-align: center;
+		opacity: 0.5;
+	}
+</style>

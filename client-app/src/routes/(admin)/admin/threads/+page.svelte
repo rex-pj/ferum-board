@@ -40,7 +40,7 @@
 </script>
 
 <div class="d-flex align-items-center gap-2 mb-4">
-	<i class="fa-solid fa-comments" style="font-size:1.1rem;opacity:.55;"></i>
+	<i class="fa-solid fa-comments fr-page-icon"></i>
 	<h1 class="h5 mb-0">Threads</h1>
 </div>
 
@@ -51,7 +51,7 @@
 <div class="card">
 	<div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
 		<form method="GET" class="d-flex align-items-center gap-2 flex-grow-1 flex-wrap">
-			<select name="category_slug" class="form-select form-select-sm" style="width:auto;min-width:160px;">
+			<select name="category_slug" class="form-select form-select-sm cat-select">
 				<option value="" selected={!data.category_slug}>All categories</option>
 				{#each data.categories as cat}
 					<option value={cat.slug} selected={data.category_slug === cat.slug}>{cat.name}</option>
@@ -79,15 +79,14 @@
 		<tbody>
 			{#each data.threads as thread}
 				<tr>
-					<td style="max-width:260px;">
+					<td class="title-col">
 						<a
 							href={ROUTES.THREAD(thread.slug)}
-							class="fw-semibold text-truncate d-block text-decoration-none"
-							style="color: var(--bs-body-color); max-width:260px;"
+							class="fw-semibold text-truncate d-block text-decoration-none text-body title-link"
 							title={thread.title}
 						>
 							{#if thread.is_pinned}
-								<i class="fa-solid fa-thumbtack text-primary me-1" style="font-size:.75rem;" title="Pinned"></i>
+								<i class="fa-solid fa-thumbtack text-primary me-1 icon-xs" title="Pinned"></i>
 							{/if}
 							{thread.title}
 						</a>
@@ -233,9 +232,8 @@
 <!-- Move modal -->
 {#if movingThread}
 	<div
-		class="modal d-block"
+		class="modal d-block modal-backdrop-dark"
 		tabindex="-1"
-		style="background:rgba(0,0,0,.4);"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="moveModalLabel"
@@ -304,3 +302,11 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.cat-select { width: auto; min-width: 160px; }
+	.title-col { max-width: 260px; }
+	.title-link { max-width: 260px; }
+	.icon-xs { font-size: 0.75rem; }
+	.modal-backdrop-dark { background: rgba(0, 0, 0, 0.4); }
+</style>

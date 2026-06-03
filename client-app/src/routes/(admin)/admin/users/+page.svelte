@@ -24,14 +24,14 @@
 </script>
 
 <div class="d-flex align-items-center gap-2 mb-4">
-	<i class="fa-solid fa-users" style="font-size:1.1rem;opacity:.55;"></i>
+	<i class="fa-solid fa-users fr-page-icon"></i>
 	<h1 class="h5 mb-0">Users</h1>
 </div>
 
 <div class="card">
 	<div class="card-header py-2 d-flex align-items-center gap-2">
 		<form method="GET" class="d-flex align-items-center gap-2 flex-grow-1">
-			<div class="input-group input-group-sm" style="max-width:360px;">
+			<div class="input-group input-group-sm filter-search">
 				<input
 					type="search"
 					name="q"
@@ -72,7 +72,7 @@
 							</div>
 						</div>
 					</td>
-					<td><Badge role={user.role} /></td>
+					<td>{#if user.primary_role_slug}<Badge role={user.primary_role_slug} />{/if}</td>
 					<td><Badge trust={user.trust_level} /></td>
 					<td>
 						{#if user.is_banned}
@@ -108,3 +108,7 @@
 </div>
 
 <Pagination {currentPage} {totalPages} buildHref={pageHref} />
+
+<style>
+	.filter-search { max-width: 360px; }
+</style>

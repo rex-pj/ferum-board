@@ -9,6 +9,7 @@ pub mod notification_handler;
 pub mod post_handler;
 pub mod profile_handler;
 pub mod reaction_handler;
+pub mod role_handler;
 pub mod search_handler;
 pub mod setup_handler;
 pub mod site_config_handler;

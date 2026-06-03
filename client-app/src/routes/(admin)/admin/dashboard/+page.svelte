@@ -22,7 +22,7 @@
 		<div class="col-sm-6 col-xl-3">
 			<div class="card h-100">
 				<div class="card-body d-flex align-items-center gap-3">
-					<div class="rounded-circle d-flex align-items-center justify-content-center bg-{stat.color} bg-opacity-10 flex-shrink-0" style="width:48px;height:48px;">
+					<div class="rounded-circle d-flex align-items-center justify-content-center bg-{stat.color} bg-opacity-10 flex-shrink-0 stat-icon">
 						<i class="fa-solid {stat.icon} text-{stat.color}"></i>
 					</div>
 					<div>
@@ -77,3 +77,7 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	.stat-icon { width: 48px; height: 48px; }
+</style>

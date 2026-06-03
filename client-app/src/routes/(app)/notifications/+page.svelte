@@ -73,37 +73,27 @@
 							<i class="fa-solid {KIND_ICONS[notif.kind] ?? 'fa-bell'}"></i>
 						</div>
 						{#if threadHref}
-							<a href={threadHref} class="flex-grow-1 min-w-0 text-decoration-none" style="color:inherit;">
-								<div class="fw-medium" style="font-size:0.875rem; color:var(--bs-body-color);">
+							<a href={threadHref} class="flex-grow-1 min-w-0 text-decoration-none notif-link">
+								<div class="fw-medium notif-title">
 									{KIND_LABELS[notif.kind] ?? notif.kind}
 								</div>
 								{#if notif.payload?.message}
-									<div style="font-size:0.8125rem; color:var(--bs-secondary-color); margin-top:0.125rem;">
-										{notif.payload.message}
-									</div>
+									<div class="notif-body">{notif.payload.message}</div>
 								{/if}
-								<div class="mt-1" style="font-size:0.75rem; color:var(--bs-tertiary-color);">
-									<Timestamp date={notif.created_at} />
-								</div>
+								<div class="mt-1 notif-time"><Timestamp date={notif.created_at} /></div>
 							</a>
 						{:else}
 							<div class="flex-grow-1 min-w-0">
-								<div class="fw-medium" style="font-size:0.875rem; color:var(--bs-body-color);">
+								<div class="fw-medium notif-title">
 									{KIND_LABELS[notif.kind] ?? notif.kind}
 								</div>
 								{#if notif.payload?.message}
-									<div style="font-size:0.8125rem; color:var(--bs-secondary-color); margin-top:0.125rem;">
-										{notif.payload.message}
-									</div>
+									<div class="notif-body">{notif.payload.message}</div>
 								{/if}
 								{#if notif.payload?.reason}
-									<div style="font-size:0.8125rem; color:var(--bs-secondary-color); margin-top:0.125rem;">
-										Reason: {notif.payload.reason}
-									</div>
+									<div class="notif-body">Reason: {notif.payload.reason}</div>
 								{/if}
-								<div class="mt-1" style="font-size:0.75rem; color:var(--bs-tertiary-color);">
-									<Timestamp date={notif.created_at} />
-								</div>
+								<div class="mt-1 notif-time"><Timestamp date={notif.created_at} /></div>
 							</div>
 						{/if}
 						{#if !notif.is_read}
@@ -117,7 +107,7 @@
 								<input type="hidden" name="id" value={notif.id} />
 								<button type="submit" class="btn btn-sm fr-notif-read-btn" title="Mark as read" disabled={readingId === notif.id}>
 									{#if readingId === notif.id}
-										<span class="spinner-border spinner-border-sm" style="width:0.75rem;height:0.75rem;"></span>
+										<span class="spinner-border spinner-border-sm spinner-xs"></span>
 									{:else}
 										<i class="fa-solid fa-check"></i>
 									{/if}
@@ -148,9 +138,9 @@
 		<div class="fr-panel">
 			<div class="fr-panel-header">Summary</div>
 			<div class="px-3 py-2">
-				<div class="fr-panel-stat" style="border:none; padding:0.5rem 0;">
-					<span style="color:var(--bs-secondary-color); font-size:0.8125rem;">Unread</span>
-					<span class="fw-semibold" style="font-size:0.8125rem; color:var(--bs-body-color);">
+				<div class="fr-panel-stat stat-no-border">
+					<span class="text-muted stat-label">Unread</span>
+					<span class="fw-semibold stat-value">
 						{#if unread > 0}
 							<span class="badge rounded-pill bg-primary">{unread}</span>
 						{:else}
@@ -158,9 +148,9 @@
 						{/if}
 					</span>
 				</div>
-				<div class="fr-panel-stat" style="border-top:1px solid var(--bs-border-color); padding:0.5rem 0 0;">
-					<span style="color:var(--bs-secondary-color); font-size:0.8125rem;">Total shown</span>
-					<span class="fw-semibold" style="font-size:0.8125rem; color:var(--bs-body-color);">{total}</span>
+				<div class="fr-panel-stat stat-top-border">
+					<span class="text-muted stat-label">Total shown</span>
+					<span class="fw-semibold stat-value">{total}</span>
 				</div>
 			</div>
 		</div>
@@ -170,9 +160,9 @@
 			<div class="fr-panel-header">Types</div>
 			<div class="fr-panel-body">
 				{#each Object.entries(KIND_LABELS) as [kind, label]}
-					<div class="fr-panel-row" style="gap:0.625rem; cursor:default;">
-						<i class="fa-solid {KIND_ICONS[kind]} text-primary" style="width:1rem; text-align:center; font-size:0.75rem;"></i>
-						<span style="font-size:0.8125rem;">{label}</span>
+					<div class="fr-panel-row kind-row">
+						<i class="fa-solid {KIND_ICONS[kind]} text-primary kind-icon"></i>
+						<span class="kind-label">{label}</span>
 					</div>
 				{/each}
 			</div>
@@ -183,18 +173,35 @@
 			<div class="fr-panel-header">Account</div>
 			<div class="fr-panel-body">
 				<a href={ROUTES.ACCOUNT} class="fr-panel-row">
-					<i class="fa-solid fa-user" style="width:1rem; text-align:center; font-size:0.75rem;"></i>
+					<i class="fa-solid fa-user kind-icon"></i>
 					Profile settings
 				</a>
 				<a href={ROUTES.BOOKMARKS} class="fr-panel-row">
-					<i class="fa-solid fa-bookmark" style="width:1rem; text-align:center; font-size:0.75rem;"></i>
+					<i class="fa-solid fa-bookmark kind-icon"></i>
 					Bookmarks
 				</a>
 				<a href={ROUTES.HOME} class="fr-panel-row">
-					<i class="fa-solid fa-house" style="width:1rem; text-align:center; font-size:0.75rem;"></i>
+					<i class="fa-solid fa-house kind-icon"></i>
 					Back to feed
 				</a>
 			</div>
 		</div>
 	</aside>
 </div>
+
+<style>
+	.notif-link  { color: inherit; }
+	.notif-title { font-size: 0.875rem; color: var(--bs-body-color); }
+	.notif-body  { font-size: 0.8125rem; color: var(--bs-secondary-color); margin-top: 0.125rem; }
+	.notif-time  { font-size: 0.75rem; color: var(--bs-tertiary-color); }
+	.spinner-xs  { width: 0.75rem; height: 0.75rem; }
+
+	.stat-no-border  { border: none; padding: 0.5rem 0; }
+	.stat-top-border { border-top: 1px solid var(--bs-border-color); padding: 0.5rem 0 0; }
+	.stat-label  { color: var(--bs-secondary-color); font-size: 0.8125rem; }
+	.stat-value  { font-size: 0.8125rem; color: var(--bs-body-color); }
+
+	.kind-row  { gap: 0.625rem; cursor: default; }
+	.kind-icon { width: 1rem; text-align: center; font-size: 0.75rem; }
+	.kind-label { font-size: 0.8125rem; }
+</style>
