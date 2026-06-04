@@ -259,6 +259,29 @@ impl EventBus {
                 )
                 .await;
             }
+            ForumEvent::MentionAdded {
+                post_id,
+                thread_id,
+                thread_slug,
+                mentioned_user_id,
+                author_id,
+            } => {
+                let payload = serde_json::json!({
+                    "kind": "mention",
+                    "post_id": post_id,
+                    "thread_id": thread_id,
+                    "thread_slug": thread_slug,
+                    "author_id": author_id,
+                });
+                self.notifications
+                    .create(*mentioned_user_id, NotificationKind::Mention, payload.clone())
+                    .await
+                    .ok();
+                self.notification_bus
+                    .publish(*mentioned_user_id, payload)
+                    .await
+                    .ok();
+            }
             _ => {}
         }
         Ok(())

@@ -75,21 +75,26 @@ pub async fn get_me_handler(
     let role_map: HashMap<Uuid, RoleResponse> =
         all_roles.into_iter().map(|r| (r.id, RoleResponse::from(r))).collect();
 
+    let mut role_responses = Vec::with_capacity(assignments.len());
+    for a in assignments {
+        if let Some(role) = role_map.get(&a.role_id).cloned() {
+            let permissions = state
+                .role_permission_cache
+                .permissions_for_role(a.role_id)
+                .await;
+            role_responses.push(UserRoleResponse {
+                id: a.id,
+                role,
+                category_id: a.category_id,
+                expires_at: a.expires_at,
+                created_at: a.created_at,
+                permissions,
+            });
+        }
+    }
+
     let mut resp = UserResponse::from(user);
-    resp.roles = Some(
-        assignments
-            .into_iter()
-            .filter_map(|a| {
-                role_map.get(&a.role_id).cloned().map(|role| UserRoleResponse {
-                    id: a.id,
-                    role,
-                    category_id: a.category_id,
-                    expires_at: a.expires_at,
-                    created_at: a.created_at,
-                })
-            })
-            .collect(),
-    );
+    resp.roles = Some(role_responses);
 
     Ok(Json(DataResponse::new(resp)))
 }

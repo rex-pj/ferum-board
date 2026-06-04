@@ -93,10 +93,29 @@ impl MigrationTrait for Migration {
                     )
                     .to_owned(),
             )
+            .await?;
+
+        // Reverse-lookup index: find all threads for a given tag (used by list_by_tag)
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_thread_tags_tag_id")
+                    .table(ThreadTags::Table)
+                    .col(ThreadTags::TagId)
+                    .to_owned(),
+            )
             .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .name("idx_thread_tags_tag_id")
+                    .table(ThreadTags::Table)
+                    .to_owned(),
+            )
+            .await?;
         manager
             .drop_table(
                 Table::drop()

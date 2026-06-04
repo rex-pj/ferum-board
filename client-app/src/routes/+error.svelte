@@ -36,13 +36,22 @@
 		},
 	};
 
+	const FILE_TOO_LARGE: ErrorConfig = {
+		icon: 'fa-file-circle-exclamation',
+		title: 'File Too Large',
+		description: 'The uploaded file exceeds the maximum allowed size. Please choose a smaller file and try again.',
+		color: '#f59e0b',
+	};
+
 	const config = $derived<ErrorConfig>(
-		ERROR_CONFIG[$page.status] ?? {
-			icon: 'fa-circle-exclamation',
-			title: 'Something Went Wrong',
-			description: $page.error?.message ?? 'An unexpected error occurred.',
-			color: 'var(--bs-primary)',
-		}
+		$page.status === 413 || ($page.status === 400 && ($page.error?.message ?? '').includes('multipart'))
+			? FILE_TOO_LARGE
+			: ERROR_CONFIG[$page.status] ?? {
+				icon: 'fa-circle-exclamation',
+				title: 'Something Went Wrong',
+				description: 'An unexpected error occurred.',
+				color: 'var(--bs-primary)',
+			}
 	);
 </script>
 

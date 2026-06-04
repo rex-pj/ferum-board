@@ -23,6 +23,14 @@ mod m20260001_000018_create_file_links;
 mod m20260001_000019_perf_indexes;
 mod m20260001_000020_create_rbac;
 mod m20260001_000021_drop_legacy_role;
+mod m20260001_000022_fix_user_pref_categories;
+mod m20260001_000023_fix_reports_integrity;
+mod m20260001_000024_counter_triggers;
+mod m20260001_000025_fix_permissions_min_trust;
+mod m20260001_000026_roles_updated_at;
+mod m20260001_000027_slug_length_constraints;
+mod m20260001_000028_fts_post_content;
+mod m20260001_000029_create_user_covers;
 
 pub struct Migrator;
 
@@ -51,6 +59,14 @@ impl MigratorTrait for Migrator {
             Box::new(m20260001_000019_perf_indexes::Migration),
             Box::new(m20260001_000020_create_rbac::Migration),
             Box::new(m20260001_000021_drop_legacy_role::Migration),
+            Box::new(m20260001_000022_fix_user_pref_categories::Migration),
+            Box::new(m20260001_000023_fix_reports_integrity::Migration),
+            Box::new(m20260001_000024_counter_triggers::Migration),
+            Box::new(m20260001_000025_fix_permissions_min_trust::Migration),
+            Box::new(m20260001_000026_roles_updated_at::Migration),
+            Box::new(m20260001_000027_slug_length_constraints::Migration),
+            Box::new(m20260001_000028_fts_post_content::Migration),
+            Box::new(m20260001_000029_create_user_covers::Migration),
         ]
     }
 }

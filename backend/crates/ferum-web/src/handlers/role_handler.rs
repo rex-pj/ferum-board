@@ -159,6 +159,10 @@ pub async fn assign_user_role_handler(
     let role_resp = role_map.get(&assignment.role_id).cloned().ok_or(
         ferum_application::shared::AppError::internal("role not found".to_string()),
     )?;
+    let permissions = state
+        .role_permission_cache
+        .permissions_for_role(assignment.role_id)
+        .await;
 
     Ok(Json(DataResponse::new(UserRoleResponse {
         id: assignment.id,
@@ -166,6 +170,7 @@ pub async fn assign_user_role_handler(
         category_id: assignment.category_id,
         expires_at: assignment.expires_at,
         created_at: assignment.created_at,
+        permissions,
     })))
 }
 

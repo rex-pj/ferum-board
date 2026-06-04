@@ -1,9 +1,38 @@
-﻿<svelte:head>
+<svelte:head>
 	<title>{data.thread?.title ?? 'Thread'} | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="description" content={data.excerpt ?? data.thread?.title} />
+	<link rel="canonical" href={data.canonicalUrl} />
+	<meta property="og:type" content="article" />
+	<meta property="og:url" content={data.canonicalUrl} />
 	<meta property="og:title" content={data.thread?.title} />
 	<meta property="og:description" content={data.excerpt ?? data.thread?.title} />
-	<meta property="og:type" content="article" />
+	{#if data.thread?.thumbnail_url}
+		<meta property="og:image" content={data.thread.thumbnail_url} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content={data.thread.thumbnail_url} />
+	{:else}
+		<meta name="twitter:card" content="summary" />
+	{/if}
+	<meta name="twitter:title" content={data.thread?.title} />
+	<meta name="twitter:description" content={data.excerpt ?? data.thread?.title} />
+	{@html `<script type="application/ld+json">${JSON.stringify({
+		'@context': 'https://schema.org',
+		'@type': 'DiscussionForumPosting',
+		headline: data.thread?.title,
+		url: data.canonicalUrl,
+		datePublished: data.thread?.created_at,
+		author: { '@type': 'Person', name: data.thread?.author?.display_name ?? data.thread?.author?.username },
+		description: data.excerpt,
+		interactionStatistic: {
+			'@type': 'InteractionCounter',
+			interactionType: 'https://schema.org/CommentAction',
+			userInteractionCount: data.thread?.reply_count ?? 0
+		}
+	// </script> inside a JSON value would terminate the script block; replace </ with the
+	// JSON-legal escape sequence <\/ which browsers parse identically inside JSON strings.
+	}).replace(/<\//g, '<\\/')}</script>`}
 </svelte:head>
 
 <script lang="ts">
@@ -14,6 +43,7 @@
 	import { ROUTES } from '$lib/routes';
 	import { toast } from '$lib/stores/toast';
 	import { isModerator, isModeratorOf } from '$lib/utils/permissions';
+	import { safeCssColor } from '$lib/utils/format';
 
 	let { data, form }: { data: any; form: any } = $props();
 
@@ -22,6 +52,7 @@
 	const currentPage = $derived(data.postsMeta?.page ?? 1);
 
 	let replyContent = $state('');
+	let quoteParentId = $state<string | null>(null);
 	let submitting = $state(false);
 	let showReply = $state(false);
 	let bookmarked = $state(data.isBookmarked ?? false);
@@ -55,12 +86,29 @@
 	let reportPostId = $state<string | null>(null);
 	let reportReason = $state('');
 	let reportSubmitting = $state(false);
+	let reportTextareaEl = $state<HTMLTextAreaElement | null>(null);
+
+	$effect(() => {
+		if (reportPostId && reportTextareaEl) {
+			reportTextareaEl.focus();
+		}
+	});
 
 	const canReply = $derived(
 		data.user &&
 		thread?.status === 'open' &&
 		(data.user.trust_level !== 'new')
 	);
+
+	function quotePost(post: { id: string; content_md: string }) {
+		const quoted = post.content_md.split('\n').map((l) => '> ' + l).join('\n');
+		replyContent = quoted + '\n\n';
+		quoteParentId = post.id;
+		showReply = true;
+		setTimeout(() => {
+			document.getElementById('reply-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		}, 50);
+	}
 
 	function openReportModal(postId: string) {
 		reportPostId = postId;
@@ -91,6 +139,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && reportPostId) reportPostId = null; }} />
+
 <div class="fr-content-layout">
 <!-- Main reading column -->
 <div class="fr-feed-col feed-col">
@@ -107,15 +157,19 @@
 	</nav>
 
 	<div class="d-flex justify-content-between align-items-start mb-4">
-		<h1 class="h4 mb-0 me-3">
-			{#if thread?.is_solved}
-				<i class="fa-solid fa-circle-check text-success me-2" title="Solved"></i>
+		<div style="min-width: 0">
+			<h1 class="h4 mb-1 me-3">
+				{#if thread?.is_solved}
+					<i class="fa-solid fa-circle-check text-success me-2" title="Solved"></i>
+				{/if}
+				{#if thread?.status === 'locked'}
+					<i class="fa-solid fa-lock text-warning me-2" title="Locked"></i>
+				{/if}
+				{thread?.title}
+			</h1>
+			{#if thread?.tags && thread.tags.length > 0}
 			{/if}
-			{#if thread?.status === 'locked'}
-				<i class="fa-solid fa-lock text-warning me-2" title="Locked"></i>
-			{/if}
-			{thread?.title}
-		</h1>
+		</div>
 		<div class="d-flex gap-2 flex-shrink-0">
 			{#if data.user?.id === thread?.author_id}
 				<a
@@ -186,12 +240,12 @@
 	{/if}
 
 	{#if thumbnailUrl || canManageThumbnail}
-		<div class="th-wrap rounded-3 overflow-hidden mb-1">
+		<div class="th-wrap rounded-3 overflow-hidden mb-4">
 			{#if thumbnailUrl}
 				<img src="{thumbnailUrl}?_t={thumbnailCacheBust}" alt="Thread thumbnail" class="th-img" />
 			{:else}
 				<div class="th-empty">
-					<i class="fa-regular fa-image empty-img-icon"></i>
+					<span class="text-muted small"><i class="fa-regular fa-image me-1"></i>Add cover image</span>
 				</div>
 			{/if}
 
@@ -264,12 +318,11 @@
 				</div>
 			{/if}
 		</div>
-		<div class="mb-4"></div>
 	{/if}
 
 	<!-- Posts -->
 	<div class="posts-list">
-		{#each data.posts ?? [] as post}
+		{#each data.posts ?? [] as post, i}
 			<PostBody
 				{post}
 				isBestAnswer={post.id === thread?.best_answer_id}
@@ -277,24 +330,11 @@
 				currentUsername={data.user?.username}
 				myReactions={post.my_reactions ?? []}
 				onReport={openReportModal}
-				class="mb-4"
+				onQuote={canReply ? quotePost : undefined}
+				canMarkBestAnswer={i > 0 && data.user?.id === thread?.author_id && !thread?.is_solved && post.id !== thread?.best_answer_id}
+				threadId={thread?.id}
+				class="mb-3"
 			/>
-			{#if data.user?.id === thread?.author_id && !thread?.is_solved && post.id !== thread?.best_answer_id}
-				<form
-					method="POST"
-					action="?/markBestAnswer"
-					use:enhance={() => {
-						return async ({ update }) => { await update(); };
-					}}
-					class="mb-3 ms-1"
-				>
-					<input type="hidden" name="thread_id" value={thread.id} />
-					<input type="hidden" name="post_id" value={post.id} />
-					<button type="submit" class="btn btn-outline-success btn-sm">
-						<i class="fa-solid fa-circle-check me-1"></i>Mark as Best Answer
-					</button>
-				</form>
-			{/if}
 		{/each}
 	</div>
 
@@ -332,12 +372,21 @@
 		</div>
 	{:else if canReply}
 		{#if !showReply}
-			<button class="btn btn-primary" onclick={() => (showReply = true)}>
-				<i class="fa-solid fa-reply me-2"></i>Reply
+			<button
+				class="btn btn-outline-secondary w-100 text-start text-muted"
+				onclick={() => (showReply = true)}
+			>
+				<i class="fa-solid fa-reply me-2 opacity-50"></i>Write a reply…
 			</button>
 		{:else}
-			<div class="card mt-4">
-				<div class="card-header fw-semibold">Your Reply</div>
+			<div class="card mt-4" id="reply-composer">
+				<div class="card-header fw-semibold">
+					{#if quoteParentId}
+						<i class="fa-solid fa-quote-left me-2 text-muted"></i>Quoting a post
+					{:else}
+						Your Reply
+					{/if}
+				</div>
 				<div class="card-body">
 					<form
 						method="POST"
@@ -347,12 +396,14 @@
 							return async ({ update }) => {
 								submitting = false;
 								replyContent = '';
+								quoteParentId = null;
 								showReply = false;
 								await update();
 							};
 						}}
 					>
 						<input type="hidden" name="thread_id" value={thread.id} />
+						<input type="hidden" name="parent_id" value={quoteParentId ?? ''} />
 						<PostComposer bind:value={replyContent} name="content_md" />
 						<div class="mt-3 d-flex gap-2">
 							<button type="submit" class="btn btn-primary" disabled={submitting || !replyContent.trim()}>
@@ -361,7 +412,11 @@
 								{/if}
 								Post Reply
 							</button>
-							<button type="button" class="btn btn-outline-secondary" onclick={() => (showReply = false)}>
+							<button
+								type="button"
+								class="btn btn-outline-secondary"
+								onclick={() => { showReply = false; quoteParentId = null; replyContent = ''; }}
+							>
 								Cancel
 							</button>
 						</div>
@@ -401,6 +456,20 @@
 					<i class="fa-regular fa-clock detail-icon"></i>
 					<span class="text-muted">Posted</span>
 					<span class="ms-auto"><Timestamp date={thread.created_at} /></span>
+				</div>
+			{/if}
+			{#if thread?.tags && thread.tags.length > 0}
+				<div class="fr-panel-row detail-tags-row">
+					<i class="fa-solid fa-tag detail-icon"></i>
+					<div class="detail-tags-wrap">
+						{#each thread.tags as tag}
+							<a
+								href="{ROUTES.SEARCH}?tag={tag.slug}"
+								class="detail-tag-chip"
+								style="--tag-color:{safeCssColor(tag.color)};"
+							>{tag.name}</a>
+						{/each}
+					</div>
 				</div>
 			{/if}
 		</div>
@@ -464,7 +533,8 @@
 
 <!-- Report modal -->
 {#if reportPostId}
-	<div class="modal d-block modal-backdrop-dark" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="reportModalLabel">
+	<div class="modal-backdrop fade show" onclick={() => (reportPostId = null)} role="presentation"></div>
+	<div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="reportModalLabel">
 		<div class="modal-dialog modal-dialog-centered">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -481,6 +551,7 @@
 						rows="3"
 						placeholder="Describe why this post violates the rules…"
 						bind:value={reportReason}
+						bind:this={reportTextareaEl}
 						maxlength="500"
 					></textarea>
 				</div>
@@ -557,12 +628,44 @@
 
 	.feed-col { min-width: 0; }
 	.breadcrumb-title { max-width: 300px; }
-	.empty-img-icon { font-size: 2rem; opacity: 0.3; }
 	.upload-label { cursor: pointer; min-width: 90px; }
 	.detail-icon { width: 1rem; opacity: 0.5; flex-shrink: 0; }
 	.detail-link { max-width: 110px; color: var(--bs-body-color); }
 	.flag-stat { gap: 0.375rem; justify-content: flex-start; }
 	.badge-sm { font-weight: 500; font-size: 0.7rem; }
 	.cat-desc { line-height: 1.5; }
-	.modal-backdrop-dark { background: rgba(0, 0, 0, 0.4); }
+
+	/* Tags in Thread Info panel */
+	.detail-tags-row {
+		align-items: flex-start;
+		padding-top: 0.5rem;
+		padding-bottom: 0.5rem;
+	}
+
+	.detail-tags-wrap {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		margin-top: 0.0625rem;
+	}
+
+	.detail-tag-chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0 0.4rem;
+		height: 20px;
+		border-radius: 4px;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		background: color-mix(in srgb, var(--tag-color) 12%, transparent);
+		color: color-mix(in srgb, var(--tag-color) 80%, var(--bs-body-color));
+		text-decoration: none;
+		border: 1px solid color-mix(in srgb, var(--tag-color) 22%, var(--bs-border-color));
+		transition: background 0.12s;
+		line-height: 1;
+	}
+
+	.detail-tag-chip:hover {
+		background: color-mix(in srgb, var(--tag-color) 22%, transparent);
+	}
 </style>

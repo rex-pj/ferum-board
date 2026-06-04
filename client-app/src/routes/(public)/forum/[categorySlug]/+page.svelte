@@ -1,9 +1,14 @@
 ﻿<svelte:head>
 	<title>{data.category?.name ?? 'Forum'} | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="description" content={data.category?.description ?? `Discussions in ${data.category?.name}`} />
+	<link rel="canonical" href={data.canonicalUrl} />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content={data.canonicalUrl} />
 	<meta property="og:title" content="{data.category?.name ?? 'Forum'} | {data.siteName ?? 'Ferum Board'}" />
 	<meta property="og:description" content={data.category?.description ?? `Discussions in ${data.category?.name}`} />
-	<meta property="og:type" content="website" />
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="{data.category?.name ?? 'Forum'} | {data.siteName ?? 'Ferum Board'}" />
+	<meta name="twitter:description" content={data.category?.description ?? `Discussions in ${data.category?.name}`} />
 </svelte:head>
 
 <script lang="ts">
@@ -90,7 +95,7 @@
 					<p class="fr-empty-sub">Be the first to start a discussion in {cat?.name}.</p>
 					{#if data.user}
 						<a href={ROUTES.NEW_THREAD_IN_CATEGORY(cat?.id)} class="btn btn-primary btn-sm px-4">
-							<i class="fa-solid fa-plus me-2"></i>Start a Discussion
+							<i class="fa-solid fa-plus me-2"></i>New Thread
 						</a>
 					{:else}
 						<div class="d-flex gap-2 justify-content-center flex-wrap">

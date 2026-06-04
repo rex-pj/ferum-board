@@ -13,6 +13,7 @@ pub mod report;
 pub mod role;
 pub mod search;
 pub mod setup;
+pub mod tag;
 pub mod thread;
 pub mod user;
 pub mod webhook;

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 36" width="160" height="36">
+  <!-- "Fe" — bold indigo, acts as the brand mark -->
+  <text
+    x="0" y="28"
+    font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+    font-size="30" font-weight="800"
+    letter-spacing="-1"
+    fill="#6366f1"
+  >Fe</text>
+
+  <!-- "rum" — same size, inherits header text color (works light + dark) -->
+  <text
+    x="36" y="28"
+    font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+    font-size="30" font-weight="800"
+    letter-spacing="-1"
+    fill="currentColor"
+  >rum</text>
+
+  <!-- "board" — lighter weight, indigo, sits on the same baseline -->
+  <text
+    x="102" y="28"
+    font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+    font-size="20" font-weight="400"
+    fill="#6366f1"
+    dominant-baseline="auto"
+  >board</text>
+</svg>

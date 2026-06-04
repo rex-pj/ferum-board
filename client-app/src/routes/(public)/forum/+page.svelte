@@ -103,9 +103,11 @@
                 {group.name}
               </span>
             </div>
-            <span class="fr-forum-group-count flex-shrink-0 inherit-color">
-              <i class="fa-regular fa-comment me-1"
-              ></i>{group.thread_count.toLocaleString()}
+            <span
+              class="fr-forum-group-count flex-shrink-0 inherit-color"
+              title="{group.thread_count.toLocaleString()} {group.thread_count === 1 ? 'thread' : 'threads'}"
+            >
+              <i class="fa-regular fa-comment me-1"></i>{group.thread_count.toLocaleString()}
             </span>
           </button>
 
@@ -129,9 +131,10 @@
                       ></span>
                     {/if}
                     <span class="text-truncate">{sub.name}</span>
-                    <span class="fr-sub-count"
-                      >{sub.thread_count.toLocaleString()}</span
-                    >
+                    <span
+                      class="fr-sub-count"
+                      title="{sub.thread_count.toLocaleString()} {sub.thread_count === 1 ? 'thread' : 'threads'}"
+                    >{sub.thread_count.toLocaleString()}</span>
                   </a>
                 {/each}
               </div>
@@ -176,7 +179,10 @@
                 <i class="fa-solid fa-hashtag panel-hash"></i>
               {/if}
               <span class="text-truncate">{group.name}</span>
-              <span class="ms-auto panel-count">
+              <span
+                class="ms-auto panel-count"
+                title="{group.thread_count.toLocaleString()} {group.thread_count === 1 ? 'thread' : 'threads'}"
+              >
                 {group.thread_count.toLocaleString()}
               </span>
             </a>
@@ -189,7 +195,7 @@
       <div class="fr-panel">
         <div class="px-3 py-3">
           <a href={ROUTES.NEW_THREAD} class="btn btn-primary btn-sm w-100">
-            <i class="fa-solid fa-plus me-1"></i>Start a Discussion
+            <i class="fa-solid fa-plus me-1"></i>New Thread
           </a>
         </div>
       </div>
@@ -314,18 +320,17 @@
   }
 
   .fr-forum-group :global(.fr-feed) {
-    border-radius: 0;
-    border: none;
+    margin: 0 0.625rem 0.625rem;
+    border-radius: var(--bs-border-radius);
   }
 
-  .fr-forum-group :global(.fr-thread-row) {
-    border-left: none;
-    border-right: none;
-    border-top: none;
+  .fr-forum-group :global(.fr-thread-row:first-child) {
+    border-radius: var(--bs-border-radius) var(--bs-border-radius) 0 0;
   }
 
   .fr-forum-group :global(.fr-thread-row:last-child) {
     border-bottom: none;
+    border-radius: 0 0 var(--bs-border-radius) var(--bs-border-radius);
   }
 
   .fr-forum-group-footer {

@@ -17,7 +17,7 @@
 </script>
 
 <div class="fr-app">
-	<SiteHeader user={data?.user} siteName={data?.siteName} logoUrl={data?.logoUrl} />
+	<SiteHeader user={data?.user} siteName={data?.siteName} siteSlogan={data?.siteSlogan} logoUrl={data?.logoUrl} />
 
 	<div class="fr-body">
 		<aside class="fr-sidebar d-none d-lg-block">
@@ -31,5 +31,5 @@
 		</main>
 	</div>
 
-	<SiteFooter siteName={data?.siteName} logoUrl={data?.logoUrl} compact />
+	<SiteFooter siteName={data?.siteName} siteSlogan={data?.siteSlogan} logoUrl={data?.logoUrl} compact />
 </div>

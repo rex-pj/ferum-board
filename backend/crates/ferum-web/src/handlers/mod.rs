@@ -13,6 +13,7 @@ pub mod role_handler;
 pub mod search_handler;
 pub mod setup_handler;
 pub mod site_config_handler;
+pub mod tag_handler;
 pub mod thread_handler;
 pub mod upload_handler;
 pub mod user_handler;

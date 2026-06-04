@@ -19,7 +19,7 @@
 	function handleFile(file: File) {
 		validationError = '';
 		if (!ACCEPTED.includes(file.type)) {
-			validationError = 'Unsupported format — use JPEG, PNG, WebP or GIF.';
+			validationError = 'Unsupported format. Please use JPEG, PNG, WebP or GIF.';
 			return;
 		}
 		if (file.size > MAX_BYTES) {

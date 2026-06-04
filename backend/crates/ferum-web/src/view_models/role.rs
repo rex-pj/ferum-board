@@ -62,6 +62,9 @@ pub struct UserRoleResponse {
     pub category_id: Option<Uuid>,
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    /// Flat list of permission keys granted by this role assignment.
+    /// Used by the frontend to gate access without relying on role slug matching.
+    pub permissions: Vec<String>,
 }
 
 // ─── Requests ─────────────────────────────────────────────────────────────────

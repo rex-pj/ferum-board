@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import ReactionBar from '$lib/components/molecules/ReactionBar.svelte';
 	import Timestamp from '$lib/components/atoms/Timestamp.svelte';
 	import UserMeta from '$lib/components/molecules/UserMeta.svelte';
@@ -11,6 +12,7 @@
 		id: string;
 		content_html: string;
 		content_md?: string;
+		parent_id?: string;
 		author?: { username: string; display_name?: string; avatar_url?: string; role?: string };
 		is_deleted: boolean;
 		edited_at?: string;
@@ -27,6 +29,9 @@
 		currentUsername?: string;
 		myReactions?: ReactionKind[];
 		onReport?: (postId: string) => void;
+		onQuote?: (post: Post) => void;
+		canMarkBestAnswer?: boolean;
+		threadId?: string;
 		class?: string;
 	}
 
@@ -37,6 +42,9 @@
 		currentUsername,
 		myReactions = [],
 		onReport,
+		onQuote,
+		canMarkBestAnswer = false,
+		threadId,
 		class: extraClass = ''
 	}: Props = $props();
 
@@ -90,6 +98,8 @@
 		}
 	}
 
+	// Must match POST_EDIT_WINDOW_HOURS in backend/crates/ferum-application/src/constants.rs.
+	// This is a UI-only gate; the backend enforces the real window on every PATCH request.
 	const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 	const canEdit = $derived(
 		loggedIn &&
@@ -102,6 +112,29 @@
 	let editDraft = $state('');
 	let editSaving = $state(false);
 	let displayHtml = $state(post.content_html);
+
+	// Replace @username with profile links in rendered HTML text (not inside tags/attributes).
+	function linkifyMentions(html: string): string {
+		return html.replace(
+			/(?<![<"'\w])@([a-zA-Z0-9_]{3,32})(?=[\s<,.!?)]|$)/g,
+			'<a href="/u/$1">@$1</a>'
+		);
+	}
+
+	// Inject a jump-to-original link inside the first blockquote (quoted reply).
+	// Only replaces the first occurrence so nested blockquotes are unaffected.
+	function injectQuoteJumpLink(html: string, parentId: string): string {
+		return html.replace(
+			'<blockquote>',
+			`<blockquote><a href="#post-${parentId}" class="quote-jump"><i class="fa-solid fa-arrow-turn-up fa-xs me-1"></i>View original post</a>`
+		);
+	}
+
+	const renderedHtml = $derived(
+		post.parent_id
+			? injectQuoteJumpLink(linkifyMentions(displayHtml), post.parent_id)
+			: linkifyMentions(displayHtml)
+	);
 
 	function startEdit() {
 		editDraft = post.content_md ?? '';
@@ -135,7 +168,7 @@
 </script>
 
 <div
-	class="post-body mb-3 {isBestAnswer ? 'border-success border-start border-3 ps-3' : ''} {extraClass}"
+	class="post-body mb-3 {isBestAnswer ? 'best-answer-post' : ''} {extraClass}"
 	id="post-{post.id}"
 >
 	{#if post.is_deleted}
@@ -191,7 +224,7 @@
 		{:else}
 			<div class="post-content prose">
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html displayHtml}
+				{@html renderedHtml}
 			</div>
 		{/if}
 
@@ -201,7 +234,7 @@
 			</div>
 		{/if}
 
-		<div class="d-flex align-items-center justify-content-between mt-3 pt-2 border-top">
+		<div class="d-flex align-items-center justify-content-between mt-3 pt-2 border-top gap-2">
 			<ReactionBar
 				postId={post.id}
 				counts={localCounts}
@@ -209,7 +242,33 @@
 				{loggedIn}
 				onReact={handleReact}
 			/>
-			<div class="d-flex align-items-center gap-1">
+			<div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
+				{#if canMarkBestAnswer && threadId}
+					<form
+						method="POST"
+						action="?/markBestAnswer"
+						use:enhance={() => {
+							return async ({ update }) => { await update(); };
+						}}
+					>
+						<input type="hidden" name="thread_id" value={threadId} />
+						<input type="hidden" name="post_id" value={post.id} />
+						<button type="submit" class="btn btn-outline-success btn-sm">
+							<i class="fa-solid fa-circle-check me-1"></i>Mark as Best Answer
+						</button>
+					</form>
+				{/if}
+				{#if onQuote && !editMode}
+					<button
+						type="button"
+						class="btn btn-link btn-sm text-muted text-decoration-none p-2"
+						title="Quote this post"
+						aria-label="Quote post"
+						onclick={() => onQuote?.(post)}
+					>
+						<i class="fa-solid fa-quote-left fa-sm"></i>
+					</button>
+				{/if}
 				{#if canEdit && !editMode}
 					<button
 						type="button"
@@ -238,6 +297,17 @@
 </div>
 
 <style>
+	.post-body {
+		background: var(--bs-body-bg);
+		border: 1px solid var(--bs-border-color);
+		border-radius: var(--bs-border-radius);
+		padding: 1rem 1.25rem;
+	}
+
+	.best-answer-post {
+		border-left: 3px solid var(--bs-success);
+	}
+
 	.post-content :global(pre) {
 		background: var(--bs-tertiary-bg);
 		border-radius: 4px;
@@ -255,6 +325,31 @@
 	}
 	.post-content :global(a) {
 		word-break: break-word;
+	}
+
+	/* Jump-to-original link injected before blockquote content */
+	.post-content :global(.quote-jump) {
+		display: inline-flex;
+		align-items: center;
+		font-size: 0.75rem;
+		color: var(--bs-secondary-color);
+		text-decoration: none;
+		padding: 0.125rem 0.5rem;
+		border-radius: var(--bs-border-radius-sm);
+		margin-bottom: 0.375rem;
+		background: var(--bs-secondary-bg);
+		transition: color 0.1s, background 0.1s;
+	}
+	.post-content :global(.quote-jump:hover) {
+		color: var(--bs-body-color);
+		background: var(--bs-border-color);
+	}
+
+	/* Highlight the post when it is the :target of a fragment navigation */
+	:global(.post-body:target) {
+		border-color: var(--bs-primary);
+		box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.15);
+		transition: border-color 0.2s, box-shadow 0.2s;
 	}
 
 	.edit-btn {

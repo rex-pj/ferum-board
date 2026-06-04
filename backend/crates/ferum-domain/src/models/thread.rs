@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::tag::Tag;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Thread {
     pub id: Uuid,
@@ -27,6 +29,7 @@ pub struct Thread {
     pub deleted_by_id: Option<Uuid>,
     pub excerpt: Option<String>,
     pub thumbnail_url: Option<String>,
+    pub tags: Vec<Tag>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Copy)]

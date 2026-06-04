@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 
-use crate::constants::MAX_AVATAR_BYTES;
+use crate::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
 use crate::permission::PermissionChecker;
 use crate::ports::{ForumJob, JobQueue, PasswordHasher};
 use crate::shared::AppError;
@@ -181,6 +181,91 @@ impl UserUseCase {
         }
 
         Ok(format!("/files/{key}"))
+    }
+
+    // ─── Cover — CAS upload flow ──────────────────────────────────────────────
+
+    pub async fn set_cover(
+        &self,
+        actor: &AuthUser,
+        data: Bytes,
+        content_type: String,
+    ) -> Result<String, AppError> {
+        PermissionChecker::can_upload(actor)?;
+
+        if !validate_image_content_type(&content_type) {
+            return Err(AppError::unprocessable(
+                "cover must be jpeg, png, webp, or gif",
+            ));
+        }
+        if data.len() > MAX_COVER_BYTES {
+            return Err(AppError::unprocessable("cover exceeds 8 MB size limit"));
+        }
+
+        let key = cas_key("covers", &data, &content_type);
+
+        if self.stored_files.exists(&key).await? {
+            self.stored_files.increment_ref(&key).await?;
+        } else {
+            self.stored_files
+                .upsert(
+                    &key,
+                    &content_type,
+                    &data,
+                    data.len() as i64,
+                    Some(actor.id),
+                )
+                .await?;
+        }
+
+        let user = self
+            .users
+            .find_by_id(actor.id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        let old_key = user
+            .cover_url
+            .as_deref()
+            .and_then(|url| url.strip_prefix("/files/"))
+            .map(|k| k.to_string());
+
+        self.users.set_cover(actor.id, key.clone()).await?;
+
+        if let Some(old) = old_key.filter(|k| k != &key) {
+            let remaining = self.stored_files.decrement_ref(&old).await?;
+            if remaining == 0 {
+                self.jobs
+                    .enqueue(ForumJob::GcStorageKey { key: old })
+                    .await?;
+            }
+        }
+
+        Ok(format!("/files/{key}"))
+    }
+
+    pub async fn remove_cover(&self, actor: &AuthUser) -> Result<(), AppError> {
+        PermissionChecker::require_not_banned(actor)?;
+
+        let user = self
+            .users
+            .find_by_id(actor.id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+
+        if let Some(url) = &user.cover_url {
+            if let Some(key) = url.strip_prefix("/files/") {
+                let remaining = self.stored_files.decrement_ref(key).await?;
+                if remaining == 0 {
+                    self.jobs
+                        .enqueue(ForumJob::GcStorageKey {
+                            key: key.to_string(),
+                        })
+                        .await?;
+                }
+            }
+        }
+
+        self.users.remove_cover(actor.id).await
     }
 
     pub async fn remove_avatar(&self, actor: &AuthUser) -> Result<(), AppError> {

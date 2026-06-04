@@ -4,6 +4,8 @@ use uuid::Uuid;
 
 use ferum_domain::models::thread::Thread;
 
+use super::tag::TagResponse;
+
 // ─── Requests ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -20,6 +22,7 @@ pub struct MarkSolvedRequest {
 pub struct ThreadListQuery {
     pub page: Option<u64>,
     pub per_page: Option<u64>,
+    pub tag: Option<String>,
 }
 
 // ─── Nested response types ─────────────────────────────────────────────────────
@@ -60,6 +63,7 @@ pub struct ThreadResponse {
     pub category: Option<ThreadCategoryResponse>,
     pub excerpt: Option<String>,
     pub thumbnail_url: Option<String>,
+    pub tags: Vec<TagResponse>,
 }
 
 impl From<Thread> for ThreadResponse {
@@ -97,6 +101,7 @@ impl From<Thread> for ThreadResponse {
             category,
             excerpt: t.excerpt,
             thumbnail_url: t.thumbnail_url,
+            tags: t.tags.into_iter().map(TagResponse::from).collect(),
         }
     }
 }

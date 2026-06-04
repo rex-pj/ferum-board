@@ -34,6 +34,7 @@ fn entity_to_domain(m: reports::Model) -> Report {
         moderator_notes: m.moderator_notes,
         resolved_by_id: m.resolved_by_id,
         resolved_at: m.resolved_at.map(|t| t.with_timezone(&Utc)),
+        target_deleted_at: m.target_deleted_at.map(|t| t.with_timezone(&Utc)),
         created_at: m.created_at.with_timezone(&Utc),
     }
 }

@@ -33,6 +33,8 @@ pub trait UserRepository: Send + Sync {
     async fn upsert_preferences(&self, prefs: UserPreferences) -> Result<(), AppError>;
     async fn set_avatar(&self, user_id: Uuid, file_key: String) -> Result<(), AppError>;
     async fn remove_avatar(&self, user_id: Uuid) -> Result<(), AppError>;
+    async fn set_cover(&self, user_id: Uuid, file_key: String) -> Result<(), AppError>;
+    async fn remove_cover(&self, user_id: Uuid) -> Result<(), AppError>;
 }
 
 #[derive(Debug, Clone)]

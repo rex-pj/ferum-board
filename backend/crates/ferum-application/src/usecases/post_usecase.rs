@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use regex::Regex;
 use uuid::Uuid;
 
 use crate::constants::{MAX_POSTS_PER_PAGE, MAX_POST_CONTENT_BYTES};
@@ -153,6 +154,7 @@ impl PostUseCase {
         }
 
         let content_html = render_content(&cmd.content_md).await?;
+        let mentions = extract_mentions(&cmd.content_md);
 
         let post = self
             .posts
@@ -180,6 +182,22 @@ impl PostUseCase {
                 category_id: thread.category_id,
             })
             .await;
+
+        for username in mentions.into_iter().take(5) {
+            if let Ok(Some(mentioned)) = self.users.find_by_username(&username).await {
+                if mentioned.id != actor.id {
+                    self.event_bus
+                        .publish(ForumEvent::MentionAdded {
+                            post_id: post.id,
+                            thread_id: cmd.thread_id,
+                            thread_slug: thread.slug.clone(),
+                            mentioned_user_id: mentioned.id,
+                            author_id: actor.id,
+                        })
+                        .await;
+                }
+            }
+        }
 
         Ok(post)
     }
@@ -231,6 +249,15 @@ pub struct CreatePostCmd {
     pub thread_id: Uuid,
     pub parent_id: Option<Uuid>,
     pub content_md: String,
+}
+
+fn extract_mentions(content: &str) -> Vec<String> {
+    let re = Regex::new(r"@([a-zA-Z0-9_]{3,32})").expect("valid regex");
+    let mut seen = HashSet::new();
+    re.captures_iter(content)
+        .filter_map(|c| c.get(1).map(|m| m.as_str().to_lowercase()))
+        .filter(|u| seen.insert(u.clone()))
+        .collect()
 }
 
 async fn render_content(md: &str) -> Result<String, crate::shared::AppError> {

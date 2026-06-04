@@ -14,6 +14,8 @@ pub struct Model {
     pub moderator_notes: Option<String>,
     pub resolved_by_id: Option<Uuid>,
     pub resolved_at: Option<DateTimeWithTimeZone>,
+    /// Set automatically when the referenced post or thread is hard-deleted.
+    pub target_deleted_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
 }
 

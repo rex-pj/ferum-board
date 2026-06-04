@@ -26,6 +26,9 @@
 	let avatarUrl = $state<string | null>(data.profile?.avatar_url ?? null);
 	let avatarUploading = $state(false);
 
+	let coverUrl = $state<string | null>(data.profile?.cover_url ?? null);
+	let coverUploading = $state(false);
+
 	let bioLength = $state((data.profile?.bio ?? '').length);
 	let displayNameLength = $state((data.profile?.display_name ?? '').length);
 
@@ -86,6 +89,48 @@
 			avatarUploading = false;
 		}
 	}
+
+	async function uploadCover(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		coverUploading = true;
+		const fd = new FormData();
+		fd.append('file', file);
+		try {
+			const res = await fetch('/api/users/me/cover', { method: 'POST', body: fd });
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}));
+				toast.error(body?.error?.message ?? 'Upload failed.');
+			} else {
+				const body = await res.json();
+				coverUrl = body.data?.cover_url ?? coverUrl;
+				toast.success('Cover image updated.');
+			}
+		} catch {
+			toast.error('Network error during upload.');
+		} finally {
+			coverUploading = false;
+			input.value = '';
+		}
+	}
+
+	async function removeCover() {
+		coverUploading = true;
+		try {
+			const res = await fetch('/api/users/me/cover', { method: 'DELETE' });
+			if (!res.ok) {
+				toast.error('Failed to remove cover image.');
+			} else {
+				coverUrl = null;
+				toast.success('Cover image removed.');
+			}
+		} catch {
+			toast.error('Network error.');
+		} finally {
+			coverUploading = false;
+		}
+	}
 </script>
 
 <div class="fr-content-layout">
@@ -132,6 +177,52 @@
 					<div class="alert alert-danger py-2 mb-3">{form.profileError}</div>
 				{/if}
 
+				<!-- Cover image row -->
+				<div class="mb-4 pb-4 border-bottom">
+					<label class="form-label fw-semibold d-block mb-2">
+						<i class="fa-solid fa-image me-1 opacity-50"></i>Cover Image
+					</label>
+					<div class="cover-preview-wrap mb-3 rounded overflow-hidden position-relative">
+						{#if coverUrl}
+							<img src={coverUrl} alt="Profile cover" class="cover-preview-img" />
+						{:else}
+							<div
+								class="cover-preview-placeholder d-flex align-items-center justify-content-center"
+								style="--profile-hue:{u ? u.username.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0) % 360 : 0}"
+							>
+								<span class="small text-white opacity-75">No cover image — auto-generated gradient is shown on your profile</span>
+							</div>
+						{/if}
+					</div>
+					<div class="d-flex gap-2 flex-wrap">
+						<label class="btn btn-outline-secondary btn-sm tap-btn">
+							{#if coverUploading}
+								<span class="spinner-border spinner-border-sm me-1"></span>Uploading…
+							{:else}
+								<i class="fa-solid fa-image me-1"></i>{coverUrl ? 'Change cover' : 'Upload cover'}
+							{/if}
+							<input
+								type="file"
+								accept="image/jpeg,image/png,image/webp,image/gif"
+								class="d-none"
+								disabled={coverUploading}
+								onchange={uploadCover}
+							/>
+						</label>
+						{#if coverUrl}
+							<button
+								type="button"
+								class="btn btn-outline-danger btn-sm tap-btn"
+								disabled={coverUploading}
+								onclick={removeCover}
+							>
+								<i class="fa-solid fa-trash me-1"></i>Remove
+							</button>
+						{/if}
+					</div>
+					<div class="form-text mt-1">Recommended: 1200×400 px, JPEG/PNG/WebP/GIF, max 8 MB.</div>
+				</div>
+
 				<!-- Avatar row -->
 				<div class="d-flex align-items-center gap-3 mb-4 pb-4 border-bottom">
 					<div class="flex-shrink-0">
@@ -141,7 +232,17 @@
 						<div class="fw-semibold mb-1 text-body">
 							{u?.display_name ?? u?.username}
 						</div>
-						<div class="small text-muted mb-2">@{u?.username}</div>
+						<div class="d-flex align-items-center gap-2 mb-2">
+							<span class="small text-muted">@{u?.username}</span>
+							{#if u?.username}
+								<a
+									href={ROUTES.USER_PROFILE(u.username)}
+									class="small text-primary text-decoration-none profile-link"
+								>
+									View profile <i class="fa-solid fa-arrow-right" style="font-size:0.6rem;"></i>
+								</a>
+							{/if}
+						</div>
 						<div class="d-flex gap-2 flex-wrap">
 							<label class="btn btn-outline-secondary btn-sm tap-btn">
 								{#if avatarUploading}
@@ -486,7 +587,33 @@
 </div>
 
 <style>
+	.cover-preview-wrap {
+		height: 100px;
+		border: 1px solid var(--bs-border-color);
+	}
+	.cover-preview-img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+	.cover-preview-placeholder {
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(
+			135deg,
+			hsl(calc(var(--profile-hue) + 20), 55%, 38%) 0%,
+			hsl(var(--profile-hue), 65%, 52%) 100%
+		);
+		padding: 0.5rem 1rem;
+		text-align: center;
+	}
+	:global([data-bs-theme='dark']) .cover-preview-placeholder {
+		filter: brightness(0.55) saturate(1.3);
+	}
 	.tap-btn         { min-height: var(--fr-tap-target); }
+	.profile-link    { opacity: 0.8; transition: opacity 0.1s; }
+	.profile-link:hover { opacity: 1; }
 	.tips-heading    { letter-spacing: 0.05em; }
 	.tips-list       { line-height: 1.8; }
 	.theme-btn       { min-width: 80px; min-height: 70px; }

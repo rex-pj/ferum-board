@@ -92,6 +92,13 @@
 							{:else if report.post_id}
 								<span class="badge bg-secondary">Post</span>
 								<code class="ms-1">{report.post_id.slice(0, 8)}…</code>
+							{:else}
+								<span class="badge bg-danger-subtle text-danger-emphasis">Deleted</span>
+								{#if report.target_deleted_at}
+									<span class="text-muted ms-1" title="Content was deleted">
+										<i class="fa-solid fa-trash-can fa-xs"></i>
+									</span>
+								{/if}
 							{/if}
 						</td>
 						<td class="small reason-col">

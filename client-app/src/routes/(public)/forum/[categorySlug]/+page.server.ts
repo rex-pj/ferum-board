@@ -43,6 +43,7 @@ export const load: PageServerLoad = async ({ params, url, cookies, fetch }) => {
 		category: cat,
 		parentCategory,
 		threads: threadJson.data ?? [],
-		meta: threadJson.meta ?? { total: 0, page, per_page: 20 }
+		meta: threadJson.meta ?? { total: 0, page, per_page: 20 },
+		canonicalUrl: url.href
 	};
 };

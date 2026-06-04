@@ -29,6 +29,7 @@ use crate::handlers::{
     search_handler::search_handler,
     setup_handler::{run_setup_handler, setup_status_handler},
     site_config_handler::*,
+    tag_handler::{create_tag_handler, list_tags_handler},
     thread_handler::*,
     upload_handler::serve_upload_handler,
     user_handler::{get_me_handler, get_public_profile_handler, list_user_threads_handler},
@@ -171,6 +172,10 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
             post(upload_avatar_handler).delete(delete_avatar_handler),
         )
         .route(
+            "/me/cover",
+            post(upload_cover_handler).delete(delete_cover_handler),
+        )
+        .route(
             "/me/preferences",
             get(get_preferences_handler).put(update_preferences_handler),
         )
@@ -205,6 +210,7 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
         .route("/health", get(health_handler))
         .route("/files/{*key}", get(serve_upload_handler))
         .route("/api/search", get(search_handler))
+        .route("/api/tags", get(list_tags_handler).post(create_tag_handler))
         .route("/api/public-config", get(get_public_config_handler))
         .route("/api/forum-index", get(get_forum_index_handler))
         .nest("/api/setup", setup_routes)

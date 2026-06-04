@@ -74,23 +74,26 @@ pub async fn admin_get_user_handler(
             .map(|r| (r.id, crate::view_models::role::RoleResponse::from(r)))
             .collect();
 
+    let mut role_responses = Vec::with_capacity(roles.len());
+    for a in roles {
+        if let Some(role) = role_map.get(&a.role_id).cloned() {
+            let permissions = state
+                .role_permission_cache
+                .permissions_for_role(a.role_id)
+                .await;
+            role_responses.push(crate::view_models::role::UserRoleResponse {
+                id: a.id,
+                role,
+                category_id: a.category_id,
+                expires_at: a.expires_at,
+                created_at: a.created_at,
+                permissions,
+            });
+        }
+    }
+
     let mut resp = UserResponse::from(user);
-    resp.roles = Some(
-        roles
-            .into_iter()
-            .filter_map(|a| {
-                role_map.get(&a.role_id).cloned().map(|role| {
-                    crate::view_models::role::UserRoleResponse {
-                        id: a.id,
-                        role,
-                        category_id: a.category_id,
-                        expires_at: a.expires_at,
-                        created_at: a.created_at,
-                    }
-                })
-            })
-            .collect(),
-    );
+    resp.roles = Some(role_responses);
     Ok(Json(DataResponse::new(resp)))
 }
 

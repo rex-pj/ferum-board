@@ -40,9 +40,10 @@
   --bs-box-shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
 
   /* Layout */
-  --fr-sidebar-width:   240px;
-  --fr-topbar-height:   56px;
-  --fr-tap-target:      44px;
+  --fr-sidebar-width:    240px;
+  --fr-topbar-height:    56px;
+  --fr-bottom-nav-height: 60px;
+  --fr-tap-target:       44px;
 
   /* Sidebar tokens */
   --fr-sidebar-bg:        #f7f8fc;
@@ -79,6 +80,10 @@
 /* ================================================================
    GLOBAL BASE
 ================================================================ */
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -118,8 +123,6 @@ body {
   text-decoration: none;
   transition: color 0.1s;
 }
-.fr-brand-link:hover,
-.fr-topbar-brand:hover { color: var(--bs-primary); }
 
 .fr-topbar-brand {
   white-space: nowrap;
@@ -608,19 +611,6 @@ a.nav-link {
   );
 }
 
-.fr-auth-logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: var(--bs-primary);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.375rem;
-  box-shadow: 0 4px 16px rgba(var(--bs-primary-rgb), 0.38);
-  flex-shrink: 0;
-}
 
 .fr-auth-card {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.05) !important;
@@ -810,4 +800,119 @@ a.fr-panel-row:hover {
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-block;
+}
+
+/* ================================================================
+   BOTTOM NAVIGATION BAR (mobile only, d-lg-none)
+================================================================ */
+.fr-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1030;
+  height: var(--fr-bottom-nav-height);
+  background: var(--bs-body-bg);
+  border-top: 1px solid var(--bs-border-color);
+  display: flex;
+  align-items: stretch;
+  padding-bottom: env(safe-area-inset-bottom); /* iPhone notch support */
+}
+
+/* Push page content up so it isn't hidden behind the bar */
+@media (max-width: 991.98px) {
+  .fr-has-bottom-nav .fr-main {
+    padding-bottom: var(--fr-bottom-nav-height);
+  }
+}
+
+/* Each nav item */
+.fr-bn-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-decoration: none;
+  color: var(--bs-tertiary-color);
+  transition: color 0.15s;
+  min-width: 0;
+  padding: 0 0.25rem;
+}
+.fr-bn-item:hover,
+.fr-bn-item.active {
+  color: var(--bs-primary);
+}
+
+.fr-bn-icon {
+  font-size: 1.0625rem;
+  line-height: 1;
+}
+
+.fr-bn-label {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Notification icon wrapper (positions badge relative to bell) */
+.fr-bn-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Unread badge on bell icon */
+.fr-bn-badge {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--bs-danger);
+  color: #fff;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* Centre CTA — New Thread */
+.fr-bn-cta {
+  color: var(--bs-primary);
+}
+.fr-bn-cta:hover {
+  color: var(--bs-primary);
+  opacity: 0.85;
+}
+
+.fr-bn-cta-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--bs-primary);
+  color: #fff;
+  font-size: 0.9375rem;
+  transition: background 0.15s, transform 0.1s;
+}
+.fr-bn-cta:hover .fr-bn-cta-pill {
+  background: var(--bs-link-hover-color);
+  transform: scale(1.06);
+}
+
+/* Dark mode adjustments */
+[data-bs-theme='dark'] .fr-bottom-nav {
+  background: var(--bs-body-bg);
+  border-top-color: var(--bs-border-color);
 }

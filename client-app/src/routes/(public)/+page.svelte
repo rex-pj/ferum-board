@@ -1,9 +1,14 @@
 ﻿<svelte:head>
 	<title>{data.siteName ?? 'Ferum Board'} | Home</title>
-	<meta name="description" content={data.siteDescription ?? `${data.siteName ?? 'Ferum Board'} — A modern self-hosted discussion forum.`} />
-	<meta property="og:title" content="{data.siteName ?? 'Ferum Board'} | Home" />
-	<meta property="og:description" content={data.siteDescription ?? `${data.siteName ?? 'Ferum Board'} — A modern self-hosted discussion forum.`} />
+	<meta name="description" content={data.siteDescription ?? `${data.siteName ?? 'Ferum Board'}: A modern self-hosted discussion forum.`} />
+	<link rel="canonical" href={data.canonicalUrl} />
 	<meta property="og:type" content="website" />
+	<meta property="og:url" content={data.canonicalUrl} />
+	<meta property="og:title" content="{data.siteName ?? 'Ferum Board'} | Home" />
+	<meta property="og:description" content={data.siteDescription ?? `${data.siteName ?? 'Ferum Board'}: A modern self-hosted discussion forum.`} />
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="{data.siteName ?? 'Ferum Board'} | Home" />
+	<meta name="twitter:description" content={data.siteDescription ?? `${data.siteName ?? 'Ferum Board'}: A modern self-hosted discussion forum.`} />
 </svelte:head>
 
 <script lang="ts">
@@ -60,10 +65,10 @@
 						<i class="fa-regular fa-comments"></i>
 					</div>
 					<h2 class="fr-empty-title">No discussions yet</h2>
-					<p class="fr-empty-sub">Be the first to kick things off — every great community starts with a single post.</p>
+					<p class="fr-empty-sub">Be the first to kick things off. Every great community starts with a single post.</p>
 					{#if data.user}
 						<a href={ROUTES.NEW_THREAD} class="btn btn-primary btn-sm px-4">
-							<i class="fa-solid fa-plus me-2"></i>Start a Discussion
+							<i class="fa-solid fa-plus me-2"></i>New Thread
 						</a>
 					{:else}
 						<div class="d-flex gap-2 justify-content-center flex-wrap">
@@ -83,11 +88,11 @@
 			<div class="fr-panel-header">About</div>
 			<div class="px-3 py-3">
 				<p class="small mb-3 text-muted about-text">
-					Welcome to <strong class="text-body">{data.siteName ?? 'Ferum Board'}</strong> — a community for open discussion.
+					Welcome to <strong class="text-body">{data.siteName ?? 'Ferum Board'}</strong>, a space for open discussion.
 				</p>
 				{#if data.user}
 					<a href={ROUTES.NEW_THREAD} class="btn btn-primary btn-sm w-100">
-						<i class="fa-solid fa-plus me-1"></i>Start a Discussion
+						<i class="fa-solid fa-plus me-1"></i>New Thread
 					</a>
 				{:else}
 					<div class="d-grid gap-2">
@@ -120,9 +125,9 @@
 							<div class="panel-thread-body">
 								<div class="text-truncate fw-medium panel-thread-title">{thread.title}</div>
 								<div class="panel-thread-meta">
-									<i class="fa-regular fa-eye me-1"></i>{thread.view_count}
+									<span title="{thread.view_count.toLocaleString()} views"><i class="fa-regular fa-eye me-1"></i>{thread.view_count}</span>
 									<span class="mx-1">·</span>
-									<i class="fa-regular fa-comment me-1"></i>{thread.reply_count}
+									<span title="{thread.reply_count} {thread.reply_count === 1 ? 'reply' : 'replies'}"><i class="fa-regular fa-comment me-1"></i>{thread.reply_count}</span>
 								</div>
 							</div>
 						</a>

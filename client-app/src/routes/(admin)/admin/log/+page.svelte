@@ -73,7 +73,7 @@
 				<tbody>
 					{#each data.logs as log}
 						<tr>
-							<td><code>{log.actor_id?.slice(0, 8) ?? '—'}…</code></td>
+							<td><code>{log.actor_id?.slice(0, 8) ?? 'System'}…</code></td>
 							<td><span class="badge bg-secondary">{log.action}</span></td>
 							<td class="text-muted">{log.target_type} <code>{log.target_id.slice(0, 8)}…</code></td>
 							<td><Timestamp date={log.created_at} /></td>

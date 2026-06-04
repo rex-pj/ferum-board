@@ -46,7 +46,8 @@ export const load: PageServerLoad = async ({ params, url, cookies, fetch }) => {
 		postsMeta: postsJson.meta ?? { total: 0, page, per_page: 20 },
 		category: catJson.data,
 		excerpt,
-		isBookmarked
+		isBookmarked,
+		canonicalUrl: url.href
 	};
 };
 
@@ -58,6 +59,7 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const content_md = data.get('content_md') as string;
 		const thread_id = data.get('thread_id') as string;
+		const parent_id = (data.get('parent_id') as string) || null;
 
 		if (!content_md?.trim()) return fail(422, { error: 'Reply content is required.' });
 		if (!thread_id) return fail(422, { error: 'Thread ID is missing.' });
@@ -65,7 +67,7 @@ export const actions: Actions = {
 		const res = await fetch(`${API}/api/threads/${thread_id}/posts`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-			body: JSON.stringify({ content_md })
+			body: JSON.stringify({ content_md, ...(parent_id ? { parent_id } : {}) })
 		});
 
 		if (!res.ok) {

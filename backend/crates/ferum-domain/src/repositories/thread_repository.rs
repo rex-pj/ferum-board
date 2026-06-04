@@ -30,6 +30,13 @@ pub trait ThreadRepository: Send + Sync {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Thread>, u64), AppError>;
+    async fn list_by_tag(
+        &self,
+        tag_slug: &str,
+        category_ids: &[Uuid],
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Thread>, u64), AppError>;
     async fn create(&self, cmd: NewThread) -> Result<Thread, AppError>;
     async fn update(&self, id: Uuid, patch: UpdateThread) -> Result<Thread, AppError>;
     async fn increment_view_count(&self, id: Uuid) -> Result<(), AppError>;

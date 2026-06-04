@@ -50,6 +50,7 @@ fn entity_to_domain(m: threads::Model) -> Thread {
         deleted_by_id: m.deleted_by_id,
         excerpt: None,
         thumbnail_url: None,
+        tags: vec![],
     }
 }
 
@@ -105,6 +106,7 @@ fn row_to_domain(row: ThreadRow) -> Thread {
         deleted_by_id: None,
         excerpt: row.excerpt,
         thumbnail_url: row.thumbnail_url,
+        tags: vec![],
     }
 }
 
@@ -277,6 +279,63 @@ impl ThreadRepository for PgThreadRepository {
         let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, values);
         let rows = ThreadRow::find_by_statement(stmt).all(&self.db).await?;
         Ok((rows.into_iter().map(row_to_domain).collect(), total))
+    }
+
+    async fn list_by_tag(
+        &self,
+        tag_slug: &str,
+        category_ids: &[Uuid],
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Thread>, u64), AppError> {
+        let offset = page.saturating_sub(1) * per_page;
+
+        let cat_filter = if category_ids.is_empty() {
+            String::new()
+        } else {
+            let placeholders: Vec<String> = (2..=category_ids.len() + 1)
+                .map(|i| format!("${i}"))
+                .collect();
+            format!("AND t.category_id IN ({})", placeholders.join(", "))
+        };
+        let limit_pos = category_ids.len() + 2;
+        let offset_pos = category_ids.len() + 3;
+
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM threads t
+             JOIN thread_tags ttg ON ttg.thread_id = t.id
+             JOIN tags tg ON tg.id = ttg.tag_id
+             WHERE tg.slug = $1 AND t.deleted_at IS NULL {cat_filter}"
+        );
+        let mut count_values: Vec<Value> = vec![tag_slug.into()];
+        count_values.extend(category_ids.iter().map(|id| Value::from(*id)));
+        let count_stmt = Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            &count_sql,
+            count_values,
+        );
+        let count_result = self.db.query_one(count_stmt).await?;
+        let total: i64 = count_result
+            .map(|r| r.try_get::<i64>("", "count").unwrap_or(0))
+            .unwrap_or(0);
+
+        let sql = format!(
+            "{ENRICHED_SELECT}
+             JOIN thread_tags ttg ON ttg.thread_id = t.id
+             JOIN tags tg ON tg.id = ttg.tag_id
+             WHERE tg.slug = $1 AND t.deleted_at IS NULL {cat_filter}
+             ORDER BY t.last_post_at DESC NULLS LAST
+             LIMIT ${limit_pos} OFFSET ${offset_pos}"
+        );
+
+        let mut values: Vec<Value> = vec![tag_slug.into()];
+        values.extend(category_ids.iter().map(|id| Value::from(*id)));
+        values.push((per_page as i64).into());
+        values.push((offset as i64).into());
+
+        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, values);
+        let rows = ThreadRow::find_by_statement(stmt).all(&self.db).await?;
+        Ok((rows.into_iter().map(row_to_domain).collect(), total as u64))
     }
 
     async fn create(&self, cmd: NewThread) -> Result<Thread, AppError> {

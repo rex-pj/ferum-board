@@ -15,7 +15,7 @@
 </script>
 
 <div class="fr-app">
-	<SiteHeader user={data?.user} siteName={data?.siteName} />
+	<SiteHeader user={data?.user} siteName={data?.siteName} siteSlogan={data?.siteSlogan} logoUrl={data?.logoUrl} />
 
 	<div class="fr-body">
 		<!-- Left rail: mod nav -->
@@ -47,5 +47,5 @@
 		</main>
 	</div>
 
-	<SiteFooter siteName={data?.siteName} logoUrl={data?.logoUrl} compact />
+	<SiteFooter siteName={data?.siteName} siteSlogan={data?.siteSlogan} logoUrl={data?.logoUrl} compact />
 </div>

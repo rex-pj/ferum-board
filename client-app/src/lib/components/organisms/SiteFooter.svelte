@@ -3,11 +3,12 @@
 
 	interface Props {
 		siteName?: string;
+		siteSlogan?: string | null;
 		logoUrl?: string | null;
 		compact?: boolean;
 	}
 
-	let { siteName = 'Ferum Board', logoUrl = null, compact = false }: Props = $props();
+	let { siteName = 'Ferum Board', siteSlogan = null, logoUrl = null, compact = false }: Props = $props();
 
 	const year = new Date().getFullYear();
 </script>
@@ -17,17 +18,23 @@
 	<footer class="fr-footer border-top mt-auto">
 		<div class="container-fluid px-4">
 			<div class="fr-footer-compact">
-				<a href={ROUTES.HOME} class="fr-brand-link">
-					{#if logoUrl}
-						<img src={logoUrl} alt={siteName} class="fr-footer-logo-img" />
-					{:else}
-						<span class="fr-footer-logo-icon">
-							<i class="fa-solid fa-feather-pointed"></i>
-						</span>
+				<div class="d-flex align-items-center gap-2">
+					<a href={ROUTES.HOME} class="fr-brand-link" aria-label={siteName}>
+						{#if logoUrl}
+							<img src={logoUrl} alt={siteName} class="fr-footer-logo-img" />
+						{:else}
+							<svg viewBox="0 0 160 36" height="22" aria-hidden="true" focusable="false" overflow="visible">
+								<text x="0" y="28" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="30" font-weight="800" letter-spacing="-1" fill="var(--bs-link-color)">Fe</text>
+								<text x="36" y="28" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="30" font-weight="800" letter-spacing="-1" fill="currentColor">rum</text>
+								<text x="102" y="28" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="400" fill="var(--bs-link-color)">board</text>
+							</svg>
+						{/if}
+					</a>
+					{#if siteSlogan}
+						<span class="fr-footer-compact-slogan">{siteSlogan}</span>
 					{/if}
-					<span class="fw-semibold">{siteName}</span>
-				</a>
-				<span class="fr-footer-copy">© {year} {siteName}</span>
+				</div>
+				<span class="fr-footer-copy">© {year} {siteName}. Powered by Ferum Board.</span>
 			</div>
 		</div>
 	</footer>
@@ -40,19 +47,20 @@
 
 				<!-- Brand -->
 				<div class="fr-footer-brand-col">
-					<a href={ROUTES.HOME} class="fr-brand-link">
+					<a href={ROUTES.HOME} class="fr-brand-link" aria-label={siteName}>
 						{#if logoUrl}
 							<img src={logoUrl} alt={siteName} class="fr-footer-logo-img" />
 						{:else}
-							<span class="fr-footer-logo-icon">
-								<i class="fa-solid fa-feather-pointed"></i>
-							</span>
+							<svg viewBox="0 0 160 36" height="26" aria-hidden="true" focusable="false" overflow="visible">
+								<text x="0" y="28" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="30" font-weight="800" letter-spacing="-1" fill="var(--bs-link-color)">Fe</text>
+								<text x="36" y="28" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="30" font-weight="800" letter-spacing="-1" fill="currentColor">rum</text>
+								<text x="102" y="28" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="400" fill="var(--bs-link-color)">board</text>
+							</svg>
 						{/if}
-						<span class="fw-bold">{siteName}</span>
 					</a>
-					<p class="fr-footer-tagline">
-						A self-hosted community forum. Your space, your data, your rules.
-					</p>
+					{#if siteSlogan}
+						<p class="fr-footer-tagline">{siteSlogan}</p>
+					{/if}
 				</div>
 
 				<!-- Browse -->
@@ -99,28 +107,6 @@
 					</ul>
 				</div>
 
-				<!-- Help -->
-				<div>
-					<h6 class="fr-label-caps fr-footer-heading">Help</h6>
-					<ul class="fr-footer-links">
-						<li>
-							<a href={ROUTES.SEARCH} class="fr-footer-link">
-								<i class="fa-solid fa-circle-question fa-fw"></i> FAQ
-							</a>
-						</li>
-						<li>
-							<a href={ROUTES.SEARCH + '?q=guidelines'} class="fr-footer-link">
-								<i class="fa-solid fa-shield-halved fa-fw"></i> Community Guidelines
-							</a>
-						</li>
-						<li>
-							<a href={ROUTES.ADMIN.SETTINGS} class="fr-footer-link">
-								<i class="fa-solid fa-gear fa-fw"></i> Site Settings
-							</a>
-						</li>
-					</ul>
-				</div>
-
 			</div>
 
 			<!-- Bottom bar -->
@@ -143,25 +129,10 @@
 		color: var(--bs-secondary-color);
 	}
 
-	/* Logo: image path */
 	.fr-footer-logo-img {
-		height: 24px;
+		height: 26px;
 		width: auto;
 		object-fit: contain;
-		flex-shrink: 0;
-	}
-
-	/* Logo: icon fallback */
-	.fr-footer-logo-icon {
-		width: 28px;
-		height: 28px;
-		border-radius: 7px;
-		background: var(--bs-primary);
-		color: #fff;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 0.8125rem;
 		flex-shrink: 0;
 	}
 
@@ -180,10 +151,21 @@
 		color: var(--bs-tertiary-color);
 	}
 
+	.fr-footer-compact-slogan {
+		font-size: 0.75rem;
+		color: var(--bs-tertiary-color);
+		border-left: 1px solid var(--bs-border-color);
+		padding-left: 0.5rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 200px;
+	}
+
 	/* ── Full (public) ───────────────────────────────────── */
 	.fr-footer-grid {
 		display: grid;
-		grid-template-columns: 1.6fr 1fr 1fr 1fr;
+		grid-template-columns: 1.6fr 1fr 1fr;
 		gap: 2rem;
 	}
 	@media (max-width: 991.98px) {

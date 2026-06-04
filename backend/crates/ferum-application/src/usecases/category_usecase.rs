@@ -7,6 +7,7 @@ use crate::shared::AppError;
 use ferum_domain::models::category::Category;
 use ferum_domain::models::thread::Thread;
 use ferum_domain::repositories::category_repository::CategoryRepository;
+use ferum_domain::repositories::tag_repository::TagRepository;
 use ferum_domain::repositories::thread_repository::ThreadRepository;
 use ferum_domain::AuthUser;
 
@@ -29,16 +30,19 @@ pub struct ForumIndexItem {
 pub struct CategoryUseCase {
     pub categories: Arc<dyn CategoryRepository>,
     pub threads: Arc<dyn ThreadRepository>,
+    pub tags: Arc<dyn TagRepository>,
 }
 
 impl CategoryUseCase {
     pub fn new(
         categories: Arc<dyn CategoryRepository>,
         threads: Arc<dyn ThreadRepository>,
+        tags: Arc<dyn TagRepository>,
     ) -> Self {
         Self {
             categories,
             threads,
+            tags,
         }
     }
 
@@ -160,6 +164,32 @@ impl CategoryUseCase {
                     recent_threads,
                     category: cat,
                 }
+            })
+            .collect::<Vec<_>>();
+
+        // Enrich all recent threads with tags in one batch query.
+        let all_thread_ids: Vec<uuid::Uuid> = items
+            .iter()
+            .flat_map(|g| g.recent_threads.iter().map(|t| t.id))
+            .collect();
+
+        if all_thread_ids.is_empty() {
+            return Ok(items);
+        }
+
+        let tag_map = self
+            .tags
+            .find_by_threads(&all_thread_ids)
+            .await
+            .unwrap_or_default();
+
+        let items = items
+            .into_iter()
+            .map(|mut group| {
+                for t in group.recent_threads.iter_mut() {
+                    t.tags = tag_map.get(&t.id).cloned().unwrap_or_default();
+                }
+                group
             })
             .collect();
 

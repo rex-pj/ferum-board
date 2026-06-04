@@ -11,7 +11,12 @@ marked.setOptions({
  * Server-side rendering uses content_html from the backend (already sanitized with ammonia).
  */
 export function renderMarkdownPreview(md: string): string {
-	const html = marked.parse(md) as string;
+	// Linkify @username before markdown parsing so they render as links.
+	const withMentions = md.replace(
+		/(?<!["\w])@([a-zA-Z0-9_]{3,32})(?=[\s,.!?)]|$)/g,
+		'[@$1](/u/$1)'
+	);
+	const html = marked.parse(withMentions) as string;
 	return DOMPurify.sanitize(html, {
 		ALLOWED_TAGS: [
 			'p', 'br', 'strong', 'em', 'del', 'code', 'pre', 'blockquote',

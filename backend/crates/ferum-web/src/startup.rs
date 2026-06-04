@@ -18,6 +18,7 @@ use ferum_application::usecases::reaction_usecase::ReactionUseCase;
 use ferum_application::usecases::role_usecase::RoleUseCase;
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_application::usecases::setup_usecase::SetupUseCase;
+use ferum_application::usecases::tag_usecase::TagUseCase;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
@@ -39,8 +40,8 @@ use ferum_infrastructure::{
         PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository,
         PgNotificationRepository, PgPermissionRepository, PgPostRepository,
         PgReactionRepository, PgReportRepository, PgRoleRepository, PgSiteConfigRepository,
-        PgStoredFileRepository, PgThreadRepository, PgUserRepository, PgUserRoleRepository,
-        PgWebhookRepository,
+        PgStoredFileRepository, PgTagRepository, PgThreadRepository, PgUserRepository,
+        PgUserRoleRepository, PgWebhookRepository,
     },
     role_permission_cache::RolePermissionCache,
     search::PostgresFtsService,
@@ -135,6 +136,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let webhook_repo = Arc::new(PgWebhookRepository::new(pg_write.clone()));
     let stored_file_repo: Arc<dyn ferum_domain::repositories::StoredFileRepository> =
         Arc::new(PgStoredFileRepository::new(pg_write.clone()));
+    let tag_repo: Arc<dyn ferum_domain::repositories::TagRepository> =
+        Arc::new(PgTagRepository::new(pg_write.clone()));
 
     // ─── RolePermissionCache (in-memory, loaded from DB after migrations) ────
     let role_permission_cache = Arc::new(RolePermissionCache::new(pg_write.clone()));
@@ -253,7 +256,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         user_role_repo.clone(),
     ));
 
-    let category = Arc::new(CategoryUseCase::new(category_repo.clone(), thread_repo.clone()));
+    let category = Arc::new(CategoryUseCase::new(category_repo.clone(), thread_repo.clone(), tag_repo.clone()));
 
     let thread = Arc::new(ThreadUseCase::new(
         thread_repo.clone(),
@@ -263,6 +266,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         stored_file_repo.clone(),
         event_bus.clone(),
         cache.clone(),
+        tag_repo.clone(),
     ));
 
     let post = Arc::new(PostUseCase::new(
@@ -308,6 +312,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     ));
 
     let bookmark = Arc::new(BookmarkUseCase::new(bookmark_repo, thread_repo.clone()));
+    let tag = Arc::new(TagUseCase::new(tag_repo.clone()));
     let webhook = Arc::new(WebhookUseCase::new(webhook_repo.clone()));
 
     let site_config: Arc<dyn SiteConfigRepository> =
@@ -345,6 +350,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         search,
         user,
         role,
+        tag,
         webhook,
         site_config,
         stored_files: stored_file_repo,

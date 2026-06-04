@@ -23,7 +23,7 @@ pub async fn get_public_config_handler(
         .filter(|(k, _)| {
             matches!(
                 k.as_str(),
-                "site_name" | "site_tagline" | "logo_url" | "favicon_url" | "primary_color"
+                "site_name" | "site_tagline" | "site_slogan" | "logo_url" | "favicon_url" | "primary_color"
             )
         })
         .collect();
@@ -51,6 +51,7 @@ pub async fn update_site_config_handler(
     let allowed_keys = [
         "site_name",
         "site_tagline",
+        "site_slogan",
         "logo_url",
         "favicon_url",
         "primary_color",

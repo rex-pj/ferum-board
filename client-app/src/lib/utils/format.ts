@@ -57,3 +57,17 @@ export function formatNumber(n: number): string {
 	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
 	return String(n);
 }
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+const DEFAULT_TAG_COLOR = '#6c757d';
+
+/**
+ * Sanitise a tag color value for use in a CSS custom property.
+ * Only hex shorthand (#rgb) and full (#rrggbb) colors are accepted.
+ * Any other value — including attempts to inject CSS via semicolons or
+ * closing braces — falls back to the default neutral grey.
+ */
+export function safeCssColor(color: string | null | undefined): string {
+	if (!color) return DEFAULT_TAG_COLOR;
+	return HEX_COLOR_RE.test(color) ? color : DEFAULT_TAG_COLOR;
+}

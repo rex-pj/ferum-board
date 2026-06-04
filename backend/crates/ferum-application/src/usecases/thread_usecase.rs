@@ -18,6 +18,7 @@ use ferum_domain::models::thread::{Thread, ThreadStatus};
 use ferum_domain::repositories::category_repository::CategoryRepository;
 use ferum_domain::repositories::post_repository::PostRepository;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
+use ferum_domain::repositories::tag_repository::TagRepository;
 use ferum_domain::repositories::thread_repository::{NewThread, ThreadRepository, UpdateThread};
 use ferum_domain::AuthUser;
 
@@ -30,6 +31,7 @@ pub struct ThreadUseCase {
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub event_bus: Arc<EventBus>,
     pub cache: Arc<dyn CacheService>,
+    pub tags: Arc<dyn TagRepository>,
 }
 
 impl ThreadUseCase {
@@ -41,6 +43,7 @@ impl ThreadUseCase {
         stored_files: Arc<dyn StoredFileRepository>,
         event_bus: Arc<EventBus>,
         cache: Arc<dyn CacheService>,
+        tags: Arc<dyn TagRepository>,
     ) -> Self {
         Self {
             threads,
@@ -50,6 +53,7 @@ impl ThreadUseCase {
             stored_files,
             event_bus,
             cache,
+            tags,
         }
     }
 
@@ -142,18 +146,17 @@ impl ThreadUseCase {
         PermissionChecker::can_view_category(actor, &category)?;
 
         let per_page = per_page.min(MAX_THREADS_PER_PAGE);
-        let (threads, total) = self
+        let (mut threads, total) = self
             .threads
             .list_by_category(category.id, page, per_page)
             .await?;
-        let threads = threads
-            .into_iter()
-            .map(|mut t| {
-                t.category_slug = category.slug.clone();
-                t.category_name = Some(category.name.clone());
-                t
-            })
-            .collect();
+        let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
+        let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
+        for t in threads.iter_mut() {
+            t.category_slug = category.slug.clone();
+            t.category_name = Some(category.name.clone());
+            t.tags = tag_map.get(&t.id).cloned().unwrap_or_default();
+        }
         Ok((threads, total))
     }
 
@@ -168,6 +171,36 @@ impl ThreadUseCase {
         let per_page = per_page.min(MAX_THREADS_PER_PAGE);
         let (mut threads, total) = self.threads.list_feed(&visible_ids, page, per_page).await?;
         Self::enrich_threads(&mut threads, &category_map);
+        let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
+        let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
+        for t in threads.iter_mut() {
+            t.tags = tag_map.get(&t.id).cloned().unwrap_or_default();
+        }
+        Ok((threads, total))
+    }
+
+    pub async fn list_by_tag(
+        &self,
+        actor: Option<&AuthUser>,
+        tag_slug: &str,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Thread>, u64), AppError> {
+        let category_map = self.visible_category_map(actor).await?;
+        let visible_ids: Vec<Uuid> = category_map.keys().cloned().collect();
+        let per_page = per_page.min(MAX_THREADS_PER_PAGE);
+        let (mut threads, total) = self
+            .threads
+            .list_by_tag(tag_slug, &visible_ids, page, per_page)
+            .await?;
+        Self::enrich_threads(&mut threads, &category_map);
+        for t in threads.iter_mut() {
+            t.tags = self
+                .tags
+                .find_by_thread(t.id)
+                .await
+                .unwrap_or_default();
+        }
         Ok((threads, total))
     }
 
@@ -222,6 +255,7 @@ impl ThreadUseCase {
         });
 
         thread.category_slug = category.slug;
+        thread.tags = self.tags.find_by_thread(thread.id).await.unwrap_or_default();
         Ok(thread)
     }
 
@@ -250,7 +284,8 @@ impl ThreadUseCase {
         let id = uuid::Uuid::new_v4();
         let slug = generate_thread_slug(&cmd.title, &id);
 
-        self.threads
+        let thread = self
+            .threads
             .create(NewThread {
                 id,
                 category_id: cmd.category_id,
@@ -258,7 +293,41 @@ impl ThreadUseCase {
                 title: cmd.title,
                 slug,
             })
-            .await
+            .await?;
+
+        if !cmd.tag_names.is_empty() {
+            let mut tag_ids = Vec::new();
+            for raw in cmd.tag_names.iter().take(5) {
+                let name = raw.trim().to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                let tag_slug = slug::slugify(&name);
+                let tag = match self.tags.find_by_slug(&tag_slug).await? {
+                    Some(t) => t,
+                    None => {
+                        if !actor.has_perm(perm::TAG_CREATE) {
+                            return Err(AppError::forbidden("tag_create_permission_required"));
+                        }
+                        self.tags
+                            .create(ferum_domain::models::tag::NewTag {
+                                id: uuid::Uuid::new_v4(),
+                                name,
+                                slug: tag_slug,
+                                color: None,
+                                created_by_id: Some(actor.id),
+                            })
+                            .await?
+                    }
+                };
+                tag_ids.push(tag.id);
+            }
+            if !tag_ids.is_empty() {
+                self.tags.assign_to_thread(thread.id, &tag_ids).await?;
+            }
+        }
+
+        Ok(thread)
     }
 
     pub async fn update_title(
@@ -514,4 +583,5 @@ impl ThreadUseCase {
 pub struct CreateThreadCmd {
     pub category_id: Uuid,
     pub title: String,
+    pub tag_names: Vec<String>,
 }

@@ -140,7 +140,7 @@
 							</span>
 						</td>
 						<td><code class="small">{role.slug}</code></td>
-						<td class="text-muted small">{role.description ?? '—'}</td>
+						<td class="text-muted small">{role.description ?? 'No description'}</td>
 						<td>
 							{#if role.is_system}
 								<span class="badge bg-secondary-subtle text-secondary-emphasis">

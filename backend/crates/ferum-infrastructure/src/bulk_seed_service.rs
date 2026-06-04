@@ -13,8 +13,10 @@ use crate::entities::{
     notifications::{self, NotificationKind},
     posts,
     reactions::{self, ReactionKind},
+    tags, thread_tags,
     threads::{self, ThreadStatus},
     user_preferences,
+    user_roles,
     users::{self, TrustLevel},
 };
 use ferum_application::ports::BulkSeedService;
@@ -34,6 +36,11 @@ const CAT_PROGRAMMING: Uuid = uuid!("10000000-0000-0000-0000-000000000005");
 const CAT_HARDWARE: Uuid = uuid!("10000000-0000-0000-0000-000000000006");
 const CAT_FEEDBACK: Uuid = uuid!("10000000-0000-0000-0000-000000000007");
 const CAT_STAFF: Uuid = uuid!("10000000-0000-0000-0000-000000000008");
+
+const TAG_RUST: Uuid      = uuid!("40000000-0000-0000-0000-000000000001");
+const TAG_WEBDEV: Uuid    = uuid!("40000000-0000-0000-0000-000000000002");
+const TAG_COMMUNITY: Uuid = uuid!("40000000-0000-0000-0000-000000000003");
+const TAG_QUESTION: Uuid  = uuid!("40000000-0000-0000-0000-000000000004");
 
 const TH_WELCOME: Uuid = uuid!("20000000-0000-0000-0000-000000000001");
 const TH_INTRO: Uuid = uuid!("20000000-0000-0000-0000-000000000002");
@@ -133,11 +140,13 @@ impl BulkSeedService for PgBulkSeedService {
 
         self.seed_example_users(&hash).await?;
         self.seed_bulk_users(&hash).await?;
+        self.seed_user_roles(admin_id).await?;
         self.seed_preferences(admin_id).await?;
         self.seed_categories().await?;
         self.seed_example_threads(admin_id).await?;
         self.seed_example_posts(admin_id).await?;
         self.seed_example_reactions(admin_id).await?;
+        self.seed_example_tags(admin_id).await?;
         self.seed_bulk_threads().await?;
         self.seed_bulk_posts().await?;
         self.sync_bulk_thread_stats().await?;
@@ -565,6 +574,127 @@ impl PgBulkSeedService {
             ],
         )
         .await
+    }
+
+    async fn seed_user_roles(&self, admin_id: Uuid) -> Result<(), AppError> {
+        use crate::entities::roles;
+
+        // Fetch role IDs from DB (seeded by migration 020)
+        let all_roles = roles::Entity::find()
+            .all(&self.db)
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
+
+        let role_id = |slug: &str| -> Result<Uuid, AppError> {
+            all_roles
+                .iter()
+                .find(|r| r.slug == slug)
+                .map(|r| r.id)
+                .ok_or_else(|| AppError::internal(format!("role '{slug}' not found — run migrations first")))
+        };
+
+        let mod_role_id = role_id("moderator")?;
+        let member_role_id = role_id("member")?;
+
+        // Example named users
+        insert_or_ignore::<user_roles::Entity, _, _>(&self.db, [
+            user_roles::ActiveModel {
+                user_id: Set(MOD_ID),
+                role_id: Set(mod_role_id),
+                category_id: Set(None),
+                granted_by: Set(Some(admin_id)),
+                ..Default::default()
+            },
+            user_roles::ActiveModel {
+                user_id: Set(ALICE_ID),
+                role_id: Set(member_role_id),
+                category_id: Set(None),
+                granted_by: Set(Some(admin_id)),
+                ..Default::default()
+            },
+            user_roles::ActiveModel {
+                user_id: Set(BOB_ID),
+                role_id: Set(member_role_id),
+                category_id: Set(None),
+                granted_by: Set(Some(admin_id)),
+                ..Default::default()
+            },
+        ]).await?;
+
+        // Bulk users — assign member role
+        let bulk_user_ids: Vec<Uuid> = users::Entity::find()
+            .filter(users::Column::Username.like("user_%"))
+            .all(&self.db)
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?
+            .into_iter()
+            .map(|u| u.id)
+            .collect();
+
+        let rows: Vec<user_roles::ActiveModel> = bulk_user_ids
+            .into_iter()
+            .map(|uid| user_roles::ActiveModel {
+                user_id: Set(uid),
+                role_id: Set(member_role_id),
+                category_id: Set(None),
+                granted_by: Set(Some(admin_id)),
+                ..Default::default()
+            })
+            .collect();
+
+        insert_in_chunks::<user_roles::Entity, _>(&self.db, rows, 200).await
+    }
+
+    async fn seed_example_tags(&self, admin_id: Uuid) -> Result<(), AppError> {
+        insert_or_ignore::<tags::Entity, _, _>(&self.db, [
+            tags::ActiveModel {
+                id: Set(TAG_RUST),
+                name: Set("rust".into()),
+                slug: Set("rust".into()),
+                color: Set(Some("#f74c00".into())),
+                created_by_id: Set(Some(admin_id)),
+                ..Default::default()
+            },
+            tags::ActiveModel {
+                id: Set(TAG_WEBDEV),
+                name: Set("webdev".into()),
+                slug: Set("webdev".into()),
+                color: Set(Some("#0d6efd".into())),
+                created_by_id: Set(Some(admin_id)),
+                ..Default::default()
+            },
+            tags::ActiveModel {
+                id: Set(TAG_COMMUNITY),
+                name: Set("community".into()),
+                slug: Set("community".into()),
+                color: Set(Some("#198754".into())),
+                created_by_id: Set(Some(admin_id)),
+                ..Default::default()
+            },
+            tags::ActiveModel {
+                id: Set(TAG_QUESTION),
+                name: Set("question".into()),
+                slug: Set("question".into()),
+                color: Set(Some("#6f42c1".into())),
+                created_by_id: Set(Some(admin_id)),
+                ..Default::default()
+            },
+        ]).await?;
+
+        insert_or_ignore::<thread_tags::Entity, _, _>(&self.db, [
+            // Welcome thread → community
+            thread_tags::ActiveModel { thread_id: Set(TH_WELCOME),   tag_id: Set(TAG_COMMUNITY) },
+            // Introductions → community
+            thread_tags::ActiveModel { thread_id: Set(TH_INTRO),     tag_id: Set(TAG_COMMUNITY) },
+            // Favourite language → question, rust
+            thread_tags::ActiveModel { thread_id: Set(TH_FAV_LANG),  tag_id: Set(TAG_QUESTION)  },
+            thread_tags::ActiveModel { thread_id: Set(TH_FAV_LANG),  tag_id: Set(TAG_RUST)      },
+            // Rust vs Go → rust, question
+            thread_tags::ActiveModel { thread_id: Set(TH_RUST_VS_GO), tag_id: Set(TAG_RUST)     },
+            thread_tags::ActiveModel { thread_id: Set(TH_RUST_VS_GO), tag_id: Set(TAG_QUESTION) },
+            // Dark mode → webdev
+            thread_tags::ActiveModel { thread_id: Set(TH_DARK_MODE), tag_id: Set(TAG_WEBDEV)    },
+        ]).await
     }
 
     // ── Bulk generation (Rust-generated rows, queried from DB for FK lookups) ──

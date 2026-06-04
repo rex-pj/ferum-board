@@ -135,7 +135,7 @@
 					</td>
 					<td><code class="small">{cat.slug}</code></td>
 					<td class="text-muted small">
-						{data.categories.find((c: any) => c.id === cat.parent_id)?.name ?? '—'}
+						{data.categories.find((c: any) => c.id === cat.parent_id)?.name ?? 'None'}
 					</td>
 					<td><span class="badge bg-secondary">{cat.view_policy}</span></td>
 					<td><span class="badge bg-secondary">{cat.post_policy}</span></td>

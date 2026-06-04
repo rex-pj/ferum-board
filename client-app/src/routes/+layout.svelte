@@ -10,6 +10,15 @@
 
 	let { data, children }: { data: any; children: any } = $props();
 
+	$effect(() => {
+		const color = data?.primaryColor;
+		if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
+			document.documentElement.style.setProperty('--bs-primary', color);
+		} else {
+			document.documentElement.style.removeProperty('--bs-primary');
+		}
+	});
+
 	onMount(async () => {
 		// Bootstrap JS must be loaded client-side only — it accesses window/document.
 		// Placed here so every route group gets dropdown/modal/collapse support.

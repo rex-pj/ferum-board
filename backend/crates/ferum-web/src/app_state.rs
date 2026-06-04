@@ -17,6 +17,7 @@ use ferum_application::usecases::reaction_usecase::ReactionUseCase;
 use ferum_application::usecases::role_usecase::RoleUseCase;
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_application::usecases::setup_usecase::SetupUseCase;
+use ferum_application::usecases::tag_usecase::TagUseCase;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
@@ -42,6 +43,7 @@ pub struct AppState {
     pub search: Arc<SearchUseCase>,
     pub user: Arc<UserUseCase>,
     pub role: Arc<RoleUseCase>,
+    pub tag: Arc<TagUseCase>,
     pub webhook: Arc<WebhookUseCase>,
     pub site_config: Arc<dyn SiteConfigRepository>,
     pub stored_files: Arc<dyn StoredFileRepository>,

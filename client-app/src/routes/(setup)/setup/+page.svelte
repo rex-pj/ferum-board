@@ -5,11 +5,9 @@
 
   let { form }: { form: any } = $props();
 
-  // ─── Step state ───────────────────────────────────────────────────────────
   let step = $state(1);
   const TOTAL_STEPS = 4;
 
-  // ─── Form data ────────────────────────────────────────────────────────────
   let admin = $state({ username: "", email: "", password: "", confirm: "" });
   let config = $state({
     site_name: "",
@@ -25,7 +23,6 @@
   let showSmtp = $state(false);
   let submitting = $state(false);
 
-  // ─── Validation helpers ───────────────────────────────────────────────────
   function isValidUsername(u: string): boolean {
     if (u.length < 3 || u.length > 30) return false;
     return /^[a-zA-Z0-9_-]+$/.test(u);
@@ -53,7 +50,6 @@
       admin.password === admin.confirm,
   );
 
-  // ─── Build the submission payload ─────────────────────────────────────────
   function buildPayload() {
     const hasConfig =
       config.site_name.trim() ||
@@ -93,7 +89,6 @@
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<!-- ─── Progress indicator ──────────────────────────────────────────────────── -->
 {#if step < 5}
   <div class="d-flex align-items-center gap-2 mb-4">
     {#each Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1) as s}
@@ -108,7 +103,6 @@
   </div>
 {/if}
 
-<!-- ─── Step 1: Welcome ───────────────────────────────────────────────────────── -->
 {#if step === 1}
   <div class="text-center mb-4">
     <div class="text-success mb-3 step-icon">
@@ -133,7 +127,6 @@
     Get Started <i class="fa-solid fa-arrow-right ms-1"></i>
   </button>
 
-  <!-- ─── Step 2: Admin account ─────────────────────────────────────────────────── -->
 {:else if step === 2}
   <h2 class="h5 mb-1">Create admin account</h2>
   <p class="text-muted small mb-4">
@@ -216,7 +209,6 @@
     </button>
   </div>
 
-  <!-- ─── Step 3: Site configuration ────────────────────────────────────────────── -->
 {:else if step === 3}
   <h2 class="h5 mb-1">Site configuration</h2>
   <p class="text-muted small mb-4">
@@ -349,7 +341,6 @@
     </button>
   </div>
 
-  <!-- ─── Step 4: Example data + final submit ───────────────────────────────────── -->
 {:else if step === 4}
   <h2 class="h5 mb-1">Example content</h2>
   <p class="text-muted small mb-4">
@@ -437,7 +428,6 @@
     </div>
   </form>
 
-  <!-- ─── Step 5: Done ──────────────────────────────────────────────────────────── -->
 {:else if step === 5}
   <div class="text-center py-3">
     <div class="text-success mb-3 done-icon">

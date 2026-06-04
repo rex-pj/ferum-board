@@ -23,5 +23,6 @@ export const load: PageServerLoad = async ({ params, fetch, url }) => {
 		threadTotal: threadsJson.total ?? 0,
 		threadPage: threadsJson.page ?? 1,
 		threadPerPage: threadsJson.per_page ?? 20,
+		canonicalUrl: url.href
 	};
 };

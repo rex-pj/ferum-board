@@ -105,7 +105,7 @@
 		>
 			<i class="fa-solid fa-webhook fa-sm me-1"></i>Webhooks
 			{#if webhooks.length > 0}
-				<span class="badge bg-secondary ms-1" class="badge-xs">{webhooks.length}</span>
+				<span class="badge bg-secondary ms-1 badge-xs">{webhooks.length}</span>
 			{/if}
 		</button>
 	</li>
@@ -117,207 +117,208 @@
 		<div class="alert alert-danger mb-4" role="alert">{form.error}</div>
 	{/if}
 
-	<!-- Logo — standalone card; separate form to avoid nesting inside save form -->
+	<!-- Branding — one card: logo/favicon uploads + name/slogan/tagline/color.
+	     HTML forbids nested forms, so upload forms are siblings inside the card;
+	     the save-form inputs use form="saveForm" to associate with the form below. -->
 	<div class="card mb-3">
-		<div class="card-header fw-semibold">Logo</div>
+		<div class="card-header fw-semibold">Branding</div>
 		<div class="card-body">
-			<div class="d-flex align-items-start gap-3 flex-wrap">
-				<!-- Preview box -->
-				<div class="d-flex flex-column align-items-center gap-1">
-					<div
-						class="border rounded p-2 d-flex align-items-center justify-content-center"
-						class="logo-preview"
-					>
-						{#if logoObjectUrl || currentLogoUrl}
-							<img
-								src={logoObjectUrl || currentLogoUrl}
-								alt="Current logo"
-								class="logo-img"
-							/>
-						{:else}
-							<i class="fa-solid fa-image fa-lg text-muted"></i>
+			<div class="row g-4">
+
+				<!-- Logo upload -->
+				<div class="col-md-6">
+					<p class="form-label fw-medium mb-2">Logo</p>
+					<div class="d-flex align-items-start gap-3 flex-wrap">
+						<div class="d-flex flex-column align-items-center gap-1">
+							<div class="border rounded p-2 d-flex align-items-center justify-content-center logo-preview">
+								{#if logoObjectUrl || currentLogoUrl}
+									<img src={logoObjectUrl || currentLogoUrl} alt="Current logo" class="logo-img" />
+								{:else}
+									<i class="fa-solid fa-image fa-lg text-muted"></i>
+								{/if}
+							</div>
+							<span class="small text-muted">Current</span>
+						</div>
+						<div class="d-flex flex-column flex-grow-1 gap-sm">
+							<form method="POST" action="?/uploadLogo" enctype="multipart/form-data" class="m-0"
+								use:enhance={() => {
+									uploadingLogo = true;
+									return async ({ result, update }) => {
+										uploadingLogo = false;
+										if (result.type === 'success') {
+											currentLogoUrl = (result.data?.logoUrl as string | null) ?? currentLogoUrl;
+											if (logoObjectUrl) { URL.revokeObjectURL(logoObjectUrl); logoObjectUrl = null; }
+											logoFile = null;
+											toast.success('Logo updated.');
+										}
+										await update({ reset: false });
+									};
+								}}
+							>
+								<div class="input-group input-md">
+									<input type="file" name="file" class="form-control"
+										accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
+										onchange={onLogoChange} />
+									<button type="submit" class="btn btn-outline-primary" disabled={uploadingLogo || !logoFile}>
+										{#if uploadingLogo}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
+										Upload
+									</button>
+								</div>
+								<div class="form-text m-0">Accepted: JPEG, PNG, WebP, GIF · Max 2 MB</div>
+							</form>
+							{#if currentLogoUrl}
+								<form method="POST" action="?/removeLogo" class="m-0"
+									use:enhance={() => {
+										removingLogo = true;
+										return async ({ result, update }) => {
+											removingLogo = false;
+											if (result.type === 'success') { currentLogoUrl = null; toast.success('Logo removed.'); }
+											await update({ reset: false });
+										};
+									}}
+								>
+									<button type="submit" class="btn btn-sm btn-outline-danger" disabled={removingLogo}
+										onclick={(e) => { if (!confirm('Remove the logo?')) e.preventDefault(); }}>
+										{#if removingLogo}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
+										<i class="fa-solid fa-trash fa-sm me-1"></i>Remove logo
+									</button>
+								</form>
+							{/if}
+						</div>
+					</div>
+					<!-- Logo URL — lives here so it's clearly tied to the logo upload above -->
+					<div class="mt-3">
+						<label class="form-label small text-muted mb-1" for="logo_url">Logo URL</label>
+						<input type="text" id="logo_url" name="logo_url" form="saveForm"
+							class="form-control form-control-sm font-monospace" maxlength="500"
+							bind:value={logoUrlInput}
+							oninput={() => (logoPreviewError = false)}
+							placeholder="https://example.com/logo.png or /files/…" />
+						<div class="form-text">Set automatically on upload, or enter an external URL.</div>
+						{#if logoUrlInput && logoPreviewError}
+							<div class="mt-1 small text-danger">
+								<i class="fa-solid fa-triangle-exclamation me-1"></i>Could not load image — check the URL.
+							</div>
 						{/if}
 					</div>
-					<span class="small text-muted">Current</span>
 				</div>
 
-				<!-- Upload + remove forms -->
-				<div class="d-flex flex-column flex-grow-1 gap-sm">
-					<form
-						method="POST"
-						action="?/uploadLogo"
-						enctype="multipart/form-data"
-						class="m-0"
-						use:enhance={() => {
-							uploadingLogo = true;
-							return async ({ result, update }) => {
-								uploadingLogo = false;
-								if (result.type === 'success') {
-									currentLogoUrl = (result.data?.logoUrl as string | null) ?? currentLogoUrl;
-									if (logoObjectUrl) { URL.revokeObjectURL(logoObjectUrl); logoObjectUrl = null; }
-									logoFile = null;
-									toast.success('Logo updated.');
-								}
-								await update({ reset: false });
-							};
-						}}
-					>
-						<div class="input-group input-md">
-							<input
-								type="file"
-								name="file"
-								class="form-control"
-								accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
-								onchange={onLogoChange}
-							/>
-							<button
-								type="submit"
-								class="btn btn-outline-primary"
-								disabled={uploadingLogo || !logoFile}
-							>
-								{#if uploadingLogo}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
-								Upload
-							</button>
+				<!-- Favicon upload -->
+				<div class="col-md-6">
+					<p class="form-label fw-medium mb-2">Favicon</p>
+					<div class="d-flex align-items-start gap-3 flex-wrap">
+						<div class="d-flex flex-column align-items-center gap-1">
+							<div class="border rounded p-2 d-flex align-items-center justify-content-center favicon-preview">
+								{#if faviconObjectUrl || currentFaviconUrl}
+									<img src={faviconObjectUrl || currentFaviconUrl} alt="Current favicon" class="favicon-img" />
+								{:else}
+									<i class="fa-solid fa-image fa-lg text-muted"></i>
+								{/if}
+							</div>
+							<span class="small text-muted">Current</span>
 						</div>
-					</form>
-
-					<div class="form-text mb-0">Accepted: JPEG, PNG, WebP, GIF · Max 2 MB</div>
-
-					{#if currentLogoUrl}
-						<form
-							method="POST"
-							action="?/removeLogo"
-							class="m-0"
-							use:enhance={() => {
-								removingLogo = true;
-								return async ({ result, update }) => {
-									removingLogo = false;
-									if (result.type === 'success') {
-										currentLogoUrl = null;
-										toast.success('Logo removed.');
-									}
-									await update({ reset: false });
-								};
-							}}
-						>
-							<button
-								type="submit"
-								class="btn btn-sm btn-outline-danger"
-								disabled={removingLogo}
-								onclick={(e) => { if (!confirm('Remove the logo?')) e.preventDefault(); }}
+						<div class="d-flex flex-column flex-grow-1 gap-sm">
+							<form method="POST" action="?/uploadFavicon" enctype="multipart/form-data" class="m-0"
+								use:enhance={() => {
+									uploadingFavicon = true;
+									return async ({ result, update }) => {
+										uploadingFavicon = false;
+										if (result.type === 'success') {
+											currentFaviconUrl = (result.data?.faviconUrl as string | null) ?? currentFaviconUrl;
+											if (faviconObjectUrl) { URL.revokeObjectURL(faviconObjectUrl); faviconObjectUrl = null; }
+											faviconFile = null;
+											toast.success('Favicon updated.');
+											await invalidate('app:config');
+										}
+										await update({ reset: false });
+									};
+								}}
 							>
-								{#if removingLogo}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
-								<i class="fa-solid fa-trash fa-sm me-1"></i>Remove logo
-							</button>
-						</form>
-					{/if}
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<!-- Favicon — standalone card at the top; separate form to avoid nesting inside save form -->
-	<div class="card mb-3">
-		<div class="card-header fw-semibold">Favicon</div>
-		<div class="card-body">
-			<div class="d-flex align-items-start gap-3 flex-wrap">
-				<!-- Preview box -->
-				<div class="d-flex flex-column align-items-center gap-1">
-					<div
-						class="border rounded p-2 d-flex align-items-center justify-content-center"
-						class="favicon-preview"
-					>
-						{#if faviconObjectUrl || currentFaviconUrl}
-							<img
-								src={faviconObjectUrl || currentFaviconUrl}
-								alt="Current favicon"
-								class="favicon-img"
-							/>
-						{:else}
-							<i class="fa-solid fa-image fa-lg text-muted"></i>
-						{/if}
+								<div class="input-group input-md">
+									<input type="file" name="file" class="form-control"
+										accept=".ico,.svg,.png,.gif,.jpg,.jpeg,image/x-icon,image/svg+xml,image/png,image/gif,image/jpeg"
+										onchange={onFaviconChange} />
+									<button type="submit" class="btn btn-outline-primary" disabled={uploadingFavicon || !faviconFile}>
+										{#if uploadingFavicon}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
+										Upload
+									</button>
+								</div>
+								<div class="form-text m-0">Accepted: ICO, SVG, PNG, GIF, JPEG · Max 512 KB</div>
+							</form>
+							{#if currentFaviconUrl}
+								<form method="POST" action="?/removeFavicon" class="m-0"
+									use:enhance={() => {
+										removingFavicon = true;
+										return async ({ result, update }) => {
+											removingFavicon = false;
+											if (result.type === 'success') {
+												currentFaviconUrl = null;
+												toast.success('Favicon removed.');
+												await invalidate('app:config');
+											}
+											await update({ reset: false });
+										};
+									}}
+								>
+									<button type="submit" class="btn btn-sm btn-outline-danger" disabled={removingFavicon}
+										onclick={(e) => { if (!confirm('Remove the custom favicon?')) e.preventDefault(); }}>
+										{#if removingFavicon}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
+										<i class="fa-solid fa-trash fa-sm me-1"></i>Remove favicon
+									</button>
+								</form>
+							{/if}
+						</div>
 					</div>
-					<span class="small text-muted">Current</span>
 				</div>
 
-				<!-- Upload + remove forms -->
-				<div class="d-flex flex-column flex-grow-1 gap-sm">
-					<form
-						method="POST"
-						action="?/uploadFavicon"
-						enctype="multipart/form-data"
-						class="m-0"
-						use:enhance={() => {
-							uploadingFavicon = true;
-							return async ({ result, update }) => {
-								uploadingFavicon = false;
-								if (result.type === 'success') {
-									currentFaviconUrl = (result.data?.faviconUrl as string | null) ?? currentFaviconUrl;
-									if (faviconObjectUrl) { URL.revokeObjectURL(faviconObjectUrl); faviconObjectUrl = null; }
-									faviconFile = null;
-									toast.success('Favicon updated.');
-									await invalidate('app:favicon');
-								}
-								await update({ reset: false });
-							};
-						}}
-					>
-						<div class="input-group input-md">
-							<input
-								type="file"
-								name="file"
-								class="form-control"
-								accept=".ico,.svg,.png,.gif,.jpg,.jpeg,image/x-icon,image/svg+xml,image/png,image/gif,image/jpeg"
-								onchange={onFaviconChange}
-							/>
-							<button
-								type="submit"
-								class="btn btn-outline-primary"
-								disabled={uploadingFavicon || !faviconFile}
-							>
-								{#if uploadingFavicon}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
-								Upload
+				<div class="col-12"><hr class="my-0" /></div>
+
+				<!-- Site Name + Slogan (save form) -->
+				<div class="col-md-6">
+					<label class="form-label" for="site_name">Site Name</label>
+					<input type="text" id="site_name" name="site_name" form="saveForm"
+						class="form-control" maxlength="100"
+						value={cfg.site_name ?? ''} placeholder="Ferum Board" />
+				</div>
+				<div class="col-md-6">
+					<label class="form-label" for="site_slogan">Slogan</label>
+					<input type="text" id="site_slogan" name="site_slogan" form="saveForm"
+						class="form-control" maxlength="80"
+						value={cfg.site_slogan ?? ''} placeholder="Your space, your rules" />
+					<div class="form-text">Short text shown beside the logo in the header.</div>
+				</div>
+				<div class="col-md-6">
+					<label class="form-label" for="site_tagline">Tagline</label>
+					<input type="text" id="site_tagline" name="site_tagline" form="saveForm"
+						class="form-control" maxlength="200"
+						value={cfg.site_tagline ?? ''} placeholder="A place for discussion" />
+					<div class="form-text">Shown in page meta descriptions (SEO).</div>
+				</div>
+
+				<!-- Primary Color -->
+				<div class="col-md-6">
+					<label class="form-label" for="primary_color">Primary Color</label>
+					<div class="d-flex align-items-center gap-3">
+						<input type="color" id="primary_color" name="primary_color" form="saveForm"
+							class="form-control form-control-color color-picker"
+							bind:value={colorInput} />
+						<div class="d-flex align-items-center gap-2">
+							<button type="button" class="btn btn-sm px-3"
+								style="background:{colorInput}; border-color:{colorInput}; color:#fff; min-height:36px;">
+								Sample button
 							</button>
+							<code class="small text-muted">{colorInput}</code>
 						</div>
-					</form>
-
-					<div class="form-text mb-0">Accepted: ICO, SVG, PNG, GIF, JPEG · Max 512 KB</div>
-
-					{#if currentFaviconUrl}
-						<form
-							method="POST"
-							action="?/removeFavicon"
-							class="m-0"
-							use:enhance={() => {
-								removingFavicon = true;
-								return async ({ result, update }) => {
-									removingFavicon = false;
-									if (result.type === 'success') {
-										currentFaviconUrl = null;
-										toast.success('Favicon removed.');
-										await invalidate('app:favicon');
-									}
-									await update({ reset: false });
-								};
-							}}
-						>
-							<button
-								type="submit"
-								class="btn btn-sm btn-outline-danger"
-								disabled={removingFavicon}
-								onclick={(e) => { if (!confirm('Remove the custom favicon?')) e.preventDefault(); }}
-							>
-								{#if removingFavicon}<span class="spinner-border spinner-border-sm me-1"></span>{/if}
-								<i class="fa-solid fa-trash fa-sm me-1"></i>Remove favicon
-							</button>
-						</form>
-					{/if}
+					</div>
+					<div class="form-text">Applied as the primary accent color across the entire site.</div>
 				</div>
+
 			</div>
 		</div>
 	</div>
 
 	<form
+		id="saveForm"
 		method="POST"
 		action="?/save"
 		use:enhance={() => {
@@ -329,100 +330,6 @@
 			};
 		}}
 	>
-		<!-- Branding -->
-		<div class="card mb-3">
-			<div class="card-header fw-semibold">Branding</div>
-			<div class="card-body">
-				<div class="row g-3">
-					<div class="col-md-6">
-						<label class="form-label" for="site_name">Site Name</label>
-						<input
-							type="text"
-							id="site_name"
-							name="site_name"
-							class="form-control"
-							maxlength="100"
-							value={cfg.site_name ?? ''}
-							placeholder="Ferum Board"
-						/>
-					</div>
-					<div class="col-md-6">
-						<label class="form-label" for="site_tagline">Tagline</label>
-						<input
-							type="text"
-							id="site_tagline"
-							name="site_tagline"
-							class="form-control"
-							maxlength="200"
-							value={cfg.site_tagline ?? ''}
-							placeholder="A place for discussion"
-						/>
-						<div class="form-text">Shown in page meta descriptions.</div>
-					</div>
-
-					<!-- Logo URL — reflects the uploaded logo or accepts an external URL -->
-					<div class="col-12">
-						<label class="form-label" for="logo_url">Logo URL</label>
-						<div class="input-group">
-							<span class="input-group-text"><i class="fa-solid fa-image fa-sm"></i></span>
-							<input
-								type="url"
-								id="logo_url"
-								name="logo_url"
-								class="form-control"
-								maxlength="500"
-								bind:value={logoUrlInput}
-								oninput={() => (logoPreviewError = false)}
-								placeholder="https://example.com/logo.png"
-							/>
-						</div>
-						<div class="form-text">Set automatically when you upload a logo above, or enter an external URL here.</div>
-						{#if logoUrlInput && !logoPreviewError}
-							<div class="mt-2 d-flex align-items-center gap-3 p-2 rounded logo-url-preview">
-								<img
-									src={logoUrlInput}
-									alt="Logo preview"
-									class="logo-url-img"
-									onerror={() => (logoPreviewError = true)}
-									onload={() => (logoPreviewError = false)}
-								/>
-								<span class="small text-muted">Preview</span>
-							</div>
-						{:else if logoUrlInput && logoPreviewError}
-							<div class="mt-1 small text-danger">
-								<i class="fa-solid fa-triangle-exclamation me-1"></i>Could not load image — check the URL.
-							</div>
-						{/if}
-					</div>
-
-					<!-- Primary color with live preview -->
-					<div class="col-md-6">
-						<label class="form-label" for="primary_color">Primary Color</label>
-						<div class="d-flex align-items-center gap-3">
-							<input
-								type="color"
-								id="primary_color"
-								name="primary_color"
-								class="form-control form-control-color color-picker"
-								bind:value={colorInput}
-							/>
-							<div class="d-flex align-items-center gap-2">
-								<button
-									type="button"
-									class="btn btn-sm px-3"
-									style="background:{colorInput}; border-color:{colorInput}; color:#fff; min-height:36px;"
-								>
-									Sample button
-								</button>
-								<code class="small text-muted">{colorInput}</code>
-							</div>
-						</div>
-						<div class="form-text">Applied as the primary accent color across the entire site.</div>
-					</div>
-				</div>
-			</div>
-		</div>
-
 		<!-- Registration -->
 		<div class="card mb-3">
 			<div class="card-header fw-semibold">Registration</div>
@@ -685,4 +592,8 @@
 	.color-picker { width: 60px; height: 44px; }
 	.webhook-btn { min-height: var(--fr-tap-target); }
 	.border-dashed { border-style: dashed !important; }
+
+	/* min-height from the tap-target rule stretches file inputs beyond their
+	   natural height, leaving dead space below the native button. */
+	input[type="file"].form-control { min-height: unset !important; }
 </style>

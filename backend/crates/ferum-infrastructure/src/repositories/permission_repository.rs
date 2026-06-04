@@ -4,10 +4,10 @@ use uuid::Uuid;
 
 use ferum_application::shared::AppError;
 use ferum_domain::models::role::Permission;
-use ferum_domain::models::user::TrustLevel;
+use ferum_domain::models::user::TrustLevel as DomainTrustLevel;
 use ferum_domain::repositories::permission_repository::PermissionRepository;
 
-use crate::entities::{permissions, role_permissions};
+use crate::entities::{permissions, role_permissions, users::TrustLevel as EntityTrustLevel};
 
 pub struct PgPermissionRepository {
     db: DatabaseConnection,
@@ -19,13 +19,13 @@ impl PgPermissionRepository {
     }
 }
 
-fn trust_from_str(s: &str) -> TrustLevel {
-    match s {
-        "basic" => TrustLevel::Basic,
-        "member" => TrustLevel::Member,
-        "regular" => TrustLevel::Regular,
-        "leader" => TrustLevel::Leader,
-        _ => TrustLevel::New,
+fn entity_trust_to_domain(t: EntityTrustLevel) -> DomainTrustLevel {
+    match t {
+        EntityTrustLevel::New => DomainTrustLevel::New,
+        EntityTrustLevel::Basic => DomainTrustLevel::Basic,
+        EntityTrustLevel::Member => DomainTrustLevel::Member,
+        EntityTrustLevel::Regular => DomainTrustLevel::Regular,
+        EntityTrustLevel::Leader => DomainTrustLevel::Leader,
     }
 }
 
@@ -35,7 +35,7 @@ fn to_domain(m: permissions::Model) -> Permission {
         key: m.key,
         description: m.description,
         group_name: m.group_name,
-        min_trust: trust_from_str(&m.min_trust),
+        min_trust: entity_trust_to_domain(m.min_trust),
     }
 }
 
@@ -67,7 +67,6 @@ impl PermissionRepository for PgPermissionRepository {
         role_id: Uuid,
         permission_keys: &[String],
     ) -> Result<(), AppError> {
-        // Resolve key → id
         let perms = permissions::Entity::find()
             .filter(permissions::Column::Key.is_in(permission_keys.to_vec()))
             .all(&self.db)
@@ -76,7 +75,6 @@ impl PermissionRepository for PgPermissionRepository {
 
         let perm_ids: Vec<Uuid> = perms.iter().map(|p| p.id).collect();
 
-        // Delete all existing for this role, then re-insert
         role_permissions::Entity::delete_many()
             .filter(role_permissions::Column::RoleId.eq(role_id))
             .exec(&self.db)

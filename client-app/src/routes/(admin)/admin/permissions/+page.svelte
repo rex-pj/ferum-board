@@ -23,7 +23,7 @@
 		},
 		admin: {
 			icon: 'fa-screwdriver-wrench',
-			description: 'Site-wide administrative capabilities — user management, config, and more.',
+			description: 'Site-wide administrative capabilities: user management, config, and more.',
 			color: '#dc3545'
 		}
 	};
@@ -185,7 +185,7 @@
 											{perm.min_trust}
 										</span>
 									{:else}
-										<span class="text-muted">—</span>
+										<span class="text-muted small fst-italic">Any</span>
 									{/if}
 								</td>
 								<td>

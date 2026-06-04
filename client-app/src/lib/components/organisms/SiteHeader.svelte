@@ -14,11 +14,12 @@
 			avatar_url?: string | null;
 		} | null;
 		siteName?: string;
+		siteSlogan?: string | null;
 		logoUrl?: string | null;
 		categories?: unknown[];
 	}
 
-	let { user = null, siteName = 'Ferum Board', logoUrl = null }: Props = $props();
+	let { user = null, siteName = 'Ferum Board', siteSlogan = null, logoUrl = null }: Props = $props();
 
 	let systemDark = $state(false);
 
@@ -63,13 +64,31 @@
 	</button>
 
 	<!-- Brand -->
-	<a href={ROUTES.HOME} class="fr-topbar-brand">
-		{#if logoUrl}
-			<img src={logoUrl} alt={siteName} class="brand-logo" />
-		{:else}
-			<i class="fa-solid fa-feather-pointed text-primary"></i>
-		{/if}
-		{siteName}
+	<a href={ROUTES.HOME} class="fr-topbar-brand" aria-label={siteName}>
+		<div class="brand-wrap">
+			{#if logoUrl}
+				<img src={logoUrl} alt={siteName} class="brand-logo" />
+			{:else}
+				<!-- Inline SVG so CSS variables (--bs-link-color, currentColor) resolve correctly in both themes -->
+				<svg viewBox="0 0 160 36" height="30" class="brand-logo" aria-hidden="true" focusable="false" overflow="visible">
+					<text x="0" y="28"
+						font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+						font-size="30" font-weight="800" letter-spacing="-1"
+						fill="var(--bs-link-color)">Fe</text>
+					<text x="36" y="28"
+						font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+						font-size="30" font-weight="800" letter-spacing="-1"
+						fill="currentColor">rum</text>
+					<text x="102" y="28"
+						font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+						font-size="20" font-weight="400"
+						fill="var(--bs-link-color)">board</text>
+				</svg>
+			{/if}
+			{#if siteSlogan}
+				<span class="brand-slogan d-none d-lg-block">{siteSlogan}</span>
+			{/if}
+		</div>
 	</a>
 
 	<!-- Search bar: desktop -->
@@ -115,8 +134,8 @@
 				{/if}
 			</a>
 
-			<!-- New Thread: desktop -->
-			<a href="/new-thread" class="btn btn-primary btn-sm gap-1 d-none d-sm-inline-flex">
+			<!-- New Thread: desktop only (bottom nav handles mobile) -->
+			<a href="/new-thread" class="btn btn-primary btn-sm gap-1 d-none d-lg-inline-flex">
 				<i class="fa-solid fa-plus"></i>
 				New Thread
 			</a>
@@ -184,10 +203,30 @@
 
 <style>
 	.brand-logo {
-		height: 24px;
+		height: 30px;
 		width: auto;
-		object-fit: contain;
 		flex-shrink: 0;
+		display: block;
+	}
+
+	.brand-wrap {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.brand-slogan {
+		font-size: 0.6875rem;
+		font-weight: 400;
+		color: var(--bs-secondary-color);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 180px;
+		line-height: 1.3;
+		border-left: 1px solid var(--bs-border-color);
+		padding-left: 0.5rem;
 	}
 
 	.notif-badge {

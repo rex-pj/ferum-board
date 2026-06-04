@@ -90,12 +90,25 @@ impl RolePermissionCache {
         result
     }
 
+    /// Return the permission keys assigned to a single role.
+    pub async fn permissions_for_role(&self, role_id: Uuid) -> Vec<String> {
+        self.inner
+            .read()
+            .await
+            .get(&role_id)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
     /// Resolve min_trust requirements for all permissions (key → min_trust string).
     pub async fn resolve_min_trust(&self) -> Result<HashMap<String, String>, AppError> {
         let rows = permissions::Entity::find()
             .all(&self.db)
             .await
             .map_err(|e| AppError::internal(e.to_string()))?;
-        Ok(rows.into_iter().map(|p| (p.key, p.min_trust)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|p| (p.key, p.min_trust.to_value()))
+            .collect())
     }
 }

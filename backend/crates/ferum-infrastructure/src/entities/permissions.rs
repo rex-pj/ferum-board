@@ -1,5 +1,7 @@
 use sea_orm::entity::prelude::*;
 
+pub use super::users::TrustLevel;
+
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "permissions")]
 pub struct Model {
@@ -8,7 +10,7 @@ pub struct Model {
     pub key: String,
     pub description: String,
     pub group_name: String,
-    pub min_trust: String,
+    pub min_trust: TrustLevel,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

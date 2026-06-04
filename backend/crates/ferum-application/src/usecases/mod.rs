@@ -10,6 +10,7 @@ pub mod reaction_usecase;
 pub mod role_usecase;
 pub mod search_usecase;
 pub mod setup_usecase;
+pub mod tag_usecase;
 pub mod thread_usecase;
 pub mod user_usecase;
 pub mod webhook_usecase;

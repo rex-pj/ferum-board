@@ -200,3 +200,76 @@ pub async fn delete_avatar_handler(
     state.user.remove_avatar(actor).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// POST /api/users/me/cover — upload a new cover image.
+pub async fn upload_cover_handler(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    mut multipart: Multipart,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
+
+    let mut file_bytes: Option<bytes::Bytes> = None;
+    let mut content_type = "application/octet-stream".to_string();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
+    {
+        if field.name() == Some("file") {
+            let ct = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+
+            if !matches!(
+                ct.as_str(),
+                "image/jpeg" | "image/png" | "image/webp" | "image/gif"
+            ) {
+                return Err(AppError::UnprocessableEntity(
+                    "Unsupported image type. Allowed: JPEG, PNG, WebP, GIF".to_string(),
+                )
+                .into());
+            }
+
+            let data = field
+                .bytes()
+                .await
+                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+
+            const MAX_SIZE: usize = 8 * 1024 * 1024;
+            if data.len() > MAX_SIZE {
+                return Err(
+                    AppError::UnprocessableEntity("File exceeds 8 MB limit".to_string()).into(),
+                );
+            }
+            if !ferum_application::validators::validate_image_magic(&data) {
+                return Err(AppError::UnprocessableEntity(
+                    "File content does not match a supported image format (JPEG, PNG, WebP, GIF)"
+                        .to_string(),
+                )
+                .into());
+            }
+
+            content_type = ct;
+            file_bytes = Some(data);
+            break;
+        }
+    }
+
+    let data = file_bytes
+        .ok_or_else(|| AppError::UnprocessableEntity("Missing file field".to_string()))?;
+    let url = state.user.set_cover(actor, data, content_type).await?;
+    Ok(Json(serde_json::json!({ "data": { "cover_url": url } })))
+}
+
+/// DELETE /api/users/me/cover — remove the current cover image.
+pub async fn delete_cover_handler(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
+    state.user.remove_cover(actor).await?;
+    Ok(StatusCode::NO_CONTENT)
+}

@@ -47,6 +47,8 @@ pub enum Relation {
     UserRoles,
     #[sea_orm(has_one = "super::user_avatars::Entity")]
     UserAvatar,
+    #[sea_orm(has_one = "super::user_covers::Entity")]
+    UserCover,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

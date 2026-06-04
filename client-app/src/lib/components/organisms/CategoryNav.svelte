@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { ROUTES } from '$lib/routes';
+	import { isAdmin, type UserWithRoles } from '$lib/utils/permissions';
 
 	interface Category {
 		id: string;
@@ -12,7 +13,7 @@
 
 	interface Props {
 		categories?: Category[];
-		user?: { username: string; role: string } | null;
+		user?: UserWithRoles | null;
 	}
 
 	let { categories = [], user = null }: Props = $props();
@@ -33,13 +34,6 @@
 		Home
 	</a>
 
-	<!-- New Thread: visible in mobile rail only (hidden on desktop — it's in the top bar) -->
-	{#if user}
-		<a href="/new-thread" class="btn btn-primary btn-sm w-100 justify-content-center mt-1 mb-1 d-lg-none">
-			<i class="fa-solid fa-plus me-1"></i>New Thread
-		</a>
-	{/if}
-
 	<!-- Forum index -->
 	<a href={ROUTES.FORUM_INDEX} class="fr-nav-link {isActive(ROUTES.FORUM_INDEX, true) ? 'active' : ''}">
 		<i class="fa-solid fa-layer-group fr-nav-icon"></i>
@@ -49,9 +43,9 @@
 	<div class="fr-nav-divider"></div>
 
 	<!-- Categories -->
-	{#if topLevel.length > 0}
-		<div class="fr-nav-section">Categories</div>
+	<div class="fr-nav-section">Categories</div>
 
+	{#if topLevel.length > 0}
 		{#each topLevel as cat}
 			<a
 				href={ROUTES.CATEGORY(cat.slug)}
@@ -78,13 +72,71 @@
 				</a>
 			{/each}
 		{/each}
+	{:else}
+		<div class="fr-nav-empty">
+			<div class="fr-nav-empty-icon-wrap">
+				<i class="fa-solid fa-folder-open"></i>
+			</div>
+			<p class="fr-nav-empty-text">No categories yet</p>
+			{#if isAdmin(user)}
+				<a href={ROUTES.ADMIN.CATEGORIES} class="fr-nav-empty-action">
+					Set up categories
+					<i class="fa-solid fa-arrow-right"></i>
+				</a>
+			{/if}
+		</div>
 	{/if}
-
-	<div class="fr-nav-divider"></div>
-
-	<!-- Search -->
-	<a href={ROUTES.SEARCH} class="fr-nav-link {isActive(ROUTES.SEARCH) ? 'active' : ''}">
-		<i class="fa-solid fa-magnifying-glass fr-nav-icon"></i>
-		Search
-	</a>
 </nav>
+
+<style>
+	.fr-nav-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: 1rem 0.75rem 0.875rem;
+		gap: 0.3125rem;
+	}
+
+	.fr-nav-empty-icon-wrap {
+		width: 2rem;
+		height: 2rem;
+		border-radius: 50%;
+		background: var(--bs-tertiary-bg);
+		border: 1px solid var(--bs-border-color);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.75rem;
+		color: var(--bs-tertiary-color);
+		margin-bottom: 0.125rem;
+	}
+
+	.fr-nav-empty-text {
+		font-size: 0.75rem;
+		color: var(--bs-tertiary-color);
+		line-height: 1.4;
+		margin: 0;
+	}
+
+	.fr-nav-empty-action {
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--bs-primary);
+		text-decoration: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3125rem;
+		margin-top: 0.125rem;
+		transition: opacity 0.1s;
+	}
+
+	.fr-nav-empty-action:hover {
+		opacity: 0.75;
+		text-decoration: underline;
+	}
+
+	.fr-nav-empty-action i {
+		font-size: 0.625rem;
+	}
+</style>

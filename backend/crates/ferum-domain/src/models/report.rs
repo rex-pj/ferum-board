@@ -13,6 +13,8 @@ pub struct Report {
     pub moderator_notes: Option<String>,
     pub resolved_by_id: Option<Uuid>,
     pub resolved_at: Option<DateTime<Utc>>,
+    /// Set when the reported content was hard-deleted; both post_id and thread_id will be None.
+    pub target_deleted_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
 

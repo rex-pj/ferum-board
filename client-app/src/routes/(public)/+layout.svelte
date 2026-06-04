@@ -4,6 +4,7 @@
 	import SiteHeader from '$lib/components/organisms/SiteHeader.svelte';
 	import CategoryNav from '$lib/components/organisms/CategoryNav.svelte';
 	import SiteFooter from '$lib/components/organisms/SiteFooter.svelte';
+	import BottomNav from '$lib/components/organisms/BottomNav.svelte';
 	import { theme } from '$lib/stores/theme';
 
 	let { data, children }: { data: any; children: any } = $props();
@@ -15,18 +16,10 @@
 		}
 	});
 
-	$effect(() => {
-		const color = data?.primaryColor;
-		if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
-			document.documentElement.style.setProperty('--bs-primary', color);
-		} else {
-			document.documentElement.style.removeProperty('--bs-primary');
-		}
-	});
 </script>
 
-<div class="fr-app">
-	<SiteHeader user={data?.user} siteName={data?.siteName} logoUrl={data?.logoUrl} categories={data?.categories} />
+<div class="fr-app fr-has-bottom-nav">
+	<SiteHeader user={data?.user} siteName={data?.siteName} siteSlogan={data?.siteSlogan} logoUrl={data?.logoUrl} categories={data?.categories} />
 
 	<div class="fr-body">
 		<!-- Desktop left rail -->
@@ -55,7 +48,8 @@
 		</main>
 	</div>
 
-	<SiteFooter siteName={data?.siteName} logoUrl={data?.logoUrl} />
+	<SiteFooter siteName={data?.siteName} siteSlogan={data?.siteSlogan} logoUrl={data?.logoUrl} />
+	<BottomNav user={data?.user} />
 </div>
 
 <style>

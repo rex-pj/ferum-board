@@ -66,4 +66,11 @@ pub enum ForumEvent {
         post_author_id: Uuid,
         by_user_id: Uuid,
     },
+    MentionAdded {
+        post_id: Uuid,
+        thread_id: Uuid,
+        thread_slug: String,
+        mentioned_user_id: Uuid,
+        author_id: Uuid,
+    },
 }

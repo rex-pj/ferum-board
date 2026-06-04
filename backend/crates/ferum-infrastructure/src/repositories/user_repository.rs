@@ -5,7 +5,7 @@ use sea_orm::sea_query::OnConflict;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{user_avatars, user_preferences, users};
+use crate::entities::{user_avatars, user_covers, user_muted_categories, user_preferences, user_watched_categories, users};
 use ferum_application::shared::AppError;
 use ferum_domain::models::user::{TrustLevel, User, UserPreferences};
 use ferum_domain::repositories::user_repository::{NewUser, UpdateUser, UserRepository};
@@ -32,12 +32,14 @@ const USER_SELECT: &str = r#"
         u.warn_count, u.failed_login_count, u.locked_until,
         u.created_at, u.updated_at, u.deleted_at, u.last_seen_at,
         ua.file_key AS avatar_key,
+        uc.file_key AS cover_key,
         (SELECT r.slug FROM user_roles ur
              JOIN roles r ON r.id = ur.role_id
              WHERE ur.user_id = u.id AND ur.category_id IS NULL
              ORDER BY r.position ASC LIMIT 1) AS primary_role_slug
     FROM users u
     LEFT JOIN user_avatars ua ON ua.user_id = u.id
+    LEFT JOIN user_covers uc ON uc.user_id = u.id
 "#;
 
 #[derive(Debug, FromQueryResult)]
@@ -65,6 +67,7 @@ struct UserRow {
     deleted_at: Option<DateTime<FixedOffset>>,
     last_seen_at: Option<DateTime<FixedOffset>>,
     avatar_key: Option<String>,
+    cover_key: Option<String>,
     primary_role_slug: Option<String>,
 }
 
@@ -88,6 +91,7 @@ fn row_to_domain(row: UserRow) -> User {
         post_count: row.post_count,
         days_visited: row.days_visited,
         avatar_url: row.avatar_key.map(|k| format!("/files/{k}")),
+        cover_url: row.cover_key.map(|k| format!("/files/{k}")),
         bio: row.bio,
         website: row.website,
         is_banned: row.is_banned,
@@ -361,51 +365,115 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn get_preferences(&self, user_id: Uuid) -> Result<UserPreferences, AppError> {
-        match user_preferences::Entity::find_by_id(user_id)
-            .one(&self.db)
+        let (theme, font_size, layout, email_notifications) =
+            match user_preferences::Entity::find_by_id(user_id)
+                .one(&self.db)
+                .await?
+            {
+                Some(m) => (m.theme, m.font_size, m.layout, m.email_notifications),
+                None => {
+                    let d = UserPreferences::default();
+                    (d.theme, d.font_size, d.layout, d.email_notifications)
+                }
+            };
+
+        let muted_categories = user_muted_categories::Entity::find()
+            .filter(user_muted_categories::Column::UserId.eq(user_id))
+            .all(&self.db)
             .await?
-        {
-            Some(m) => Ok(UserPreferences {
-                user_id: m.user_id,
-                theme: m.theme,
-                font_size: m.font_size,
-                layout: m.layout,
-                email_notifications: m.email_notifications,
-                muted_categories: m.muted_categories,
-                watched_categories: m.watched_categories,
-            }),
-            None => Ok(UserPreferences {
-                user_id,
-                ..Default::default()
-            }),
-        }
+            .into_iter()
+            .map(|m| m.category_id)
+            .collect();
+
+        let watched_categories = user_watched_categories::Entity::find()
+            .filter(user_watched_categories::Column::UserId.eq(user_id))
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|m| m.category_id)
+            .collect();
+
+        Ok(UserPreferences {
+            user_id,
+            theme,
+            font_size,
+            layout,
+            email_notifications,
+            muted_categories,
+            watched_categories,
+        })
     }
 
     async fn upsert_preferences(&self, prefs: UserPreferences) -> Result<(), AppError> {
-        let model = user_preferences::ActiveModel {
-            user_id: Set(prefs.user_id),
-            theme: Set(prefs.theme),
-            font_size: Set(prefs.font_size),
-            layout: Set(prefs.layout),
-            email_notifications: Set(prefs.email_notifications),
-            muted_categories: Set(prefs.muted_categories),
-            watched_categories: Set(prefs.watched_categories),
-        };
-        user_preferences::Entity::insert(model)
-            .on_conflict(
-                OnConflict::column(user_preferences::Column::UserId)
-                    .update_columns([
-                        user_preferences::Column::Theme,
-                        user_preferences::Column::FontSize,
-                        user_preferences::Column::Layout,
-                        user_preferences::Column::EmailNotifications,
-                        user_preferences::Column::MutedCategories,
-                        user_preferences::Column::WatchedCategories,
-                    ])
-                    .to_owned(),
-            )
-            .exec(&self.db)
+        let UserPreferences {
+            user_id,
+            theme,
+            font_size,
+            layout,
+            email_notifications,
+            muted_categories,
+            watched_categories,
+        } = prefs;
+
+        let txn = self.db.begin().await?;
+
+        user_preferences::Entity::insert(user_preferences::ActiveModel {
+            user_id: Set(user_id),
+            theme: Set(theme),
+            font_size: Set(font_size),
+            layout: Set(layout),
+            email_notifications: Set(email_notifications),
+        })
+        .on_conflict(
+            OnConflict::column(user_preferences::Column::UserId)
+                .update_columns([
+                    user_preferences::Column::Theme,
+                    user_preferences::Column::FontSize,
+                    user_preferences::Column::Layout,
+                    user_preferences::Column::EmailNotifications,
+                ])
+                .to_owned(),
+        )
+        .exec(&txn)
+        .await?;
+
+        user_muted_categories::Entity::delete_many()
+            .filter(user_muted_categories::Column::UserId.eq(user_id))
+            .exec(&txn)
             .await?;
+
+        if !muted_categories.is_empty() {
+            let models: Vec<_> = muted_categories
+                .into_iter()
+                .map(|category_id| user_muted_categories::ActiveModel {
+                    user_id: Set(user_id),
+                    category_id: Set(category_id),
+                })
+                .collect();
+            user_muted_categories::Entity::insert_many(models)
+                .exec(&txn)
+                .await?;
+        }
+
+        user_watched_categories::Entity::delete_many()
+            .filter(user_watched_categories::Column::UserId.eq(user_id))
+            .exec(&txn)
+            .await?;
+
+        if !watched_categories.is_empty() {
+            let models: Vec<_> = watched_categories
+                .into_iter()
+                .map(|category_id| user_watched_categories::ActiveModel {
+                    user_id: Set(user_id),
+                    category_id: Set(category_id),
+                })
+                .collect();
+            user_watched_categories::Entity::insert_many(models)
+                .exec(&txn)
+                .await?;
+        }
+
+        txn.commit().await?;
         Ok(())
     }
 
@@ -431,6 +499,33 @@ impl UserRepository for PgUserRepository {
 
     async fn remove_avatar(&self, user_id: Uuid) -> Result<(), AppError> {
         user_avatars::Entity::delete_by_id(user_id)
+            .exec(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    async fn set_cover(&self, user_id: Uuid, file_key: String) -> Result<(), AppError> {
+        let model = user_covers::ActiveModel {
+            user_id: Set(user_id),
+            file_key: Set(file_key),
+            ..Default::default()
+        };
+        user_covers::Entity::insert(model)
+            .on_conflict(
+                OnConflict::column(user_covers::Column::UserId)
+                    .update_columns([
+                        user_covers::Column::FileKey,
+                        user_covers::Column::UpdatedAt,
+                    ])
+                    .to_owned(),
+            )
+            .exec(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    async fn remove_cover(&self, user_id: Uuid) -> Result<(), AppError> {
+        user_covers::Entity::delete_by_id(user_id)
             .exec(&self.db)
             .await?;
         Ok(())

@@ -19,6 +19,7 @@ pub struct User {
     pub post_count: i32,
     pub days_visited: i32,
     pub avatar_url: Option<String>,
+    pub cover_url: Option<String>,
     pub bio: Option<String>,
     pub website: Option<String>,
     pub is_banned: bool,

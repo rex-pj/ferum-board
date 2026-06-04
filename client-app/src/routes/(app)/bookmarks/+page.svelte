@@ -43,8 +43,8 @@
 								{item.thread.title}
 							</div>
 							<div class="d-flex align-items-center gap-3 mt-1 bm-meta">
-								<span><i class="fa-regular fa-comment me-1"></i>{item.thread.reply_count}</span>
-								<span><i class="fa-regular fa-eye me-1"></i>{item.thread.view_count}</span>
+								<span title="{item.thread.reply_count} {item.thread.reply_count === 1 ? 'reply' : 'replies'}"><i class="fa-regular fa-comment me-1"></i>{item.thread.reply_count}</span>
+								<span title="{item.thread.view_count.toLocaleString()} views"><i class="fa-regular fa-eye me-1"></i>{item.thread.view_count}</span>
 								<span>·</span>
 								<span>Saved <Timestamp date={item.bookmarked_at} /></span>
 							</div>

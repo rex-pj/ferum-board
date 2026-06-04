@@ -41,7 +41,7 @@ fn validate_image_field(content_type: &str, data: &bytes::Bytes) -> Result<(), A
 
 // ─── Thread list / get ─────────────────────────────────────────────────────────
 
-/// GET /api/threads — global feed across all visible categories
+/// GET /api/threads — global feed across all visible categories (optionally filtered by ?tag=slug)
 pub async fn list_threads_by_feed(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
@@ -50,10 +50,17 @@ pub async fn list_threads_by_feed(
     let page = q.page.unwrap_or(1).max(1);
     let per_page = q.per_page.unwrap_or(20);
 
-    let (threads, total) = state
-        .thread
-        .list_feed(auth_user.as_ref(), page, per_page)
-        .await?;
+    let (threads, total) = if let Some(tag_slug) = &q.tag {
+        state
+            .thread
+            .list_by_tag(auth_user.as_ref(), tag_slug, page, per_page)
+            .await?
+    } else {
+        state
+            .thread
+            .list_feed(auth_user.as_ref(), page, per_page)
+            .await?
+    };
 
     Ok(Json(PagedResponse::new(
         threads.into_iter().map(ThreadResponse::from).collect(),
@@ -109,6 +116,7 @@ pub async fn create_thread_handler(
     let mut title: Option<String> = None;
     let mut content_md: Option<String> = None;
     let mut thumbnail: Option<(bytes::Bytes, String)> = None;
+    let mut tag_names: Vec<String> = Vec::new();
 
     while let Some(field) = multipart
         .next_field()
@@ -140,6 +148,18 @@ pub async fn create_thread_handler(
                         .await
                         .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?,
                 );
+            }
+            Some("tags") => {
+                let raw = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+                // Accept either repeated fields or comma-separated values
+                for name in raw.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                    if tag_names.len() < 5 {
+                        tag_names.push(name.to_string());
+                    }
+                }
             }
             Some("thumbnail") => {
                 let ct = field
@@ -175,7 +195,7 @@ pub async fn create_thread_handler(
 
     let mut thread = state
         .thread
-        .create(actor, CreateThreadCmd { category_id, title })
+        .create(actor, CreateThreadCmd { category_id, title, tag_names })
         .await?;
 
     let post = state

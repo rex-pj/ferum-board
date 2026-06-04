@@ -74,6 +74,13 @@
 							{:else if report.thread_id}
 								<span class="badge bg-secondary">Thread</span>
 								<code class="ms-1">{report.thread_id.slice(0, 8)}…</code>
+							{:else}
+								<span class="badge bg-danger-subtle text-danger-emphasis">Deleted</span>
+								{#if report.target_deleted_at}
+									<span class="text-muted ms-1" title="Content was deleted">
+										<i class="fa-solid fa-trash-can fa-xs"></i>
+									</span>
+								{/if}
 							{/if}
 						</td>
 						<td class="small reason-col">

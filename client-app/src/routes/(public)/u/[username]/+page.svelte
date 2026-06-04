@@ -1,9 +1,14 @@
 <svelte:head>
 	<title>{data.profile?.display_name ?? data.profile?.username ?? 'User'} | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="description" content={data.profile?.bio ?? `${data.profile?.username}'s profile on Ferum Board`} />
+	<link rel="canonical" href={data.canonicalUrl} />
+	<meta property="og:type" content="profile" />
+	<meta property="og:url" content={data.canonicalUrl} />
 	<meta property="og:title" content="{data.profile?.display_name ?? data.profile?.username ?? 'User'} | {data.siteName ?? 'Ferum Board'}" />
 	<meta property="og:description" content={data.profile?.bio ?? `${data.profile?.username}'s profile on Ferum Board`} />
-	<meta property="og:type" content="profile" />
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="{data.profile?.display_name ?? data.profile?.username ?? 'User'} | {data.siteName ?? 'Ferum Board'}" />
+	<meta name="twitter:description" content={data.profile?.bio ?? `${data.profile?.username}'s profile on Ferum Board`} />
 </svelte:head>
 
 <script lang="ts">
@@ -26,8 +31,8 @@
 	};
 
 	const TRUST_DESCRIPTIONS: Record<string, string> = {
-		new:     'New member — getting started',
-		basic:   'Basic member — verified and active',
+		new:     'New member, just getting started',
+		basic:   'Basic member, verified and active',
 		member:  'Trusted member of the community',
 		regular: 'Regular contributor',
 		leader:  'Community leader with elevated trust',
@@ -41,24 +46,21 @@
 
 <div class="fr-content-layout">
 
-<!-- ── Main column ─────────────────────────────────────────── -->
 <div class="fr-feed-col">
 	{#if profile}
 
-		<!-- Profile hero card -->
 		<div class="card mb-4 fr-profile-card">
-			<!-- Gradient banner -->
+			{#if profile.cover_url}
+			<div class="fr-profile-banner fr-profile-banner--photo" style="background-image:url('{profile.cover_url}')"></div>
+		{:else}
 			<div class="fr-profile-banner" style="--profile-hue:{profileHue}"></div>
+		{/if}
 
-			<!-- Avatar: absolutely positioned so it is never in the card's flex flow
-			     and can never be clipped by sibling paint order -->
 			<div class="fr-profile-avatar-abs">
 				<Avatar src={profile.avatar_url} username={profile.username} size={80} />
 			</div>
 
-			<!-- Name, badges, bio, stats — padding-top clears the avatar overlap -->
 			<div class="px-3 px-sm-4 pb-3 pb-sm-4 fr-profile-body">
-				<!-- Name + Edit Profile in the same row -->
 				<div class="d-flex align-items-start justify-content-between gap-2 flex-wrap mb-1">
 					<h1 class="h4 fw-bold mb-0">{profile.display_name ?? profile.username}</h1>
 					{#if data.user?.username === profile.username}
@@ -85,7 +87,6 @@
 					</a>
 				{/if}
 
-				<!-- Stats strip -->
 				<div class="fr-profile-stats mt-3">
 					<div class="fr-profile-stat-item">
 						<span class="fw-semibold small text-body">{(profile.post_count ?? 0).toLocaleString()}</span>
@@ -93,7 +94,7 @@
 					</div>
 					{#if profile.trust_score != null}
 						<div class="fr-profile-stat-item">
-							<span class="fw-semibold small text-body">
+							<span class="fw-semibold small text-body" title="Trust score: {profile.trust_score}">
 								<i class="fa-solid fa-star fa-xs text-warning"></i> {profile.trust_score}
 							</span>
 							<span class="fr-stat-label">Trust</span>
@@ -107,7 +108,6 @@
 			</div>
 		</div>
 
-		<!-- Thread list -->
 		<div class="d-flex align-items-center mb-3">
 			<h2 class="h6 fw-semibold mb-0" style="color:var(--bs-secondary-color)">
 				<i class="fa-regular fa-comment-dots me-2"></i>Threads
@@ -165,11 +165,9 @@
 	{/if}
 </div>
 
-<!-- ── Right panel ──────────────────────────────────────────── -->
 {#if profile}
 <aside class="fr-right-panel">
 
-	<!-- Stats card -->
 	<div class="fr-panel">
 		<div class="fr-panel-header">Stats</div>
 		<div class="fr-panel-stat">
@@ -179,7 +177,7 @@
 		{#if profile.trust_score != null}
 			<div class="fr-panel-stat">
 				<span class="text-muted small"><i class="fa-solid fa-star me-2 text-warning opacity-75"></i>Trust score</span>
-				<span class="fw-semibold small">{profile.trust_score}</span>
+				<span class="fw-semibold small" title="Trust score: {profile.trust_score}">{profile.trust_score}</span>
 			</div>
 		{/if}
 		<div class="fr-panel-stat">
@@ -188,7 +186,6 @@
 		</div>
 	</div>
 
-	<!-- Member status card -->
 	<div class="fr-panel">
 		<div class="fr-panel-header">Member status</div>
 		<div class="px-3 py-3 d-flex flex-column gap-2">
@@ -216,7 +213,6 @@
 </div>
 
 <style>
-	/* ── Banner ───────────────────────────────────────────────── */
 	.fr-profile-banner {
 		height: 88px;
 		background: linear-gradient(
@@ -232,9 +228,13 @@
 		filter: brightness(0.55) saturate(1.3);
 	}
 
-	/* ── Avatar (absolute — never in flex flow, never clipped by siblings) ── */
-	.fr-profile-card {
-		position: relative; /* Bootstrap already sets this; explicit for clarity */
+	.fr-profile-banner--photo {
+		background-size: cover;
+		background-position: center;
+	}
+
+	:global([data-bs-theme='dark']) .fr-profile-banner--photo {
+		filter: brightness(0.75);
 	}
 
 	.fr-profile-avatar-abs {
@@ -256,7 +256,6 @@
 		padding-top: 52px;
 	}
 
-	/* ── Stats strip ──────────────────────────────────────────── */
 	.fr-profile-stats {
 		display: flex;
 		border: 1px solid var(--bs-border-color);

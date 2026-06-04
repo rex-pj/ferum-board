@@ -155,7 +155,7 @@
 				<input type="hidden" name="category_id" value={thread?.category_id ?? ''} />
 				<div class="form-control-plaintext text-body-secondary">
 					<i class="fa-solid fa-folder me-1 opacity-50"></i>
-					{currentCategory?.name ?? thread?.category_slug ?? '—'}
+					{currentCategory?.name ?? thread?.category_slug ?? 'None'}
 				</div>
 			{/if}
 		</div>

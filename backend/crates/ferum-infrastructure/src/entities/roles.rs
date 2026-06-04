@@ -13,6 +13,7 @@ pub struct Model {
     pub is_default: bool,
     pub position: i32,
     pub created_at: DateTimeWithTimeZone,
+    pub updated_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

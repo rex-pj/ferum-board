@@ -59,6 +59,7 @@ fn thread_to_domain(m: threads::Model) -> Thread {
         deleted_by_id: None,
         thumbnail_url: None,
         excerpt: None,
+        tags: vec![],
     }
 }
 

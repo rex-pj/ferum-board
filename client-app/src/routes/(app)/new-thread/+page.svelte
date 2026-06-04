@@ -16,6 +16,31 @@
 	let selectedCategory = $state((form?.category_id as string) ?? (data.preselectedCategoryId ?? ''));
 	let submitting = $state(false);
 
+	// Tag chip input (max 5 tags)
+	let tags = $state<string[]>([]);
+	let tagInput = $state('');
+
+	function addTag() {
+		const name = tagInput.trim();
+		if (name && tags.length < 5 && !tags.includes(name)) {
+			tags = [...tags, name];
+		}
+		tagInput = '';
+	}
+
+	function removeTag(tag: string) {
+		tags = tags.filter((t) => t !== tag);
+	}
+
+	function onTagKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ',') {
+			e.preventDefault();
+			addTag();
+		} else if (e.key === 'Backspace' && tagInput === '' && tags.length > 0) {
+			tags = tags.slice(0, -1);
+		}
+	}
+
 	const topLevelCategories = $derived((data.categories ?? []).filter((c: any) => !c.parent_id));
 	const subCategories = $derived((data.categories ?? []).filter((c: any) => !!c.parent_id));
 </script>
@@ -68,7 +93,7 @@
 				bind:value={selectedCategory}
 				required
 			>
-				<option value="">— Select a category —</option>
+				<option value="">Select a category</option>
 				{#each topLevelCategories as cat}
 					<option value={cat.id}>{cat.name}</option>
 					{#each subCategories.filter((s: any) => s.parent_id === cat.id) as sub}
@@ -76,6 +101,40 @@
 					{/each}
 				{/each}
 			</select>
+		</div>
+
+		<div class="mb-4">
+			<label class="form-label fw-semibold">
+				Tags
+				<span class="text-secondary fw-normal ms-1 small">(optional, max 5)</span>
+			</label>
+			<div class="tag-input-wrapper border rounded p-2 d-flex flex-wrap gap-1 align-items-center">
+				{#each tags as tag}
+					<span class="badge bg-secondary d-inline-flex align-items-center gap-1">
+						{tag}
+						<button
+							type="button"
+							class="btn-close btn-close-white"
+							style="font-size:0.55rem;"
+							aria-label="Remove tag {tag}"
+							onclick={() => removeTag(tag)}
+						></button>
+					</span>
+					<input type="hidden" name="tags" value={tag} />
+				{/each}
+				{#if tags.length < 5}
+					<input
+						type="text"
+						class="border-0 outline-0 flex-grow-1"
+						style="min-width:120px;outline:none;"
+						placeholder={tags.length === 0 ? 'Add tags…' : ''}
+						bind:value={tagInput}
+						onkeydown={onTagKeydown}
+						onblur={addTag}
+					/>
+				{/if}
+			</div>
+			<div class="form-text">Press Enter or comma to add a tag.</div>
 		</div>
 
 		<div class="mb-4">

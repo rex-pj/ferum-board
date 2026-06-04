@@ -93,8 +93,8 @@
 							{thread.title}
 						</a>
 					</td>
-					<td class="small text-muted">{thread.category?.name ?? '—'}</td>
-					<td class="small">{thread.author?.username ?? '—'}</td>
+					<td class="small text-muted">{thread.category?.name ?? 'N/A'}</td>
+					<td class="small">{thread.author?.username ?? 'N/A'}</td>
 					<td>
 						{#if thread.status === 'locked'}
 							<span class="badge bg-warning text-dark">locked</span>
@@ -248,7 +248,7 @@
 							bind:value={selectedCategoryId}
 							required
 						>
-							<option value="">— Select category —</option>
+							<option value="">Select a category</option>
 							{#each data.categories as cat}
 								<option value={cat.id}>{cat.name}</option>
 							{/each}

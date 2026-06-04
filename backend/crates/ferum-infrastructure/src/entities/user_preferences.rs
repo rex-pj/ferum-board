@@ -11,8 +11,6 @@ pub struct Model {
     pub font_size: String,
     pub layout: String,
     pub email_notifications: Value,
-    pub muted_categories: Vec<Uuid>,
-    pub watched_categories: Vec<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

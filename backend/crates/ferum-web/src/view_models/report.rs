@@ -55,6 +55,8 @@ pub struct ReportResponse {
     pub moderator_notes: Option<String>,
     pub resolved_by_id: Option<Uuid>,
     pub resolved_at: Option<DateTime<Utc>>,
+    /// Non-null when the reported content was hard-deleted; post_id and thread_id will both be null.
+    pub target_deleted_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -70,6 +72,7 @@ impl From<Report> for ReportResponse {
             moderator_notes: r.moderator_notes,
             resolved_by_id: r.resolved_by_id,
             resolved_at: r.resolved_at,
+            target_deleted_at: r.target_deleted_at,
             created_at: r.created_at,
         }
     }
