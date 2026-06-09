@@ -7,10 +7,9 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		adapter: adapter(),
-		// Allow file uploads up to 10 MB through SvelteKit form actions.
-		// Individual backend handlers enforce their own tighter limits (logo: 2 MB, favicon: 512 KB).
-		server: { bodySizeLimit: '10mb' }
+		// bodySizeLimit covers plugin .fpkg uploads (max 50 MB) and logo/favicon uploads.
+		// Individual backend handlers enforce their own tighter limits.
+		adapter: adapter({ bodySizeLimit: '52mb' })
 	}
 };
 

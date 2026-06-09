@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Notifications | Ferum Board</title>
+	<title>Notifications | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

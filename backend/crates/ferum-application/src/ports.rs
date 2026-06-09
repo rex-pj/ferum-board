@@ -169,3 +169,78 @@ pub trait BulkSeedService: Send + Sync {
     /// user so example content can be authored by the real account.
     async fn seed_bulk(&self, admin_id: Uuid) -> Result<(), AppError>;
 }
+
+// ─── PluginRuntime ────────────────────────────────────────────────────────────
+
+/// Context passed to every before-hook invocation.
+/// Contains only what plugins are allowed to see — never raw DB connections or secrets.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HookContext {
+    pub hook_name: String,
+    pub actor_id: Option<Uuid>,
+    pub actor_trust_level: String,
+    pub payload: serde_json::Value,
+}
+
+#[derive(Debug)]
+pub enum HookDecision {
+    Allow,
+    Deny { reason: String, error_code: String },
+}
+
+/// Entry returned by active_ui_slots() for SSR frontend hydration.
+#[derive(Debug, Clone)]
+pub struct UiSlotEntry {
+    pub slot_name: String,
+    pub plugin_slug: String,
+    pub asset_url: String,
+    pub custom_element_tag: String,
+    pub props: Vec<String>,
+    pub load_order: i32,
+}
+
+#[async_trait]
+pub trait PluginRuntime: Send + Sync {
+    /// Dispatch a synchronous before-hook. Returns Allow unless a plugin explicitly denies.
+    /// Plugin failures (timeout, crash) are logged and treated as Allow — never fail the request.
+    async fn dispatch_before_hook(
+        &self,
+        hook: &str,
+        ctx: &HookContext,
+    ) -> Result<HookDecision, AppError>;
+
+    /// Fire-and-forget after-event dispatch.
+    /// Runs in a background task; errors are logged and never propagated to the caller.
+    async fn dispatch_after_event(&self, event_type: &str, payload: serde_json::Value);
+
+    /// Returns all active UI slot registrations, sorted by load_order ASC.
+    /// Used by the frontend SSR layer to hydrate plugin Web Components.
+    async fn active_ui_slots(&self) -> Vec<UiSlotEntry>;
+
+    /// Reload a plugin's in-memory dispatch table entry after activation or deactivation.
+    /// Called by PluginUseCase after updating plugin status in DB.
+    async fn reload_plugin(&self, plugin_id: Uuid);
+}
+
+/// No-op implementation used during startup or when plugin system is disabled.
+pub struct NullPluginRuntime;
+
+#[async_trait]
+impl PluginRuntime for NullPluginRuntime {
+    async fn dispatch_before_hook(
+        &self,
+        _hook: &str,
+        _ctx: &HookContext,
+    ) -> Result<HookDecision, AppError> {
+        Ok(HookDecision::Allow)
+    }
+
+    async fn dispatch_after_event(&self, _event_type: &str, _payload: serde_json::Value) {}
+
+    async fn active_ui_slots(&self) -> Vec<UiSlotEntry> {
+        vec![]
+    }
+
+    async fn reload_plugin(&self, _plugin_id: Uuid) {}
+}
+

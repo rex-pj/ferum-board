@@ -73,4 +73,41 @@ pub enum ForumEvent {
         mentioned_user_id: Uuid,
         author_id: Uuid,
     },
+    ThreadCreated {
+        thread_id: Uuid,
+        thread_slug: String,
+        author_id: Uuid,
+        category_id: Uuid,
+    },
+    ThreadDeleted {
+        thread_id: Uuid,
+        deleted_by_id: Uuid,
+    },
+    UserFollowed {
+        follower_id: Uuid,
+        follower_username: String,
+        followed_id: Uuid,
+    },
+}
+
+impl ForumEvent {
+    /// Returns the string event type used for webhook subscriptions and plugin dispatch.
+    pub fn event_type_str(&self) -> &'static str {
+        match self {
+            ForumEvent::PostCreated { .. } => "post.created",
+            ForumEvent::PostDeleted { .. } => "post.deleted",
+            ForumEvent::ThreadLocked { .. } => "thread.locked",
+            ForumEvent::ThreadMoved { .. } => "thread.moved",
+            ForumEvent::UserBanned { .. } => "user.banned",
+            ForumEvent::UserWarned { .. } => "user.warned",
+            ForumEvent::ReactionAdded { .. } => "reaction.added",
+            ForumEvent::ReactionRemoved { .. } => "reaction.removed",
+            ForumEvent::TrustLevelChanged { .. } => "trust_level.changed",
+            ForumEvent::BestAnswerMarked { .. } => "best_answer.marked",
+            ForumEvent::MentionAdded { .. } => "mention.added",
+            ForumEvent::ThreadCreated { .. } => "thread.created",
+            ForumEvent::ThreadDeleted { .. } => "thread.deleted",
+            ForumEvent::UserFollowed { .. } => "user.followed",
+        }
+    }
 }

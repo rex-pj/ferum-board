@@ -43,6 +43,7 @@ fn entity_to_domain(m: categories::Model) -> Category {
             categories::PostPolicy::Trusted => PostPolicy::Trusted,
             categories::PostPolicy::StaffOnly => PostPolicy::StaffOnly,
             categories::PostPolicy::Closed => PostPolicy::Closed,
+            categories::PostPolicy::Moderated => PostPolicy::Moderated,
         },
         color: m.color,
         created_at: m.created_at.with_timezone(&chrono::Utc),
@@ -66,6 +67,7 @@ fn post_policy_to_entity(p: &PostPolicy) -> categories::PostPolicy {
         PostPolicy::Trusted => categories::PostPolicy::Trusted,
         PostPolicy::StaffOnly => categories::PostPolicy::StaffOnly,
         PostPolicy::Closed => categories::PostPolicy::Closed,
+        PostPolicy::Moderated => categories::PostPolicy::Moderated,
     }
 }
 

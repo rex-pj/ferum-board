@@ -12,12 +12,14 @@ use ferum_domain::models::user::TrustLevel;
 use ferum_domain::repositories::post_repository::PostRepository;
 use ferum_domain::repositories::reaction_repository::ReactionRepository;
 use ferum_domain::repositories::thread_repository::ThreadRepository;
+use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::AuthUser;
 
 pub struct ReactionUseCase {
     pub reactions: Arc<dyn ReactionRepository>,
     pub posts: Arc<dyn PostRepository>,
     pub threads: Arc<dyn ThreadRepository>,
+    pub users: Arc<dyn UserRepository>,
     pub event_bus: Arc<EventBus>,
 }
 
@@ -26,12 +28,14 @@ impl ReactionUseCase {
         reactions: Arc<dyn ReactionRepository>,
         posts: Arc<dyn PostRepository>,
         threads: Arc<dyn ThreadRepository>,
+        users: Arc<dyn UserRepository>,
         event_bus: Arc<EventBus>,
     ) -> Self {
         Self {
             reactions,
             posts,
             threads,
+            users,
             event_bus,
         }
     }
@@ -94,6 +98,17 @@ impl ReactionUseCase {
             })
             .await;
 
+        // Meaningful reactions (helpful, insightful) add 2 points to the post author's
+        // trust_score. Like/funny reactions carry no score weight.
+        // Fire-and-forget — never blocks the response.
+        if matches!(kind, ReactionKind::Helpful | ReactionKind::Insightful) {
+            let users = self.users.clone();
+            let author_id = post.author_id;
+            tokio::spawn(async move {
+                let _ = users.increment_trust_score(author_id, 2).await;
+            });
+        }
+
         self.reactions.counts_by_post(post_id).await
     }
 
@@ -117,6 +132,15 @@ impl ReactionUseCase {
                 kind,
             })
             .await;
+
+        // Undo the trust_score boost when a meaningful reaction is removed.
+        if matches!(kind, ReactionKind::Helpful | ReactionKind::Insightful) {
+            let users = self.users.clone();
+            let author_id = post.author_id;
+            tokio::spawn(async move {
+                let _ = users.increment_trust_score(author_id, -2).await;
+            });
+        }
 
         self.reactions.counts_by_post(post_id).await
     }

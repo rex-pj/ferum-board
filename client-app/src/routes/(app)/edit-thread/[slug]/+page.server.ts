@@ -33,7 +33,7 @@ export const actions: Actions = {
 	// Handles title / content / category changes only.
 	// Thumbnail upload is done directly browser → backend in the page's enhance callback
 	// so it never reaches this action (no double-hop through the SvelteKit server).
-	default: async ({ request, cookies, fetch, params }) => {
+	save: async ({ request, cookies, fetch, params }) => {
 		const token = cookies.get('token');
 		if (!token) return fail(401, { error: 'You must be signed in.' });
 

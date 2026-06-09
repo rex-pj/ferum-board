@@ -14,6 +14,12 @@
 		if (!stored && data?.theme && ['auto', 'light', 'dark'].includes(data.theme)) {
 			theme.set(data.theme);
 		}
+		if (data?.fontSizePref) {
+			document.documentElement.setAttribute('data-font-size', data.fontSizePref);
+		}
+		if (data?.layoutPref) {
+			document.documentElement.setAttribute('data-layout', data.layoutPref);
+		}
 	});
 
 </script>

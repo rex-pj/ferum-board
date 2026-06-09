@@ -5,6 +5,7 @@ use axum::Json;
 use crate::app_state::AppState;
 use crate::middleware::AuthUser;
 use crate::view_models::auth::UserResponse;
+use crate::view_models::post::PostResponse;
 use crate::view_models::thread::{ThreadListQuery, ThreadResponse};
 use crate::view_models::user::UserSummaryResponse;
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
@@ -47,6 +48,31 @@ pub async fn list_user_threads_handler(
 
     Ok(Json(PagedResponse::new(
         threads.into_iter().map(ThreadResponse::from).collect(),
+        total,
+        page,
+        per_page,
+    )))
+}
+
+pub async fn list_user_posts_handler(
+    State(state): State<AppState>,
+    Path(username): Path<String>,
+    Query(q): Query<ThreadListQuery>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = state
+        .auth
+        .users
+        .find_by_username(&username)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let page = q.page.unwrap_or(1).max(1);
+    let per_page = q.per_page.unwrap_or(20).min(50);
+
+    let (posts, total) = state.post.list_by_author(user.id, page, per_page).await?;
+
+    Ok(Json(PagedResponse::new(
+        posts.into_iter().map(PostResponse::from).collect(),
         total,
         page,
         per_page,

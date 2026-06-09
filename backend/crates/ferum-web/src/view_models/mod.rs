@@ -5,6 +5,7 @@ use ferum_application::shared::AppError;
 
 pub mod auth;
 pub mod bookmark;
+pub mod follow;
 pub mod category;
 pub mod notification;
 pub mod post;
@@ -16,6 +17,7 @@ pub mod setup;
 pub mod tag;
 pub mod thread;
 pub mod user;
+pub mod plugin;
 pub mod webhook;
 
 // ─── Response envelope ────────────────────────────────────────────────────────

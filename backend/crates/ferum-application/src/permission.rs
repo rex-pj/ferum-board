@@ -26,8 +26,9 @@ impl PermissionChecker {
             }
             ViewPolicy::StaffOnly => {
                 let u = user.ok_or_else(|| AppError::NotFound)?;
-                // Staff = has any moderation or admin permission
-                if u.has_perm(perm::MOD_WARN) || u.has_perm(perm::ADMIN_USERS) {
+                // has_perm_in checks global + category-scoped — covers both global mods and
+                // mods assigned specifically to this staff_only category.
+                if u.has_perm_in(perm::MOD_WARN, category.id) || u.has_perm(perm::ADMIN_USERS) {
                     Ok(())
                 } else {
                     Err(AppError::NotFound)
@@ -42,7 +43,7 @@ impl PermissionChecker {
         Self::require_not_banned(user)?;
 
         if category.view_policy == ViewPolicy::StaffOnly
-            && !user.has_perm(perm::MOD_WARN)
+            && !user.has_perm_in(perm::MOD_WARN, category.id)
             && !user.has_perm(perm::ADMIN_USERS)
         {
             return Err(AppError::NotFound);
@@ -58,8 +59,9 @@ impl PermissionChecker {
 
         // Category post_policy provides the trust gate (admin-configurable per category).
         // Staff (users with moderation permissions in this category) bypass the trust gate.
+        // Moderated behaves like Members for access; post status is determined after entry.
         let category_min = match category.post_policy {
-            PostPolicy::Members => TrustLevel::Basic,
+            PostPolicy::Members | PostPolicy::Moderated => TrustLevel::Basic,
             PostPolicy::Trusted => TrustLevel::Member,
             PostPolicy::StaffOnly => TrustLevel::Leader,
             PostPolicy::Closed => unreachable!(),
@@ -151,7 +153,9 @@ impl PermissionChecker {
     pub fn can_view_reports(user: &AuthUser, category_id: Option<Uuid>) -> Result<(), AppError> {
         let ok = match category_id {
             Some(cat_id) => user.has_perm_in(perm::MOD_VIEW_REPORTS, cat_id),
-            None => user.has_perm(perm::MOD_VIEW_REPORTS),
+            // No specific category — allow if the user holds this permission
+            // globally or in ANY of their scoped categories.
+            None => user.has_perm_any_category(perm::MOD_VIEW_REPORTS),
         };
         if ok {
             Ok(())
@@ -163,7 +167,7 @@ impl PermissionChecker {
     pub fn can_resolve_report(user: &AuthUser, category_id: Option<Uuid>) -> Result<(), AppError> {
         let ok = match category_id {
             Some(cat_id) => user.has_perm_in(perm::MOD_RESOLVE, cat_id),
-            None => user.has_perm(perm::MOD_RESOLVE),
+            None => user.has_perm_any_category(perm::MOD_RESOLVE),
         };
         if ok {
             Ok(())
@@ -247,6 +251,14 @@ impl PermissionChecker {
 
     pub fn can_manage_webhooks(user: &AuthUser) -> Result<(), AppError> {
         if user.has_perm(perm::ADMIN_WEBHOOKS) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    pub fn can_manage_plugins(user: &AuthUser) -> Result<(), AppError> {
+        if user.has_perm(perm::ADMIN_PLUGINS) {
             Ok(())
         } else {
             Err(AppError::forbidden("permission_denied"))

@@ -68,7 +68,9 @@ impl SetupUseCase {
         if !crate::validators::validate_password(&cmd.admin_password) {
             return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
         }
-        if self.users.find_by_email(&cmd.admin_email).await?.is_some() {
+        let admin_email = cmd.admin_email.to_lowercase();
+
+        if self.users.find_by_email(&admin_email).await?.is_some() {
             return Err(AppError::Conflict("email_taken".to_string()));
         }
         if self.users.find_by_username(&cmd.admin_username).await?.is_some() {
@@ -80,7 +82,7 @@ impl SetupUseCase {
             .users
             .create(NewUser {
                 username: cmd.admin_username,
-                email: cmd.admin_email,
+                email: admin_email,
                 password_hash: Some(hash),
             })
             .await?;

@@ -3,12 +3,13 @@ use std::sync::Arc;
 use sea_orm::DatabaseConnection;
 
 use ferum_application::ports::{
-    CacheService, NotificationBus, RateLimiter, StorageService, TokenService,
+    CacheService, NotificationBus, PluginRuntime, RateLimiter, StorageService, TokenService,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
 use ferum_application::usecases::auth_usecase::AuthUseCase;
 use ferum_application::usecases::bookmark_usecase::BookmarkUseCase;
+use ferum_application::usecases::follow_usecase::FollowUseCase;
 use ferum_application::usecases::category_usecase::CategoryUseCase;
 use ferum_application::usecases::moderation_usecase::ModerationUseCase;
 use ferum_application::usecases::notification_usecase::NotificationUseCase;
@@ -20,8 +21,10 @@ use ferum_application::usecases::setup_usecase::SetupUseCase;
 use ferum_application::usecases::tag_usecase::TagUseCase;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
+use ferum_application::usecases::plugin_usecase::PluginUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
 use ferum_domain::repositories::{SiteConfigRepository, StoredFileRepository, UserRoleRepository};
+use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_infrastructure::notification::SseBroadcaster;
 use ferum_infrastructure::role_permission_cache::RolePermissionCache;
 
@@ -34,6 +37,7 @@ pub struct AppState {
     pub admin: Arc<AdminUseCase>,
     pub admin_stats: Arc<AdminStatsUseCase>,
     pub bookmark: Arc<BookmarkUseCase>,
+    pub follow: Arc<FollowUseCase>,
     pub category: Arc<CategoryUseCase>,
     pub thread: Arc<ThreadUseCase>,
     pub post: Arc<PostUseCase>,
@@ -45,9 +49,12 @@ pub struct AppState {
     pub role: Arc<RoleUseCase>,
     pub tag: Arc<TagUseCase>,
     pub webhook: Arc<WebhookUseCase>,
+    pub plugin: Arc<PluginUseCase>,
+    pub plugin_runtime: Arc<dyn PluginRuntime>,
     pub site_config: Arc<dyn SiteConfigRepository>,
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub user_role_repo: Arc<dyn UserRoleRepository>,
+    pub user_repo: Arc<dyn UserRepository>,
     pub role_permission_cache: Arc<RolePermissionCache>,
     pub token_service: Arc<dyn TokenService>,
     pub cache: Arc<dyn CacheService>,
@@ -57,4 +64,6 @@ pub struct AppState {
     pub broadcaster: Arc<SseBroadcaster>,
     /// True when APP_URL starts with https:// — adds the Secure flag to auth cookies.
     pub cookies_secure: bool,
+    /// Absolute path to the plugins directory on disk.
+    pub plugins_dir: String,
 }

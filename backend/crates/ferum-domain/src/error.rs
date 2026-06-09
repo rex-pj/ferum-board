@@ -19,6 +19,8 @@ pub enum AppError {
     TooManyRequests(u64),
     #[error("internal error: {0}")]
     Internal(String),
+    #[error("blocked by plugin: {error_code}")]
+    PluginBlocked { reason: String, error_code: String },
 }
 
 impl AppError {
@@ -45,6 +47,9 @@ impl AppError {
             }
             AppError::TooManyRequests(_) => (StatusCode::TOO_MANY_REQUESTS, "rate_limit_exceeded"),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+            AppError::PluginBlocked { error_code, .. } => {
+                (StatusCode::FORBIDDEN, error_code.as_str())
+            }
         }
     }
 }
@@ -68,6 +73,7 @@ impl IntoResponse for AppError {
                 format!("Too many requests. Please try again in {} seconds.", retry)
             }
             AppError::Internal(_) => "An internal error occurred.".to_string(),
+            AppError::PluginBlocked { reason, .. } => reason.clone(),
             _ => code.replace('_', " "),
         };
         let body = json!({ "error": { "code": code, "message": message } });

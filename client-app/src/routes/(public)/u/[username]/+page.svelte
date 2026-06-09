@@ -18,9 +18,38 @@
 	import ThreadCard from '$lib/components/molecules/ThreadCard.svelte';
 	import { ROUTES } from '$lib/routes';
 
+	import { invalidateAll } from '$app/navigation';
+
 	let { data }: { data: any } = $props();
 
-	const profile = data.profile;
+	const profile = $derived(data.profile);
+	const isOwnProfile = $derived(data.user?.username === profile?.username);
+
+	let following = $state(false);
+	let followerCount = $state(0);
+	let followingCount = $state(0);
+	let followLoading = $state(false);
+
+	$effect(() => {
+		following = data.followStatus?.following ?? false;
+		followerCount = data.followStatus?.follower_count ?? 0;
+		followingCount = data.followStatus?.following_count ?? 0;
+	});
+
+	async function toggleFollow() {
+		if (!profile?.id || followLoading) return;
+		followLoading = true;
+		try {
+			const method = following ? 'DELETE' : 'POST';
+			const res = await fetch(`/api/users/${profile.id}/follow`, { method });
+			if (res.ok) {
+				following = !following;
+				followerCount = following ? followerCount + 1 : followerCount - 1;
+			}
+		} finally {
+			followLoading = false;
+		}
+	}
 
 	const TRUST_LABELS: Record<string, string> = {
 		new:     'New',
@@ -38,10 +67,11 @@
 		leader:  'Community leader with elevated trust',
 	};
 
-	// Matches the hue derivation in Avatar.svelte for a consistent per-user colour
-	const profileHue = profile
-		? profile.username.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0) % 360
-		: 0;
+	const profileHue = $derived(
+		profile
+			? profile.username.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0) % 360
+			: 0
+	);
 </script>
 
 <div class="fr-content-layout">
@@ -63,10 +93,25 @@
 			<div class="px-3 px-sm-4 pb-3 pb-sm-4 fr-profile-body">
 				<div class="d-flex align-items-start justify-content-between gap-2 flex-wrap mb-1">
 					<h1 class="h4 fw-bold mb-0">{profile.display_name ?? profile.username}</h1>
-					{#if data.user?.username === profile.username}
+					{#if isOwnProfile}
 						<a href={ROUTES.ACCOUNT} class="btn btn-outline-secondary btn-sm flex-shrink-0">
 							<i class="fa-solid fa-pen me-1"></i>Edit Profile
 						</a>
+					{:else if data.user}
+						<button
+							class="btn btn-sm flex-shrink-0"
+							class:btn-primary={!following}
+							class:btn-outline-secondary={following}
+							disabled={followLoading}
+							onclick={toggleFollow}
+						>
+							{#if followLoading}
+								<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+							{:else}
+								<i class="fa-solid {following ? 'fa-user-minus' : 'fa-user-plus'} me-1"></i>
+							{/if}
+							{following ? 'Following' : 'Follow'}
+						</button>
 					{/if}
 				</div>
 
@@ -88,13 +133,25 @@
 				{/if}
 
 				<div class="fr-profile-stats mt-3">
-					<div class="fr-profile-stat-item">
+					<a href={ROUTES.USER_POSTS(profile.username)} class="fr-profile-stat-item text-decoration-none text-reset">
 						<span class="fw-semibold small text-body">{(profile.post_count ?? 0).toLocaleString()}</span>
 						<span class="fr-stat-label">Posts</span>
-					</div>
+					</a>
+					<a href={ROUTES.USER_FOLLOWERS(profile.username)} class="fr-profile-stat-item text-decoration-none text-reset">
+						<span class="fw-semibold small text-body">{followerCount.toLocaleString()}</span>
+						<span class="fr-stat-label">Followers</span>
+					</a>
+					<a href={ROUTES.USER_FOLLOWING(profile.username)} class="fr-profile-stat-item text-decoration-none text-reset">
+						<span class="fw-semibold small text-body">{followingCount.toLocaleString()}</span>
+						<span class="fr-stat-label">Following</span>
+					</a>
 					{#if profile.trust_score != null}
-						<div class="fr-profile-stat-item">
-							<span class="fw-semibold small text-body" title="Trust score: {profile.trust_score}">
+						<div
+							class="fr-profile-stat-item"
+							title="{TRUST_DESCRIPTIONS[profile.trust_level] ?? ''} · Score: {profile.trust_score}"
+							style="cursor:default"
+						>
+							<span class="fw-semibold small text-body">
 								<i class="fa-solid fa-star fa-xs text-warning"></i> {profile.trust_score}
 							</span>
 							<span class="fr-stat-label">Trust</span>
@@ -130,8 +187,8 @@
 					<ul class="pagination justify-content-center">
 						{#if data.threadPage > 1}
 							<li class="page-item">
-								<a class="page-link" href="{ROUTES.USER_PROFILE(profile.username)}?page={data.threadPage - 1}">
-									<i class="fa-solid fa-chevron-left"></i>
+								<a class="page-link" aria-label="Previous page" href="{ROUTES.USER_PROFILE(profile.username)}?page={data.threadPage - 1}">
+									<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
 								</a>
 							</li>
 						{/if}
@@ -142,8 +199,8 @@
 						{/each}
 						{#if data.threadPage < totalPages}
 							<li class="page-item">
-								<a class="page-link" href="{ROUTES.USER_PROFILE(profile.username)}?page={data.threadPage + 1}">
-									<i class="fa-solid fa-chevron-right"></i>
+								<a class="page-link" aria-label="Next page" href="{ROUTES.USER_PROFILE(profile.username)}?page={data.threadPage + 1}">
+									<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
 								</a>
 							</li>
 						{/if}

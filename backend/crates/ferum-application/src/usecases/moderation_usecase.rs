@@ -142,6 +142,14 @@ impl ModerationUseCase {
             .publish(ForumEvent::UserWarned { user_id, by_user_id: actor.id, reason })
             .await;
 
+        // Each warning reduces trust_score. Fire-and-forget.
+        {
+            let users = self.users.clone();
+            tokio::spawn(async move {
+                let _ = users.increment_trust_score(user_id, -5).await;
+            });
+        }
+
         Ok(())
     }
 

@@ -73,12 +73,18 @@ export const actions: Actions = {
 		if (!res.ok) {
 			const err = await res.json().catch(() => ({}));
 			const code = err?.error?.code ?? '';
-			const messages: Record<string, string> = {
+			const hardcoded: Record<string, string> = {
 				thread_locked: 'This thread is locked.',
 				trust_level_insufficient: 'Your trust level is too low to post here.',
 				account_suspended: 'Your account is suspended.'
 			};
-			return fail(res.status, { error: messages[code] ?? 'Failed to post reply.' });
+			const message = hardcoded[code] ?? err?.error?.message ?? 'Failed to post reply.';
+			return fail(res.status, { error: message });
+		}
+
+		const body = await res.json().catch(() => ({}));
+		if (body?.data?.status === 'pending') {
+			return { pending: true };
 		}
 
 		return {};

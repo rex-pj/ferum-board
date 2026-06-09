@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Edit Category | Admin | Ferum Board</title>
+	<title>Edit Category | Admin | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -13,7 +13,7 @@
 	let saving = $state(false);
 
 	const VIEW_POLICIES = ['public', 'members_only', 'staff_only'];
-	const POST_POLICIES = ['members', 'trusted', 'staff_only', 'closed'];
+	const POST_POLICIES = ['members', 'trusted', 'staff_only', 'closed', 'moderated'];
 
 	const cat = data.category;
 </script>

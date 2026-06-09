@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Report Queue | Mod | Ferum Board</title>
+	<title>Report Queue | Mod | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

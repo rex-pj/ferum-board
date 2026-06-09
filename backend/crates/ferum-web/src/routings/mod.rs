@@ -18,7 +18,12 @@ use crate::handlers::{
     admin_stats_handler::*,
     auth_handler::*,
     bookmark_handler::*,
-    category_handler::*,
+    category_handler::{
+        get_category_handler, get_category_watch_status_handler, get_forum_index_handler,
+        list_public_categories_handler,
+        mute_category_handler, unmute_category_handler,
+        unwatch_category_handler, watch_category_handler,
+    },
     health_handler::health_handler,
     moderation_handler::*,
     notification_handler::*,
@@ -32,8 +37,16 @@ use crate::handlers::{
     tag_handler::{create_tag_handler, list_tags_handler},
     thread_handler::*,
     upload_handler::serve_upload_handler,
-    user_handler::{get_me_handler, get_public_profile_handler, list_user_threads_handler},
+    follow_handler::{
+        follow_user_handler, get_follow_status_handler, list_followers_handler,
+        list_following_handler, unfollow_user_handler,
+    },
+    user_handler::{
+        get_me_handler, get_public_profile_handler, list_user_posts_handler,
+        list_user_threads_handler,
+    },
     webhook_handler::*,
+    plugin_handler::*,
 };
 
 pub fn build_router(state: AppState, cors_origins: &str) -> Router {
@@ -116,6 +129,19 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
             "/webhooks/{id}",
             patch(update_webhook_handler).delete(delete_webhook_handler),
         )
+        // Static plugin routes must come before parameterized /{slug} routes
+        .route("/plugins", get(list_plugins_handler))
+        .route("/plugins/upload", post(upload_plugin_handler))
+        .route("/plugins/install", post(install_plugin_handler))
+        .route("/plugins/debug/hooks", post(debug_hook_handler))
+        // Parameterized routes
+        .route(
+            "/plugins/{slug}",
+            get(get_plugin_handler).delete(uninstall_plugin_handler),
+        )
+        .route("/plugins/{slug}/config", patch(configure_plugin_handler))
+        .route("/plugins/{slug}/status", patch(toggle_plugin_status_handler))
+        .route("/plugins/{slug}/logs", get(get_plugin_logs_handler))
         .nest("/categories", admin_category_routes)
         .nest("/users", admin_user_routes)
         .nest("/roles", admin_role_routes);
@@ -124,7 +150,10 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
     let category_routes = Router::new()
         .route("/", get(list_public_categories_handler))
         .route("/{slug}", get(get_category_handler))
-        .route("/{slug}/threads", get(list_threads_handler));
+        .route("/{slug}/threads", get(list_threads_handler))
+        .route("/{id}/watch", post(watch_category_handler).delete(unwatch_category_handler))
+        .route("/{id}/mute", post(mute_category_handler).delete(unmute_category_handler))
+        .route("/{id}/watch-status", get(get_category_watch_status_handler));
 
     // Thread routes — the single-segment param is a slug for GET, a UUID for mutations
     let thread_routes = Router::new()
@@ -181,7 +210,15 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
         )
         .route("/me/bookmarks", get(list_bookmarks_handler))
         .route("/{username}", get(get_public_profile_handler))
-        .route("/{username}/threads", get(list_user_threads_handler));
+        .route("/{username}/threads", get(list_user_threads_handler))
+        .route("/{username}/posts", get(list_user_posts_handler))
+        .route(
+            "/{id}/follow",
+            post(follow_user_handler).delete(unfollow_user_handler),
+        )
+        .route("/{id}/follow-status", get(get_follow_status_handler))
+        .route("/{id}/followers", get(list_followers_handler))
+        .route("/{id}/following", get(list_following_handler));
 
     // Notification routes
     let notification_routes = Router::new()
@@ -200,7 +237,10 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
         .route("/reports/{id}", patch(resolve_report_handler))
         .route("/users/{id}/warn", post(warn_user_handler))
         .route("/users/{id}/ban", post(temp_ban_handler))
-        .route("/audit-log", get(list_mod_audit_log_handler));
+        .route("/audit-log", get(list_mod_audit_log_handler))
+        .route("/queue", get(list_pending_posts_handler))
+        .route("/queue/{id}/approve", post(approve_post_handler))
+        .route("/queue/{id}/reject", delete(reject_post_handler));
 
     let setup_routes = Router::new()
         .route("/status", get(setup_status_handler))
@@ -223,6 +263,7 @@ pub fn build_router(state: AppState, cors_origins: &str) -> Router {
         .nest("/api/reports", report_routes)
         .nest("/api/mod", mod_routes)
         .nest("/api/admin", admin_routes)
+        .route("/api/plugins/active-slots", get(get_active_slots_handler))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

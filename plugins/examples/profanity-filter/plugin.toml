@@ -1,0 +1,48 @@
+[meta]
+id          = "com.ferum.profanity-filter"
+name        = "Profanity Filter"
+version     = "1.0.0"
+tier        = "script"
+min_ferum   = "0.1.0"
+description = "Blocks posts and threads whose content matches a configurable word blacklist."
+author      = "Ferum Team"
+
+# ─── Script entry point ───────────────────────────────────────────────────────
+
+[script]
+bundle_file = "bundle.js"
+
+# ─── Config schema ────────────────────────────────────────────────────────────
+
+[config_schema]
+type     = "object"
+required = []
+
+[config_schema.properties.blacklist]
+type        = "string"
+title       = "Word blacklist"
+description = "Comma-separated list of blocked words/phrases (case-insensitive, partial match)."
+default     = ""
+
+[config_schema.properties.block_message]
+type        = "string"
+title       = "Block message"
+description = "Message shown to the user when their content is blocked."
+default     = "Your post contains prohibited content. Please review our community guidelines."
+
+[config_schema.properties.log_blocked]
+type        = "boolean"
+title       = "Log blocked attempts"
+description = "Write a warning log entry each time content is blocked."
+default     = true
+
+# ─── Capabilities ─────────────────────────────────────────────────────────────
+
+[capabilities]
+# before_post_create  — checks replies
+# before_thread_create — checks new thread title + body
+hooks = [
+    { name = "before_post_create",   priority = 10 },
+    { name = "before_post_edit",     priority = 10 },
+    { name = "before_thread_create", priority = 10 },
+]

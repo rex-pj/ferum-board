@@ -44,6 +44,7 @@ impl WebhookUseCase {
                 events,
                 secret,
                 created_by_id: Some(actor.id),
+                plugin_id: None,
             })
             .await
     }

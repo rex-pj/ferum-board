@@ -1,40 +1,3 @@
-<svelte:head>
-	<title>{data.thread?.title ?? 'Thread'} | {data.siteName ?? 'Ferum Board'}</title>
-	<meta name="description" content={data.excerpt ?? data.thread?.title} />
-	<link rel="canonical" href={data.canonicalUrl} />
-	<meta property="og:type" content="article" />
-	<meta property="og:url" content={data.canonicalUrl} />
-	<meta property="og:title" content={data.thread?.title} />
-	<meta property="og:description" content={data.excerpt ?? data.thread?.title} />
-	{#if data.thread?.thumbnail_url}
-		<meta property="og:image" content={data.thread.thumbnail_url} />
-		<meta property="og:image:width" content="1200" />
-		<meta property="og:image:height" content="630" />
-		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:image" content={data.thread.thumbnail_url} />
-	{:else}
-		<meta name="twitter:card" content="summary" />
-	{/if}
-	<meta name="twitter:title" content={data.thread?.title} />
-	<meta name="twitter:description" content={data.excerpt ?? data.thread?.title} />
-	{@html `<script type="application/ld+json">${JSON.stringify({
-		'@context': 'https://schema.org',
-		'@type': 'DiscussionForumPosting',
-		headline: data.thread?.title,
-		url: data.canonicalUrl,
-		datePublished: data.thread?.created_at,
-		author: { '@type': 'Person', name: data.thread?.author?.display_name ?? data.thread?.author?.username },
-		description: data.excerpt,
-		interactionStatistic: {
-			'@type': 'InteractionCounter',
-			interactionType: 'https://schema.org/CommentAction',
-			userInteractionCount: data.thread?.reply_count ?? 0
-		}
-	// </script> inside a JSON value would terminate the script block; replace </ with the
-	// JSON-legal escape sequence <\/ which browsers parse identically inside JSON strings.
-	}).replace(/<\//g, '<\\/')}</script>`}
-</svelte:head>
-
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import PostBody from '$lib/components/molecules/PostBody.svelte';
@@ -100,8 +63,8 @@
 		(data.user.trust_level !== 'new')
 	);
 
-	function quotePost(post: { id: string; content_md: string }) {
-		const quoted = post.content_md.split('\n').map((l) => '> ' + l).join('\n');
+	function quotePost(post: { id: string; content_md?: string }) {
+		const quoted = (post.content_md ?? '').split('\n').map((l) => '> ' + l).join('\n');
 		replyContent = quoted + '\n\n';
 		quoteParentId = post.id;
 		showReply = true;
@@ -138,6 +101,41 @@
 		}
 	}
 </script>
+
+<svelte:head>
+	<title>{data.thread?.title ?? 'Thread'} | {data.siteName ?? 'Ferum Board'}</title>
+	<meta name="description" content={data.excerpt ?? data.thread?.title} />
+	<link rel="canonical" href={data.canonicalUrl} />
+	<meta property="og:type" content="article" />
+	<meta property="og:url" content={data.canonicalUrl} />
+	<meta property="og:title" content={data.thread?.title} />
+	<meta property="og:description" content={data.excerpt ?? data.thread?.title} />
+	{#if data.thread?.thumbnail_url}
+		<meta property="og:image" content={data.thread.thumbnail_url} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content={data.thread.thumbnail_url} />
+	{:else}
+		<meta name="twitter:card" content="summary" />
+	{/if}
+	<meta name="twitter:title" content={data.thread?.title} />
+	<meta name="twitter:description" content={data.excerpt ?? data.thread?.title} />
+	{@html `<script type="application/ld+json">${JSON.stringify({
+		'@context': 'https://schema.org',
+		'@type': 'DiscussionForumPosting',
+		headline: data.thread?.title,
+		url: data.canonicalUrl,
+		datePublished: data.thread?.created_at,
+		author: { '@type': 'Person', name: data.thread?.author?.display_name ?? data.thread?.author?.username },
+		description: data.excerpt,
+		interactionStatistic: {
+			'@type': 'InteractionCounter',
+			interactionType: 'https://schema.org/CommentAction',
+			userInteractionCount: data.thread?.reply_count ?? 0
+		}
+	}).replace(/<\//g, '<\\/')}</script>`}
+</svelte:head>
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && reportPostId) reportPostId = null; }} />
 
@@ -393,8 +391,15 @@
 						action="?/reply"
 						use:enhance={() => {
 							submitting = true;
-							return async ({ update }) => {
+							return async ({ result, update }) => {
 								submitting = false;
+								if (result.type === 'success' && (result.data as any)?.pending) {
+									toast.info('Your reply has been submitted and is awaiting moderator approval.');
+									replyContent = '';
+									quoteParentId = null;
+									showReply = false;
+									return;
+								}
 								replyContent = '';
 								quoteParentId = null;
 								showReply = false;

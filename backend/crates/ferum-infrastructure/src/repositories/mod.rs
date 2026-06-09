@@ -1,5 +1,7 @@
 pub mod audit_log_repository;
 pub mod bookmark_repository;
+pub mod follow_repository;
+pub mod plugin_repository;
 pub mod category_repository;
 pub mod notification_repository;
 pub mod permission_repository;
@@ -17,6 +19,7 @@ pub mod webhook_repository;
 
 pub use audit_log_repository::PgAuditLogRepository;
 pub use bookmark_repository::PgBookmarkRepository;
+pub use follow_repository::PgFollowRepository;
 pub use category_repository::PgCategoryRepository;
 pub use notification_repository::PgNotificationRepository;
 pub use permission_repository::PgPermissionRepository;
@@ -30,4 +33,5 @@ pub use tag_repository::PgTagRepository;
 pub use thread_repository::PgThreadRepository;
 pub use user_repository::PgUserRepository;
 pub use user_role_repository::PgUserRoleRepository;
+pub use plugin_repository::PgPluginRepository;
 pub use webhook_repository::PgWebhookRepository;

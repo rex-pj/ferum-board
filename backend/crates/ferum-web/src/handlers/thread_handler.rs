@@ -195,10 +195,10 @@ pub async fn create_thread_handler(
 
     let mut thread = state
         .thread
-        .create(actor, CreateThreadCmd { category_id, title, tag_names })
+        .create(actor, CreateThreadCmd { category_id, title, content_md: content_md.clone(), tag_names })
         .await?;
 
-    let post = state
+    let post = match state
         .post
         .create(
             actor,
@@ -208,7 +208,16 @@ pub async fn create_thread_handler(
                 content_md,
             },
         )
-        .await?;
+        .await
+    {
+        Ok(p) => p,
+        Err(e) => {
+            // Compensate: mark the thread as deleted so it does not appear in feeds
+            // with zero posts. Best-effort — we still return the original error.
+            let _ = state.thread.soft_delete(actor, thread.id).await;
+            return Err(e.into());
+        }
+    };
 
     if let Some((data, content_type)) = thumbnail {
         let url = state

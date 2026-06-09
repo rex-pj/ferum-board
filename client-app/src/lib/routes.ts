@@ -10,6 +10,9 @@ export const ROUTES = {
 	THREAD: (slug: string) => `/forum/t/${slug}`,
 	SEARCH: '/search',
 	USER_PROFILE: (username: string) => `/u/${username}`,
+	USER_POSTS: (username: string) => `/u/${username}/posts`,
+	USER_FOLLOWERS: (username: string) => `/u/${username}/followers`,
+	USER_FOLLOWING: (username: string) => `/u/${username}/following`,
 
 	// Auth (unauthenticated only)
 	LOGIN: '/login',
@@ -28,6 +31,7 @@ export const ROUTES = {
 	// Mod
 	MOD: {
 		REPORTS: '/mod/reports',
+		QUEUE: '/mod/queue',
 		THREADS: '/mod/threads',
 		LOG: '/mod/log'
 	},
@@ -46,6 +50,8 @@ export const ROUTES = {
 		SETTINGS: '/admin/settings',
 		ROLES: '/admin/roles',
 		ROLE: (id: string) => `/admin/roles/${id}`,
-		PERMISSIONS: '/admin/permissions'
+		PERMISSIONS: '/admin/permissions',
+		PLUGINS: '/admin/plugins',
+		PLUGIN: (slug: string) => `/admin/plugins/${slug}`
 	},
 } as const;

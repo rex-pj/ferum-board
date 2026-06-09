@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>Settings | Admin | Ferum Board</title>
+	<title>Settings | Admin | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -351,6 +351,44 @@
 				<div class="form-text mt-1">
 					When disabled, the registration page returns 403 and invite links stop working.
 				</div>
+			</div>
+		</div>
+
+		<!-- Post Approval -->
+		<div class="card mb-4">
+			<div class="card-header fw-semibold">Post Approval Queue</div>
+			<div class="card-body">
+				<div class="form-check form-switch mb-3">
+					<input
+						class="form-check-input"
+						type="checkbox"
+						role="switch"
+						id="post_approval_enabled"
+						name="post_approval_enabled"
+						value="true"
+						checked={cfg.post_approval_enabled === 'true'}
+					/>
+					<label class="form-check-label" for="post_approval_enabled">
+						Enable global post approval
+					</label>
+				</div>
+				<div class="form-text mb-3">
+					When enabled, posts from users below the selected trust level go to the
+					<a href="/mod/queue">moderator queue</a> before being published.
+					Individual categories can also be set to <strong>Moderated</strong> in their settings —
+					this always requires approval regardless of the global toggle.
+				</div>
+				<label class="form-label" for="post_approval_min_trust">Minimum trust level to skip queue</label>
+				<select
+					id="post_approval_min_trust"
+					name="post_approval_min_trust"
+					class="form-select w-auto"
+				>
+					{#each [['new','New (all users)'],['basic','Basic (email verified)'],['member','Member (≥30 posts)'],['regular','Regular'],['leader','Leader']] as [val, label]}
+						<option value={val} selected={cfg.post_approval_min_trust === val}>{label}</option>
+					{/each}
+				</select>
+				<div class="form-text mt-1">Users at or below this level require approval.</div>
 			</div>
 		</div>
 

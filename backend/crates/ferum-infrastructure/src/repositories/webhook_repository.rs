@@ -34,6 +34,7 @@ fn entity_to_domain(m: webhooks::Model) -> Webhook {
         created_by_id: m.created_by_id,
         last_triggered_at: m.last_triggered_at.map(|t| t.with_timezone(&Utc)),
         failure_count: m.failure_count,
+        plugin_id: m.plugin_id,
     }
 }
 
@@ -78,6 +79,7 @@ impl WebhookRepository for PgWebhookRepository {
             secret: Set(new.secret),
             is_active: Set(true),
             created_by_id: Set(new.created_by_id),
+            plugin_id: Set(new.plugin_id),
             ..Default::default()
         };
         Ok(entity_to_domain(model.insert(&self.db).await?))
@@ -108,6 +110,14 @@ impl WebhookRepository for PgWebhookRepository {
 
     async fn delete(&self, id: Uuid) -> Result<(), AppError> {
         webhooks::Entity::delete_by_id(id).exec(&self.db).await?;
+        Ok(())
+    }
+
+    async fn delete_by_plugin(&self, plugin_id: Uuid) -> Result<(), AppError> {
+        webhooks::Entity::delete_many()
+            .filter(webhooks::Column::PluginId.eq(plugin_id))
+            .exec(&self.db)
+            .await?;
         Ok(())
     }
 

@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>{data.user?.username ?? 'User'} | Admin | Ferum Board</title>
+	<title>{data.user?.username ?? 'User'} | Admin | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -63,6 +63,10 @@
 					</div>
 					<div class="text-muted small">
 						<div>Posts: {u.post_count}</div>
+						<div class="mt-1">
+							<i class="fa-solid fa-star fa-xs text-warning me-1"></i>Trust score:
+							<span class="text-body fw-semibold">{u.trust_score ?? 0}</span> / 100
+						</div>
 						<div class="mt-1">Joined: <Timestamp date={u.created_at} /></div>
 					</div>
 				</div>

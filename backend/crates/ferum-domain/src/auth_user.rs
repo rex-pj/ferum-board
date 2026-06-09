@@ -44,6 +44,14 @@ impl AuthUser {
                 .map_or(false, |p| p.contains(key))
     }
 
+    /// Returns true if the user has the permission globally OR in ANY category scope.
+    /// Use this when the action is not tied to a specific category (e.g., listing the
+    /// report queue without a pre-known category filter).
+    pub fn has_perm_any_category(&self, key: &str) -> bool {
+        self.has_perm(key)
+            || self.category_permissions.values().any(|p| p.contains(key))
+    }
+
     pub fn meets_trust(&self, required: TrustLevel) -> bool {
         self.trust_level >= required
     }

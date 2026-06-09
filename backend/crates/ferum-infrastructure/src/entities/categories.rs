@@ -59,4 +59,6 @@ pub enum PostPolicy {
     StaffOnly,
     #[sea_orm(string_value = "closed")]
     Closed,
+    #[sea_orm(string_value = "moderated")]
+    Moderated,
 }

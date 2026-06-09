@@ -8,7 +8,7 @@ pub struct Config {
     pub jwt_secret: String,
     pub from_email: String,
 
-    pub smtp_host: String,
+    pub smtp_host: Option<String>,
     #[serde(default = "default_smtp_port")]
     pub smtp_port: u16,
     pub smtp_user: Option<String>,
@@ -38,6 +38,17 @@ pub struct Config {
     pub setup_admin_username: Option<String>,
     pub setup_admin_email: Option<String>,
     pub setup_admin_password: Option<String>,
+
+    // Plugin system
+    #[serde(default = "default_plugins_dir")]
+    pub plugins_dir: String,
+    /// Internal signing secret for Plugin Service Tokens (NOT the user JWT_SECRET) — used in Milestone 2
+    #[allow(dead_code)]
+    pub plugin_internal_secret: Option<String>,
+    #[serde(default = "default_plugin_hook_timeout_ms")]
+    pub plugin_hook_timeout_ms: u64,
+    #[serde(default = "default_plugin_circuit_threshold")]
+    pub plugin_circuit_threshold: u32,
 }
 
 impl std::fmt::Debug for Config {
@@ -76,6 +87,9 @@ impl std::fmt::Debug for Config {
             .field("cors_origins", &self.cors_origins)
             .field("registration_open", &self.registration_open)
             .field("max_upload_size_mb", &self.max_upload_size_mb)
+            .field("plugins_dir", &self.plugins_dir)
+            .field("plugin_hook_timeout_ms", &self.plugin_hook_timeout_ms)
+            .field("plugin_circuit_threshold", &self.plugin_circuit_threshold)
             .field("setup_admin_username", &self.setup_admin_username)
             .field("setup_admin_email", &self.setup_admin_email)
             .field(
@@ -97,6 +111,15 @@ fn default_cors() -> String {
 }
 fn default_max_upload_mb() -> u64 {
     5
+}
+fn default_plugins_dir() -> String {
+    "./plugins".to_string()
+}
+fn default_plugin_hook_timeout_ms() -> u64 {
+    500
+}
+fn default_plugin_circuit_threshold() -> u32 {
+    10
 }
 
 impl Config {

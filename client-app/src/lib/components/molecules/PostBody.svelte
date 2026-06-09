@@ -180,7 +180,7 @@
 					username={post.author.username}
 					displayName={post.author.display_name}
 					avatarUrl={post.author.avatar_url}
-					role={post.author.primary_role_slug}
+					role={post.author.role}
 					date={post.created_at}
 				/>
 				{#if isBestAnswer}

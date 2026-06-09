@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::constants::{MAX_THREADS_PER_PAGE, MAX_THUMBNAIL_BYTES, POST_EDIT_WINDOW_HOURS};
 use crate::event_bus::EventBus;
 use crate::permission::PermissionChecker;
-use crate::ports::{CacheService, ForumJob, JobQueue};
+use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginRuntime};
 use crate::shared::AppError;
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::generate_thread_slug;
@@ -20,6 +20,7 @@ use ferum_domain::repositories::post_repository::PostRepository;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::tag_repository::TagRepository;
 use ferum_domain::repositories::thread_repository::{NewThread, ThreadRepository, UpdateThread};
+use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::AuthUser;
 
 #[allow(dead_code)]
@@ -32,6 +33,8 @@ pub struct ThreadUseCase {
     pub event_bus: Arc<EventBus>,
     pub cache: Arc<dyn CacheService>,
     pub tags: Arc<dyn TagRepository>,
+    pub users: Arc<dyn UserRepository>,
+    pub plugin_runtime: Arc<dyn PluginRuntime>,
 }
 
 impl ThreadUseCase {
@@ -44,6 +47,7 @@ impl ThreadUseCase {
         event_bus: Arc<EventBus>,
         cache: Arc<dyn CacheService>,
         tags: Arc<dyn TagRepository>,
+        users: Arc<dyn UserRepository>,
     ) -> Self {
         Self {
             threads,
@@ -54,7 +58,14 @@ impl ThreadUseCase {
             event_bus,
             cache,
             tags,
+            users,
+            plugin_runtime: Arc::new(NullPluginRuntime),
         }
+    }
+
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginRuntime>) -> Self {
+        self.plugin_runtime = runtime;
+        self
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
@@ -169,7 +180,54 @@ impl ThreadUseCase {
         let category_map = self.visible_category_map(actor).await?;
         let visible_ids: Vec<Uuid> = category_map.keys().cloned().collect();
         let per_page = per_page.min(MAX_THREADS_PER_PAGE);
-        let (mut threads, total) = self.threads.list_feed(&visible_ids, page, per_page).await?;
+
+        // Personalized feed: filter by watched/muted when the user is logged in.
+        let feed_ids = if let Some(actor) = actor {
+            let (watched, muted) = tokio::try_join!(
+                self.users.get_watched_categories(actor.id),
+                self.users.get_muted_categories(actor.id),
+            )?;
+
+            let had_watched = !watched.is_empty();
+
+            // watched takes priority — show only watched (minus muted) if any are set.
+            // fall back to all visible categories minus muted when no watched set.
+            let base: Vec<Uuid> = if had_watched {
+                watched.into_iter().filter(|id| visible_ids.contains(id)).collect()
+            } else {
+                visible_ids.clone()
+            };
+
+            // Track whether the user had watched categories that are still visible.
+            // Used to distinguish "muted everything" from "all watched were deleted".
+            let has_visible_watched = had_watched && !base.is_empty();
+
+            let filtered: Vec<Uuid> = base.into_iter().filter(|id| !muted.contains(id)).collect();
+
+            // Fallback to all visible only when there was no effective personalization
+            // (no watched set, or all watched categories became invisible/deleted).
+            // Never fall back when the user deliberately muted all their watched categories.
+            if filtered.is_empty() && !has_visible_watched {
+                category_map.keys()
+                    .cloned()
+                    .filter(|id| !muted.contains(id))
+                    .collect()
+            } else {
+                filtered
+            }
+        } else {
+            visible_ids
+        };
+
+        // Final safety fallback: if every visible category is muted by a guest-path
+        // (shouldn't happen — guests have no mute list), serve all visible.
+        let feed_ids = if feed_ids.is_empty() && actor.is_none() {
+            category_map.keys().cloned().collect()
+        } else {
+            feed_ids
+        };
+
+        let (mut threads, total) = self.threads.list_feed(&feed_ids, page, per_page).await?;
         Self::enrich_threads(&mut threads, &category_map);
         let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
         let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
@@ -280,6 +338,29 @@ impl ThreadUseCase {
 
         PermissionChecker::can_create_post(actor, &category)?;
 
+        // Before-hook: allow plugins to inspect or block thread creation
+        let hook_ctx = HookContext {
+            hook_name: "before_thread_create".to_string(),
+            actor_id: Some(actor.id),
+            actor_trust_level: format!("{:?}", actor.trust_level).to_lowercase(),
+            payload: serde_json::json!({
+                "title": cmd.title,
+                "content_md": cmd.content_md,
+                "tag_names": cmd.tag_names,
+                "category_id": cmd.category_id,
+            }),
+        };
+        match self
+            .plugin_runtime
+            .dispatch_before_hook("before_thread_create", &hook_ctx)
+            .await?
+        {
+            HookDecision::Deny { reason, error_code } => {
+                return Err(crate::shared::AppError::PluginBlocked { reason, error_code });
+            }
+            HookDecision::Allow => {}
+        }
+
         // Pre-generate UUID so slug can embed it — collision-free, no retry needed
         let id = uuid::Uuid::new_v4();
         let slug = generate_thread_slug(&cmd.title, &id);
@@ -326,6 +407,15 @@ impl ThreadUseCase {
                 self.tags.assign_to_thread(thread.id, &tag_ids).await?;
             }
         }
+
+        self.event_bus
+            .publish(ForumEvent::ThreadCreated {
+                thread_id: thread.id,
+                thread_slug: thread.slug.clone(),
+                author_id: actor.id,
+                category_id: thread.category_id,
+            })
+            .await;
 
         Ok(thread)
     }
@@ -376,6 +466,14 @@ impl ThreadUseCase {
                 },
             )
             .await?;
+
+        self.event_bus
+            .publish(ForumEvent::ThreadDeleted {
+                thread_id: id,
+                deleted_by_id: actor.id,
+            })
+            .await;
+
         Ok(())
     }
 
@@ -499,6 +597,15 @@ impl ThreadUseCase {
             })
             .await;
 
+        // Reward the author of the best answer. Fire-and-forget.
+        {
+            let users = self.users.clone();
+            let author_id = best_post.author_id;
+            tokio::spawn(async move {
+                let _ = users.increment_trust_score(author_id, 5).await;
+            });
+        }
+
         Ok(result)
     }
 
@@ -544,7 +651,19 @@ impl ThreadUseCase {
 
         // Release old ref
         let old_key = self.threads.find_thumbnail_key(thread_id).await?;
-        self.threads.set_thumbnail(thread_id, key.clone()).await?;
+
+        // If this DB write fails we roll back the ref we just added so the
+        // stored_files row is not orphaned with ref_count > 0 and no referencing thread.
+        if let Err(e) = self.threads.set_thumbnail(thread_id, key.clone()).await {
+            let remaining = self.stored_files.decrement_ref(&key).await.unwrap_or(1);
+            if remaining == 0 {
+                self.jobs
+                    .enqueue(ForumJob::GcStorageKey { key })
+                    .await
+                    .ok();
+            }
+            return Err(e);
+        }
 
         if let Some(old) = old_key.filter(|k| k != &key) {
             let remaining = self.stored_files.decrement_ref(&old).await?;
@@ -583,5 +702,6 @@ impl ThreadUseCase {
 pub struct CreateThreadCmd {
     pub category_id: Uuid,
     pub title: String,
+    pub content_md: String,
     pub tag_names: Vec<String>,
 }

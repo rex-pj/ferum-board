@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Threads | Mod | Ferum Board</title>
+	<title>Threads | Mod | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

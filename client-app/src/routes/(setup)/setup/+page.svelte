@@ -11,6 +11,7 @@
   let admin = $state({ username: "", email: "", password: "", confirm: "" });
   let config = $state({
     site_name: "",
+    site_slogan: "",
     site_tagline: "",
     primary_color: "#0d6efd",
     registration_open: true,
@@ -53,6 +54,7 @@
   function buildPayload() {
     const hasConfig =
       config.site_name.trim() ||
+      config.site_slogan.trim() ||
       config.site_tagline.trim() ||
       config.primary_color !== "#0d6efd" ||
       !config.registration_open ||
@@ -68,6 +70,7 @@
     if (hasConfig) {
       payload.config = {
         ...(config.site_name.trim() && { site_name: config.site_name }),
+        ...(config.site_slogan.trim() && { site_slogan: config.site_slogan }),
         ...(config.site_tagline.trim() && {
           site_tagline: config.site_tagline,
         }),
@@ -227,6 +230,18 @@
   </div>
 
   <div class="mb-3">
+    <label for="site_slogan" class="form-label">Slogan</label>
+    <input
+      type="text"
+      id="site_slogan"
+      class="form-control"
+      bind:value={config.site_slogan}
+      placeholder="Your space, your rules"
+    />
+    <div class="form-text">Shown next to the logo in the header.</div>
+  </div>
+
+  <div class="mb-3">
     <label for="site_tagline" class="form-label">Tagline</label>
     <input
       type="text"
@@ -235,6 +250,7 @@
       bind:value={config.site_tagline}
       placeholder="A modern self-hosted forum"
     />
+    <div class="form-text">Used as the SEO meta description.</div>
   </div>
 
   <div class="row mb-3">

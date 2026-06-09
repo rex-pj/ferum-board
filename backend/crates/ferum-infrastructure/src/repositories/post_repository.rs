@@ -4,9 +4,9 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::posts;
+use crate::entities::{posts, threads};
 use ferum_application::shared::AppError;
-use ferum_domain::models::post::Post;
+use ferum_domain::models::post::{Post, PostStatus};
 use ferum_domain::repositories::post_repository::{NewPost, PostRepository};
 
 pub struct PgPostRepository {
@@ -19,6 +19,20 @@ impl PgPostRepository {
     }
 }
 
+fn entity_status_to_domain(s: &posts::PostStatus) -> PostStatus {
+    match s {
+        posts::PostStatus::Pending => PostStatus::Pending,
+        posts::PostStatus::Published => PostStatus::Published,
+    }
+}
+
+fn domain_status_to_entity(s: PostStatus) -> posts::PostStatus {
+    match s {
+        PostStatus::Pending => posts::PostStatus::Pending,
+        PostStatus::Published => posts::PostStatus::Published,
+    }
+}
+
 fn entity_to_domain(m: posts::Model) -> Post {
     Post {
         id: m.id,
@@ -27,6 +41,7 @@ fn entity_to_domain(m: posts::Model) -> Post {
         parent_id: m.parent_id,
         content_md: m.content_md,
         content_html: m.content_html,
+        status: entity_status_to_domain(&m.status),
         is_deleted: m.is_deleted,
         deleted_at: m.deleted_at.map(|t| t.with_timezone(&Utc)),
         deleted_by_id: m.deleted_by_id,
@@ -40,6 +55,8 @@ fn entity_to_domain(m: posts::Model) -> Post {
         author_role: None,
         reactions: vec![],
         my_reactions: vec![],
+        thread_slug: None,
+        thread_title: None,
     }
 }
 
@@ -62,6 +79,7 @@ impl PostRepository for PgPostRepository {
         let query = posts::Entity::find()
             .filter(posts::Column::ThreadId.eq(thread_id))
             .filter(posts::Column::IsDeleted.eq(false))
+            .filter(posts::Column::Status.eq(posts::PostStatus::Published))
             .order_by_asc(posts::Column::CreatedAt);
 
         let total = query.clone().count(&self.db).await?;
@@ -77,6 +95,7 @@ impl PostRepository for PgPostRepository {
             parent_id: Set(cmd.parent_id),
             content_md: Set(cmd.content_md),
             content_html: Set(cmd.content_html),
+            status: Set(domain_status_to_entity(cmd.status)),
             ..Default::default()
         };
         let inserted = model.insert(&self.db).await?;
@@ -118,5 +137,84 @@ impl PostRepository for PgPostRepository {
             .exec(&self.db)
             .await?;
         Ok(())
+    }
+
+    async fn set_status(&self, id: Uuid, status: PostStatus) -> Result<(), AppError> {
+        let model = posts::Entity::find_by_id(id)
+            .one(&self.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        let mut active: posts::ActiveModel = model.into();
+        active.status = Set(domain_status_to_entity(status));
+        active.update(&self.db).await?;
+        Ok(())
+    }
+
+    async fn list_by_author(
+        &self,
+        author_id: Uuid,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Post>, u64), AppError> {
+        use std::collections::HashMap;
+
+        let offset = (page.saturating_sub(1)) * per_page;
+        let query = posts::Entity::find()
+            .filter(posts::Column::AuthorId.eq(author_id))
+            .filter(posts::Column::IsDeleted.eq(false))
+            .filter(posts::Column::Status.eq(posts::PostStatus::Published))
+            .order_by_desc(posts::Column::CreatedAt);
+
+        let total = query.clone().count(&self.db).await?;
+        let rows = query.limit(per_page).offset(offset).all(&self.db).await?;
+
+        let thread_ids: Vec<Uuid> = rows.iter().map(|r| r.thread_id).collect();
+        let thread_map: HashMap<Uuid, (String, String)> = threads::Entity::find()
+            .filter(threads::Column::Id.is_in(thread_ids))
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|t| (t.id, (t.slug, t.title)))
+            .collect();
+
+        let posts = rows
+            .into_iter()
+            .map(|row| {
+                let mut post = entity_to_domain(row.clone());
+                if let Some((slug, title)) = thread_map.get(&row.thread_id) {
+                    post.thread_slug = Some(slug.clone());
+                    post.thread_title = Some(title.clone());
+                }
+                post
+            })
+            .collect();
+
+        Ok((posts, total))
+    }
+
+    async fn list_pending(
+        &self,
+        category_id: Option<Uuid>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Post>, u64), AppError> {
+        use crate::entities::threads;
+
+        let offset = (page.saturating_sub(1)) * per_page;
+
+        let mut query = posts::Entity::find()
+            .filter(posts::Column::Status.eq(posts::PostStatus::Pending))
+            .filter(posts::Column::IsDeleted.eq(false))
+            .order_by_asc(posts::Column::CreatedAt);
+
+        if let Some(cat_id) = category_id {
+            query = query
+                .join(JoinType::InnerJoin, posts::Relation::Thread.def())
+                .filter(threads::Column::CategoryId.eq(cat_id));
+        }
+
+        let total = query.clone().count(&self.db).await?;
+        let rows = query.limit(per_page).offset(offset).all(&self.db).await?;
+        Ok((rows.into_iter().map(entity_to_domain).collect(), total))
     }
 }

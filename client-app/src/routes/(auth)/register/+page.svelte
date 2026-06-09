@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>Create an account | Ferum Board</title>
+	<title>Create an account | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -7,7 +7,7 @@
 	import { enhance } from '$app/forms';
 	import { ROUTES } from '$lib/routes';
 
-	let { form }: { form: any } = $props();
+	let { form, data }: { form: any; data: any } = $props();
 	let loading = $state(false);
 	let showPassword = $state(false);
 </script>
@@ -50,7 +50,7 @@
 				type="text"
 				id="username"
 				name="username"
-				class="form-control"
+				class="form-control {form?.fieldErrors?.username ? 'is-invalid' : ''}"
 				required
 				minlength="3"
 				maxlength="30"
@@ -58,7 +58,11 @@
 				autocomplete="username"
 				value={form?.username ?? ''}
 			/>
-			<div class="form-text">3–30 characters. Letters, numbers, _ and - only.</div>
+			{#if form?.fieldErrors?.username}
+				<div class="invalid-feedback">{form.fieldErrors.username}</div>
+			{:else}
+				<div class="form-text">3–30 characters. Letters, numbers, _ and - only.</div>
+			{/if}
 		</div>
 
 		<div class="mb-3">
@@ -67,11 +71,14 @@
 				type="email"
 				id="email"
 				name="email"
-				class="form-control"
+				class="form-control {form?.fieldErrors?.email ? 'is-invalid' : ''}"
 				required
 				autocomplete="email"
 				value={form?.email ?? ''}
 			/>
+			{#if form?.fieldErrors?.email}
+				<div class="invalid-feedback">{form.fieldErrors.email}</div>
+			{/if}
 		</div>
 
 		<div class="mb-4">
@@ -81,7 +88,7 @@
 					type={showPassword ? 'text' : 'password'}
 					id="password"
 					name="password"
-					class="form-control"
+					class="form-control {form?.fieldErrors?.password ? 'is-invalid' : ''}"
 					required
 					minlength="8"
 					autocomplete="new-password"
@@ -94,8 +101,13 @@
 				>
 					<i class={showPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'}></i>
 				</button>
+				{#if form?.fieldErrors?.password}
+					<div class="invalid-feedback">{form.fieldErrors.password}</div>
+				{/if}
 			</div>
-			<div class="form-text">At least 8 characters.</div>
+			{#if !form?.fieldErrors?.password}
+				<div class="form-text">At least 8 characters.</div>
+			{/if}
 		</div>
 
 		<button type="submit" class="btn btn-primary w-100" disabled={loading}>

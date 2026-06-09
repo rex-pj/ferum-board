@@ -30,6 +30,8 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, depends, parent }
 		siteDescription,
 		logoUrl,
 		primaryColor,
-		theme: prefsJson.data?.theme ?? null
+		theme: prefsJson.data?.theme ?? null,
+		fontSizePref: prefsJson.data?.font_size ?? null,
+		layoutPref: prefsJson.data?.layout ?? null
 	};
 };

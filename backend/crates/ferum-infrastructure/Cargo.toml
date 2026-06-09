@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 s3 = ["dep:aws-sdk-s3", "dep:aws-config", "dep:aws-credential-types"]
 meilisearch = ["dep:meilisearch-sdk"]
+script_plugins = ["dep:boa_engine"]
 default = []
 
 [dependencies]
@@ -51,4 +52,7 @@ aws-sdk-s3 = { version = "1", optional = true }
 aws-config = { version = "1", optional = true }
 aws-credential-types = { version = "1", optional = true }
 meilisearch-sdk = { version = "0.28", optional = true }
+boa_engine = { version = "0.19", optional = true }
 anyhow = "1.0.102"
+zip = "2.1"
+toml = "0.8"

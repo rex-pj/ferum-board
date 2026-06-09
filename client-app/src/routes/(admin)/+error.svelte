@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>Error {$page.status} | Admin | Ferum Board</title>
+	<title>Error {$page.status} | Admin | {$page.data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

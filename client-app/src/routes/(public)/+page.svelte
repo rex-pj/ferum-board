@@ -33,7 +33,19 @@
 	<!-- Feed column -->
 	<div class="fr-feed-col">
 		<div class="d-flex justify-content-between align-items-center mb-3">
-			<h1 class="h5 fw-semibold mb-0">Latest Discussions</h1>
+			<div class="d-flex align-items-center gap-2">
+				<h1 class="h5 fw-semibold mb-0">Latest Discussions</h1>
+				{#if data.isPersonalized}
+					<span class="badge bg-primary-subtle text-primary-emphasis small">
+						<i class="fa-solid fa-sliders me-1"></i>Personalized
+					</span>
+				{/if}
+			</div>
+			{#if data.isPersonalized}
+				<a href={ROUTES.FORUM_INDEX} class="btn btn-link btn-sm text-muted text-decoration-none p-0">
+					All categories
+				</a>
+			{/if}
 		</div>
 
 		{#if data.threads?.length > 0}

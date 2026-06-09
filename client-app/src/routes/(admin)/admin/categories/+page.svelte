@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Categories | Admin | Ferum Board</title>
+	<title>Categories | Admin | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -15,7 +15,7 @@
 	let deletingId = $state<string | null>(null);
 
 	const VIEW_POLICIES = ['public', 'members_only', 'staff_only'];
-	const POST_POLICIES = ['members', 'trusted', 'staff_only', 'closed'];
+	const POST_POLICIES = ['members', 'trusted', 'staff_only', 'closed', 'moderated'];
 </script>
 
 <div class="d-flex align-items-center gap-2 mb-4">

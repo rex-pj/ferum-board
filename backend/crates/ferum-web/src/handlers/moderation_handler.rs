@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::AuthUser;
+use crate::view_models::post::PostResponse;
 use crate::view_models::report::{
     AuditLogQuery, CreateReportRequest, ReportListQuery, ReportResponse, ResolveReportRequest,
     TempBanRequest, WarnUserRequest,
@@ -106,6 +107,55 @@ pub async fn temp_ban_handler(
         .moderation
         .temp_ban(actor, user_id, body.reason, body.until)
         .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ─── Post approval queue ──────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct PendingQueueQuery {
+    pub category_id: Option<uuid::Uuid>,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
+}
+
+pub async fn list_pending_posts_handler(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Query(q): Query<PendingQueueQuery>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
+    let page = q.page.unwrap_or(1).max(1);
+    let per_page = q.per_page.unwrap_or(20);
+    let (posts, total) = state
+        .post
+        .list_pending(actor, q.category_id, page, per_page)
+        .await?;
+    Ok(Json(PagedResponse::new(
+        posts.into_iter().map(PostResponse::from).collect(),
+        total,
+        page,
+        per_page,
+    )))
+}
+
+pub async fn approve_post_handler(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
+    state.post.approve_post(actor, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn reject_post_handler(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.as_ref().ok_or(AppError::Unauthorized)?;
+    state.post.reject_post(actor, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

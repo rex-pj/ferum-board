@@ -4,6 +4,19 @@ use uuid::Uuid;
 
 use crate::models::reaction::ReactionKind;
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum PostStatus {
+    Pending,
+    Published,
+}
+
+impl PostStatus {
+    pub fn is_pending(&self) -> bool {
+        matches!(self, PostStatus::Pending)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Post {
     pub id: Uuid,
@@ -12,6 +25,7 @@ pub struct Post {
     pub parent_id: Option<Uuid>,
     pub content_md: String,
     pub content_html: String,
+    pub status: PostStatus,
     pub is_deleted: bool,
     pub deleted_at: Option<DateTime<Utc>>,
     pub deleted_by_id: Option<Uuid>,
@@ -26,6 +40,9 @@ pub struct Post {
     pub author_role: Option<String>,
     pub reactions: Vec<(ReactionKind, u64)>,
     pub my_reactions: Vec<ReactionKind>,
+    // Populated only by list_by_author for the user posts page
+    pub thread_slug: Option<String>,
+    pub thread_title: Option<String>,
 }
 
 impl Post {

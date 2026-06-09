@@ -33,6 +33,7 @@ export const actions: Actions = {
 
 		// Checkboxes are absent from FormData when unchecked — set explicitly
 		if (!data.has('registration_open')) body.registration_open = 'false';
+		if (!data.has('post_approval_enabled')) body.post_approval_enabled = 'false';
 
 		const res = await fetch(`${API}/api/admin/config`, {
 			method: 'PUT',

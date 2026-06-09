@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Users | Admin | Ferum Board</title>
+	<title>Users | Admin | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

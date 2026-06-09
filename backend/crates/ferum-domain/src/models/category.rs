@@ -32,4 +32,5 @@ pub enum PostPolicy {
     Trusted,
     StaffOnly,
     Closed,
+    Moderated,
 }

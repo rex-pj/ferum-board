@@ -15,6 +15,8 @@ pub struct Model {
     pub created_by_id: Option<Uuid>,
     pub last_triggered_at: Option<DateTimeWithTimeZone>,
     pub failure_count: i32,
+    /// NULL for user-created webhooks; set for Tier 1 plugin-registered webhooks.
+    pub plugin_id: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

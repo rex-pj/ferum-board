@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Bookmarks | Ferum Board</title>
+	<title>Bookmarks | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

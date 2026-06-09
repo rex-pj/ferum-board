@@ -12,15 +12,23 @@
 </svelte:head>
 
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import ThreadCard from '$lib/components/molecules/ThreadCard.svelte';
 	import Pagination from '$lib/components/atoms/Pagination.svelte';
 	import { ROUTES } from '$lib/routes';
 
-	let { data }: { data: any } = $props();
+	let { data, form }: { data: any; form: any } = $props();
 
 	const cat = $derived(data.category);
 	const totalPages = $derived(Math.ceil((data.meta?.total ?? 0) / (data.meta?.per_page ?? 20)));
 	const currentPage = $derived(data.meta?.page ?? 1);
+
+	// Optimistic watch/mute state — falls back to server value
+	let watched = $state(data.watched ?? false);
+	let muted = $state(data.muted ?? false);
+
+	$effect(() => { watched = data.watched ?? false; });
+	$effect(() => { muted = data.muted ?? false; });
 
 	const subCategories = $derived(
 		(data.categories ?? []).filter((c: any) => c.parent_id === cat?.id)
@@ -49,18 +57,55 @@
 		</nav>
 
 		<!-- Category header -->
-		<div class="d-flex justify-content-between align-items-center mb-3">
+		<div class="d-flex justify-content-between align-items-start mb-3 gap-2">
 			<div class="d-flex align-items-center gap-2">
 				{#if cat?.color}
 					<span class="rounded-circle flex-shrink-0" style="width:10px; height:10px; background:{cat.color};"></span>
 				{/if}
 				<h1 class="h5 fw-semibold mb-0">{cat?.name}</h1>
+				{#if watched}
+					<span class="badge bg-primary-subtle text-primary-emphasis small">
+						<i class="fa-solid fa-eye me-1"></i>Watching
+					</span>
+				{/if}
+				{#if muted}
+					<span class="badge bg-secondary-subtle text-secondary-emphasis small">
+						<i class="fa-solid fa-eye-slash me-1"></i>Muted
+					</span>
+				{/if}
 			</div>
-			{#if data.user}
-				<a href={ROUTES.NEW_THREAD_IN_CATEGORY(cat?.id)} class="btn btn-primary btn-sm gap-1 flex-shrink-0">
-					<i class="fa-solid fa-plus"></i>New Thread
-				</a>
-			{/if}
+
+			<div class="d-flex gap-2 flex-shrink-0">
+				{#if data.user}
+					<!-- Watch / Unwatch -->
+					<form method="POST" action={watched ? '?/unwatch' : '?/watch'} use:enhance={({ submitter }) => {
+						watched = !watched;
+						return async ({ update }) => update({ reset: false });
+					}}>
+						<input type="hidden" name="category_id" value={cat?.id} />
+						<button type="submit" class="btn btn-outline-secondary btn-sm" title={watched ? 'Stop watching' : 'Watch category'}>
+							<i class="fa-solid {watched ? 'fa-eye-slash' : 'fa-eye'} me-1"></i>
+							{watched ? 'Unwatch' : 'Watch'}
+						</button>
+					</form>
+
+					<!-- Mute / Unmute -->
+					<form method="POST" action={muted ? '?/unmute' : '?/mute'} use:enhance={() => {
+						muted = !muted;
+						return async ({ update }) => update({ reset: false });
+					}}>
+						<input type="hidden" name="category_id" value={cat?.id} />
+						<button type="submit" class="btn btn-outline-secondary btn-sm" title={muted ? 'Unmute' : 'Mute category'}>
+							<i class="fa-solid {muted ? 'fa-bell' : 'fa-bell-slash'} me-1"></i>
+							{muted ? 'Unmute' : 'Mute'}
+						</button>
+					</form>
+
+					<a href={ROUTES.NEW_THREAD_IN_CATEGORY(cat?.id)} class="btn btn-primary btn-sm">
+						<i class="fa-solid fa-plus me-1"></i>New Thread
+					</a>
+				{/if}
+			</div>
 		</div>
 
 		{#if data.threads?.length > 0}

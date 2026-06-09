@@ -1,5 +1,8 @@
 pub mod notification_kind;
+pub mod plugin_status;
+pub mod plugin_tier;
 pub mod post_policy;
+pub mod post_status;
 pub mod reaction_kind;
 pub mod report_status;
 pub mod thread_status;

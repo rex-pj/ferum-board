@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Audit Log | Mod | Ferum Board</title>
+	<title>Audit Log | Mod | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

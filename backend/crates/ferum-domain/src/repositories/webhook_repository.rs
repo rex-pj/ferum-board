@@ -10,6 +10,8 @@ pub struct NewWebhook {
     pub events: Vec<String>,
     pub secret: Option<String>,
     pub created_by_id: Option<Uuid>,
+    /// Set to `Some(plugin_id)` when registering webhooks on behalf of a Tier 1 plugin.
+    pub plugin_id: Option<Uuid>,
 }
 
 #[derive(Debug)]
@@ -28,6 +30,8 @@ pub trait WebhookRepository: Send + Sync {
     async fn create(&self, new: NewWebhook) -> Result<Webhook, AppError>;
     async fn update(&self, id: Uuid, update: UpdateWebhook) -> Result<Webhook, AppError>;
     async fn delete(&self, id: Uuid) -> Result<(), AppError>;
+    /// Delete all webhooks whose `plugin_id` matches. Called on plugin deactivation.
+    async fn delete_by_plugin(&self, plugin_id: Uuid) -> Result<(), AppError>;
     /// Called on successful delivery: update last_triggered_at, reset failure_count to 0.
     async fn record_success(&self, id: Uuid) -> Result<(), AppError>;
     /// Called on failed delivery: increment failure_count; auto-disable when >= WEBHOOK_MAX_FAILURES.

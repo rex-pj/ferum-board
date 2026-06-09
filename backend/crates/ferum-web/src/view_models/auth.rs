@@ -51,6 +51,7 @@ pub struct UserResponse {
     /// Slug of the user's highest-priority global role (for badge display).
     pub primary_role_slug: Option<String>,
     pub trust_level: String,
+    pub trust_score: i32,
     pub avatar_url: Option<String>,
     pub cover_url: Option<String>,
     pub bio: Option<String>,
@@ -74,6 +75,7 @@ impl From<User> for UserResponse {
             display_name: u.display_name,
             primary_role_slug: u.primary_role_slug,
             trust_level: format!("{:?}", u.trust_level).to_lowercase(),
+            trust_score: u.trust_score,
             avatar_url: u.avatar_url,
             cover_url: u.cover_url,
             bio: u.bio,

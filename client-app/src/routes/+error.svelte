@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>Error {$page.status} | Ferum Board</title>
+	<title>Error {$page.status} | {$page.data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -57,9 +57,21 @@
 
 <div class="fr-err-shell">
 	<header class="fr-err-header">
-		<a href={ROUTES.HOME} class="fr-brand-link">
-			<i class="fa-solid fa-layer-group text-primary"></i>
-			Ferum Board
+		<a href={ROUTES.HOME} class="fr-err-brand" aria-label="Ferum Board">
+			<svg viewBox="0 0 160 36" height="28" aria-hidden="true" focusable="false" overflow="visible">
+				<text x="0" y="28"
+					font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+					font-size="30" font-weight="800" letter-spacing="-1"
+					fill="var(--bs-link-color)">Fe</text>
+				<text x="36" y="28"
+					font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+					font-size="30" font-weight="800" letter-spacing="-1"
+					fill="currentColor">rum</text>
+				<text x="102" y="28"
+					font-family="'Inter', 'Helvetica Neue', Arial, sans-serif"
+					font-size="20" font-weight="400"
+					fill="var(--bs-link-color)">board</text>
+			</svg>
 		</a>
 	</header>
 
@@ -112,6 +124,12 @@
 		flex-shrink: 0;
 	}
 
+	.fr-err-brand {
+		display: flex;
+		align-items: center;
+		text-decoration: none;
+		color: var(--bs-body-color);
+	}
 
 	.fr-err-body {
 		flex: 1;

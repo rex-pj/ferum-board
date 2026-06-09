@@ -1,0 +1,45 @@
+[meta]
+id          = "com.ferum.discord-notifier"
+name        = "Discord Notifier"
+version     = "1.0.0"
+tier        = "manifest"
+min_ferum   = "0.1.0"
+description = "Posts a Discord embed to a configured channel webhook when new threads or posts are created."
+author      = "Ferum Team"
+
+# ─── Config schema (rendered as a form in /admin/plugins/[slug]) ─────────────
+
+[config_schema]
+type = "object"
+required = ["webhook_url"]
+
+[config_schema.properties.webhook_url]
+type        = "string"
+title       = "Discord Webhook URL"
+description = "The Discord channel webhook URL (Settings → Integrations → Webhooks)."
+
+[config_schema.properties.notify_on_post]
+type        = "boolean"
+title       = "Notify on new reply"
+description = "Also send a notification when a reply is posted (not just new threads)."
+default     = false
+
+[config_schema.properties.username]
+type        = "string"
+title       = "Bot display name"
+description = "The name shown as the message sender in Discord."
+default     = "Ferum Board"
+
+# ─── Tier 1: webhook subscriptions ───────────────────────────────────────────
+# Ferum will POST to these URLs when the listed events occur.
+# {{config.field}} is substituted with the saved config value at activation time.
+
+[[webhooks]]
+event = "post.created"
+url   = "{{config.webhook_url}}"
+
+# ─── Capabilities declared (reviewed by admin at install time) ────────────────
+
+[capabilities]
+# Tier 1 plugins declare no hooks — they only receive outbound webhooks.
+hooks = []

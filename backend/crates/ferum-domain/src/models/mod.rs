@@ -2,6 +2,8 @@
 
 pub mod audit_log;
 pub mod bookmark;
+pub mod follow;
+pub mod plugin;
 pub mod category;
 pub mod notification;
 pub mod post;
@@ -15,13 +17,18 @@ pub mod webhook;
 
 pub use audit_log::AuditLog;
 pub use bookmark::Bookmark;
+pub use follow::Follow;
 pub use category::{Category, PostPolicy, ViewPolicy};
 pub use notification::{Notification, NotificationKind};
-pub use post::Post;
+pub use post::{Post, PostStatus};
 pub use reaction::{Reaction, ReactionKind};
 pub use report::{Report, ReportStatus};
 pub use role::{Permission, Role, UserRoleAssignment};
 pub use tag::{NewTag, Tag};
 pub use thread::{Thread, ThreadStatus};
 pub use user::{TrustLevel, User, UserPreferences};
+pub use plugin::{
+    NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginHook, PluginLog,
+    PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
+};
 pub use webhook::Webhook;

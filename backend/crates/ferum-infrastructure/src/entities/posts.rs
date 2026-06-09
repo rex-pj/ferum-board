@@ -13,6 +13,7 @@ pub struct Model {
     pub content_md: String,
     #[sea_orm(column_type = "Text")]
     pub content_html: String,
+    pub status: PostStatus,
     pub is_deleted: bool,
     pub deleted_at: Option<DateTimeWithTimeZone>,
     pub deleted_by_id: Option<Uuid>,
@@ -59,3 +60,12 @@ impl Related<super::reactions::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+#[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "post_status")]
+pub enum PostStatus {
+    #[sea_orm(string_value = "pending")]
+    Pending,
+    #[sea_orm(string_value = "published")]
+    Published,
+}

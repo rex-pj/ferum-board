@@ -10,6 +10,7 @@ use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
 use ferum_application::usecases::auth_usecase::AuthUseCase;
 use ferum_application::usecases::bookmark_usecase::BookmarkUseCase;
+use ferum_application::usecases::follow_usecase::FollowUseCase;
 use ferum_application::usecases::category_usecase::CategoryUseCase;
 use ferum_application::usecases::moderation_usecase::ModerationUseCase;
 use ferum_application::usecases::notification_usecase::NotificationUseCase;
@@ -21,6 +22,7 @@ use ferum_application::usecases::setup_usecase::SetupUseCase;
 use ferum_application::usecases::tag_usecase::TagUseCase;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
+use ferum_application::usecases::plugin_usecase::PluginUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
 use ferum_domain::repositories::SiteConfigRepository;
 #[cfg(feature = "meilisearch")]
@@ -36,9 +38,10 @@ use ferum_infrastructure::{
     jwt_token_service::JwtTokenService,
     notification::{SseBroadcaster, SseNotificationBus},
     rate_limit::{InMemoryRateLimiter, NullRateLimiter, RedisRateLimiter},
+    plugins::registry::PluginRegistry,
     repositories::{
-        PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository,
-        PgNotificationRepository, PgPermissionRepository, PgPostRepository,
+        PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository, PgFollowRepository,
+        PgNotificationRepository, PgPermissionRepository, PgPluginRepository, PgPostRepository,
         PgReactionRepository, PgReportRepository, PgRoleRepository, PgSiteConfigRepository,
         PgStoredFileRepository, PgTagRepository, PgThreadRepository, PgUserRepository,
         PgUserRoleRepository, PgWebhookRepository,
@@ -83,13 +86,20 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     };
 
     // ─── Email service ──────────────────────────────────────────────────────
+    // When SMTP_HOST is absent, email is disabled and users are auto-verified on registration.
+    let smtp_enabled = config.smtp_host.is_some();
     let email = Arc::new(LettreEmailService::new(
-        &config.smtp_host,
+        config.smtp_host.as_deref().unwrap_or("localhost"),
         config.smtp_port,
         config.smtp_user.as_deref(),
         config.smtp_pass.as_deref(),
         &config.from_email,
     )?);
+    if !smtp_enabled {
+        tracing::warn!(
+            "SMTP_HOST not set — email sending disabled, new registrations are auto-verified"
+        );
+    }
 
     // ─── SSE broadcaster ─────────────────────────────────────────────────────
     let broadcaster = Arc::new(SseBroadcaster::new());
@@ -224,22 +234,43 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let hasher = Arc::new(BcryptPasswordHasher);
     let token_service: Arc<dyn ferum_application::ports::TokenService> =
         Arc::new(JwtTokenService::new(&config.jwt_secret));
-    let event_bus = Arc::new(EventBus::new(
-        audit_log_repo,
-        notification_repo.clone(),
-        notification_bus.clone(),
-        webhook_repo.clone(),
-        job_queue.clone(),
+
+    // ─── Plugin system (before event_bus so plugin_runtime can be injected) ──
+    let plugin_repo = Arc::new(PgPluginRepository::new(pg_write.clone()));
+    let plugin_registry = Arc::new(PluginRegistry::new(
+        plugin_repo.clone(),
+        cache.clone(),
+        config.plugin_hook_timeout_ms,
+        config.plugin_circuit_threshold,
     ));
+    if let Err(e) = plugin_registry.load_from_db().await {
+        tracing::warn!("Plugin registry failed to load from DB: {:?}", e);
+    }
+    let plugin_runtime: Arc<dyn ferum_application::ports::PluginRuntime> = plugin_registry;
+
+    let event_bus = Arc::new(
+        EventBus::new(
+            audit_log_repo,
+            notification_repo.clone(),
+            notification_bus.clone(),
+            webhook_repo.clone(),
+            job_queue.clone(),
+        )
+        .with_plugin_runtime(plugin_runtime.clone()),
+    );
 
     // ─── Use cases ───────────────────────────────────────────────────────────
-    let auth = Arc::new(AuthUseCase::new(
-        user_repo.clone(),
-        hasher,
-        token_service.clone(),
-        cache.clone(),
-        job_queue.clone(),
-    ));
+    let auth = Arc::new(
+        AuthUseCase::new(
+            user_repo.clone(),
+            hasher,
+            token_service.clone(),
+            cache.clone(),
+            job_queue.clone(),
+        )
+        .with_auto_verify_email(!smtp_enabled)
+        .with_plugin_runtime(plugin_runtime.clone()),
+    );
 
     let admin = Arc::new(AdminUseCase::new(
         category_repo.clone(),
@@ -258,30 +289,42 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     let category = Arc::new(CategoryUseCase::new(category_repo.clone(), thread_repo.clone(), tag_repo.clone()));
 
-    let thread = Arc::new(ThreadUseCase::new(
-        thread_repo.clone(),
-        category_repo.clone(),
-        post_repo.clone(),
-        job_queue.clone(),
-        stored_file_repo.clone(),
-        event_bus.clone(),
-        cache.clone(),
-        tag_repo.clone(),
-    ));
+    let thread = Arc::new(
+        ThreadUseCase::new(
+            thread_repo.clone(),
+            category_repo.clone(),
+            post_repo.clone(),
+            job_queue.clone(),
+            stored_file_repo.clone(),
+            event_bus.clone(),
+            cache.clone(),
+            tag_repo.clone(),
+            user_repo.clone(),
+        )
+        .with_plugin_runtime(plugin_runtime.clone()),
+    );
 
-    let post = Arc::new(PostUseCase::new(
-        post_repo.clone(),
-        thread_repo.clone(),
-        category_repo.clone(),
-        user_repo.clone(),
-        reaction_repo.clone(),
-        event_bus.clone(),
-    ));
+    let site_config: Arc<dyn SiteConfigRepository> =
+        Arc::new(PgSiteConfigRepository::new(pg_write.clone()));
+
+    let post = Arc::new(
+        PostUseCase::new(
+            post_repo.clone(),
+            thread_repo.clone(),
+            category_repo.clone(),
+            user_repo.clone(),
+            reaction_repo.clone(),
+            site_config.clone(),
+            event_bus.clone(),
+        )
+        .with_plugin_runtime(plugin_runtime.clone()),
+    );
 
     let reaction = Arc::new(ReactionUseCase::new(
         reaction_repo.clone(),
         post_repo.clone(),
         thread_repo.clone(),
+        user_repo.clone(),
         event_bus.clone(),
     ));
 
@@ -294,7 +337,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         user_repo.clone(),
         notification_repo,
         Arc::new(PgAuditLogRepository::new(pg_write.clone())),
-        event_bus,
+        event_bus.clone(),
         cache.clone(),
     ));
 
@@ -312,11 +355,19 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     ));
 
     let bookmark = Arc::new(BookmarkUseCase::new(bookmark_repo, thread_repo.clone()));
+    let follow_repo = Arc::new(PgFollowRepository::new(pg_write.clone()));
+    let follow = Arc::new(FollowUseCase::new(
+        follow_repo,
+        user_repo.clone(),
+        event_bus.clone(),
+    ));
     let tag = Arc::new(TagUseCase::new(tag_repo.clone()));
     let webhook = Arc::new(WebhookUseCase::new(webhook_repo.clone()));
-
-    let site_config: Arc<dyn SiteConfigRepository> =
-        Arc::new(PgSiteConfigRepository::new(pg_write.clone()));
+    let plugin = Arc::new(PluginUseCase::new(
+        plugin_repo,
+        webhook_repo.clone(),
+        plugin_runtime.clone(),
+    ));
 
     let hasher3 = Arc::new(BcryptPasswordHasher);
     let bulk_seed = Arc::new(PgBulkSeedService::new(pg_write.clone()));
@@ -341,6 +392,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         admin,
         admin_stats,
         bookmark,
+        follow,
         category,
         thread,
         post,
@@ -352,9 +404,12 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         role,
         tag,
         webhook,
+        plugin,
+        plugin_runtime,
         site_config,
         stored_files: stored_file_repo,
         user_role_repo,
+        user_repo,
         role_permission_cache,
         token_service,
         cache,
@@ -363,6 +418,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         notification_bus,
         broadcaster,
         cookies_secure,
+        plugins_dir: config.plugins_dir.clone(),
     })
 }
 

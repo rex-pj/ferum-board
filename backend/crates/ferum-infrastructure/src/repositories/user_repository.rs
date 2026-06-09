@@ -146,7 +146,7 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
-        let sql = format!("{USER_SELECT} WHERE u.email = $1");
+        let sql = format!("{USER_SELECT} WHERE LOWER(u.email) = LOWER($1)");
         let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [email.into()]);
         Ok(UserRow::find_by_statement(stmt)
             .one(&self.db)
@@ -526,6 +526,111 @@ impl UserRepository for PgUserRepository {
 
     async fn remove_cover(&self, user_id: Uuid) -> Result<(), AppError> {
         user_covers::Entity::delete_by_id(user_id)
+            .exec(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    async fn update_last_seen(&self, user_id: Uuid) -> Result<(), AppError> {
+        // Atomically update last_seen_at and increment days_visited only when
+        // the calendar date (UTC) has changed since the previous visit.
+        self.db
+            .execute(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                r#"
+                UPDATE users SET
+                    last_seen_at  = NOW(),
+                    days_visited  = days_visited + CASE
+                        WHEN last_seen_at IS NULL
+                          OR DATE(last_seen_at AT TIME ZONE 'UTC') < CURRENT_DATE
+                        THEN 1 ELSE 0 END
+                WHERE id = $1
+                "#,
+                [user_id.into()],
+            ))
+            .await?;
+        Ok(())
+    }
+
+    async fn increment_post_count(&self, user_id: Uuid, delta: i32) -> Result<(), AppError> {
+        self.db
+            .execute(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE users SET post_count = GREATEST(0, post_count + $1) WHERE id = $2",
+                [delta.into(), user_id.into()],
+            ))
+            .await?;
+        Ok(())
+    }
+
+    async fn increment_trust_score(&self, user_id: Uuid, amount: i32) -> Result<(), AppError> {
+        self.db
+            .execute(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE users SET trust_score = GREATEST(0, LEAST(100, trust_score + $1)) WHERE id = $2",
+                [amount.into(), user_id.into()],
+            ))
+            .await?;
+        Ok(())
+    }
+
+    async fn get_watched_categories(&self, user_id: Uuid) -> Result<Vec<Uuid>, AppError> {
+        let rows = user_watched_categories::Entity::find()
+            .filter(user_watched_categories::Column::UserId.eq(user_id))
+            .all(&self.db)
+            .await?;
+        Ok(rows.into_iter().map(|r| r.category_id).collect())
+    }
+
+    async fn get_muted_categories(&self, user_id: Uuid) -> Result<Vec<Uuid>, AppError> {
+        let rows = user_muted_categories::Entity::find()
+            .filter(user_muted_categories::Column::UserId.eq(user_id))
+            .all(&self.db)
+            .await?;
+        Ok(rows.into_iter().map(|r| r.category_id).collect())
+    }
+
+    async fn watch_category(&self, user_id: Uuid, category_id: Uuid) -> Result<(), AppError> {
+        user_watched_categories::Entity::insert(user_watched_categories::ActiveModel {
+            user_id: Set(user_id),
+            category_id: Set(category_id),
+        })
+        .on_conflict(OnConflict::columns([
+            user_watched_categories::Column::UserId,
+            user_watched_categories::Column::CategoryId,
+        ]).do_nothing().to_owned())
+        .exec(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    async fn unwatch_category(&self, user_id: Uuid, category_id: Uuid) -> Result<(), AppError> {
+        user_watched_categories::Entity::delete_many()
+            .filter(user_watched_categories::Column::UserId.eq(user_id))
+            .filter(user_watched_categories::Column::CategoryId.eq(category_id))
+            .exec(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    async fn mute_category(&self, user_id: Uuid, category_id: Uuid) -> Result<(), AppError> {
+        user_muted_categories::Entity::insert(user_muted_categories::ActiveModel {
+            user_id: Set(user_id),
+            category_id: Set(category_id),
+        })
+        .on_conflict(OnConflict::columns([
+            user_muted_categories::Column::UserId,
+            user_muted_categories::Column::CategoryId,
+        ]).do_nothing().to_owned())
+        .exec(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    async fn unmute_category(&self, user_id: Uuid, category_id: Uuid) -> Result<(), AppError> {
+        user_muted_categories::Entity::delete_many()
+            .filter(user_muted_categories::Column::UserId.eq(user_id))
+            .filter(user_muted_categories::Column::CategoryId.eq(category_id))
             .exec(&self.db)
             .await?;
         Ok(())

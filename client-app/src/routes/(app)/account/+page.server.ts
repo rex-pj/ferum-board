@@ -6,15 +6,17 @@ const API = process.env.API_URL ?? 'http://localhost:8080';
 export const load: PageServerLoad = async ({ cookies, fetch }) => {
 	const token = cookies.get('token')!;
 
-	const [profileRes, prefsRes] = await Promise.all([
+	const [profileRes, prefsRes, catRes] = await Promise.all([
 		fetch(`${API}/api/users/me`, { headers: { Authorization: `Bearer ${token}` } }),
-		fetch(`${API}/api/users/me/preferences`, { headers: { Authorization: `Bearer ${token}` } })
+		fetch(`${API}/api/users/me/preferences`, { headers: { Authorization: `Bearer ${token}` } }),
+		fetch(`${API}/api/categories`, { headers: { Authorization: `Bearer ${token}` } })
 	]);
 
 	const profile = profileRes.ok ? (await profileRes.json()).data : null;
 	const prefs = prefsRes.ok ? (await prefsRes.json()).data : null;
+	const allCategories = catRes.ok ? ((await catRes.json()).data ?? []) : [];
 
-	return { profile, prefs };
+	return { profile, prefs, allCategories };
 };
 
 export const actions: Actions = {
@@ -83,5 +85,27 @@ export const actions: Actions = {
 			return fail(res.status, { prefsError: err?.error?.message ?? 'Failed to update preferences.' });
 		}
 		return { prefsSuccess: 'Preferences saved.' };
+	},
+
+	unwatch: async ({ request, cookies, fetch }) => {
+		const token = cookies.get('token')!;
+		const data = await request.formData();
+		const category_id = data.get('category_id') as string;
+		await fetch(`${API}/api/categories/${category_id}/watch`, {
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		return { success: true };
+	},
+
+	unmute: async ({ request, cookies, fetch }) => {
+		const token = cookies.get('token')!;
+		const data = await request.formData();
+		const category_id = data.get('category_id') as string;
+		await fetch(`${API}/api/categories/${category_id}/mute`, {
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		return { success: true };
 	}
 };

@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>Reset Password | Ferum Board</title>
+	<title>Reset Password | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -7,7 +7,7 @@
 	import { enhance } from '$app/forms';
 	import { ROUTES } from '$lib/routes';
 
-	let { form }: { form: any } = $props();
+	let { form, data }: { form: any; data: any } = $props();
 	let loading = $state(false);
 </script>
 

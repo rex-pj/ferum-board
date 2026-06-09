@@ -10,7 +10,8 @@ path = "src/main.rs"
 [features]
 s3 = ["ferum-infrastructure/s3"]
 meilisearch = ["ferum-infrastructure/meilisearch"]
-default = []
+script_plugins = ["ferum-infrastructure/script_plugins"]
+default = ["script_plugins"]
 
 [dependencies]
 ferum-domain = { path = "../ferum-domain" }

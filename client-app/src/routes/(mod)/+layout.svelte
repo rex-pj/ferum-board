@@ -9,6 +9,7 @@
 
 	const modNav = [
 		{ href: ROUTES.MOD.REPORTS, icon: 'fa-flag', label: 'Reports' },
+		{ href: ROUTES.MOD.QUEUE, icon: 'fa-hourglass-half', label: 'Approval Queue' },
 		{ href: ROUTES.MOD.THREADS, icon: 'fa-comments', label: 'Threads' },
 		{ href: ROUTES.MOD.LOG, icon: 'fa-scroll', label: 'Audit Log' }
 	];

@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Edit Thread | Ferum Board</title>
+	<title>Edit Thread | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -48,6 +48,7 @@
 
 	<form
 		method="POST"
+		action="?/save"
 		enctype="multipart/form-data"
 		use:enhance={async ({ formData, cancel }) => {
 			submitting = true;

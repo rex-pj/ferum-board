@@ -25,12 +25,12 @@ export const actions: Actions = {
 		if (!res.ok) {
 			const body = await res.json().catch(() => ({}));
 			const code = body?.error?.code ?? '';
-			const messages: Record<string, string> = {
+			const hardcoded: Record<string, string> = {
 				invalid_or_expired_token: 'This reset link is invalid or has expired.',
 				token_already_used: 'This reset link has already been used.'
 			};
 			return fail(res.status, {
-				error: messages[code] ?? 'Failed to reset password. Please try again.'
+				error: hardcoded[code] ?? body?.error?.message ?? 'Failed to reset password. Please try again.'
 			});
 		}
 

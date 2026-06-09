@@ -45,6 +45,7 @@ pub struct PostResponse {
     pub parent_id: Option<Uuid>,
     pub content_md: String,
     pub content_html: String,
+    pub status: String,
     pub is_deleted: bool,
     pub edited_at: Option<DateTime<Utc>>,
     pub edit_count: i32,
@@ -52,6 +53,10 @@ pub struct PostResponse {
     pub author: Option<PostAuthorResponse>,
     pub reactions: Vec<ReactionCountResponse>,
     pub my_reactions: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_title: Option<String>,
 }
 
 impl From<Post> for PostResponse {
@@ -88,6 +93,7 @@ impl From<Post> for PostResponse {
             parent_id: p.parent_id,
             content_md: p.content_md,
             content_html: p.content_html,
+            status: format!("{:?}", p.status).to_lowercase(),
             is_deleted: p.is_deleted,
             edited_at: p.edited_at,
             edit_count: p.edit_count,
@@ -95,6 +101,8 @@ impl From<Post> for PostResponse {
             author,
             reactions,
             my_reactions,
+            thread_slug: p.thread_slug,
+            thread_title: p.thread_title,
         }
     }
 }

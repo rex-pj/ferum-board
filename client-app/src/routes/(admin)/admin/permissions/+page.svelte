@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>Permissions | Admin | Ferum Board</title>
+	<title>Permissions | Admin | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

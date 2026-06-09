@@ -101,6 +101,7 @@ impl From<Category> for CategoryResponse {
                 PostPolicy::Trusted => "trusted",
                 PostPolicy::StaffOnly => "staff_only",
                 PostPolicy::Closed => "closed",
+                PostPolicy::Moderated => "moderated",
             }
             .to_string(),
             color: c.color,

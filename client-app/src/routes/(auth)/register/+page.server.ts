@@ -30,16 +30,25 @@ export const actions: Actions = {
 		if (!res.ok) {
 			const body = await res.json().catch(() => ({}));
 			const code = body?.error?.code ?? '';
-			const messages: Record<string, string> = {
-				email_taken: 'That email address is already registered.',
-				username_taken: 'That username is taken. Please choose another.',
-				validation_error: body?.error?.message ?? 'Invalid input.'
-			};
-			return fail(res.status, {
-				error: messages[code] ?? 'Registration failed. Please try again.',
-				username,
-				email
-			});
+			const message: string = body?.error?.message ?? 'Registration failed. Please try again.';
+
+			if (code === 'email_taken') {
+				return fail(res.status, { fieldErrors: { email: 'That email address is already registered.' }, username, email });
+			}
+			if (code === 'username_taken') {
+				return fail(res.status, { fieldErrors: { username: 'That username is taken. Please choose another.' }, username, email });
+			}
+			// Backend validation errors mention the field name in the message
+			if (/username/i.test(message)) {
+				return fail(res.status, { fieldErrors: { username: message }, username, email });
+			}
+			if (/password/i.test(message)) {
+				return fail(res.status, { fieldErrors: { password: message }, username, email });
+			}
+			if (/email/i.test(message)) {
+				return fail(res.status, { fieldErrors: { email: message }, username, email });
+			}
+			return fail(res.status, { error: message, username, email });
 		}
 
 		return { success: true };

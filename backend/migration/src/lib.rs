@@ -31,6 +31,15 @@ mod m20260001_000026_roles_updated_at;
 mod m20260001_000027_slug_length_constraints;
 mod m20260001_000028_fts_post_content;
 mod m20260001_000029_create_user_covers;
+mod m20260002_000030_create_plugins;
+mod m20260002_000031_create_plugin_hooks;
+mod m20260002_000032_create_plugin_ui_slots;
+mod m20260002_000033_create_plugin_logs;
+mod m20260002_000034_seed_plugin_permission;
+mod m20260002_000035_post_approval;
+mod m20260003_000036_create_user_follows;
+mod m20260003_000037_user_post_count_trigger;
+mod m20260003_000038_add_plugin_id_to_webhooks;
 
 pub struct Migrator;
 
@@ -67,6 +76,15 @@ impl MigratorTrait for Migrator {
             Box::new(m20260001_000027_slug_length_constraints::Migration),
             Box::new(m20260001_000028_fts_post_content::Migration),
             Box::new(m20260001_000029_create_user_covers::Migration),
+            Box::new(m20260002_000030_create_plugins::Migration),
+            Box::new(m20260002_000031_create_plugin_hooks::Migration),
+            Box::new(m20260002_000032_create_plugin_ui_slots::Migration),
+            Box::new(m20260002_000033_create_plugin_logs::Migration),
+            Box::new(m20260002_000034_seed_plugin_permission::Migration),
+            Box::new(m20260002_000035_post_approval::Migration),
+            Box::new(m20260003_000036_create_user_follows::Migration),
+            Box::new(m20260003_000037_user_post_count_trigger::Migration),
+            Box::new(m20260003_000038_add_plugin_id_to_webhooks::Migration),
         ]
     }
 }

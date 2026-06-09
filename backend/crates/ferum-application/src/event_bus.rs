@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::ports::{ForumJob, JobQueue, NotificationBus};
+use crate::ports::{ForumJob, JobQueue, NotificationBus, NullPluginRuntime, PluginRuntime};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::audit_log::AuditLog;
 use ferum_domain::models::notification::NotificationKind;
@@ -14,6 +14,7 @@ pub struct EventBus {
     notification_bus: Arc<dyn NotificationBus>,
     webhooks: Arc<dyn WebhookRepository>,
     jobs: Arc<dyn JobQueue>,
+    plugin_runtime: Arc<dyn PluginRuntime>,
 }
 
 impl EventBus {
@@ -30,7 +31,13 @@ impl EventBus {
             notification_bus,
             webhooks,
             jobs,
+            plugin_runtime: Arc::new(NullPluginRuntime),
         }
+    }
+
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginRuntime>) -> Self {
+        self.plugin_runtime = runtime;
+        self
     }
 
     pub async fn publish(&self, event: ForumEvent) {
@@ -41,6 +48,14 @@ impl EventBus {
                 e
             );
         }
+        // Fire-and-forget plugin after-event dispatch (Tier 2/3 — Milestone 2)
+        // Runs in background so it never blocks or affects the response.
+        let event_type = event.event_type_str().to_string();
+        let payload = serde_json::to_value(&event).unwrap_or_default();
+        let runtime = self.plugin_runtime.clone();
+        tokio::spawn(async move {
+            runtime.dispatch_after_event(&event_type, payload).await;
+        });
     }
 
     async fn handle(&self, event: &ForumEvent) -> Result<(), crate::shared::AppError> {
@@ -281,6 +296,65 @@ impl EventBus {
                     .publish(*mentioned_user_id, payload)
                     .await
                     .ok();
+            }
+            ForumEvent::UserFollowed {
+                follower_id,
+                follower_username,
+                followed_id,
+            } => {
+                let payload = serde_json::json!({
+                    "kind": "system",
+                    "follower_id": follower_id,
+                    "follower_username": follower_username,
+                });
+                self.notifications
+                    .create(*followed_id, NotificationKind::System, payload.clone())
+                    .await
+                    .ok();
+                self.notification_bus.publish(*followed_id, payload).await.ok();
+                self.dispatch_webhooks(
+                    "user.followed",
+                    serde_json::json!({
+                        "follower_id": follower_id,
+                        "followed_id": followed_id,
+                    }),
+                )
+                .await;
+            }
+            ForumEvent::ThreadCreated {
+                thread_id,
+                author_id,
+                category_id,
+                ..
+            } => {
+                self.dispatch_webhooks(
+                    "thread.created",
+                    serde_json::json!({
+                        "thread_id": thread_id,
+                        "author_id": author_id,
+                        "category_id": category_id,
+                    }),
+                )
+                .await;
+            }
+            ForumEvent::ThreadDeleted {
+                thread_id,
+                deleted_by_id,
+            } => {
+                self.audit_log
+                    .append(AuditLog::user_action(
+                        *deleted_by_id,
+                        "thread.deleted",
+                        "thread",
+                        *thread_id,
+                        None,
+                    ))
+                    .await?;
+                self.dispatch_webhooks(
+                    "thread.deleted",
+                    serde_json::json!({ "thread_id": thread_id }),
+                )
+                .await;
             }
             _ => {}
         }

@@ -8,7 +8,10 @@ use crate::constants::{
     ACCOUNT_LOCKOUT_ATTEMPTS, ACCOUNT_LOCKOUT_DURATION_MINUTES, PASSWORD_RESET_TOKEN_TTL_SECS,
     REFRESH_TOKEN_TTL_SECS,
 };
-use crate::ports::{AccessTokenClaims, CacheService, ForumJob, JobQueue, PasswordHasher, TokenService};
+use crate::ports::{
+    AccessTokenClaims, CacheService, ForumJob, HookContext, HookDecision, JobQueue,
+    NullPluginRuntime, PasswordHasher, PluginRuntime, TokenService,
+};
 use crate::shared::AppError;
 use ferum_domain::models::user::{TrustLevel, User};
 use ferum_domain::repositories::user_repository::{NewUser, UserRepository};
@@ -19,6 +22,10 @@ pub struct AuthUseCase {
     pub tokens: Arc<dyn TokenService>,
     pub cache: Arc<dyn CacheService>,
     pub jobs: Arc<dyn JobQueue>,
+    pub plugin_runtime: Arc<dyn PluginRuntime>,
+    /// When true, newly registered users are immediately verified (no email required).
+    /// Set to true when SMTP_HOST is not configured.
+    pub auto_verify_email: bool,
 }
 
 impl AuthUseCase {
@@ -29,7 +36,25 @@ impl AuthUseCase {
         cache: Arc<dyn CacheService>,
         jobs: Arc<dyn JobQueue>,
     ) -> Self {
-        Self { users, hasher, tokens, cache, jobs }
+        Self {
+            users,
+            hasher,
+            tokens,
+            cache,
+            jobs,
+            plugin_runtime: Arc::new(NullPluginRuntime),
+            auto_verify_email: false,
+        }
+    }
+
+    pub fn with_auto_verify_email(mut self, enabled: bool) -> Self {
+        self.auto_verify_email = enabled;
+        self
+    }
+
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginRuntime>) -> Self {
+        self.plugin_runtime = runtime;
+        self
     }
 
     // ─── Register ─────────────────────────────────────────────────────────────
@@ -44,11 +69,34 @@ impl AuthUseCase {
             return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
         }
 
-        if self.users.find_by_email(&cmd.email).await?.is_some() {
+        let email = cmd.email.to_lowercase();
+
+        if self.users.find_by_email(&email).await?.is_some() {
             return Err(AppError::Conflict("email_taken".to_string()));
         }
         if self.users.find_by_username(&cmd.username).await?.is_some() {
             return Err(AppError::Conflict("username_taken".to_string()));
+        }
+
+        // Plugin before-hook — allows Tier 2 plugins (e.g. StopForumSpam) to block registration
+        let hook_ctx = HookContext {
+            hook_name: "before_user_register".to_string(),
+            actor_id: None,
+            actor_trust_level: "new".to_string(),
+            payload: serde_json::json!({
+                "username": cmd.username,
+                "email": email,
+            }),
+        };
+        match self
+            .plugin_runtime
+            .dispatch_before_hook("before_user_register", &hook_ctx)
+            .await?
+        {
+            HookDecision::Deny { reason, error_code } => {
+                return Err(AppError::PluginBlocked { reason, error_code });
+            }
+            HookDecision::Allow => {}
         }
 
         let hash = self.hasher.hash(&cmd.password).await?;
@@ -56,19 +104,24 @@ impl AuthUseCase {
             .users
             .create(NewUser {
                 username: cmd.username,
-                email: cmd.email.clone(),
+                email: email.clone(),
                 password_hash: Some(hash),
             })
             .await?;
 
-        let token = self.tokens.mint_email_token(user.id, "email_verification")?;
-        self.jobs
-            .enqueue(ForumJob::SendEmailVerification {
-                user_id: user.id,
-                email: cmd.email,
-                token,
-            })
-            .await?;
+        if self.auto_verify_email {
+            self.users.set_email_verified(user.id).await?;
+            self.users.set_trust_level(user.id, TrustLevel::Basic).await?;
+        } else {
+            let token = self.tokens.mint_email_token(user.id, "email_verification")?;
+            self.jobs
+                .enqueue(ForumJob::SendEmailVerification {
+                    user_id: user.id,
+                    email,
+                    token,
+                })
+                .await?;
+        }
 
         Ok(user)
     }
@@ -94,7 +147,7 @@ impl AuthUseCase {
     // ─── Login ────────────────────────────────────────────────────────────────
 
     pub async fn login(&self, cmd: LoginCmd) -> Result<LoginResult, AppError> {
-        let user_opt = self.users.find_by_email(&cmd.email).await?;
+        let user_opt = self.users.find_by_email(&cmd.email.to_lowercase()).await?;
 
         if user_opt.is_none() {
             let _ = self
@@ -127,14 +180,27 @@ impl AuthUseCase {
             return Err(AppError::Unauthorized);
         }
 
-        self.users.reset_failed_login(user.id).await?;
-
         if !user.is_email_verified {
             return Err(AppError::forbidden("email_not_verified"));
         }
 
         if user.is_currently_banned() {
             return Err(AppError::forbidden("account_suspended"));
+        }
+
+        // Reset only after all checks pass — prevents banned/unverified users
+        // from resetting their lockout counter on each correct-password attempt.
+        self.users.reset_failed_login(user.id).await?;
+
+        // ── Activity tracking (fire-and-forget, never blocks login) ──────────
+        // update_last_seen atomically increments days_visited when the UTC date
+        // has changed since the user's last visit.
+        {
+            let users = self.users.clone();
+            let uid = user.id;
+            tokio::spawn(async move {
+                let _ = users.update_last_seen(uid).await;
+            });
         }
 
         // ── Lazy trust level promotion ────────────────────────────────────────
@@ -213,7 +279,7 @@ impl AuthUseCase {
     // ─── Forgot password ──────────────────────────────────────────────────────
 
     pub async fn forgot_password(&self, email: &str) -> Result<(), AppError> {
-        if let Some(user) = self.users.find_by_email(email).await? {
+        if let Some(user) = self.users.find_by_email(&email.to_lowercase()).await? {
             let token = self.tokens.mint_email_token(user.id, "password_reset")?;
             self.jobs
                 .enqueue(ForumJob::SendPasswordResetEmail { email: user.email, token })

@@ -86,4 +86,5 @@ pub mod perm {
     pub const ADMIN_ROLES: &str = "admin.roles";
     pub const ADMIN_CONFIG: &str = "admin.config";
     pub const ADMIN_WEBHOOKS: &str = "admin.webhooks";
+    pub const ADMIN_PLUGINS: &str = "admin.plugins";
 }

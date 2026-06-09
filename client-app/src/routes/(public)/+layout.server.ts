@@ -27,7 +27,14 @@ export const load: LayoutServerLoad = async ({ cookies, fetch, depends, parent }
 		const userJson = await userRes.json();
 		const prefsJson = prefsRes.ok ? await prefsRes.json() : { data: null };
 
-		return { user: userJson.data, siteName, siteSlogan, siteDescription, logoUrl, primaryColor, theme: prefsJson.data?.theme ?? null, categories };
+		return {
+			user: userJson.data,
+			siteName, siteSlogan, siteDescription, logoUrl, primaryColor,
+			theme: prefsJson.data?.theme ?? null,
+			layoutPref: prefsJson.data?.layout ?? null,
+			fontSizePref: prefsJson.data?.font_size ?? null,
+			categories
+		};
 	} catch {
 		return { user: null, siteName, siteSlogan, siteDescription, logoUrl, primaryColor, theme: null, categories };
 	}

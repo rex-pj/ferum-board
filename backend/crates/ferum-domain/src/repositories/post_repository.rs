@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::models::post::Post;
+use crate::models::post::{Post, PostStatus};
 use crate::AppError;
 
 #[async_trait]
@@ -22,6 +22,19 @@ pub trait PostRepository: Send + Sync {
         edited_by_id: Uuid,
     ) -> Result<Post, AppError>;
     async fn soft_delete(&self, id: Uuid, deleted_by_id: Uuid) -> Result<(), AppError>;
+    async fn set_status(&self, id: Uuid, status: PostStatus) -> Result<(), AppError>;
+    async fn list_by_author(
+        &self,
+        author_id: Uuid,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Post>, u64), AppError>;
+    async fn list_pending(
+        &self,
+        category_id: Option<Uuid>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Post>, u64), AppError>;
 }
 
 #[derive(Debug, Clone)]
@@ -31,4 +44,5 @@ pub struct NewPost {
     pub parent_id: Option<Uuid>,
     pub content_md: String,
     pub content_html: String,
+    pub status: PostStatus,
 }

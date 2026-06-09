@@ -1,5 +1,5 @@
 ﻿<svelte:head>
-	<title>Account Settings | Ferum Board</title>
+	<title>Account Settings | {data.siteName ?? 'Ferum Board'}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -41,11 +41,30 @@
 	let selectedFontSize = $state<string>(prefs?.font_size ?? 'medium');
 	let selectedLayout = $state<string>(prefs?.layout ?? 'comfortable');
 
+	let watchedIds = $state<string[]>(data.prefs?.watched_categories ?? []);
+	let mutedIds = $state<string[]>(data.prefs?.muted_categories ?? []);
+
+	const categoryById = $derived(
+		Object.fromEntries((data.allCategories ?? []).map((c: any) => [c.id, c]))
+	);
+	const watchedCategories = $derived(
+		watchedIds.map((id: string) => categoryById[id]).filter(Boolean)
+	);
+	const mutedCategories = $derived(
+		mutedIds.map((id: string) => categoryById[id]).filter(Boolean)
+	);
+
 	// Navigate to the right tab when a server-side error comes back
 	$effect(() => {
 		if (form?.profileError) activeTab = 'profile';
 		if (form?.passwordError) activeTab = 'security';
 		if (form?.prefsError) activeTab = 'preferences';
+	});
+
+	// Keep watched/muted in sync when the server reloads (e.g. invalidate after action)
+	$effect(() => {
+		watchedIds = data.prefs?.watched_categories ?? [];
+		mutedIds = data.prefs?.muted_categories ?? [];
 	});
 
 	async function uploadAvatar(e: Event) {
@@ -445,10 +464,14 @@
 					use:enhance={({ formData }) => {
 						savingPrefs = true;
 						const newTheme = formData.get('theme') as Theme;
+						const newFontSize = formData.get('font_size') as string;
+						const newLayout = formData.get('layout') as string;
 						return async ({ result, update }) => {
 							savingPrefs = false;
 							if (result.type === 'success') {
 								if (newTheme) themeStore.set(newTheme);
+								if (newFontSize) document.documentElement.setAttribute('data-font-size', newFontSize);
+								if (newLayout) document.documentElement.setAttribute('data-layout', newLayout);
 								toast.success('Preferences saved.');
 							}
 							await update({ reset: false });
@@ -530,6 +553,83 @@
 				</form>
 			</div>
 		</div>
+
+		<!-- Watching & Muted -->
+		<div class="card mt-3">
+			<div class="card-body">
+				<h2 class="h6 fw-semibold mb-3">Watching &amp; Muted</h2>
+
+				<div class="mb-3">
+					<label class="form-label fw-semibold d-block mb-2 small text-muted text-uppercase" style="letter-spacing:.05em">
+						<i class="fa-solid fa-eye me-1"></i>Watching
+					</label>
+					{#if watchedCategories.length === 0}
+						<p class="small text-muted mb-0">Not watching any categories. Visit a category page and click <strong>Watch</strong> to follow its threads in your home feed.</p>
+					{:else}
+						<div class="d-flex flex-wrap gap-2">
+							{#each watchedCategories as cat (cat.id)}
+								<form
+									method="POST"
+									action="?/unwatch"
+									use:enhance={() => {
+										watchedIds = watchedIds.filter((id: string) => id !== cat.id);
+										return async ({ update }) => update({ reset: false });
+									}}
+								>
+									<input type="hidden" name="category_id" value={cat.id} />
+									<button
+										type="submit"
+										class="badge bg-primary-subtle text-primary-emphasis d-inline-flex align-items-center gap-1 border-0 py-1 px-2"
+										title="Stop watching {cat.name}"
+									>
+										{#if cat.color}
+											<span class="rounded-circle flex-shrink-0" style="width:7px;height:7px;background:{cat.color};"></span>
+										{/if}
+										{cat.name}
+										<i class="fa-solid fa-xmark fa-xs"></i>
+									</button>
+								</form>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<div>
+					<label class="form-label fw-semibold d-block mb-2 small text-muted text-uppercase" style="letter-spacing:.05em">
+						<i class="fa-solid fa-eye-slash me-1"></i>Muted
+					</label>
+					{#if mutedCategories.length === 0}
+						<p class="small text-muted mb-0">Not muting any categories. Visit a category page and click <strong>Mute</strong> to hide its threads from your home feed.</p>
+					{:else}
+						<div class="d-flex flex-wrap gap-2">
+							{#each mutedCategories as cat (cat.id)}
+								<form
+									method="POST"
+									action="?/unmute"
+									use:enhance={() => {
+										mutedIds = mutedIds.filter((id: string) => id !== cat.id);
+										return async ({ update }) => update({ reset: false });
+									}}
+								>
+									<input type="hidden" name="category_id" value={cat.id} />
+									<button
+										type="submit"
+										class="badge bg-secondary-subtle text-secondary-emphasis d-inline-flex align-items-center gap-1 border-0 py-1 px-2"
+										title="Unmute {cat.name}"
+									>
+										{#if cat.color}
+											<span class="rounded-circle flex-shrink-0" style="width:7px;height:7px;background:{cat.color};"></span>
+										{/if}
+										{cat.name}
+										<i class="fa-solid fa-xmark fa-xs"></i>
+									</button>
+								</form>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
 	{/if}
 </div>
 
@@ -556,6 +656,11 @@
 			<div class="fr-panel-stat border-top">
 				<span class="text-muted">Email</span>
 				<span class="small text-truncate ms-2 text-body email-value" title={u.email}>{u.email}</span>
+			</div>
+			<div class="fr-panel-stat">
+				<span class="text-muted"><i class="fa-solid fa-star fa-xs text-warning me-1"></i>Trust score</span>
+				<span class="fw-semibold small text-body"
+					title="Score needed for Regular level: 80">{u.trust_score ?? 0} / 100</span>
 			</div>
 		</div>
 	{/if}
