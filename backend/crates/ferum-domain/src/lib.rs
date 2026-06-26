@@ -6,3 +6,4 @@ pub mod repositories;
 mod auth_user;
 pub use auth_user::AuthUser;
 pub use error::AppError;
+pub use error::OptionExt;

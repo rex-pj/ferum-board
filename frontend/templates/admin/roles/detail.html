@@ -1,0 +1,30 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ role.name }} — Permissions{% endblock %}
+{% block page_title %}Role: {{ role.name }}{% endblock %}
+{% block nav_roles %}active fw-semibold{% endblock %}
+
+{% block content %}
+<a href="/admin/roles" class="btn btn-sm btn-outline-secondary mb-3">
+  <i class="fa-solid fa-arrow-left me-1"></i>Back to Roles
+</a>
+
+<div class="d-flex align-items-center gap-2 mb-4">
+  <span class="badge fs-6" style="background-color:{{ role.color | default(value="#6c757d") }}">{{ role.name }}</span>
+  {% if role.is_system %}
+    <span class="badge bg-warning text-dark">System Role</span>
+  {% endif %}
+</div>
+
+<admin-permission-matrix
+  role-id="{{ role.id }}"
+  permissions='{{ permissions | json_encode }}'
+  role-permissions='{{ role_perm_keys | json_encode }}'
+  is-system='{{ role.is_system | json_encode }}'>
+</admin-permission-matrix>
+
+<noscript>
+  <div class="alert alert-warning mt-3">
+    JavaScript is required to manage permissions on this page.
+  </div>
+</noscript>
+{% endblock %}

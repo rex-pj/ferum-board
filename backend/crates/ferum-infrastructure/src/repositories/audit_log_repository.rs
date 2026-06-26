@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sea_orm::*;
 use uuid::Uuid;
 
@@ -49,6 +50,9 @@ impl AuditLogRepository for PgAuditLogRepository {
         &self,
         actor_id: Option<Uuid>,
         target_type: Option<&str>,
+        action_contains: Option<&str>,
+        created_from: Option<DateTime<Utc>>,
+        created_to: Option<DateTime<Utc>>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<AuditLog>, u64), AppError> {
@@ -60,16 +64,25 @@ impl AuditLogRepository for PgAuditLogRepository {
         if let Some(tt) = target_type {
             query = query.filter(audit_logs::Column::TargetType.eq(tt));
         }
+        if let Some(q) = action_contains.filter(|s| !s.is_empty()) {
+            query = query.filter(audit_logs::Column::Action.contains(q));
+        }
+        if let Some(from) = created_from {
+            query = query.filter(audit_logs::Column::CreatedAt.gte(from));
+        }
+        if let Some(to) = created_to {
+            query = query.filter(audit_logs::Column::CreatedAt.lte(to));
+        }
 
-        let total = query.clone().count(&self.db).await?;
         let offset = (page.saturating_sub(1)) * per_page;
-
-        let rows = query
-            .order_by_desc(audit_logs::Column::CreatedAt)
-            .limit(per_page)
-            .offset(offset)
-            .all(&self.db)
-            .await?;
+        let (total, rows) = tokio::try_join!(
+            query.clone().count(&self.db),
+            query
+                .order_by_desc(audit_logs::Column::CreatedAt)
+                .limit(per_page)
+                .offset(offset)
+                .all(&self.db),
+        )?;
 
         Ok((rows.into_iter().map(entity_to_domain).collect(), total))
     }

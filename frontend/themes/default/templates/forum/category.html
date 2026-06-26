@@ -1,0 +1,189 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}{{ category.name }} — {{ site.name }}{% endblock %}
+{% block description %}{{ category.description | default(value="") }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/forum">Forum</a></li>
+    <li class="breadcrumb-item active">{{ category.name }}</li>
+  </ol>
+</nav>
+
+<div class="fr-feed mb-3">
+  <div class="fr-cat-header" style="cursor:default">
+    <div class="d-flex align-items-start gap-2 min-w-0 flex-grow-1">
+      {% if category.color %}
+        <div class="flex-shrink-0 d-flex align-items-center justify-content-center rounded-2 mt-1"
+             style="width:22px;height:22px;background:color-mix(in srgb,{{ category.color }} 14%,transparent);border:1px solid color-mix(in srgb,{{ category.color }} 28%,transparent)">
+          <span class="rounded-circle" style="width:7px;height:7px;background:{{ category.color }};display:block;flex-shrink:0"></span>
+        </div>
+      {% endif %}
+      <div class="min-w-0">
+        <h1 class="fs-5 fw-bold mb-0 lh-sm">
+          {{ category.name }}
+          <small class="fw-normal ms-1" style="font-size:.75rem;color:var(--bs-tertiary-color)">{{ category.thread_count }} threads</small>
+        </h1>
+        {% if category.description %}
+          <p class="mb-0 mt-1" style="font-size:.875rem;color:var(--bs-secondary-color);line-height:1.55">{{ category.description }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap align-items-center flex-shrink-0">
+      {% if current_user %}
+        <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus me-1"></i>New Thread
+        </a>
+        <div x-data="categoryWatchState('{{ category.id }}')" class="d-flex gap-1">
+          <button @click="toggleWatch()"
+                  :class="watched ? 'btn-primary' : 'btn-outline-secondary'"
+                  class="btn btn-sm" :disabled="loading"
+                  :title="watched ? 'Stop watching' : 'Watch for new threads'">
+            <i class="fa-solid fa-eye"></i>
+            <span class="d-none d-md-inline ms-1" x-text="watched ? 'Watching' : 'Watch'">Watch</span>
+          </button>
+          <button @click="toggleMute()"
+                  :class="muted ? 'btn-warning' : 'btn-outline-secondary'"
+                  class="btn btn-sm" :disabled="loading"
+                  :title="muted ? 'Unmute notifications' : 'Mute notifications'">
+            <i class="fa-solid fa-bell-slash"></i>
+          </button>
+        </div>
+      {% else %}
+        <a href="/login?next=/forum/{{ category.slug }}" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus me-1"></i>New Thread
+        </a>
+        <a href="/login?next=/forum/{{ category.slug }}"
+           class="btn btn-outline-secondary btn-sm"
+           title="Sign in to watch this category">
+          <i class="fa-solid fa-eye"></i>
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Sort / filter tab bar #}
+  <div class="fr-sort-tabs">
+    <a href="?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' %}fr-sort-tab--active{% endif %}">
+      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>Latest
+    </a>
+    <a href="?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
+      <i class="fa-solid fa-star fa-xs" aria-hidden="true"></i>Newest
+    </a>
+    <a href="?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
+      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>Hottest
+    </a>
+    <a href="?sort=unanswered" class="fr-sort-tab {% if active_sort == 'unanswered' %}fr-sort-tab--active{% endif %}">
+      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>Unanswered
+    </a>
+    <a href="?sort=solved" class="fr-sort-tab {% if active_sort == 'solved' %}fr-sort-tab--active{% endif %}">
+      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>Solved
+    </a>
+  </div>
+
+  {% if threads %}
+    {% for thread in threads %}
+      {% include "default/templates/partials/thread_card.html" %}
+    {% endfor %}
+  {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block"></i>
+      {% if active_sort == "unanswered" %}
+        No unanswered threads — great work!
+      {% elif active_sort == "solved" %}
+        No solved threads in this category yet.
+      {% else %}
+        No threads in this category yet.
+      {% endif %}
+      {% if current_user %}
+        <div class="mt-2">
+          <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm">
+            Start the first thread
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+{% include "default/templates/partials/pagination.html" %}
+{% endblock %}
+
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+
+  {# About panel — description + stats (no redundant name/dot, already in heading) #}
+  <div class="fr-panel">
+    {% if category.color %}
+      <div style="height: 3px; background: {{ category.color }}; border-radius: 8px 8px 0 0;"></div>
+    {% endif %}
+    <div class="fr-panel-header">About</div>
+    <div class="fr-panel-body">
+      {% if category.description %}
+        <p class="small mb-3" style="line-height: 1.6; color: var(--bs-secondary-color)">{{ category.description }}</p>
+      {% endif %}
+      <div class="fr-panel-stat-row">
+        <span class="text-muted"><i class="fa-regular fa-message fa-xs me-1" aria-hidden="true"></i>Threads</span>
+        <span class="fr-panel-stat-val">{{ category.thread_count }}</span>
+      </div>
+      <div class="fr-panel-stat-row">
+        <span class="text-muted"><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>Posting</span>
+        <span class="fr-panel-stat-val" style="font-size: .8125rem">
+          {% if category.post_policy == "members" %}Members
+          {% elif category.post_policy == "trusted" %}Trusted only
+          {% elif category.post_policy == "moderated" %}Moderated
+          {% elif category.post_policy == "staff_only" %}Staff only
+          {% elif category.post_policy == "closed" %}Closed
+          {% else %}{{ category.post_policy }}{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  {# Subcategories #}
+  {% if subcategories %}
+    <div class="fr-panel">
+      <div class="fr-panel-header">Subcategories</div>
+      <div class="py-1">
+        {% for sub in subcategories %}
+          <a href="/forum/{{ sub.slug }}" class="fr-panel-row">
+            {% if sub.color %}
+              {{ m::color_dot(color=sub.color, size_px=8) }}
+            {% else %}
+              <i class="fa-solid fa-hashtag fa-xs fr-icon-col opacity-50" aria-hidden="true"></i>
+            {% endif %}
+            <span class="text-truncate">{{ sub.name }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {# Related (sibling) categories #}
+  {% if sibling_categories %}
+    <div class="fr-panel">
+      <div class="fr-panel-header">Related</div>
+      <div class="py-1">
+        {% for sib in sibling_categories %}
+          <a href="/forum/{{ sib.slug }}" class="fr-panel-row">
+            {% if sib.color %}
+              {{ m::color_dot(color=sib.color, size_px=8) }}
+            {% else %}
+              <i class="fa-solid fa-hashtag fa-xs fr-icon-col opacity-50" aria-hidden="true"></i>
+            {% endif %}
+            <span class="text-truncate">{{ sib.name }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-page-forum.js" defer></script>
+{% endblock %}

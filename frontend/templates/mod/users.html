@@ -1,0 +1,106 @@
+{% extends "mod/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Users | Mod Panel{% endblock %}
+{% block page_title %}Users{% endblock %}
+{% block nav_users %}active{% endblock %}
+
+{% block content %}
+{{ m::page_header(title="User Moderation") }}
+
+{# Search bar to look up a user #}
+<form method="GET" class="adm-filter-row mb-4">
+  <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+    <span class="input-group-text bg-transparent">
+      <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+    </span>
+    <input type="search" name="q" class="form-control border-start-0 ps-0"
+           placeholder="Search by username…" value="{% if q %}{{ q }}{% endif %}"
+           autocomplete="off">
+  </div>
+  <button type="submit" class="btn btn-sm btn-outline-success">
+    <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+  </button>
+  {% if q %}
+    <a href="/mod/users" class="btn btn-sm btn-outline-secondary" title="Clear">
+      <i class="fa-solid fa-xmark"></i>
+    </a>
+  {% endif %}
+</form>
+
+{% if users %}
+  {% for u in users %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-4 align-items-start">
+        {# Profile #}
+        <div class="col-md-4 text-center text-md-start d-flex align-items-center gap-3">
+          {% if u.avatar_url %}
+            <img src="{{ u.avatar_url }}" alt="" class="rounded-circle flex-shrink-0" style="width:56px;height:56px;object-fit:cover">
+          {% else %}
+            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
+                 style="width:56px;height:56px;font-size:1.25rem">
+              {{ u.username | truncate(length=1, end="") | upper }}
+            </div>
+          {% endif %}
+          <div>
+            <div class="fw-semibold">{{ u.username }}</div>
+            {% if u.display_name %}<div class="small text-muted">{{ u.display_name }}</div>{% endif %}
+            <div class="small text-muted mt-1">Posts: {{ u.post_count | default(value=0) }}</div>
+            {% if u.is_banned %}
+              <span class="badge bg-danger mt-1">banned</span>
+            {% endif %}
+            <div class="mt-2">
+              <a href="/u/{{ u.username }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Profile
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {# Warn form #}
+        <div class="col-md-4">
+          <h6 class="fw-semibold small text-uppercase text-muted mb-2">
+            <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Issue Warning
+          </h6>
+          <div id="warn-feedback-{{ u.id }}" class="d-none mb-2"></div>
+          <textarea class="form-control form-control-sm mb-2" rows="2" maxlength="500"
+                    id="warn-reason-{{ u.id }}" placeholder="Reason for warning…"></textarea>
+          <button class="btn btn-warning btn-sm"
+                  data-mod-action="warn-user" data-user-id="{{ u.id }}" data-username="{{ u.username }}">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i>Warn
+          </button>
+        </div>
+
+        {# Ban form #}
+        <div class="col-md-4">
+          <h6 class="fw-semibold small text-uppercase text-muted mb-2">
+            <i class="fa-solid fa-ban text-danger me-1"></i>Temporary Ban
+          </h6>
+          <div id="ban-feedback-{{ u.id }}" class="d-none mb-2"></div>
+          <textarea class="form-control form-control-sm mb-2" rows="2" maxlength="500"
+                    id="ban-reason-{{ u.id }}" placeholder="Ban reason…"></textarea>
+          <input type="datetime-local" class="form-control form-control-sm mb-2"
+                 id="ban-until-{{ u.id }}">
+          <div class="form-text mb-2" style="font-size:.7rem">Time is interpreted as UTC.</div>
+          <button class="btn btn-danger btn-sm"
+                  data-mod-action="ban-user" data-user-id="{{ u.id }}" data-username="{{ u.username }}">
+            <i class="fa-solid fa-ban me-1"></i>Ban
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="card">
+    <div class="text-center py-5 text-secondary">
+      <i class="fa-solid fa-users fa-3x mb-3 d-block opacity-25"></i>
+      <div class="fw-semibold mb-1">Search for a user</div>
+      <div class="small">Enter a username above to look up and moderate a user.</div>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}{% endblock %}

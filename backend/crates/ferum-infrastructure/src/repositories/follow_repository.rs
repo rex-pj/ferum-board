@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Utc};
 use sea_orm::prelude::*;
+use sea_orm::sea_query::{Alias, Expr, JoinType, Order, PostgresQueryBuilder, Query, SimpleExpr, SubQueryStatement};
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::user_follows;
+use crate::entities::{roles, user_avatars, user_covers, user_follows, user_roles, users};
 use ferum_application::shared::AppError;
 use ferum_domain::models::follow::Follow;
 use ferum_domain::models::user::{TrustLevel, User};
@@ -148,41 +149,20 @@ impl FollowRepository for PgFollowRepository {
         per_page: u64,
     ) -> Result<(Vec<(Follow, User)>, u64), AppError> {
         let offset = page.saturating_sub(1) * per_page;
-
-        let count_sql = "SELECT COUNT(*) FROM user_follows WHERE follower_id = $1";
-        let count_stmt =
-            Statement::from_sql_and_values(DbBackend::Postgres, count_sql, [user_id.into()]);
-        let total: u64 = self
-            .db
-            .query_one(count_stmt)
-            .await?
-            .map(|r| r.try_get_by_index::<i64>(0).unwrap_or(0) as u64)
-            .unwrap_or(0);
-
-        if total == 0 {
-            return Ok((vec![], 0));
-        }
-
-        let sql = format!(
-            r#"SELECT
-                uf.id AS follow_id, uf.follower_id, uf.followed_id,
-                uf.created_at AS follow_created_at,
-                {user_cols}
-            FROM user_follows uf
-            JOIN users u ON u.id = uf.followed_id
-            LEFT JOIN user_avatars ua ON ua.user_id = u.id
-            LEFT JOIN user_covers uc ON uc.user_id = u.id
-            WHERE uf.follower_id = $1
-            ORDER BY uf.created_at DESC
-            LIMIT $2 OFFSET $3"#,
-            user_cols = USER_SELECT_COLS
+        let (sql, values) = follow_list_query(
+            user_follows::Column::FollowedId,
+            user_follows::Column::FollowerId,
+            user_id,
+            per_page,
+            offset,
         );
-        let stmt = Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            &sql,
-            [user_id.into(), (per_page as i64).into(), (offset as i64).into()],
-        );
-        let rows = FollowUserRow::find_by_statement(stmt).all(&self.db).await?;
+        let data_stmt = Statement::from_sql_and_values(DbBackend::Postgres, sql, values);
+        let (total, rows) = tokio::try_join!(
+            user_follows::Entity::find()
+                .filter(user_follows::Column::FollowerId.eq(user_id))
+                .count(&self.db),
+            FollowUserRow::find_by_statement(data_stmt).all(&self.db),
+        )?;
         Ok((rows.into_iter().map(follow_user_row_to_pair).collect(), total))
     }
 
@@ -193,80 +173,142 @@ impl FollowRepository for PgFollowRepository {
         per_page: u64,
     ) -> Result<(Vec<(Follow, User)>, u64), AppError> {
         let offset = page.saturating_sub(1) * per_page;
-
-        let count_sql = "SELECT COUNT(*) FROM user_follows WHERE followed_id = $1";
-        let count_stmt =
-            Statement::from_sql_and_values(DbBackend::Postgres, count_sql, [user_id.into()]);
-        let total: u64 = self
-            .db
-            .query_one(count_stmt)
-            .await?
-            .map(|r| r.try_get_by_index::<i64>(0).unwrap_or(0) as u64)
-            .unwrap_or(0);
-
-        if total == 0 {
-            return Ok((vec![], 0));
-        }
-
-        let sql = format!(
-            r#"SELECT
-                uf.id AS follow_id, uf.follower_id, uf.followed_id,
-                uf.created_at AS follow_created_at,
-                {user_cols}
-            FROM user_follows uf
-            JOIN users u ON u.id = uf.follower_id
-            LEFT JOIN user_avatars ua ON ua.user_id = u.id
-            LEFT JOIN user_covers uc ON uc.user_id = u.id
-            WHERE uf.followed_id = $1
-            ORDER BY uf.created_at DESC
-            LIMIT $2 OFFSET $3"#,
-            user_cols = USER_SELECT_COLS
+        let (sql, values) = follow_list_query(
+            user_follows::Column::FollowerId,
+            user_follows::Column::FollowedId,
+            user_id,
+            per_page,
+            offset,
         );
-        let stmt = Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            &sql,
-            [user_id.into(), (per_page as i64).into(), (offset as i64).into()],
-        );
-        let rows = FollowUserRow::find_by_statement(stmt).all(&self.db).await?;
+        let data_stmt = Statement::from_sql_and_values(DbBackend::Postgres, sql, values);
+        let (total, rows) = tokio::try_join!(
+            user_follows::Entity::find()
+                .filter(user_follows::Column::FollowedId.eq(user_id))
+                .count(&self.db),
+            FollowUserRow::find_by_statement(data_stmt).all(&self.db),
+        )?;
         Ok((rows.into_iter().map(follow_user_row_to_pair).collect(), total))
     }
 
     async fn count_following(&self, user_id: Uuid) -> Result<u64, AppError> {
-        let sql = "SELECT COUNT(*) FROM user_follows WHERE follower_id = $1";
-        let stmt =
-            Statement::from_sql_and_values(DbBackend::Postgres, sql, [user_id.into()]);
-        Ok(self
-            .db
-            .query_one(stmt)
-            .await?
-            .map(|r| r.try_get_by_index::<i64>(0).unwrap_or(0) as u64)
-            .unwrap_or(0))
+        Ok(user_follows::Entity::find()
+            .filter(user_follows::Column::FollowerId.eq(user_id))
+            .count(&self.db)
+            .await?)
     }
 
     async fn count_followers(&self, user_id: Uuid) -> Result<u64, AppError> {
-        let sql = "SELECT COUNT(*) FROM user_follows WHERE followed_id = $1";
-        let stmt =
-            Statement::from_sql_and_values(DbBackend::Postgres, sql, [user_id.into()]);
-        Ok(self
-            .db
-            .query_one(stmt)
-            .await?
-            .map(|r| r.try_get_by_index::<i64>(0).unwrap_or(0) as u64)
-            .unwrap_or(0))
+        Ok(user_follows::Entity::find()
+            .filter(user_follows::Column::FollowedId.eq(user_id))
+            .count(&self.db)
+            .await?)
     }
 }
 
-// Inline columns for the FollowUserRow SELECT (everything after the follow columns).
-const USER_SELECT_COLS: &str = r#"u.id, u.username, u.email, u.is_email_verified,
-        u.display_name, u.password_hash,
-        u.trust_level::TEXT AS trust_level,
-        u.trust_score, u.post_count, u.days_visited,
-        u.bio, u.website, u.is_banned, u.banned_until, u.ban_reason,
-        u.warn_count, u.failed_login_count, u.locked_until,
-        u.created_at, u.updated_at, u.deleted_at, u.last_seen_at,
-        ua.file_key AS avatar_key,
-        uc.file_key AS cover_key,
-        (SELECT r.slug FROM user_roles ur2
-             JOIN roles r ON r.id = ur2.role_id
-             WHERE ur2.user_id = u.id AND ur2.category_id IS NULL
-             ORDER BY r.position ASC LIMIT 1) AS primary_role_slug"#;
+/// Builds the paginated follow list query. `user_join_col` is the `user_follows` column
+/// that points to the user being listed (followed_id for following, follower_id for followers).
+/// `filter_col` is the column used in the WHERE clause (follower_id or followed_id).
+fn follow_list_query(
+    user_join_col: user_follows::Column,
+    filter_col: user_follows::Column,
+    user_id: Uuid,
+    per_page: u64,
+    offset: u64,
+) -> (String, sea_orm::sea_query::Values) {
+    let primary_role_subq = Query::select()
+        .column((roles::Entity, roles::Column::Slug))
+        .from(user_roles::Entity)
+        .inner_join(
+            roles::Entity,
+            Expr::col((roles::Entity, roles::Column::Id))
+                .equals((user_roles::Entity, user_roles::Column::RoleId)),
+        )
+        .and_where(
+            Expr::col((user_roles::Entity, user_roles::Column::UserId))
+                .equals((users::Entity, users::Column::Id)),
+        )
+        .and_where(
+            Expr::col((user_roles::Entity, user_roles::Column::CategoryId)).is_null(),
+        )
+        .order_by((roles::Entity, roles::Column::Position), Order::Asc)
+        .limit(1)
+        .to_owned();
+
+    let primary_role_expr = SimpleExpr::SubQuery(
+        None,
+        Box::new(SubQueryStatement::SelectStatement(primary_role_subq)),
+    );
+
+    Query::select()
+        .expr_as(
+            Expr::col((user_follows::Entity, user_follows::Column::Id)),
+            Alias::new("follow_id"),
+        )
+        .column((user_follows::Entity, user_follows::Column::FollowerId))
+        .column((user_follows::Entity, user_follows::Column::FollowedId))
+        .expr_as(
+            Expr::col((user_follows::Entity, user_follows::Column::CreatedAt)),
+            Alias::new("follow_created_at"),
+        )
+        .column((users::Entity, users::Column::Id))
+        .column((users::Entity, users::Column::Username))
+        .column((users::Entity, users::Column::Email))
+        .column((users::Entity, users::Column::IsEmailVerified))
+        .column((users::Entity, users::Column::DisplayName))
+        .column((users::Entity, users::Column::PasswordHash))
+        .expr_as(
+            Expr::col((users::Entity, users::Column::TrustLevel))
+                .cast_as(Alias::new("text")),
+            Alias::new("trust_level"),
+        )
+        .column((users::Entity, users::Column::TrustScore))
+        .column((users::Entity, users::Column::PostCount))
+        .column((users::Entity, users::Column::DaysVisited))
+        .column((users::Entity, users::Column::Bio))
+        .column((users::Entity, users::Column::Website))
+        .column((users::Entity, users::Column::IsBanned))
+        .column((users::Entity, users::Column::BannedUntil))
+        .column((users::Entity, users::Column::BanReason))
+        .column((users::Entity, users::Column::WarnCount))
+        .column((users::Entity, users::Column::FailedLoginCount))
+        .column((users::Entity, users::Column::LockedUntil))
+        .column((users::Entity, users::Column::CreatedAt))
+        .column((users::Entity, users::Column::UpdatedAt))
+        .column((users::Entity, users::Column::DeletedAt))
+        .column((users::Entity, users::Column::LastSeenAt))
+        .expr_as(
+            Expr::col((user_avatars::Entity, user_avatars::Column::FileKey)),
+            Alias::new("avatar_key"),
+        )
+        .expr_as(
+            Expr::col((user_covers::Entity, user_covers::Column::FileKey)),
+            Alias::new("cover_key"),
+        )
+        .expr_as(primary_role_expr, Alias::new("primary_role_slug"))
+        .from(user_follows::Entity)
+        .inner_join(
+            users::Entity,
+            Expr::col((users::Entity, users::Column::Id))
+                .equals((user_follows::Entity, user_join_col)),
+        )
+        .join(
+            JoinType::LeftJoin,
+            user_avatars::Entity,
+            Expr::col((user_avatars::Entity, user_avatars::Column::UserId))
+                .equals((users::Entity, users::Column::Id)),
+        )
+        .join(
+            JoinType::LeftJoin,
+            user_covers::Entity,
+            Expr::col((user_covers::Entity, user_covers::Column::UserId))
+                .equals((users::Entity, users::Column::Id)),
+        )
+        .and_where(Expr::col((user_follows::Entity, filter_col)).eq(user_id))
+        .order_by(
+            (user_follows::Entity, user_follows::Column::CreatedAt),
+            Order::Desc,
+        )
+        .limit(per_page)
+        .offset(offset)
+        .build(PostgresQueryBuilder)
+}

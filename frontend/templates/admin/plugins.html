@@ -1,0 +1,224 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Plugins | Admin{% endblock %}
+{% block page_title %}Plugins{% endblock %}
+{% block nav_plugins %}active fw-semibold{% endblock %}
+
+{% block content %}
+{% if flash_success %}
+<div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+  <i class="fa-solid fa-circle-check me-2"></i>{{ flash_success }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if flash_error %}
+<div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+  <i class="fa-solid fa-circle-exclamation me-2"></i>{{ flash_error }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="card" x-data="{ q: '', status: '' }">
+  <div class="card-header">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="fw-semibold">Installed Plugins</span>
+      <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal">
+        <i class="fa-solid fa-upload me-1"></i>Upload Plugin
+      </button>
+    </div>
+    <div class="adm-filter-row">
+      <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+        <span class="input-group-text bg-transparent">
+          <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+        </span>
+        <input type="search" x-model="q" class="form-control border-start-0 ps-0"
+               placeholder="Filter by name or slug…" autocomplete="off">
+      </div>
+      <select x-model="status" class="form-select form-select-sm" style="max-width:150px">
+        <option value="">All statuses</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+        <option value="disabled">Disabled</option>
+        <option value="error">Error</option>
+      </select>
+    </div>
+  </div>
+
+  {% if plugins %}
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-active">
+        <tr>
+          <th>Name</th>
+          <th>Slug</th>
+          <th>Version</th>
+          <th>Tier</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plugin in plugins %}
+        <tr x-show="(!q || ('{{ plugin.name | lower }} {{ plugin.slug }}').includes(q.toLowerCase())) && (!status || '{{ plugin.status }}' === status)">
+          <td class="fw-semibold align-middle">{{ plugin.name }}</td>
+          <td class="text-muted small align-middle font-monospace">{{ plugin.slug }}</td>
+          <td class="text-muted small align-middle">{{ plugin.version }}</td>
+          <td class="align-middle">
+            <span class="badge bg-secondary">{{ plugin.tier }}</span>
+          </td>
+          <td class="align-middle">
+            {% if plugin.status == "active" %}
+              <span class="badge bg-success">Active</span>
+            {% elif plugin.status == "inactive" %}
+              <span class="badge bg-secondary" title="Never activated">Inactive</span>
+            {% elif plugin.status == "error" %}
+              <span class="badge bg-danger">Error</span>
+            {% elif plugin.status == "disabled" %}
+              <span class="badge bg-warning text-dark" title="Manually disabled by admin">Disabled</span>
+            {% elif plugin.status == "installing" %}
+              <span class="badge bg-info text-dark">Installing…</span>
+            {% elif plugin.status == "uninstalling" %}
+              <span class="badge bg-warning text-dark">Uninstalling…</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ plugin.status }}</span>
+            {% endif %}
+          </td>
+          <td class="align-middle">
+            <div class="d-flex gap-1">
+              <a href="/admin/plugins/{{ plugin.slug }}" class="btn btn-sm btn-outline-secondary" title="View details">
+                <i class="fa-solid fa-circle-info"></i>
+              </a>
+              {% if plugin.status == "active" %}
+                <form method="post" action="/admin/plugins/{{ plugin.slug }}/deactivate">
+                  <button class="btn btn-sm btn-outline-warning" type="submit">
+                    <i class="fa-solid fa-pause me-1"></i>Deactivate
+                  </button>
+                </form>
+              {% elif plugin.status == "inactive" or plugin.status == "disabled" %}
+                <form method="post" action="/admin/plugins/{{ plugin.slug }}/activate">
+                  <button class="btn btn-sm btn-outline-success" type="submit">
+                    <i class="fa-solid fa-play me-1"></i>Activate
+                  </button>
+                </form>
+              {% endif %}
+              <button class="btn btn-sm btn-outline-danger"
+                      data-bs-toggle="modal" data-bs-target="#uninstallPluginModal"
+                      data-plugin-slug="{{ plugin.slug }}"
+                      data-plugin-name="{{ plugin.name }}"
+                      title="Uninstall">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body text-center py-5 text-muted">
+    <i class="fa-solid fa-puzzle-piece fa-3x mb-3 d-block opacity-50"></i>
+    <p class="mb-2">No plugins installed.</p>
+    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal">
+      <i class="fa-solid fa-upload me-1"></i>Upload your first plugin
+    </button>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Uninstall Confirm Modal ─────────────────────────────────────── #}
+<div class="modal fade" id="uninstallPluginModal" tabindex="-1"
+     aria-labelledby="uninstallPluginModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title text-danger" id="uninstallPluginModalLabel" style="font-size:1rem">
+          <i class="fa-solid fa-trash me-2"></i>Uninstall Plugin
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small mb-3">
+          This will permanently remove <strong id="uninstall-plugin-name"></strong>
+          and delete all its files. This cannot be undone.
+        </p>
+        <form id="uninstall-plugin-form" method="post" action="">
+          <label class="form-label small fw-semibold" for="uninstall-plugin-confirm-input">
+            Type <code id="uninstall-plugin-slug-display"></code> to confirm:
+          </label>
+          <input type="text" class="form-control form-control-sm font-monospace"
+                 id="uninstall-plugin-confirm-input" name="confirm_slug"
+                 placeholder="" autocomplete="off">
+        </form>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" form="uninstall-plugin-form"
+                class="btn btn-danger btn-sm" id="uninstall-plugin-confirm-btn" disabled>
+          <i class="fa-solid fa-trash me-1"></i>Uninstall
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Modal — two-step: (1) upload → capability review, (2) confirm install -->
+<div class="modal fade" id="uploadModal" tabindex="-1" x-data="pluginUpload()">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-puzzle-piece me-2"></i>Install Plugin</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" @click="reset()"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Step 1: file picker (shown when step === 1) -->
+        <div x-show="step === 1">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Plugin package <code>.fpkg</code></label>
+            <input type="file" class="form-control" accept=".fpkg,.zip" required
+                   @change="fileSelected($event)">
+          </div>
+          <p class="text-muted small mb-0">
+            The plugin manifest will be shown for review before installation.
+          </p>
+        </div>
+
+        <!-- Step 2: capability review (HTMX swaps content here) -->
+        <div x-show="step === 2" id="plugin-review-container">
+          <!-- Content injected by HTMX after upload -->
+        </div>
+
+        <!-- Error alert -->
+        <div x-show="errorMsg" class="alert alert-danger mt-3 mb-0" x-text="errorMsg"></div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @click="reset()">Cancel</button>
+
+        <!-- Step 1 action -->
+        <button x-show="step === 1" class="btn btn-primary"
+                :disabled="!selectedFile || loading"
+                @click="uploadForReview()">
+          <span x-show="loading" class="spinner-border spinner-border-sm me-1"></span>
+          <span x-text="loading ? 'Uploading…' : 'Next: Review'"></span>
+        </button>
+
+        <!-- Step 2 action: submits the hidden install form -->
+        <button x-show="step === 2" class="btn btn-success"
+                :disabled="loading"
+                @click="confirmInstall()">
+          <span x-show="loading" class="spinner-border spinner-border-sm me-1"></span>
+          <i x-show="!loading" class="fa-solid fa-circle-check me-1"></i>
+          Confirm Install
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-admin-plugins.js?v={{ asset_version() }}"></script>
+{% endblock %}

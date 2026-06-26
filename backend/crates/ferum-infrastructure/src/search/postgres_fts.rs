@@ -1,7 +1,13 @@
 use async_trait::async_trait;
-use sea_orm::DbBackend;
-use sea_orm::{DatabaseConnection, FromQueryResult, Statement};
+use sea_orm::{DatabaseConnection, DbBackend, FromQueryResult, Statement};
 use uuid::Uuid;
+
+fn sanitize_headline(html: String) -> String {
+    ammonia::Builder::new()
+        .tags(["b"].iter().cloned().collect())
+        .clean(&html)
+        .to_string()
+}
 
 use ferum_application::ports::{SearchHit, SearchQuery, SearchResults, SearchService};
 use ferum_application::shared::AppError;
@@ -24,6 +30,11 @@ struct FtsRow {
     excerpt: Option<String>,
 }
 
+#[derive(Debug, FromQueryResult)]
+struct CountRow {
+    count: i64,
+}
+
 #[async_trait]
 impl SearchService for PostgresFtsService {
     async fn search(&self, query: SearchQuery) -> Result<SearchResults, AppError> {
@@ -34,6 +45,7 @@ impl SearchService for PostgresFtsService {
             });
         }
 
+        // Build prefix-match tsquery: "hello world" → "hello:* & world:*"
         let tsquery = query
             .q
             .trim()
@@ -42,55 +54,67 @@ impl SearchService for PostgresFtsService {
             .collect::<Vec<_>>()
             .join(" & ");
 
-        let category_filter = if query.category_id.is_some() {
-            "AND t.category_id = $4"
-        } else {
-            ""
-        };
-
         let offset = (query.page.saturating_sub(1)) * query.per_page;
 
-        let sql = format!(
-            r#"SELECT
-                t.id AS thread_id,
-                t.slug AS thread_slug,
-                t.title,
-                ts_headline('simple', t.title, to_tsquery('simple', $1), 'MaxFragments=1') AS excerpt
-               FROM threads t
-               WHERE t.search_vector @@ to_tsquery('simple', $1)
-                 AND t.status != 'deleted'
-                 {category_filter}
-               ORDER BY ts_rank(t.search_vector, to_tsquery('simple', $1)) DESC
-               LIMIT $2 OFFSET $3"#,
-        );
-
-        let stmt = if let Some(cat_id) = query.category_id {
-            Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                &sql,
-                vec![
-                    tsquery.into(),
-                    (query.per_page as i64).into(),
-                    (offset as i64).into(),
-                    cat_id.into(),
-                ],
-            )
-        } else {
-            Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                &sql,
-                vec![
-                    tsquery.into(),
-                    (query.per_page as i64).into(),
-                    (offset as i64).into(),
-                ],
-            )
+        // $1 = tsquery string (reused for match, rank, headline)
+        // $2 = category_id filter (optional, appended below)
+        // last two params = LIMIT, OFFSET
+        let (cat_clause, mut values): (&str, Vec<sea_orm::Value>) = match query.category_id {
+            Some(cat_id) => ("AND t.category_id = $2", vec![tsquery.clone().into(), cat_id.into()]),
+            None => ("", vec![tsquery.clone().into()]),
         };
 
-        let rows = FtsRow::find_by_statement(stmt)
-            .all(&self.db)
-            .await
-            .map_err(AppError::from)?;
+        let limit_idx = values.len() + 1;
+        let offset_idx = values.len() + 2;
+        values.push((query.per_page as i64).into());
+        values.push((offset as i64).into());
+
+        let data_sql = format!(
+            r#"
+            SELECT
+                t.id         AS thread_id,
+                t.slug       AS thread_slug,
+                t.title,
+                ts_headline(
+                    'simple', t.title,
+                    to_tsquery('simple', $1),
+                    'MaxFragments=1,MinWords=6,MaxWords=20'
+                )            AS excerpt
+            FROM threads t
+            WHERE to_tsvector('simple', t.title) @@ to_tsquery('simple', $1)
+              AND t.deleted_at IS NULL
+              AND t.status != 'deleted'::thread_status
+              {cat_clause}
+            ORDER BY ts_rank(to_tsvector('simple', t.title), to_tsquery('simple', $1)) DESC
+            LIMIT ${limit_idx} OFFSET ${offset_idx}
+            "#
+        );
+
+        let count_sql = format!(
+            r#"
+            SELECT COUNT(*)::BIGINT AS count
+            FROM threads t
+            WHERE to_tsvector('simple', t.title) @@ to_tsquery('simple', $1)
+              AND t.deleted_at IS NULL
+              AND t.status != 'deleted'::thread_status
+              {cat_clause}
+            "#
+        );
+
+        // Run data + count queries concurrently
+        let data_stmt = Statement::from_sql_and_values(DbBackend::Postgres, &data_sql, values.clone());
+        let count_stmt = Statement::from_sql_and_values(DbBackend::Postgres, &count_sql, values[..values.len() - 2].to_vec());
+
+        let (rows, count_row) = tokio::try_join!(
+            FtsRow::find_by_statement(data_stmt).all(&self.db),
+            CountRow::find_by_statement(count_stmt).one(&self.db),
+        )
+        .map_err(|e| {
+            tracing::error!(error = %e, q = %query.q, "fts_search_failed");
+            AppError::from(e)
+        })?;
+
+        let total = count_row.and_then(|r| u64::try_from(r.count).ok()).unwrap_or(0);
 
         let hits = rows
             .into_iter()
@@ -98,11 +122,10 @@ impl SearchService for PostgresFtsService {
                 thread_id: r.thread_id,
                 thread_slug: r.thread_slug,
                 title: r.title,
-                excerpt: r.excerpt,
+                // ts_headline wraps matched terms in <b>; strip everything else to prevent XSS.
+                excerpt: r.excerpt.map(sanitize_headline),
             })
-            .collect::<Vec<_>>();
-
-        let total = hits.len() as u64;
+            .collect();
 
         Ok(SearchResults { hits, total })
     }

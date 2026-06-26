@@ -5,24 +5,33 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::constants::{
-    ACCOUNT_LOCKOUT_ATTEMPTS, ACCOUNT_LOCKOUT_DURATION_MINUTES, PASSWORD_RESET_TOKEN_TTL_SECS,
-    REFRESH_TOKEN_TTL_SECS,
+    DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS, DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES,
+    PASSWORD_RESET_TOKEN_TTL_SECS, REFRESH_TOKEN_TTL_SECS,
 };
 use crate::ports::{
-    AccessTokenClaims, CacheService, ForumJob, HookContext, HookDecision, JobQueue,
-    NullPluginRuntime, PasswordHasher, PluginRuntime, TokenService,
+    CacheService, ForumJob, HookContext, HookDecision, JobQueue,
+    NullPluginRuntime, PasswordHasher, PluginHookRuntime, TokenService,
 };
-use crate::shared::AppError;
+use super::{build_access_token_claims, refresh_token_key};
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::models::user::{TrustLevel, User};
+use ferum_domain::repositories::role_repository::RoleRepository;
+use ferum_domain::repositories::site_config_repository::{
+    get_config_i32, get_config_u64, SiteConfigRepository,
+};
 use ferum_domain::repositories::user_repository::{NewUser, UserRepository};
+use ferum_domain::repositories::user_role_repository::UserRoleRepository;
 
 pub struct AuthUseCase {
     pub users: Arc<dyn UserRepository>,
+    pub roles: Arc<dyn RoleRepository>,
+    pub user_roles: Arc<dyn UserRoleRepository>,
     pub hasher: Arc<dyn PasswordHasher>,
     pub tokens: Arc<dyn TokenService>,
     pub cache: Arc<dyn CacheService>,
     pub jobs: Arc<dyn JobQueue>,
-    pub plugin_runtime: Arc<dyn PluginRuntime>,
+    pub plugin_runtime: Arc<dyn PluginHookRuntime>,
+    pub site_config: Option<Arc<dyn SiteConfigRepository>>,
     /// When true, newly registered users are immediately verified (no email required).
     /// Set to true when SMTP_HOST is not configured.
     pub auto_verify_email: bool,
@@ -31,6 +40,8 @@ pub struct AuthUseCase {
 impl AuthUseCase {
     pub fn new(
         users: Arc<dyn UserRepository>,
+        roles: Arc<dyn RoleRepository>,
+        user_roles: Arc<dyn UserRoleRepository>,
         hasher: Arc<dyn PasswordHasher>,
         tokens: Arc<dyn TokenService>,
         cache: Arc<dyn CacheService>,
@@ -38,11 +49,14 @@ impl AuthUseCase {
     ) -> Self {
         Self {
             users,
+            roles,
+            user_roles,
             hasher,
             tokens,
             cache,
             jobs,
             plugin_runtime: Arc::new(NullPluginRuntime),
+            site_config: None,
             auto_verify_email: false,
         }
     }
@@ -52,13 +66,19 @@ impl AuthUseCase {
         self
     }
 
-    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginRuntime>) -> Self {
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
         self.plugin_runtime = runtime;
+        self
+    }
+
+    pub fn with_site_config(mut self, site_config: Arc<dyn SiteConfigRepository>) -> Self {
+        self.site_config = Some(site_config);
         self
     }
 
     // ─── Register ─────────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all)]
     pub async fn register(&self, cmd: RegisterCmd) -> Result<User, AppError> {
         if !crate::validators::validate_username(&cmd.username) {
             return Err(AppError::unprocessable(
@@ -109,6 +129,15 @@ impl AuthUseCase {
             })
             .await?;
 
+        // Assign all is_default roles so the user has baseline permissions immediately.
+        let default_roles = self.roles.list_default().await?;
+        for role in default_roles {
+            let _ = self
+                .user_roles
+                .assign(user.id, role.id, None, user.id, None)
+                .await;
+        }
+
         if self.auto_verify_email {
             self.users.set_email_verified(user.id).await?;
             self.users.set_trust_level(user.id, TrustLevel::Basic).await?;
@@ -128,13 +157,14 @@ impl AuthUseCase {
 
     // ─── Verify email ─────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all)]
     pub async fn verify_email(&self, token: &str) -> Result<(), AppError> {
         let user_id = self
             .tokens
             .verify_email_token(token, "email_verification")
             .map_err(|_| AppError::forbidden("invalid_or_expired_token"))?;
 
-        let user = self.users.find_by_id(user_id).await?.ok_or(AppError::NotFound)?;
+        let user = self.users.find_by_id(user_id).await?.or_not_found()?;
 
         if !user.is_email_verified {
             self.users.set_email_verified(user_id).await?;
@@ -146,6 +176,7 @@ impl AuthUseCase {
 
     // ─── Login ────────────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all)]
     pub async fn login(&self, cmd: LoginCmd) -> Result<LoginResult, AppError> {
         let user_opt = self.users.find_by_email(&cmd.email.to_lowercase()).await?;
 
@@ -171,9 +202,17 @@ impl AuthUseCase {
 
         if user.password_hash.is_none() || !valid {
             let count = self.users.increment_failed_login(user.id).await?;
-            if count >= ACCOUNT_LOCKOUT_ATTEMPTS {
+            let lockout_attempts = match &self.site_config {
+                Some(sc) => get_config_i32(sc.as_ref(), "account_lockout_attempts", DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS).await,
+                None => DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS,
+            };
+            if count >= lockout_attempts {
+                let lockout_minutes = match &self.site_config {
+                    Some(sc) => get_config_u64(sc.as_ref(), "account_lockout_duration_minutes", DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES).await,
+                    None => DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES,
+                };
                 let until = Utc::now()
-                    + chrono::Duration::minutes(ACCOUNT_LOCKOUT_DURATION_MINUTES as i64);
+                    + chrono::Duration::minutes(lockout_minutes as i64);
                 self.users.lock_until(user.id, until).await?;
                 return Err(AppError::forbidden("account_locked"));
             }
@@ -209,17 +248,7 @@ impl AuthUseCase {
             user.trust_level = new_level;
         }
 
-        let trust_str = format!("{:?}", user.trust_level).to_lowercase();
-        let claims = AccessTokenClaims {
-            sub: user.id,
-            username: user.username.clone(),
-            trust_level: trust_str,
-            is_banned: user.is_banned,
-            banned_until: user.banned_until.map(|t| t.timestamp()),
-            exp: (Utc::now()
-                + chrono::Duration::seconds(crate::constants::JWT_EXPIRY_SECS as i64))
-            .timestamp(),
-        };
+        let claims = build_access_token_claims(&user);
         let access_token = self.tokens.mint_access_token(&claims)?;
         let refresh_token = self.tokens.mint_refresh_token(user.id)?;
 
@@ -236,6 +265,7 @@ impl AuthUseCase {
 
     // ─── Refresh ──────────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all)]
     pub async fn refresh_access_token(
         &self,
         refresh_token: &str,
@@ -253,17 +283,16 @@ impl AuthUseCase {
             return Err(AppError::forbidden("account_suspended"));
         }
 
-        let trust_str = format!("{:?}", user.trust_level).to_lowercase();
-        let claims = AccessTokenClaims {
-            sub: user.id,
-            username: user.username.clone(),
-            trust_level: trust_str,
-            is_banned: user.is_banned,
-            banned_until: user.banned_until.map(|t| t.timestamp()),
-            exp: (Utc::now()
-                + chrono::Duration::seconds(crate::constants::JWT_EXPIRY_SECS as i64))
-            .timestamp(),
-        };
+        // Fire-and-forget: update last_seen_at and days_visited on token refresh (≤1/hour).
+        // This catches active users who never explicitly log out and back in.
+        {
+            let users = self.users.clone();
+            tokio::spawn(async move {
+                let _ = users.update_last_seen(user_id).await;
+            });
+        }
+
+        let claims = build_access_token_claims(&user);
         let access_token = self.tokens.mint_access_token(&claims)?;
 
         Ok(RefreshResult { access_token })
@@ -271,6 +300,7 @@ impl AuthUseCase {
 
     // ─── Logout ───────────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all, fields(user_id = %user_id))]
     pub async fn logout(&self, user_id: Uuid, refresh_token: &str) -> Result<(), AppError> {
         self.cache.del(&refresh_token_key(user_id, refresh_token)).await?;
         Ok(())
@@ -278,6 +308,7 @@ impl AuthUseCase {
 
     // ─── Forgot password ──────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all)]
     pub async fn forgot_password(&self, email: &str) -> Result<(), AppError> {
         if let Some(user) = self.users.find_by_email(&email.to_lowercase()).await? {
             let token = self.tokens.mint_email_token(user.id, "password_reset")?;
@@ -290,6 +321,7 @@ impl AuthUseCase {
 
     // ─── Reset password ───────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all)]
     pub async fn reset_password(&self, cmd: ResetPasswordCmd) -> Result<(), AppError> {
         if !crate::validators::validate_password(&cmd.new_password) {
             return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
@@ -375,12 +407,3 @@ pub struct RefreshResult {
     pub access_token: String,
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-fn refresh_token_key(user_id: Uuid, token: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(token.as_bytes());
-    let digest = h.finalize();
-    format!("refresh:{}:{}", user_id, hex::encode(&digest[..16]))
-}

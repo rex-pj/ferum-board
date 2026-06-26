@@ -3,7 +3,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::permission::PermissionChecker;
-use crate::shared::AppError;
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::models::webhook::Webhook;
 use ferum_domain::repositories::webhook_repository::{
     NewWebhook, UpdateWebhook, WebhookRepository,
@@ -19,11 +19,13 @@ impl WebhookUseCase {
         Self { webhooks }
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn list(&self, actor: &AuthUser) -> Result<Vec<Webhook>, AppError> {
         PermissionChecker::can_manage_webhooks(actor)?;
         self.webhooks.list().await
     }
 
+    #[tracing::instrument(skip(self, actor, url, events, secret), fields(user_id = %actor.id))]
     pub async fn create(
         &self,
         actor: &AuthUser,
@@ -49,6 +51,7 @@ impl WebhookUseCase {
             .await
     }
 
+    #[tracing::instrument(skip(self, actor, url, events, secret), fields(user_id = %actor.id, webhook_id = %id))]
     pub async fn update(
         &self,
         actor: &AuthUser,
@@ -65,7 +68,7 @@ impl WebhookUseCase {
         self.webhooks
             .find_by_id(id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         self.webhooks
             .update(
                 id,
@@ -79,12 +82,13 @@ impl WebhookUseCase {
             .await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, webhook_id = %id))]
     pub async fn delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         PermissionChecker::can_manage_webhooks(actor)?;
         self.webhooks
             .find_by_id(id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         self.webhooks.delete(id).await
     }
 }
@@ -99,7 +103,7 @@ fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppError> {
     }
 
     // Parse with the http crate's Uri to validate structure.
-    let uri: axum::http::Uri = url
+    let uri: http::Uri = url
         .parse()
         .map_err(|_| AppError::unprocessable("Webhook URL is not a valid URI"))?;
 
@@ -140,7 +144,18 @@ fn is_private_host(host: &str) -> bool {
     }
     // Parse as IPv6
     if let Ok(addr) = host.parse::<std::net::Ipv6Addr>() {
-        return addr.is_loopback() || addr.is_unspecified();
+        let segments = addr.segments();
+        // Loopback (::1), unspecified (::)
+        let basic = addr.is_loopback() || addr.is_unspecified();
+        // Unique Local Addresses: fc00::/7 (first segment high byte 0xfc or 0xfd)
+        let is_ula = (segments[0] & 0xfe00) == 0xfc00;
+        // Link-Local: fe80::/10
+        let is_link_local = (segments[0] & 0xffc0) == 0xfe80;
+        // IPv4-mapped private addresses (::ffff:192.168.x.x etc.)
+        let is_v4_mapped_private = addr.to_ipv4_mapped().map_or(false, |v4| {
+            v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
+        });
+        return basic || is_ula || is_link_local || is_v4_mapped_private;
     }
     false
 }

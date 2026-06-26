@@ -1,0 +1,12 @@
+/* ── Admin layout ─────────────────────────────────────────────── */
+.fr-admin-sidebar {
+  width: 220px;
+  min-height: calc(100dvh - var(--fr-topbar-height));
+  border-right: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+  position: sticky;
+  top: var(--fr-topbar-height);
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 0.5rem 0.375rem;
+}

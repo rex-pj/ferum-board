@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::event_bus::EventBus;
 use crate::permission::PermissionChecker;
-use crate::shared::AppError;
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::post::Post;
 use ferum_domain::models::reaction::ReactionKind;
@@ -45,13 +45,14 @@ impl ReactionUseCase {
             .posts
             .find_by_id(post_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if post.is_deleted {
             return Err(AppError::NotFound);
         }
         Ok(post)
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, post_id = %post_id, kind = ?kind))]
     pub async fn add(
         &self,
         actor: &AuthUser,
@@ -83,7 +84,7 @@ impl ReactionUseCase {
             .threads
             .find_by_id(post.thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         self.reactions.add(post_id, actor.id, kind).await?;
 
@@ -92,8 +93,10 @@ impl ReactionUseCase {
                 post_id,
                 thread_id: thread.id,
                 thread_slug: thread.slug,
+                thread_title: thread.title,
                 post_author_id: post.author_id,
                 reactor_id: actor.id,
+                reactor_username: actor.username.clone(),
                 kind,
             })
             .await;
@@ -112,6 +115,7 @@ impl ReactionUseCase {
         self.reactions.counts_by_post(post_id).await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, post_id = %post_id, kind = ?kind))]
     pub async fn remove(
         &self,
         actor: &AuthUser,

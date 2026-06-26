@@ -4,6 +4,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::view_models::reaction::ReactionCountResponse;
+use crate::view_models::AuthorInfo;
 use ferum_domain::models::post::Post;
 
 // ─── Requests ─────────────────────────────────────────────────────────────────
@@ -11,13 +12,13 @@ use ferum_domain::models::post::Post;
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreatePostRequest {
     pub parent_id: Option<Uuid>,
-    #[validate(length(min = 1, message = "Content is required"))]
+    #[validate(length(min = 1, max = 50_000, message = "Content must be 1–50 000 characters"))]
     pub content_md: String,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct UpdatePostRequest {
-    #[validate(length(min = 1, message = "Content is required"))]
+    #[validate(length(min = 1, max = 50_000, message = "Content must be 1–50 000 characters"))]
     pub content_md: String,
 }
 
@@ -28,14 +29,6 @@ pub struct PostListQuery {
 }
 
 // ─── Responses ────────────────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-pub struct PostAuthorResponse {
-    pub username: String,
-    pub display_name: Option<String>,
-    pub avatar_url: Option<String>,
-    pub role: Option<String>,
-}
 
 #[derive(Serialize)]
 pub struct PostResponse {
@@ -50,7 +43,7 @@ pub struct PostResponse {
     pub edited_at: Option<DateTime<Utc>>,
     pub edit_count: i32,
     pub created_at: DateTime<Utc>,
-    pub author: Option<PostAuthorResponse>,
+    pub author: Option<AuthorInfo>,
     pub reactions: Vec<ReactionCountResponse>,
     pub my_reactions: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,7 +57,7 @@ impl From<Post> for PostResponse {
         let author = p
             .author_username
             .as_ref()
-            .map(|username| PostAuthorResponse {
+            .map(|username| AuthorInfo {
                 username: username.clone(),
                 display_name: p.author_display_name.clone(),
                 avatar_url: p.author_avatar_url.clone(),

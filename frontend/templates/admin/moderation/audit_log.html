@@ -1,0 +1,110 @@
+{% extends "admin/base.html" %}
+{% import "default/templates/macros.html" as m %}
+{% block title %}Audit Log | Admin{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+{% block nav_log %}active fw-semibold{% endblock %}
+
+{% block content %}
+
+{# ── Page header ────────────────────────────────────────────────── #}
+<div class="d-flex align-items-start justify-content-between mb-3">
+  <div>
+    <h4 class="mb-0 fw-semibold">Audit Log</h4>
+    {% if pagination.total > 0 %}
+      <div class="text-muted small mt-1">{{ pagination.total }} entries</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Log table ──────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header p-0">
+    <form class="adm-filter-row px-3 py-2" method="get" action="/admin/log">
+      <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+        <span class="input-group-text bg-transparent">
+          <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+        </span>
+        <input type="search" class="form-control border-start-0 ps-0" name="q"
+               value="{{ search_query }}" placeholder="Filter by action…"
+               autocomplete="off">
+      </div>
+      <ferum-remote-select name="actor_id" endpoint="/api/admin/lookups/users"
+                           value="{{ actor_id_filter }}" label="{{ actor_label }}"
+                           placeholder="Any actor"></ferum-remote-select>
+      <select name="target_type" class="form-select form-select-sm" style="width:auto">
+        <option value="">All targets</option>
+        <option value="Thread" {% if target_type_filter == "Thread" %}selected{% endif %}>Thread</option>
+        <option value="Post"   {% if target_type_filter == "Post" %}selected{% endif %}>Post</option>
+        <option value="User"   {% if target_type_filter == "User" %}selected{% endif %}>User</option>
+        <option value="Report" {% if target_type_filter == "Report" %}selected{% endif %}>Report</option>
+      </select>
+      <input type="date" class="form-control form-control-sm" style="max-width:160px" name="date_from"
+             value="{{ date_from_filter }}" title="From date" aria-label="From date">
+      <input type="date" class="form-control form-control-sm" style="max-width:160px" name="date_to"
+             value="{{ date_to_filter }}" title="To date" aria-label="To date">
+      <button class="btn btn-sm btn-outline-success" type="submit">
+        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      </button>
+      {% if search_query or actor_id_filter or target_type_filter or date_from_filter or date_to_filter %}
+        <a href="/admin/log" class="btn btn-sm btn-outline-secondary" title="Clear filters">
+          <i class="fa-solid fa-xmark"></i>
+        </a>
+      {% endif %}
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-active">
+        <tr>
+          <th style="width:13%">Time</th>
+          <th style="width:18%">Actor</th>
+          <th style="width:28%">Action</th>
+          <th>Target</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr>
+          <td class="text-muted small text-nowrap align-middle">
+            <time data-rel datetime="{{ entry.created_at }}">{{ entry.created_at | date(format="%b %d, %Y %H:%M") }}</time>
+          </td>
+          <td class="align-middle">
+            <a href="/admin/users/{{ entry.actor_id }}" class="text-decoration-none fw-semibold">
+              @{{ entry.actor_username | default(value=entry.actor_id) }}
+            </a>
+          </td>
+          <td class="align-middle">
+            <code class="small">{{ entry.action }}</code>
+          </td>
+          <td class="text-muted small align-middle">
+            <span class="badge bg-secondary bg-opacity-50 text-body me-1" style="font-size:.65rem">{{ entry.target_type }}</span>
+            <code class="opacity-75" style="font-size:.7rem">{{ entry.target_id }}</code>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4" class="text-center text-muted py-5">
+            <i class="fa-solid fa-scroll fa-2x d-block mb-2 opacity-25"></i>
+            {% if search_query or actor_id_filter or target_type_filter %}No entries match the current filters.{% else %}No log entries.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Footer: count + pagination ─────────────────────────────── #}
+  {% if pagination.total > 0 %}
+  <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
+    <span class="text-muted small">
+      {{ pagination.total }} entr{% if pagination.total == 1 %}y{% else %}ies{% endif %}
+      {% if pagination.total_pages > 1 %}
+        — page {{ pagination.page }} of {{ pagination.total_pages }}
+      {% endif %}
+    </span>
+    {{ m::paginate(pagination=pagination, base_url="/admin/log", extra_params="&q=" ~ search_query ~ "&actor_id=" ~ actor_id_filter ~ "&target_type=" ~ target_type_filter ~ "&date_from=" ~ date_from_filter ~ "&date_to=" ~ date_to_filter) }}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

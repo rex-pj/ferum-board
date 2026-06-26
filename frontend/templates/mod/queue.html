@@ -1,0 +1,72 @@
+{% extends "mod/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Approval Queue | Mod Panel{% endblock %}
+{% block page_title %}Approval Queue{% endblock %}
+{% block nav_queue %}active{% endblock %}
+
+{% block content %}
+
+{# ── Page header ────────────────────────────────────────────────── #}
+{{ m::page_header(title="Approval Queue", total=pagination.total, count_label="pending") }}
+
+{% if posts %}
+<div class="vstack gap-3">
+  {% for post in posts %}
+  <div class="card" id="queue-item-{{ post.id }}">
+    <div class="card-header py-2 d-flex align-items-center justify-content-between gap-2">
+      <div class="small">
+        <span class="fw-semibold">{{ post.author_username | default(value="Unknown") }}</span>
+        <span class="text-muted ms-1">in</span>
+        <a href="/forum/t/{{ post.thread_slug | default(value='') }}" class="text-decoration-none ms-1" target="_blank">
+          {{ post.thread_title | default(value="Thread") | truncate(length=60) }}
+        </a>
+        <span class="text-muted ms-2">{{ post.created_at | truncate(length=10, end="") }}</span>
+      </div>
+      <div class="d-flex gap-1 flex-shrink-0">
+        <button type="button" class="btn btn-sm btn-success" data-mod-action="approve" data-post-id="{{ post.id }}" title="Approve">
+          <i class="fa-solid fa-check me-1"></i>Approve
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-danger" data-mod-action="reject" data-post-id="{{ post.id }}" title="Reject">
+          <i class="fa-solid fa-xmark me-1"></i>Reject
+        </button>
+      </div>
+    </div>
+    <div class="card-body py-2">
+      <div class="small text-muted" style="white-space:pre-wrap;word-break:break-word;max-height:8rem;overflow:hidden">
+        {{ post.content_md | truncate(length=400) }}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ── Pagination ──────────────────────────────────────────────────── #}
+{% if pagination and pagination.total_pages > 1 %}
+  <div class="card mt-3">
+    {{ m::card_footer_pagination(pagination=pagination, base_url="/mod/queue") }}
+  </div>
+{% endif %}
+
+{% else %}
+<div class="card">
+  <div class="text-center py-5 text-secondary">
+    <i class="fa-solid fa-list-check fa-3x mb-3 d-block opacity-25"></i>
+    <div class="fw-semibold mb-1">Queue is empty</div>
+    <div class="small text-muted">
+      The approval queue is enabled when a category's <code>post_policy</code> is set to require approval.<br>
+      Posts waiting for approval will appear here.
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div id="queue-toast" class="toast align-items-center position-fixed bottom-0 end-0 m-3 d-none" role="alert">
+  <div class="d-flex">
+    <div class="toast-body" id="queue-toast-msg"></div>
+    <button type="button" class="btn-close me-2 m-auto" data-action="close-toast"></button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}{% endblock %}

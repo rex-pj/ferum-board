@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 
 pub mod markdown;
 
@@ -34,24 +33,6 @@ pub fn validate_slug_format(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && !s.starts_with('-')
         && !s.ends_with('-')
-}
-
-pub fn validate_email(s: &str) -> bool {
-    if s.len() < 5 || s.len() > 254 {
-        return false;
-    }
-    let at = match s.rfind('@') {
-        Some(i) if i > 0 => i,
-        _ => return false,
-    };
-    let local = &s[..at];
-    let domain = &s[at + 1..];
-    !local.is_empty()
-        && local.len() <= 64
-        && !domain.is_empty()
-        && domain.contains('.')
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
 }
 
 /// Validate an image by inspecting its magic bytes.
@@ -107,6 +88,11 @@ const RESERVED_SLUGS: &[&str] = &[
 /// Returns true if the slug collides with a system-reserved path segment.
 pub fn is_reserved_slug(s: &str) -> bool {
     RESERVED_SLUGS.contains(&s)
+}
+
+pub fn validate_thread_title(s: &str) -> bool {
+    let len = s.chars().count();
+    len >= crate::constants::MIN_THREAD_TITLE_LEN && len <= crate::constants::MAX_THREAD_TITLE_LEN
 }
 
 pub fn generate_slug(title: &str) -> String {

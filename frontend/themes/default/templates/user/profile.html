@@ -1,0 +1,206 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}{{ profile.display_name }} (@{{ profile.username }}) — {{ site.name }}{% endblock %}
+
+{% block head_extra %}
+<meta property="og:type" content="profile">
+<meta property="og:title" content="{{ profile.display_name }} (@{{ profile.username }}) | {{ site.name }}">
+<meta property="og:description" content="{{ profile.bio | default(value=profile.username ~ 's profile on ' ~ site.name) }}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{ profile.display_name }} (@{{ profile.username }}) | {{ site.name }}">
+<meta name="twitter:description" content="{{ profile.bio | default(value=profile.username ~ 's profile on ' ~ site.name) }}">
+{% endblock %}
+
+{% block content %}
+<div id="ferum-profile-data" data-username="{{ profile.username | escape }}" data-profile-id="{{ profile.id }}" hidden></div>
+<div x-data="profileTabs('{{ profile.id }}')">
+
+  {# Cover + avatar header #}
+  <div class="card overflow-hidden mb-3">
+    <div class="fr-profile-cover"
+         style="{% if not profile.cover_url %}background:linear-gradient(135deg,hsl(210,55%,38%) 0%,hsl(190,65%,52%) 100%);{% endif %}">
+      {% if profile.cover_url %}<img src="{{ profile.cover_url }}" alt="Cover">{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div class="d-flex align-items-end gap-3">
+          <div class="fr-profile-avatar-wrap">
+            {% if profile.avatar_url %}
+              <img src="{{ profile.avatar_url }}" class="fr-profile-avatar" alt="">
+            {% else %}
+              <div class="fr-profile-avatar-placeholder">
+                {{ profile.display_name | truncate(length=1, end="") | upper }}
+              </div>
+            {% endif %}
+          </div>
+          <div class="pb-1">
+            <h5 class="mb-1 fw-bold">{{ profile.display_name }}</h5>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="fr-stat-label">@{{ profile.username }}</span>
+              {{ m::trust_badge(level=profile.trust_level) }}
+            </div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+          {% if current_user and current_user.username != profile.username %}
+            <div x-data="followState('{{ profile.id }}')">
+              <button @click="toggle()"
+                      :class="following ? 'btn-outline-secondary' : 'btn-primary'"
+                      class="btn btn-sm fr-profile-action-btn" :disabled="loading">
+                <i class="fa-solid me-1" :class="following ? 'fa-user-minus' : 'fa-user-plus'"></i>
+                <span x-text="following ? 'Following' : 'Follow'">Follow</span>
+              </button>
+            </div>
+          {% endif %}
+          {% if current_user and current_user.username == profile.username %}
+            <a href="/account" class="btn btn-outline-secondary btn-sm fr-profile-action-btn">
+              <i class="fa-solid fa-pen-to-square me-1"></i>Edit profile
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Stats / tab navigation #}
+    <div class="fr-profile-tab-bar">
+      <button @click="setTab('threads')"
+              :class="active === 'threads' ? 'fr-profile-tab--active' : ''"
+              class="fr-profile-tab">
+        <div class="fr-profile-tab-count">{{ profile.thread_pagination.total | default(value=0) }}</div>
+        <div class="fr-profile-tab-label">Threads</div>
+      </button>
+      <button @click="setTab('posts')"
+              :class="active === 'posts' ? 'fr-profile-tab--active' : ''"
+              class="fr-profile-tab">
+        <div class="fr-profile-tab-count">{{ profile.post_count }}</div>
+        <div class="fr-profile-tab-label">Posts</div>
+      </button>
+      <button @click="setTab('followers')"
+              :class="active === 'followers' ? 'fr-profile-tab--active' : ''"
+              class="fr-profile-tab">
+        <div class="fr-profile-tab-count">{{ profile.follower_count }}</div>
+        <div class="fr-profile-tab-label">Followers</div>
+      </button>
+      <button @click="setTab('following')"
+              :class="active === 'following' ? 'fr-profile-tab--active' : ''"
+              class="fr-profile-tab">
+        <div class="fr-profile-tab-count">{{ profile.following_count }}</div>
+        <div class="fr-profile-tab-label">Following</div>
+      </button>
+    </div>
+  </div>
+
+  {# Tab content #}
+  <div x-show="active === 'threads'" x-transition>
+    {% if profile.threads %}
+      <div class="fr-feed mb-3">
+        {% for thread in profile.threads %}
+          {% include "default/templates/partials/thread_card.html" %}
+        {% endfor %}
+      </div>
+      {% if profile.thread_pagination %}
+        {% set pagination = profile.thread_pagination %}
+        {% set base_url = "/u/" ~ profile.username %}
+        {% include "default/templates/partials/pagination.html" %}
+      {% endif %}
+    {% else %}
+      <div class="fr-feed">
+        <div class="text-center py-5 text-secondary">
+          <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block opacity-50" aria-hidden="true"></i>
+          No threads yet.
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div x-show="active === 'posts'" x-transition>
+    <div id="posts-content">
+      <div class="text-center py-4 text-secondary">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading…
+      </div>
+    </div>
+  </div>
+
+  <div x-show="active === 'followers'" x-transition>
+    <div id="followers-content">
+      <div class="text-center py-4 text-secondary">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading…
+      </div>
+    </div>
+  </div>
+
+  <div x-show="active === 'following'" x-transition>
+    <div id="following-content">
+      <div class="text-center py-4 text-secondary">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading…
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+{% if profile.bio %}
+<div class="fr-panel">
+  <div class="fr-panel-section">Bio</div>
+  <div class="fr-panel-body"><p class="mb-0 small">{{ profile.bio }}</p></div>
+</div>
+{% endif %}
+
+<div class="fr-panel">
+  <div class="fr-panel-section">Stats</div>
+  <div class="fr-panel-body">
+    <div class="fr-panel-stat-row">
+      <span>Posts</span><span class="fr-panel-stat-val">{{ profile.post_count }}</span>
+    </div>
+    {% if profile.trust_score %}
+      <div class="fr-panel-stat-row">
+        <span>Trust score</span>
+        <span class="fr-panel-stat-val">
+          <i class="fa-solid fa-star fa-xs text-warning"></i> {{ profile.trust_score }}
+        </span>
+      </div>
+    {% endif %}
+    <div class="fr-panel-stat-row">
+      <span>Joined</span>
+      <time class="fr-panel-stat-val" data-rel datetime="{{ profile.created_at }}">{{ profile.created_at | date(format="%b %d, %Y") }}</time>
+    </div>
+  </div>
+</div>
+
+<div class="fr-panel">
+  <div class="fr-panel-section">Member status</div>
+  <div class="fr-panel-body">
+    <div class="fr-panel-stat-row">
+      <span>Trust level</span>{{ m::trust_badge(level=profile.trust_level) }}
+    </div>
+    {% if profile.primary_role_name %}
+      <div class="fr-panel-stat-row">
+        <span>Role</span>
+        {% if profile.primary_role_color %}
+          <span class="badge" style="background:{{ profile.primary_role_color }}">{{ profile.primary_role_name }}</span>
+        {% else %}
+          <span class="badge bg-secondary">{{ profile.primary_role_name }}</span>
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if profile.website %}
+      <div class="fr-panel-stat-row">
+        <span>Website</span>
+        <a href="{{ profile.website }}" target="_blank" rel="noopener noreferrer"
+           class="text-truncate text-decoration-none small" style="max-width:140px">
+          {{ profile.website | truncate(length=25) }}
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-page-profile.js" defer></script>
+{% endblock %}

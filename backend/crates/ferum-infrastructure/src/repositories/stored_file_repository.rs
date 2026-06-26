@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use sea_orm::prelude::*;
-use sea_orm::sea_query::OnConflict;
+use sea_orm::sea_query::{Expr, Func, OnConflict, PostgresQueryBuilder, Query};
 use sea_orm::*;
 use uuid::Uuid;
 
@@ -20,14 +20,37 @@ impl PgStoredFileRepository {
 
 #[async_trait]
 impl StoredFileRepository for PgStoredFileRepository {
-    async fn exists(&self, key: &str) -> Result<bool, AppError> {
-        let count = stored_files::Entity::find_by_id(key)
-            .count(&self.db)
-            .await?;
-        Ok(count > 0)
+    async fn decrement_ref(&self, key: &str) -> Result<i32, AppError> {
+        #[derive(FromQueryResult)]
+        struct Row {
+            ref_count: i32,
+        }
+
+        let (sql, values) = Query::update()
+            .table(stored_files::Entity)
+            .value(
+                stored_files::Column::RefCount,
+                Func::greatest([
+                    Expr::col(stored_files::Column::RefCount).sub(1i32),
+                    Expr::val(0i32).into(),
+                ]),
+            )
+            .and_where(stored_files::Column::Key.eq(key))
+            .returning_col(stored_files::Column::RefCount)
+            .build(PostgresQueryBuilder);
+
+        let row = Row::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
+        .one(&self.db)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+        Ok(row.map(|r| r.ref_count).unwrap_or(0))
     }
 
-    async fn upsert(
+    async fn upsert_and_ref(
         &self,
         key: &str,
         content_type: &str,
@@ -35,61 +58,26 @@ impl StoredFileRepository for PgStoredFileRepository {
         size: i64,
         uploaded_by_id: Option<Uuid>,
     ) -> Result<(), AppError> {
-        let model = stored_files::ActiveModel {
-            key: Set(key.to_string()),
-            content_type: Set(content_type.to_string()),
+        stored_files::Entity::insert(stored_files::ActiveModel {
+            key: Set(key.to_owned()),
+            content_type: Set(content_type.to_owned()),
             data: Set(data.to_vec()),
             size: Set(size),
             ref_count: Set(1),
             uploaded_by_id: Set(uploaded_by_id),
-            ..Default::default()
-        };
-        stored_files::Entity::insert(model)
-            .on_conflict(
-                OnConflict::column(stored_files::Column::Key)
-                    .do_nothing()
-                    .to_owned(),
-            )
-            .exec(&self.db)
-            .await
-            .map(|_| ())
-            .or_else(|e| {
-                // RecordNotInserted = key already exists, that's fine
-                if matches!(e, DbErr::RecordNotInserted) {
-                    Ok(())
-                } else {
-                    Err(AppError::internal(e.to_string()))
-                }
-            })
-    }
-
-    async fn increment_ref(&self, key: &str) -> Result<i32, AppError> {
-        self.db
-            .execute(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                "UPDATE stored_files SET ref_count = ref_count + 1 WHERE key = $1",
-                [key.into()],
-            ))
-            .await?;
-
-        let row = stored_files::Entity::find_by_id(key)
-            .one(&self.db)
-            .await?
-            .ok_or_else(|| AppError::NotFound)?;
-        Ok(row.ref_count)
-    }
-
-    async fn decrement_ref(&self, key: &str) -> Result<i32, AppError> {
-        self.db
-            .execute(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                "UPDATE stored_files SET ref_count = GREATEST(ref_count - 1, 0) WHERE key = $1",
-                [key.into()],
-            ))
-            .await?;
-
-        let row = stored_files::Entity::find_by_id(key).one(&self.db).await?;
-        Ok(row.map(|r| r.ref_count).unwrap_or(0))
+            created_at: NotSet,
+        })
+        .on_conflict(
+            OnConflict::column(stored_files::Column::Key)
+                .value(
+                    stored_files::Column::RefCount,
+                    Expr::col((stored_files::Entity, stored_files::Column::RefCount)).add(1i32),
+                )
+                .to_owned(),
+        )
+        .exec(&self.db)
+        .await?;
+        Ok(())
     }
 
     async fn delete_by_key(&self, key: &str) -> Result<(), AppError> {

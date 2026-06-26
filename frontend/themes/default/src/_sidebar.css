@@ -1,0 +1,78 @@
+/* ── Sidebar nav ──────────────────────────────────────────────── */
+.fr-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0 0.75rem;
+  min-height: 36px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  border-radius: var(--bs-border-radius-sm);
+  margin: 0.0625rem 0;
+  transition: background 0.1s, color 0.1s;
+}
+.fr-nav-link:hover  { background: var(--fr-nav-hover-bg); color: var(--bs-body-color); }
+.fr-nav-link.active { background: var(--fr-nav-active-bg); color: var(--fr-nav-active-color); font-weight: 600; }
+.fr-nav-section {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--bs-tertiary-color);
+  padding: 0.75rem 0.75rem 0.25rem;
+}
+
+/* ── Home sidebar categories panel ───────────────────────────── */
+.fr-categories-panel {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  overflow: hidden;
+}
+.fr-panel-header {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--bs-tertiary-color);
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+.fr-category-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.875rem;
+  text-decoration: none;
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--bs-border-color);
+  transition: background 0.1s, color 0.1s;
+}
+.fr-category-row:last-child { border-bottom: none; }
+.fr-category-row:hover      { background: var(--fr-nav-hover-bg); color: var(--bs-body-color); text-decoration: none; }
+.fr-category-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── 3-column layout tuning ───────────────────────────────────────
+   NOTE: the base .fr-layout / .fr-main-col / .fr-right-col rules
+   currently live only in assets/theme.css (the source tree has drifted
+   from the built artifact). These additions are mirrored here so they
+   survive a future src↔assets reconciliation. */
+/* Reading pages (thread): cap the main column for a comfortable line length,
+   then center the [main + rail] group so leftover space becomes balanced
+   outer margins instead of a gap between the two columns. */
+.fr-page-inner--reading               { justify-content: center; gap: 2rem; }
+.fr-page-inner--reading .fr-main-col  { max-width: 800px; }
+/* Bring the right rail in at 1100px instead of 1200px so its content no
+   longer vanishes across the whole small-laptop range. */
+@media (min-width: 1100px) {
+  .fr-right-col { display: block; }
+}

@@ -579,7 +579,7 @@ impl PgBulkSeedService {
     async fn seed_user_roles(&self, admin_id: Uuid) -> Result<(), AppError> {
         use crate::entities::roles;
 
-        // Fetch role IDs from DB (seeded by migration 020)
+        // Fetch role IDs from DB (seeded by migration 014 create_rbac)
         let all_roles = roles::Entity::find()
             .all(&self.db)
             .await
@@ -807,7 +807,8 @@ impl PgBulkSeedService {
     }
 
     async fn seed_bulk_posts(&self) -> Result<(), AppError> {
-        let bulk_thread_ids: Vec<Uuid> = threads::Entity::find()
+        // Fetch (id, author_id) so the opening post of each thread can be by the thread author.
+        let bulk_threads: Vec<(Uuid, Uuid)> = threads::Entity::find()
             .filter(threads::Column::Slug.like("bulk-thread-%"))
             .order_by_asc(threads::Column::CreatedAt)
             .order_by_asc(threads::Column::Id)
@@ -815,7 +816,7 @@ impl PgBulkSeedService {
             .await
             .map_err(|e| AppError::internal(e.to_string()))?
             .into_iter()
-            .map(|t| t.id)
+            .map(|t| (t.id, t.author_id))
             .collect();
 
         let all_user_ids: Vec<Uuid> = users::Entity::find()
@@ -828,24 +829,38 @@ impl PgBulkSeedService {
             .map(|u| u.id)
             .collect();
 
-        let nt = bulk_thread_ids.len();
         let nu = all_user_ids.len();
+        let posts_per_thread: usize = 18;
         let now = Utc::now().fixed_offset();
 
-        let rows: Vec<posts::ActiveModel> = (1usize..=90000)
-            .map(|i| {
+        let mut rows: Vec<posts::ActiveModel> = Vec::with_capacity(bulk_threads.len() * posts_per_thread);
+
+        for (ti, (thread_id, thread_author_id)) in bulk_threads.iter().enumerate() {
+            for pi in 0..posts_per_thread {
+                let i = ti * posts_per_thread + pi + 1;
+                // Post #0 within a thread is the opening post — always by the thread author.
+                let author_id = if pi == 0 {
+                    *thread_author_id
+                } else {
+                    all_user_ids[(i - 1) % nu]
+                };
                 let body = BULK_POST_BODIES[(i - 1) % 10];
-                posts::ActiveModel {
-                    thread_id: Set(bulk_thread_ids[((i - 1) / 18) % nt]),
-                    author_id: Set(all_user_ids[(i - 1) % nu]),
+                let content = if pi == 0 {
+                    format!("This is the opening post for this discussion. {body}")
+                } else {
+                    format!("Post #{i} — {body}")
+                };
+                rows.push(posts::ActiveModel {
+                    thread_id: Set(*thread_id),
+                    author_id: Set(author_id),
                     parent_id: Set(None),
-                    content_md: Set(format!("Post #{i} — {body}")),
-                    content_html: Set(format!("<p>Post #{i} — {body}</p>")),
+                    content_md: Set(content.clone()),
+                    content_html: Set(format!("<p>{content}</p>")),
                     created_at: Set(now - Duration::minutes(i as i64)),
                     ..Default::default()
-                }
-            })
-            .collect();
+                });
+            }
+        }
 
         insert_in_chunks::<posts::Entity, _>(&self.db, rows, 500).await
     }

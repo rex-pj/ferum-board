@@ -1,0 +1,100 @@
+{% extends "mod/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Audit Log | Mod Panel{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+{% block nav_log %}active{% endblock %}
+
+{% block content %}
+
+{# ── Page header ────────────────────────────────────────────────── #}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h4 class="mb-0 fw-semibold">Audit Log</h4>
+    {% if pagination and pagination.total > 0 %}
+      <div class="text-muted small mt-1">{{ pagination.total }} entries</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Log table ──────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header p-0">
+    <form method="GET" class="adm-filter-row px-3 py-2">
+      <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+        <span class="input-group-text bg-transparent">
+          <i class="fa-solid fa-user text-muted" style="font-size:.75rem"></i>
+        </span>
+        <input type="search" name="actor_id" class="form-control border-start-0 ps-0"
+               placeholder="Actor ID…"
+               value="{% if filter %}{{ filter }}{% endif %}"
+               autocomplete="off">
+      </div>
+      <select name="target_type" class="form-select form-select-sm" style="width:auto">
+        <option value="">All targets</option>
+        <option value="Thread"  {% if target_type == "Thread" %}selected{% endif %}>Thread</option>
+        <option value="Post"    {% if target_type == "Post" %}selected{% endif %}>Post</option>
+        <option value="User"    {% if target_type == "User" %}selected{% endif %}>User</option>
+        <option value="Report"  {% if target_type == "Report" %}selected{% endif %}>Report</option>
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-success">
+        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      </button>
+      {% if filter or target_type %}
+        <a href="/mod/log" class="btn btn-sm btn-outline-secondary" title="Clear filters">
+          <i class="fa-solid fa-xmark"></i>
+        </a>
+      {% endif %}
+    </form>
+  </div>
+  {% if logs %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-active">
+        <tr>
+          <th style="width:14%">When</th>
+          <th style="width:18%">Actor</th>
+          <th style="width:28%">Action</th>
+          <th>Target</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td class="text-muted text-nowrap">{{ log.created_at | truncate(length=10, end="") }}</td>
+          <td>
+            <code style="font-size:.7rem">{{ log.actor_id | truncate(length=8, end="…") }}</code>
+          </td>
+          <td>
+            <span class="badge bg-secondary bg-opacity-75">{{ log.action }}</span>
+          </td>
+          <td class="text-muted">
+            <span class="badge bg-secondary bg-opacity-50 text-body me-1" style="font-size:.6rem">{{ log.target_type }}</span>
+            <code style="font-size:.7rem">{{ log.target_id | truncate(length=8, end="…") }}</code>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5 text-secondary">
+    <i class="fa-solid fa-scroll fa-3x mb-3 d-block opacity-25"></i>
+    <div class="fw-semibold mb-1">No log entries</div>
+    <div class="small">Moderation actions will be recorded here as they happen.</div>
+  </div>
+  {% endif %}
+
+  {# ── Footer: count + pagination ──────────────────────────────── #}
+  {% if pagination and pagination.total > 0 %}
+  <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
+    <span class="text-muted small">
+      {{ pagination.total }} entr{% if pagination.total == 1 %}y{% else %}ies{% endif %}
+      {% if pagination.total_pages > 1 %}— page {{ pagination.page }} of {{ pagination.total_pages }}{% endif %}
+    </span>
+    {{ m::paginate(pagination=pagination, base_url="/mod/log", extra_params="&actor_id=" ~ filter ~ "&target_type=" ~ target_type) }}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

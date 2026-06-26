@@ -1,0 +1,205 @@
+{% extends "admin/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Threads | Admin{% endblock %}
+{% block page_title %}Threads{% endblock %}
+{% block nav_threads %}active fw-semibold{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  {# ── Filter bar ──────────────────────────────────────────────── #}
+  {% set has_filters = status_filter or category_id_filter or author_id_filter or date_from_filter or date_to_filter %}
+  {% set any_active = search_query or has_filters or (sort_by and sort_by != "latest") %}
+
+  <div class="card-header p-0">
+    <form method="get" action="/admin/threads">
+
+      {# ── Row 1: Search · Submit · Filters toggle · Clear ─── #}
+      <div class="adm-filter-row px-3 py-2">
+        <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+          <span class="input-group-text bg-transparent">
+            <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+          </span>
+          <input type="search" name="q" class="form-control border-start-0 ps-0"
+                 placeholder="Search by title…" value="{{ search_query }}" autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-sm btn-outline-success">
+          <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+        </button>
+
+        {# Filters toggle — Bootstrap collapse, dot indicator when active #}
+        <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                data-bs-toggle="collapse" data-bs-target="#threadAdvFilters"
+                aria-expanded="{% if has_filters %}true{% else %}false{% endif %}"
+                aria-controls="threadAdvFilters">
+          <i class="fa-solid fa-sliders" style="font-size:.75rem"></i>
+          Filters
+          {% if has_filters %}
+            <span class="rounded-circle bg-primary ms-1"
+                  style="width:.45rem;height:.45rem;flex-shrink:0;display:inline-block"></span>
+          {% endif %}
+        </button>
+
+        {% if any_active %}
+          <a href="/admin/threads" class="btn btn-sm btn-outline-secondary ms-auto" title="Clear all">
+            <i class="fa-solid fa-xmark me-1"></i>Clear
+          </a>
+        {% endif %}
+      </div>
+
+      {# ── Row 2: Advanced filters (Bootstrap collapse) ─────── #}
+      <div id="threadAdvFilters"
+           class="collapse {% if has_filters %}show{% endif %} border-top"
+           style="background:var(--bs-secondary-bg)">
+        <div class="adm-filter-row px-3 py-2">
+
+          <select name="sort_by" class="form-select form-select-sm" style="width:auto">
+            <option value="latest"  {% if sort_by == "latest" or not sort_by %}selected{% endif %}>Latest activity</option>
+            <option value="newest"  {% if sort_by == "newest"  %}selected{% endif %}>Newest</option>
+            <option value="hottest" {% if sort_by == "hottest" %}selected{% endif %}>Most replies</option>
+          </select>
+
+          <div class="vr opacity-25 align-self-stretch"></div>
+
+          <select name="category_id" class="form-select form-select-sm" style="width:auto">
+            <option value="">All categories</option>
+            {% for opt in category_options %}
+              <option value="{{ opt.id }}" {% if category_id_filter == opt.id %}selected{% endif %}>
+                {{ opt.name }}
+              </option>
+            {% endfor %}
+          </select>
+
+          <ferum-remote-select name="author_id" endpoint="/api/admin/lookups/users"
+                               value="{{ author_id_filter }}" label="{{ author_label }}"
+                               placeholder="Any author"></ferum-remote-select>
+
+          <select name="status" class="form-select form-select-sm" style="width:auto">
+            <option value="">All statuses</option>
+            <option value="open"    {% if status_filter == "open"    %}selected{% endif %}>Open</option>
+            <option value="locked"  {% if status_filter == "locked"  %}selected{% endif %}>Locked</option>
+            <option value="deleted" {% if status_filter == "deleted" %}selected{% endif %}>Deleted</option>
+          </select>
+
+          <div class="vr opacity-25 align-self-stretch"></div>
+
+          <div class="d-flex align-items-center gap-1">
+            <span class="text-muted small text-nowrap">From</span>
+            <input type="date" name="date_from" class="form-control form-control-sm" style="max-width:145px"
+                   value="{{ date_from_filter }}">
+          </div>
+          <div class="d-flex align-items-center gap-1">
+            <span class="text-muted small text-nowrap">to</span>
+            <input type="date" name="date_to" class="form-control form-control-sm" style="max-width:145px"
+                   value="{{ date_to_filter }}">
+          </div>
+
+          <button type="submit" class="btn btn-sm btn-outline-success ms-auto">Apply</button>
+
+          {% if has_filters %}
+            <a href="/admin/threads{% if search_query %}?q={{ search_query }}{% endif %}"
+               class="btn btn-sm btn-link text-danger text-decoration-none p-0">
+              <i class="fa-solid fa-xmark me-1"></i>Clear filters
+            </a>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-active">
+        <tr>
+          <th>Title</th>
+          <th style="width:14%">Category</th>
+          <th style="width:12%">Author</th>
+          <th style="width:5%" class="text-center">Replies</th>
+          <th style="width:8%">Status</th>
+          <th style="width:10%">Created</th>
+          <th style="width:6%"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for thread in threads %}
+        <tr>
+          <td class="align-middle" style="max-width:320px">
+            <a href="/forum/t/{{ thread.slug }}" target="_blank"
+               class="text-body text-decoration-none fw-semibold text-truncate d-block">
+              {% if thread.is_pinned %}
+                <i class="fa-solid fa-thumbtack fa-xs text-warning me-1"></i>
+              {% endif %}
+              {% if thread.is_solved %}
+                <i class="fa-solid fa-circle-check fa-xs text-success me-1"></i>
+              {% endif %}
+              {{ thread.title }}
+            </a>
+            {% if thread.tags %}
+              <div class="d-flex flex-wrap gap-1 mt-1">
+                {% for tag in thread.tags %}
+                  <span class="badge rounded-pill"
+                        style="background-color:{{ tag.color | default(value="#6c757d") }}; font-size:.6rem">
+                    {{ tag.name }}
+                  </span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </td>
+          <td class="align-middle text-muted small">
+            <a href="/forum/{{ thread.category_slug }}" target="_blank"
+               class="text-muted text-decoration-none">{{ thread.category_name }}</a>
+          </td>
+          <td class="align-middle text-muted small">
+            <a href="/u/{{ thread.author_username }}" target="_blank"
+               class="text-muted text-decoration-none">{{ thread.author_display_name }}</a>
+          </td>
+          <td class="align-middle text-muted small text-center">{{ thread.reply_count }}</td>
+          <td class="align-middle">
+            {% if thread.status == "deleted" %}
+              <span class="badge bg-danger">Deleted</span>
+            {% elif thread.is_locked or thread.status == "locked" %}
+              <span class="badge bg-warning text-dark">Locked</span>
+            {% else %}
+              <span class="badge bg-success">Open</span>
+            {% endif %}
+          </td>
+          <td class="align-middle text-muted small text-nowrap">
+            {{ thread.created_at | date(format="%b %d, %Y") }}
+          </td>
+          <td class="align-middle">
+            <div class="d-flex gap-1">
+              <a href="/forum/t/{{ thread.slug }}" target="_blank"
+                 class="btn btn-sm btn-outline-secondary" title="View">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </a>
+              <button class="btn btn-sm btn-outline-danger"
+                      data-admin-action="delete-thread" data-thread-id="{{ thread.id }}" data-thread-title="{{ thread.title | escape }}"
+                      title="Delete">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-5">
+            <i class="fa-regular fa-comments fa-2x d-block mb-2 opacity-25"></i>
+            {% if search_query %}No threads match "{{ search_query }}".{% else %}No threads yet.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Footer: count + pagination ──────────────────────────────── #}
+  {% set extra = "&q=" ~ search_query ~ "&status=" ~ status_filter ~ "&sort_by=" ~ sort_by ~ "&category_id=" ~ category_id_filter ~ "&author_id=" ~ author_id_filter ~ "&date_from=" ~ date_from_filter ~ "&date_to=" ~ date_to_filter %}
+  {{ m::card_footer_pagination(pagination=pagination, base_url="/admin/threads", noun="thread", extra_params=extra) }}
+</div>
+
+{% endblock %}
+
+{% block scripts %}{% endblock %}

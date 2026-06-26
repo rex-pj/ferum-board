@@ -1,0 +1,156 @@
+{% extends "admin/base.html" %}
+{% block title %}Roles{% endblock %}
+{% block page_title %}Roles{% endblock %}
+{% block nav_roles %}active fw-semibold{% endblock %}
+
+{% block content %}
+<div class="card" x-data="{ q: '' }">
+  <div class="card-header">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="fw-semibold">All Roles</span>
+      <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newRoleModal">
+        <i class="fa-solid fa-plus me-1"></i>New Role
+      </button>
+    </div>
+    <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+      <span class="input-group-text bg-transparent">
+        <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+      </span>
+      <input type="search" x-model="q" class="form-control border-start-0 ps-0"
+             placeholder="Filter by name or slug…" autocomplete="off">
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-active">
+        <tr>
+          <th>Role</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th title="Distinct users holding this role (any scope, active assignments)">Members</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for role in roles %}
+        <tr x-show="!q || '{{ role.name | lower }}/{{ role.slug }}'.includes(q.toLowerCase())">
+          <td>
+            <span class="badge me-2" style="background-color:{{ role.color | default(value="#6c757d") }}">
+              {{ role.name }}
+            </span>
+            <span class="text-muted small">/{{ role.slug }}</span>
+          </td>
+          <td class="align-middle">
+            {% if role.is_system %}
+              <span class="badge bg-info text-dark">System</span>
+            {% else %}
+              <span class="badge bg-secondary">Custom</span>
+            {% endif %}
+          </td>
+          <td class="align-middle">
+            {% if role.is_default %}
+              <i class="fa-solid fa-check text-success"></i>
+            {% endif %}
+          </td>
+          <td class="align-middle text-muted">{{ role.member_count | default(value=0) }}</td>
+          <td class="align-middle">
+            <div class="d-flex gap-1">
+              <a href="/admin/roles/{{ role.id }}" class="btn btn-sm btn-outline-secondary" title="Permissions">
+                <i class="fa-solid fa-shield-halved me-1"></i>Permissions
+              </a>
+              {% if not role.is_system %}
+                <button class="btn btn-sm btn-outline-secondary"
+                        data-bs-toggle="modal" data-bs-target="#editRoleModal"
+                        data-id="{{ role.id }}"
+                        data-name="{{ role.name }}"
+                        data-color="{{ role.color | default(value='#6c757d') }}"
+                        data-is-default="{% if role.is_default %}true{% else %}false{% endif %}"
+                        title="Edit">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" type="button" title="Delete"
+                        data-admin-action="delete-role"
+                        data-role-id="{{ role.id }}"
+                        data-role-name="{{ role.name | escape }}"
+                        data-member-count="{{ role.member_count | default(value=0) }}">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-4">No roles found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- New Role Modal -->
+<div class="modal fade" id="newRoleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">New Role</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="new-role-feedback" class="d-none"></div>
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input type="text" name="name" class="form-control" required maxlength="60">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Slug</label>
+          <input type="text" name="slug" class="form-control" required maxlength="60">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Color</label>
+          <input type="color" name="color" class="form-control form-control-color" value="#6c757d">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" data-admin-action="create-role">
+          <i class="fa-solid fa-spinner fa-spin d-none me-1"></i>Create
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Role Modal -->
+<div class="modal fade" id="editRoleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Role</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input type="text" name="name" class="form-control" required maxlength="60">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Color</label>
+          <input type="color" name="color" class="form-control form-control-color" value="#6c757d">
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="is_default" id="editIsDefault" value="true">
+          <label class="form-check-label" for="editIsDefault">Assign to new users by default</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" data-admin-action="save-role">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}{% endblock %}

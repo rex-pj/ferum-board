@@ -1,0 +1,24 @@
+{% extends "default/templates/errors/base.html" %}
+
+{% block title %}Something Went Wrong — {{ site.name }}{% endblock %}
+{% block description %}An unexpected error occurred.{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+  <div class="mb-3">
+    <i class="fa-solid fa-triangle-exclamation fa-4x text-warning opacity-75"></i>
+  </div>
+  <h1 class="h3 fw-bold mb-2">Something Went Wrong</h1>
+  <p class="text-body-secondary mb-4">
+    An unexpected error occurred. Please try again in a moment.
+  </p>
+  {% if request_id %}
+  <p class="text-body-secondary small mb-4">
+    Reference: <code>{{ request_id }}</code>
+  </p>
+  {% endif %}
+  <a href="/" class="btn btn-primary">
+    <i class="fa-solid fa-house me-1"></i>Go home
+  </a>
+</div>
+{% endblock %}

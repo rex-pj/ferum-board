@@ -4,11 +4,11 @@ use std::sync::Arc;
 use regex::Regex;
 use uuid::Uuid;
 
-use crate::constants::{MAX_POSTS_PER_PAGE, MAX_POST_CONTENT_BYTES};
+use crate::constants::{DEFAULT_MAX_POSTS_PER_PAGE, MAX_POST_CONTENT_BYTES};
 use crate::event_bus::EventBus;
 use crate::permission::PermissionChecker;
-use crate::ports::{HookContext, HookDecision, PluginRuntime};
-use crate::shared::AppError;
+use crate::ports::{HookContext, HookDecision, PluginHookRuntime};
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::category::PostPolicy;
 use ferum_domain::models::post::{Post, PostStatus};
@@ -17,7 +17,7 @@ use ferum_domain::models::user::TrustLevel;
 use ferum_domain::repositories::category_repository::CategoryRepository;
 use ferum_domain::repositories::post_repository::{NewPost, PostRepository};
 use ferum_domain::repositories::reaction_repository::ReactionRepository;
-use ferum_domain::repositories::site_config_repository::SiteConfigRepository;
+use ferum_domain::repositories::site_config_repository::{get_config_u64, SiteConfigRepository};
 use ferum_domain::repositories::thread_repository::ThreadRepository;
 use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::AuthUser;
@@ -30,7 +30,7 @@ pub struct PostUseCase {
     pub reactions: Arc<dyn ReactionRepository>,
     pub site_config: Arc<dyn SiteConfigRepository>,
     pub event_bus: Arc<EventBus>,
-    pub plugin_runtime: Arc<dyn PluginRuntime>,
+    pub plugin_runtime: Arc<dyn PluginHookRuntime>,
 }
 
 impl PostUseCase {
@@ -55,11 +55,12 @@ impl PostUseCase {
         }
     }
 
-    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginRuntime>) -> Self {
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
         self.plugin_runtime = runtime;
         self
     }
 
+    #[tracing::instrument(skip_all, fields(thread_id = %thread_id, page = page))]
     pub async fn list_by_thread(
         &self,
         actor: Option<&AuthUser>,
@@ -71,7 +72,7 @@ impl PostUseCase {
             .threads
             .find_by_id(thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if thread.deleted_at.is_some() {
             return Err(AppError::NotFound);
         }
@@ -80,10 +81,24 @@ impl PostUseCase {
             .categories
             .find_by_id(thread.category_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         PermissionChecker::can_view_category(actor, &category)?;
 
-        let per_page = per_page.min(MAX_POSTS_PER_PAGE);
+        self.list_posts_enriched(actor, thread_id, page, per_page).await
+    }
+
+    /// Fetch a page of posts for a thread and hydrate authors + reaction counts + the
+    /// viewer's own reactions in one batched round of queries. Assumes the caller has
+    /// already enforced thread visibility.
+    async fn list_posts_enriched(
+        &self,
+        actor: Option<&AuthUser>,
+        thread_id: Uuid,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Post>, u64), AppError> {
+        let max_per_page = get_config_u64(self.site_config.as_ref(), "max_posts_per_page", DEFAULT_MAX_POSTS_PER_PAGE).await;
+        let per_page = per_page.min(max_per_page);
         let (mut posts, total) = self.posts.list_by_thread(thread_id, page, per_page).await?;
 
         if posts.is_empty() {
@@ -129,12 +144,13 @@ impl PostUseCase {
         Ok((posts, total))
     }
 
+    #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id, thread_id = %cmd.thread_id))]
     pub async fn create(&self, actor: &AuthUser, cmd: CreatePostCmd) -> Result<Post, AppError> {
         let thread = self
             .threads
             .find_by_id(cmd.thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         if thread.deleted_at.is_some() {
             return Err(AppError::NotFound);
@@ -147,7 +163,7 @@ impl PostUseCase {
             .categories
             .find_by_id(thread.category_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         PermissionChecker::can_create_post(actor, &category)?;
 
         // Before-hook: allow plugins to inspect or block post creation
@@ -173,6 +189,9 @@ impl PostUseCase {
             HookDecision::Allow => {}
         }
 
+        if cmd.content_md.trim().is_empty() {
+            return Err(AppError::unprocessable("Post content cannot be empty"));
+        }
         if cmd.content_md.len() > MAX_POST_CONTENT_BYTES {
             return Err(AppError::unprocessable("Post content exceeds 100 KB limit"));
         }
@@ -182,7 +201,7 @@ impl PostUseCase {
                 .posts
                 .find_by_id(parent_id)
                 .await?
-                .ok_or(AppError::NotFound)?;
+                .or_not_found()?;
             if parent.thread_id != cmd.thread_id {
                 return Err(AppError::unprocessable(
                     "parent_id does not belong to this thread",
@@ -218,28 +237,38 @@ impl PostUseCase {
             .update_reply_stats(cmd.thread_id, 1, chrono::Utc::now())
             .await
             .ok();
+        self.users.increment_post_count(actor.id, 1).await.ok();
 
         self.event_bus
             .publish(ForumEvent::PostCreated {
                 post_id: post.id,
                 thread_id: cmd.thread_id,
                 thread_slug: thread.slug.clone(),
+                thread_title: thread.title.clone(),
                 author_id: actor.id,
+                author_username: actor.username.clone(),
                 thread_author_id: thread.author_id,
                 category_id: thread.category_id,
             })
             .await;
 
-        for username in mentions.into_iter().take(5) {
-            if let Ok(Some(mentioned)) = self.users.find_by_username(&username).await {
+        let mention_list: Vec<String> = mentions.into_iter().take(5).collect();
+        let mention_results = futures::future::join_all(
+            mention_list.iter().map(|u| self.users.find_by_username(u.as_str())),
+        )
+        .await;
+        for result in mention_results {
+            if let Ok(Some(mentioned)) = result {
                 if mentioned.id != actor.id {
                     self.event_bus
                         .publish(ForumEvent::MentionAdded {
                             post_id: post.id,
                             thread_id: cmd.thread_id,
                             thread_slug: thread.slug.clone(),
+                            thread_title: thread.title.clone(),
                             mentioned_user_id: mentioned.id,
                             author_id: actor.id,
+                            author_username: actor.username.clone(),
                         })
                         .await;
                 }
@@ -249,21 +278,25 @@ impl PostUseCase {
         Ok(post)
     }
 
+    #[tracing::instrument(skip(self, actor, content_md), fields(user_id = %actor.id, post_id = %id))]
     pub async fn edit(
         &self,
         actor: &AuthUser,
         id: Uuid,
         content_md: String,
     ) -> Result<Post, AppError> {
+        if content_md.trim().is_empty() {
+            return Err(AppError::unprocessable("Post content cannot be empty"));
+        }
         if content_md.len() > MAX_POST_CONTENT_BYTES {
             return Err(AppError::unprocessable("Post content exceeds 100 KB limit"));
         }
-        let post = self.posts.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        let post = self.posts.find_by_id(id).await?.or_not_found()?;
         let thread = self
             .threads
             .find_by_id(post.thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         PermissionChecker::can_edit_post(actor, &post, thread.category_id)?;
 
         let hook_ctx = crate::ports::HookContext {
@@ -294,15 +327,23 @@ impl PostUseCase {
             .await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, post_id = %id))]
     pub async fn delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
-        let post = self.posts.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        let post = self.posts.find_by_id(id).await?.or_not_found()?;
         let thread = self
             .threads
             .find_by_id(post.thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         PermissionChecker::can_delete_post(actor, &post, thread.category_id)?;
         self.posts.soft_delete(id, actor.id).await?;
+
+        self.event_bus
+            .publish(ForumEvent::PostDeleted {
+                post_id: id,
+                deleted_by_id: actor.id,
+            })
+            .await;
 
         // Pending posts were never counted in reply_count (create() returns early
         // before calling update_reply_stats when needs_approval is true).
@@ -311,6 +352,7 @@ impl PostUseCase {
                 .update_reply_stats(post.thread_id, -1, chrono::Utc::now())
                 .await
                 .ok();
+            self.users.increment_post_count(post.author_id, -1).await.ok();
         }
 
         Ok(())
@@ -318,6 +360,7 @@ impl PostUseCase {
 
     // ── Approval queue ────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
     pub async fn list_pending(
         &self,
         actor: &AuthUser,
@@ -325,24 +368,36 @@ impl PostUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
-        if !actor.has_perm("moderation.view_reports") {
+        if !actor.has_perm_any_category("moderation.view_reports") {
             return Err(AppError::forbidden("permission_denied"));
         }
-        let per_page = per_page.min(MAX_POSTS_PER_PAGE);
+        let max_per_page = get_config_u64(self.site_config.as_ref(), "max_posts_per_page", DEFAULT_MAX_POSTS_PER_PAGE).await;
+        let per_page = per_page.min(max_per_page);
         self.posts.list_pending(category_id, page, per_page).await
     }
 
+    #[tracing::instrument(skip(self), fields(author_id = %author_id, page = page))]
     pub async fn list_by_author(
         &self,
         author_id: Uuid,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
-        self.posts.list_by_author(author_id, page, per_page).await
+        let (mut posts, total) = self.posts.list_by_author(author_id, page, per_page).await?;
+        if let Ok(Some(user)) = self.users.find_by_id(author_id).await {
+            for post in posts.iter_mut() {
+                post.author_username = Some(user.username.clone());
+                post.author_display_name = user.display_name.clone();
+                post.author_avatar_url = user.avatar_url.clone();
+                post.author_role = user.primary_role_slug.clone();
+            }
+        }
+        Ok((posts, total))
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, post_id = %id))]
     pub async fn approve_post(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
-        let post = self.posts.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        let post = self.posts.find_by_id(id).await?.or_not_found()?;
         if !post.status.is_pending() {
             return Err(AppError::unprocessable("Post is not pending approval"));
         }
@@ -350,7 +405,7 @@ impl PostUseCase {
             .threads
             .find_by_id(post.thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if !actor.has_perm("moderation.view_reports")
             && !actor.has_perm_in("moderation.view_reports", thread.category_id)
         {
@@ -361,12 +416,23 @@ impl PostUseCase {
             .update_reply_stats(post.thread_id, 1, chrono::Utc::now())
             .await
             .ok();
+        self.users.increment_post_count(post.author_id, 1).await.ok();
+        let author_username = self
+            .users
+            .find_by_id(post.author_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|u| u.username)
+            .unwrap_or_default();
         self.event_bus
             .publish(ForumEvent::PostCreated {
                 post_id: post.id,
                 thread_id: post.thread_id,
                 thread_slug: thread.slug,
+                thread_title: thread.title,
                 author_id: post.author_id,
+                author_username,
                 thread_author_id: thread.author_id,
                 category_id: thread.category_id,
             })
@@ -374,8 +440,9 @@ impl PostUseCase {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, post_id = %id))]
     pub async fn reject_post(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
-        let post = self.posts.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        let post = self.posts.find_by_id(id).await?.or_not_found()?;
         if !post.status.is_pending() {
             return Err(AppError::unprocessable("Post is not pending approval"));
         }
@@ -383,7 +450,7 @@ impl PostUseCase {
             .threads
             .find_by_id(post.thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if !actor.has_perm("moderation.view_reports")
             && !actor.has_perm_in("moderation.view_reports", thread.category_id)
         {

@@ -26,9 +26,13 @@ impl PermissionChecker {
             }
             ViewPolicy::StaffOnly => {
                 let u = user.ok_or_else(|| AppError::NotFound)?;
-                // has_perm_in checks global + category-scoped — covers both global mods and
-                // mods assigned specifically to this staff_only category.
-                if u.has_perm_in(perm::MOD_WARN, category.id) || u.has_perm(perm::ADMIN_USERS) {
+                // MOD_VIEW_REPORTS is the minimum moderation capability — any mod assigned to
+                // this category (or globally) should be able to see staff_only categories.
+                // MOD_WARN is NOT used here: a mod who can view/resolve reports but cannot
+                // warn users is still staff and should see this category.
+                if u.has_perm_in(perm::MOD_VIEW_REPORTS, category.id)
+                    || u.has_perm(perm::ADMIN_USERS)
+                {
                     Ok(())
                 } else {
                     Err(AppError::NotFound)
@@ -210,6 +214,16 @@ impl PermissionChecker {
         // Default min_trust for file.upload is Member (matches seeded DB value).
         // Staff bypass this gate.
         if !user.has_perm(perm::MOD_WARN) && !user.meets_trust(TrustLevel::Member) {
+            return Err(AppError::forbidden("trust_level_insufficient"));
+        }
+        Ok(())
+    }
+
+    /// Avatar and cover uploads only require email verification (F-PRF-01, F-PRF-02).
+    /// min_trust: Basic — separate from general file.upload (which needs Member).
+    pub fn can_upload_profile_image(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
+        if !user.meets_trust(TrustLevel::Basic) {
             return Err(AppError::forbidden("trust_level_insufficient"));
         }
         Ok(())

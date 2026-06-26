@@ -1,0 +1,32 @@
+<footer class="fr-footer">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 px-4 py-3">
+    <div class="d-flex align-items-center gap-2">
+      {% if site.logo_url %}
+        <img src="{{ site.logo_url }}" alt="{{ site.name }}" height="24">
+      {% else %}
+        <span class="fw-semibold fr-brand-name small">{{ site.name }}</span>
+      {% endif %}
+      {% if site.slogan %}
+        <span class="text-muted" aria-hidden="true">·</span>
+        <span class="fr-footer-copy small">{{ site.slogan }}</span>
+      {% endif %}
+    </div>
+
+    <nav class="d-flex flex-wrap gap-3 small" aria-label="Footer navigation">
+      <a href="/forum"  class="fr-footer-link">Forum</a>
+      <a href="/search" class="fr-footer-link">Search</a>
+      {% if current_user %}
+        <a href="/account"       class="fr-footer-link">Account</a>
+        <a href="/notifications" class="fr-footer-link">Notifications</a>
+        <a href="/bookmarks"     class="fr-footer-link">Bookmarks</a>
+      {% else %}
+        <a href="/login"    class="fr-footer-link">Log in</a>
+        <a href="/register" class="fr-footer-link">Register</a>
+      {% endif %}
+      {% if current_user and current_user.is_admin %}
+        <a href="/admin/dashboard" class="fr-footer-link">Admin</a>
+      {% endif %}
+      <span class="fr-footer-copy">Powered by <strong>Ferum Board</strong></span>
+    </nav>
+  </div>
+</footer>

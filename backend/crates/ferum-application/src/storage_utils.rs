@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 /// Format: `{prefix}/{sha256_hex_16}.{ext}`
 pub fn cas_key(prefix: &str, data: &[u8], content_type: &str) -> String {
     let hash = Sha256::digest(data);
-    let hex = hex::encode(&hash[..8]);
+    let hex = hex::encode(&hash[..16]);
     let ext = content_type_to_ext(content_type);
     format!("{}/{}.{}", prefix, hex, ext)
 }
@@ -29,11 +29,12 @@ pub fn validate_image_content_type(ct: &str) -> bool {
 }
 
 pub fn validate_favicon_content_type(ct: &str) -> bool {
+    // SVG excluded: browsers may execute embedded scripts when served inline,
+    // and an attacker with admin.config can achieve stored XSS via a crafted SVG.
     matches!(
         ct,
         "image/x-icon"
             | "image/vnd.microsoft.icon"
-            | "image/svg+xml"
             | "image/png"
             | "image/gif"
             | "image/jpeg"

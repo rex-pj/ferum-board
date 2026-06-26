@@ -1,0 +1,323 @@
+{# ================================================================
+   Ferum Board — Tera Macro Library
+   Import in any template with:
+     {% import "default/templates/macros.html" as m %}
+   Then call with:
+     {{ m::avatar(url=user.avatar_url, name=user.display_name) }}
+================================================================ #}
+
+{# ── avatar ───────────────────────────────────────────────────────
+   Renders a circular avatar image with a fallback initials circle.
+   size: 24 | 32 | 40 | 80 | 96
+#}
+{% macro avatar(url, name, size=40) %}
+{% if url %}
+  <img src="{{ url }}"
+       class="fr-avatar fr-avatar--{{ size }}"
+       alt="{{ name }}"
+       loading="lazy">
+{% else %}
+  <div class="fr-avatar--placeholder fr-avatar--{{ size }}"
+       aria-label="{{ name }}">
+    {{ name | truncate(length=1, end="") | upper }}
+  </div>
+{% endif %}
+{% endmacro avatar %}
+
+
+{# ── thread_status_icons ──────────────────────────────────────────
+   Small inline icons — used in thread feed / thread cards.
+#}
+{% macro thread_status_icons(is_pinned=false, is_solved=false, is_locked=false) %}
+{% if is_pinned %}
+  <i class="fa-solid fa-thumbtack fr-status-icon fr-status-icon--pinned" title="Pinned"></i>
+{% endif %}
+{% if is_solved %}
+  <i class="fa-solid fa-circle-check fr-status-icon fr-status-icon--solved" title="Solved"></i>
+{% endif %}
+{% if is_locked %}
+  <i class="fa-solid fa-lock fr-status-icon fr-status-icon--locked" title="Locked"></i>
+{% endif %}
+{% endmacro thread_status_icons %}
+
+
+{# ── thread_status_badges ─────────────────────────────────────────
+   Bootstrap badge variant — used in thread detail page header.
+#}
+{% macro thread_status_badges(is_pinned=false, is_solved=false, is_locked=false) %}
+{% if is_pinned %}
+  <span class="badge bg-primary me-1"><i class="fa-solid fa-thumbtack me-1"></i>Pinned</span>
+{% endif %}
+{% if is_solved %}
+  <span class="badge bg-success me-1"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+{% endif %}
+{% if is_locked %}
+  <span class="badge bg-secondary me-1"><i class="fa-solid fa-lock me-1"></i>Locked</span>
+{% endif %}
+{% endmacro thread_status_badges %}
+
+
+{# ── tag_chip ─────────────────────────────────────────────────────
+   Single tag chip with dynamic --tag-color CSS variable.
+   linked=true  → <a href="/forum?tag={slug}">
+   linked=false → <span>
+   extra_class  → appended to class (e.g. "fr-link-elevated" in stretched-link contexts)
+   Note: style="--tag-color:..." is intentional — per-instance CSS variable injection.
+#}
+{% macro tag_chip(tag, linked=true, extra_class="") %}
+{% if linked %}
+  <a href="/?tag={{ tag.slug }}"
+     class="fr-tag-chip {{ extra_class }}"
+     style="--tag-color: {{ tag.color | default(value='#6b7280') }}">{{ tag.name }}</a>
+{% else %}
+  <span class="fr-tag-chip {{ extra_class }}"
+        style="--tag-color: {{ tag.color | default(value='#6b7280') }}">{{ tag.name }}</span>
+{% endif %}
+{% endmacro tag_chip %}
+
+
+{# ── tag_list ─────────────────────────────────────────────────────
+   Renders up to `max` tag chips, then a "+N more" overflow label.
+   extra_class is forwarded to each chip (e.g. "fr-link-elevated").
+#}
+{% macro tag_list(tags, max=3, linked=true, extra_class="") %}
+{% set tag_count = tags | length %}
+{% for tag in tags %}
+  {% if loop.index <= max %}
+    {% if linked %}
+      <a href="/?tag={{ tag.slug }}"
+         class="fr-tag-chip {{ extra_class }}"
+         style="--tag-color: {{ tag.color | default(value='#6b7280') }}">{{ tag.name }}</a>
+    {% else %}
+      <span class="fr-tag-chip {{ extra_class }}"
+            style="--tag-color: {{ tag.color | default(value='#6b7280') }}">{{ tag.name }}</span>
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% if tag_count > max %}
+  <span class="fr-tag-more">+{{ tag_count - max }}</span>
+{% endif %}
+{% endmacro tag_list %}
+
+
+{# ── color_dot ────────────────────────────────────────────────────
+   Small colored circle indicator — used for category color marks.
+   size_px: 8 | 10
+   Note: style="background:..." is intentional — dynamic data binding.
+#}
+{% macro color_dot(color, size_px=8) %}
+<span class="fr-color-dot fr-color-dot--{{ size_px }}"
+      style="background: {{ color }}"
+      aria-hidden="true"></span>
+{% endmacro color_dot %}
+
+
+{# ── trust_badge ─────────────────────────────────────────────────
+   Small trust level badge next to a username.
+#}
+{% macro trust_badge(level) %}
+<span class="badge fr-trust-badge">{{ level }}</span>
+{% endmacro trust_badge %}
+
+
+{# ── category_pill ────────────────────────────────────────────────
+   Small bordered category link pill.
+   extra_class: appended to class (e.g. "fr-link-elevated" in stretched-link contexts)
+#}
+{% macro category_pill(category, extra_class="") %}
+<a href="/forum/{{ category.slug }}" class="fr-category-pill {{ extra_class }}">{{ category.name }}</a>
+{% endmacro category_pill %}
+
+
+{# ── btn_submit ───────────────────────────────────────────────────
+   Submit button with integrated loading spinner (shown via JS).
+   variant: "primary" | "danger" | "secondary" etc.
+#}
+{% macro btn_submit(text, btn_id="submit-btn", spinner_id="btn-spinner", variant="primary", class="w-100") %}
+<button type="submit" class="btn btn-{{ variant }} {{ class }}" id="{{ btn_id }}">
+  {{ text }}
+  <span id="{{ spinner_id }}"
+        class="spinner-border spinner-border-sm ms-2 d-none"
+        role="status"
+        aria-hidden="true"></span>
+</button>
+{% endmacro btn_submit %}
+
+
+{# ── feedback_alert ───────────────────────────────────────────────
+   Hidden alert div — JS sets textContent and removes 'd-none'.
+   type: "danger" | "success" | "warning" | "info"
+#}
+{% macro feedback_alert(id, type="danger") %}
+<div id="{{ id }}" class="alert alert-{{ type }} d-none" role="alert"></div>
+{% endmacro feedback_alert %}
+
+
+{# ── auth_brand ───────────────────────────────────────────────────
+   Logo / wordmark used on every auth page (login, register, etc.).
+#}
+{% macro auth_brand() %}
+<a href="/" class="fr-auth-brand">
+  {% if site.logo_url %}
+    <img src="{{ site.logo_url }}" alt="{{ site.name }}" height="32">
+  {% else %}
+    <strong>Fe</strong>rum<span class="fr-brand-suffix">&nbsp;board</span>
+  {% endif %}
+</a>
+{% endmacro auth_brand %}
+
+
+{# ── password_field ───────────────────────────────────────────────
+   Password input with a show/hide eye-icon toggle.
+   Pair with Ferum.initPasswordToggle(id) in the page script block.
+   id:           HTML id for the <input> (default "password")
+   name:         form field name (default "password")
+   autocomplete: hint for password managers
+   minlength:    optional min-length attribute (empty = omitted)
+#}
+{% macro password_field(id="password", name="password", autocomplete="current-password", minlength="") %}
+<div class="fr-password-wrapper">
+  <input type="password" class="form-control" id="{{ id }}" name="{{ name }}"
+         {% if minlength %}minlength="{{ minlength }}"{% endif %}
+         required autocomplete="{{ autocomplete }}">
+  <button type="button" class="fr-password-toggle" aria-label="Show password">
+    <i class="fa-regular fa-eye"></i>
+  </button>
+</div>
+{% endmacro password_field %}
+
+
+{# ── page_header ──────────────────────────────────────────────────
+   Standard admin/mod page title row with optional item count.
+   total:       integer count; if > 0 a sub-line is shown
+   count_label: label after the number, e.g. "total" or "pending"
+#}
+{% macro page_header(title, total=0, count_label="total") %}
+<div class="d-flex align-items-start justify-content-between mb-3">
+  <div>
+    <h4 class="mb-0 fw-semibold">{{ title }}</h4>
+    {% if total > 0 %}
+      <div class="text-muted small mt-1">{{ total }} {{ count_label }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro page_header %}
+
+
+{# ── search_form_header ───────────────────────────────────────────
+   Card-header search form used on admin list pages.
+   action:      form action URL (also used as the clear-filter href)
+   query:       current search value (pre-fills the input)
+   placeholder: input placeholder text
+#}
+{% macro search_form_header(action, query="", placeholder="Search…") %}
+<div class="card-header p-0">
+  <form method="get" action="{{ action }}"
+        class="adm-filter-row px-3 py-2">
+    <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+      <span class="input-group-text bg-transparent">
+        <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+      </span>
+      <input type="search" class="form-control border-start-0 ps-0" name="q"
+             value="{{ query }}" placeholder="{{ placeholder }}" autocomplete="off">
+    </div>
+    <button type="submit" class="btn btn-sm btn-outline-success">
+      <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+    </button>
+    {% if query %}
+      <a href="{{ action }}" class="btn btn-sm btn-outline-secondary" title="Clear">
+        <i class="fa-solid fa-xmark"></i>
+      </a>
+    {% endif %}
+  </form>
+</div>
+{% endmacro search_form_header %}
+
+
+{# ── card_footer_pagination ───────────────────────────────────────
+   Standard card-footer with item count + pagination.
+   noun:        singular noun for the item type, e.g. "user", "thread"
+   extra_params: forwarded to paginate, e.g. "&q=foo&status=pending"
+#}
+{% macro card_footer_pagination(pagination, base_url, noun="item", extra_params="") %}
+{% if pagination.total > 0 %}
+<div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
+  <span class="text-muted small">
+    {{ pagination.total }} {{ noun }}{% if pagination.total != 1 %}s{% endif %}
+    {% if pagination.total_pages > 1 %}— page {{ pagination.page }} of {{ pagination.total_pages }}{% endif %}
+  </span>
+  {{ self::paginate(pagination=pagination, base_url=base_url, extra_params=extra_params) }}
+</div>
+{% endif %}
+{% endmacro card_footer_pagination %}
+
+
+{# ── paginate ─────────────────────────────────────────────────────
+   Full numbered pagination: « 1 … 4 5 [6] 7 8 … 20 »
+   Preserves any extra query params on every page link.
+
+   base_url:     e.g. "/admin/users"
+   extra_params: e.g. "&q=test&status=pending"  (leading & required)
+#}
+{% macro paginate(pagination, base_url, extra_params="") %}
+{% if pagination.total_pages > 1 %}
+<nav aria-label="Page navigation">
+  <ul class="pagination pagination-sm mb-0 flex-wrap gap-0">
+
+    {# ← Prev #}
+    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+      <a class="page-link" href="{{ base_url }}?page={{ pagination.page - 1 }}{{ extra_params }}" aria-label="Previous">
+        <i class="fa-solid fa-chevron-left" style="font-size:.65rem"></i>
+      </a>
+    </li>
+
+    {# First page #}
+    {% if pagination.page == 1 %}
+      <li class="page-item active" aria-current="page"><span class="page-link">1</span></li>
+    {% else %}
+      <li class="page-item"><a class="page-link" href="{{ base_url }}?page=1{{ extra_params }}">1</a></li>
+    {% endif %}
+
+    {# Left ellipsis — when current is far from start #}
+    {% if pagination.page > 4 %}
+      <li class="page-item disabled" aria-hidden="true"><span class="page-link">&hellip;</span></li>
+    {% endif %}
+
+    {# Window of ±2 around current page (excluding first & last) #}
+    {% for p in range(start=1, end=pagination.total_pages + 1) %}
+      {% if p >= 2 and p <= pagination.total_pages - 1 %}
+        {% if p >= pagination.page - 2 and p <= pagination.page + 2 %}
+          {% if p == pagination.page %}
+            <li class="page-item active" aria-current="page"><span class="page-link">{{ p }}</span></li>
+          {% else %}
+            <li class="page-item"><a class="page-link" href="{{ base_url }}?page={{ p }}{{ extra_params }}">{{ p }}</a></li>
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+
+    {# Right ellipsis — when current is far from end #}
+    {% if pagination.page < pagination.total_pages - 3 %}
+      <li class="page-item disabled" aria-hidden="true"><span class="page-link">&hellip;</span></li>
+    {% endif %}
+
+    {# Last page #}
+    {% if pagination.total_pages > 1 %}
+      {% if pagination.page == pagination.total_pages %}
+        <li class="page-item active" aria-current="page"><span class="page-link">{{ pagination.total_pages }}</span></li>
+      {% else %}
+        <li class="page-item"><a class="page-link" href="{{ base_url }}?page={{ pagination.total_pages }}{{ extra_params }}">{{ pagination.total_pages }}</a></li>
+      {% endif %}
+    {% endif %}
+
+    {# Next → #}
+    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+      <a class="page-link" href="{{ base_url }}?page={{ pagination.page + 1 }}{{ extra_params }}" aria-label="Next">
+        <i class="fa-solid fa-chevron-right" style="font-size:.65rem"></i>
+      </a>
+    </li>
+
+  </ul>
+</nav>
+{% endif %}
+{% endmacro paginate %}

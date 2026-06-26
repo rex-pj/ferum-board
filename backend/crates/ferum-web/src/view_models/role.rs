@@ -69,20 +69,28 @@ pub struct UserRoleResponse {
 
 // ─── Requests ─────────────────────────────────────────────────────────────────
 
+
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateRoleRequest {
-    #[validate(length(min = 2, max = 50))]
+    #[validate(
+        length(min = 2, max = 50),
+        custom(function = "crate::view_models::validators::slug_format")
+    )]
     pub slug: String,
     #[validate(length(min = 1, max = 100))]
     pub name: String,
+    #[validate(length(max = 500, message = "Description must be at most 500 characters"))]
     pub description: Option<String>,
+    #[validate(custom(function = "crate::view_models::validators::hex_color"))]
     pub color: Option<String>,
     pub position: Option<i32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct UpdateRoleRequest {
+    #[validate(length(min = 1, max = 100))]
     pub name: Option<String>,
+    // Option<Option<String>> — validated manually in handler (validator derive doesn't handle double-Option)
     pub description: Option<Option<String>>,
     pub color: Option<Option<String>>,
     pub position: Option<i32>,

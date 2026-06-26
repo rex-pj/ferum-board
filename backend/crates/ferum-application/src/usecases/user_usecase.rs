@@ -5,7 +5,7 @@ use bytes::Bytes;
 use crate::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
 use crate::permission::PermissionChecker;
 use crate::ports::{ForumJob, JobQueue, PasswordHasher};
-use crate::shared::AppError;
+use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use ferum_domain::models::user::{User, UserPreferences};
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
@@ -34,6 +34,7 @@ impl UserUseCase {
         }
     }
 
+    #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id))]
     pub async fn update_profile(
         &self,
         actor: &AuthUser,
@@ -76,6 +77,7 @@ impl UserUseCase {
             .await
     }
 
+    #[tracing::instrument(skip_all, fields(user_id = %actor.id))]
     pub async fn change_password(
         &self,
         actor: &AuthUser,
@@ -92,7 +94,7 @@ impl UserUseCase {
             .users
             .find_by_id(actor.id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         let hash = user
             .password_hash
             .as_deref()
@@ -106,10 +108,12 @@ impl UserUseCase {
         self.users.set_password_hash(actor.id, new_hash).await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn get_preferences(&self, actor: &AuthUser) -> Result<UserPreferences, AppError> {
         self.users.get_preferences(actor.id).await
     }
 
+    #[tracing::instrument(skip(self, actor, prefs), fields(user_id = %actor.id))]
     pub async fn update_preferences(
         &self,
         actor: &AuthUser,
@@ -122,13 +126,14 @@ impl UserUseCase {
 
     // ─── Avatar — CAS upload flow ─────────────────────────────────────────────
 
+    #[tracing::instrument(skip(self, actor, data, content_type), fields(user_id = %actor.id))]
     pub async fn set_avatar(
         &self,
         actor: &AuthUser,
         data: Bytes,
         content_type: String,
     ) -> Result<String, AppError> {
-        PermissionChecker::can_upload(actor)?;
+        PermissionChecker::can_upload_profile_image(actor)?;
 
         if !validate_image_content_type(&content_type) {
             return Err(AppError::unprocessable(
@@ -141,27 +146,16 @@ impl UserUseCase {
 
         let key = cas_key("avatars", &data, &content_type);
 
-        // CAS: insert if not exists, otherwise just increment ref_count
-        if self.stored_files.exists(&key).await? {
-            self.stored_files.increment_ref(&key).await?;
-        } else {
-            self.stored_files
-                .upsert(
-                    &key,
-                    &content_type,
-                    &data,
-                    data.len() as i64,
-                    Some(actor.id),
-                )
-                .await?;
-        }
+        self.stored_files
+            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .await?;
 
         // Swap pointer — get old key before overwriting
         let user = self
             .users
             .find_by_id(actor.id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         let old_key = user
             .avatar_url
             .as_deref()
@@ -185,13 +179,14 @@ impl UserUseCase {
 
     // ─── Cover — CAS upload flow ──────────────────────────────────────────────
 
+    #[tracing::instrument(skip(self, actor, data, content_type), fields(user_id = %actor.id))]
     pub async fn set_cover(
         &self,
         actor: &AuthUser,
         data: Bytes,
         content_type: String,
     ) -> Result<String, AppError> {
-        PermissionChecker::can_upload(actor)?;
+        PermissionChecker::can_upload_profile_image(actor)?;
 
         if !validate_image_content_type(&content_type) {
             return Err(AppError::unprocessable(
@@ -204,25 +199,15 @@ impl UserUseCase {
 
         let key = cas_key("covers", &data, &content_type);
 
-        if self.stored_files.exists(&key).await? {
-            self.stored_files.increment_ref(&key).await?;
-        } else {
-            self.stored_files
-                .upsert(
-                    &key,
-                    &content_type,
-                    &data,
-                    data.len() as i64,
-                    Some(actor.id),
-                )
-                .await?;
-        }
+        self.stored_files
+            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .await?;
 
         let user = self
             .users
             .find_by_id(actor.id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         let old_key = user
             .cover_url
             .as_deref()
@@ -243,6 +228,7 @@ impl UserUseCase {
         Ok(format!("/files/{key}"))
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn remove_cover(&self, actor: &AuthUser) -> Result<(), AppError> {
         PermissionChecker::require_not_banned(actor)?;
 
@@ -250,7 +236,7 @@ impl UserUseCase {
             .users
             .find_by_id(actor.id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         if let Some(url) = &user.cover_url {
             if let Some(key) = url.strip_prefix("/files/") {
@@ -268,6 +254,7 @@ impl UserUseCase {
         self.users.remove_cover(actor.id).await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn remove_avatar(&self, actor: &AuthUser) -> Result<(), AppError> {
         PermissionChecker::require_not_banned(actor)?;
 
@@ -275,7 +262,7 @@ impl UserUseCase {
             .users
             .find_by_id(actor.id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         if let Some(url) = &user.avatar_url {
             if let Some(key) = url.strip_prefix("/files/") {

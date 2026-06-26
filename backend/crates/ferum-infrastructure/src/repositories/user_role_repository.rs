@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query, SelectStatement, SimpleExpr};
 use sea_orm::*;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use ferum_application::shared::AppError;
 use ferum_domain::models::role::UserRoleAssignment;
 use ferum_domain::repositories::user_role_repository::UserRoleRepository;
 
-use crate::entities::user_roles;
+use crate::entities::{roles, user_roles};
 
 pub struct PgUserRoleRepository {
     db: DatabaseConnection,
@@ -25,6 +27,8 @@ struct UserRoleRow {
     user_id: Uuid,
     role_id: Uuid,
     role_slug: String,
+    role_name: String,
+    role_color: Option<String>,
     category_id: Option<Uuid>,
     granted_by: Option<Uuid>,
     expires_at: Option<chrono::DateTime<chrono::FixedOffset>>,
@@ -37,6 +41,8 @@ fn to_domain(row: UserRoleRow) -> UserRoleAssignment {
         user_id: row.user_id,
         role_id: row.role_id,
         role_slug: row.role_slug,
+        role_name: row.role_name,
+        role_color: row.role_color,
         category_id: row.category_id,
         granted_by: row.granted_by,
         expires_at: row.expires_at.map(|t| t.with_timezone(&Utc)),
@@ -44,22 +50,60 @@ fn to_domain(row: UserRoleRow) -> UserRoleAssignment {
     }
 }
 
-const SELECT: &str = r#"
-    SELECT
-        ur.id, ur.user_id, ur.role_id,
-        r.slug AS role_slug,
-        ur.category_id, ur.granted_by, ur.expires_at, ur.created_at
-    FROM user_roles ur
-    JOIN roles r ON r.id = ur.role_id
-"#;
+/// Base SELECT + JOIN shared by all read methods. Each caller appends its own
+/// WHERE conditions before calling `.build(PostgresQueryBuilder)`.
+fn base_query() -> SelectStatement {
+    Query::select()
+        .column((user_roles::Entity, user_roles::Column::Id))
+        .column((user_roles::Entity, user_roles::Column::UserId))
+        .column((user_roles::Entity, user_roles::Column::RoleId))
+        .expr_as(
+            Expr::col((roles::Entity, roles::Column::Slug)),
+            Alias::new("role_slug"),
+        )
+        .expr_as(
+            Expr::col((roles::Entity, roles::Column::Name)),
+            Alias::new("role_name"),
+        )
+        .expr_as(
+            Expr::col((roles::Entity, roles::Column::Color)),
+            Alias::new("role_color"),
+        )
+        .column((user_roles::Entity, user_roles::Column::CategoryId))
+        .column((user_roles::Entity, user_roles::Column::GrantedBy))
+        .column((user_roles::Entity, user_roles::Column::ExpiresAt))
+        .column((user_roles::Entity, user_roles::Column::CreatedAt))
+        .from(user_roles::Entity)
+        .inner_join(
+            roles::Entity,
+            Expr::col((roles::Entity, roles::Column::Id))
+                .equals((user_roles::Entity, user_roles::Column::RoleId)),
+        )
+        .to_owned()
+}
+
+/// Condition: row is not expired (expires_at IS NULL OR expires_at > now()).
+fn not_expired() -> SimpleExpr {
+    Expr::col((user_roles::Entity, user_roles::Column::ExpiresAt))
+        .is_null()
+        .or(Expr::col((user_roles::Entity, user_roles::Column::ExpiresAt))
+            .gt(Expr::cust("now()")))
+}
 
 #[async_trait]
 impl UserRoleRepository for PgUserRoleRepository {
     async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<UserRoleAssignment>, AppError> {
+        let (sql, values) = base_query()
+            .and_where(
+                Expr::col((user_roles::Entity, user_roles::Column::UserId)).eq(user_id),
+            )
+            .and_where(not_expired())
+            .build(PostgresQueryBuilder);
+
         let rows = UserRoleRow::find_by_statement(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            &format!("{SELECT} WHERE ur.user_id = $1 AND (ur.expires_at IS NULL OR ur.expires_at > now())"),
-            [user_id.into()],
+            sql,
+            values,
         ))
         .all(&self.db)
         .await
@@ -72,18 +116,23 @@ impl UserRoleRepository for PgUserRoleRepository {
         role_id: Uuid,
         category_id: Option<Uuid>,
     ) -> Result<Vec<UserRoleAssignment>, AppError> {
-        let rows = match category_id {
-            Some(cat_id) => UserRoleRow::find_by_statement(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                &format!("{SELECT} WHERE ur.role_id = $1 AND ur.category_id = $2"),
-                [role_id.into(), cat_id.into()],
-            )),
-            None => UserRoleRow::find_by_statement(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                &format!("{SELECT} WHERE ur.role_id = $1 AND ur.category_id IS NULL"),
-                [role_id.into()],
-            )),
-        }
+        let mut q = base_query();
+        q.and_where(Expr::col((user_roles::Entity, user_roles::Column::RoleId)).eq(role_id));
+        match category_id {
+            Some(cat_id) => q.and_where(
+                Expr::col((user_roles::Entity, user_roles::Column::CategoryId)).eq(cat_id),
+            ),
+            None => q.and_where(
+                Expr::col((user_roles::Entity, user_roles::Column::CategoryId)).is_null(),
+            ),
+        };
+        let (sql, values) = q.build(PostgresQueryBuilder);
+
+        let rows = UserRoleRow::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
         .all(&self.db)
         .await
         .map_err(|e| AppError::internal(e.to_string()))?;
@@ -119,10 +168,14 @@ impl UserRoleRepository for PgUserRoleRepository {
             })?;
 
         // Fetch the full row with role slug joined
+        let (sql, values) = base_query()
+            .and_where(Expr::col((user_roles::Entity, user_roles::Column::Id)).eq(row.id))
+            .build(PostgresQueryBuilder);
+
         let rows = UserRoleRow::find_by_statement(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            &format!("{SELECT} WHERE ur.id = $1"),
-            [row.id.into()],
+            sql,
+            values,
         ))
         .all(&self.db)
         .await
@@ -160,25 +213,92 @@ impl UserRoleRepository for PgUserRoleRepository {
         Ok(())
     }
 
-    async fn is_assigned(
-        &self,
-        user_id: Uuid,
-        role_id: Uuid,
-        category_id: Option<Uuid>,
-    ) -> Result<bool, AppError> {
-        let mut q = user_roles::Entity::find()
-            .filter(user_roles::Column::UserId.eq(user_id))
-            .filter(user_roles::Column::RoleId.eq(role_id));
+    async fn list_for_users(&self, user_ids: &[Uuid]) -> Result<Vec<UserRoleAssignment>, AppError> {
+        if user_ids.is_empty() {
+            return Ok(vec![]);
+        }
 
-        q = match category_id {
-            Some(cat_id) => q.filter(user_roles::Column::CategoryId.eq(cat_id)),
-            None => q.filter(user_roles::Column::CategoryId.is_null()),
-        };
+        let placeholders: Vec<SimpleExpr> =
+            user_ids.iter().map(|id| Expr::val(*id).into()).collect();
 
-        let count = q
-            .count(&self.db)
-            .await
-            .map_err(|e| AppError::internal(e.to_string()))?;
-        Ok(count > 0)
+        let (sql, values) = base_query()
+            .and_where(
+                Expr::col((user_roles::Entity, user_roles::Column::UserId))
+                    .is_in(placeholders),
+            )
+            .and_where(not_expired())
+            .build(PostgresQueryBuilder);
+
+        let rows = UserRoleRow::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
+        .all(&self.db)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+        Ok(rows.into_iter().map(to_domain).collect())
     }
+
+    async fn count_by_role(&self) -> Result<HashMap<Uuid, u64>, AppError> {
+        #[derive(FromQueryResult)]
+        struct RoleCountRow {
+            role_id: Uuid,
+            cnt: i64,
+        }
+
+        // Count distinct users per role across all assignment scopes (global + category-scoped).
+        let (sql, values) = Query::select()
+            .column(user_roles::Column::RoleId)
+            .expr_as(
+                Expr::cust("COUNT(DISTINCT user_id)::BIGINT"),
+                Alias::new("cnt"),
+            )
+            .from(user_roles::Entity)
+            .and_where(not_expired())
+            .group_by_col(user_roles::Column::RoleId)
+            .build(PostgresQueryBuilder);
+
+        let rows = RoleCountRow::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
+        .all(&self.db)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+        Ok(rows.into_iter().map(|r| (r.role_id, r.cnt as u64)).collect())
+    }
+
+    async fn count_global_by_role(&self) -> Result<HashMap<Uuid, u64>, AppError> {
+        #[derive(FromQueryResult)]
+        struct RoleCountRow {
+            role_id: Uuid,
+            cnt: i64,
+        }
+
+        // Count distinct users per role for global assignments only (category_id IS NULL).
+        let (sql, values) = Query::select()
+            .column(user_roles::Column::RoleId)
+            .expr_as(
+                Expr::cust("COUNT(DISTINCT user_id)::BIGINT"),
+                Alias::new("cnt"),
+            )
+            .from(user_roles::Entity)
+            .and_where(user_roles::Column::CategoryId.is_null())
+            .and_where(not_expired())
+            .group_by_col(user_roles::Column::RoleId)
+            .build(PostgresQueryBuilder);
+
+        let rows = RoleCountRow::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
+        .all(&self.db)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+        Ok(rows.into_iter().map(|r| (r.role_id, r.cnt as u64)).collect())
+    }
+
 }

@@ -14,6 +14,7 @@ pub mod tag;
 pub mod thread;
 pub mod user;
 pub mod webhook;
+pub mod theme;
 
 pub use audit_log::AuditLog;
 pub use bookmark::Bookmark;
@@ -32,3 +33,4 @@ pub use plugin::{
     PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
 };
 pub use webhook::Webhook;
+pub use theme::{NewTheme, Theme};

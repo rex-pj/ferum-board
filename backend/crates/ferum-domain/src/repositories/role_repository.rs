@@ -22,6 +22,7 @@ pub struct UpdateRole {
 #[async_trait]
 pub trait RoleRepository: Send + Sync {
     async fn list(&self) -> Result<Vec<Role>, AppError>;
+    async fn list_default(&self) -> Result<Vec<Role>, AppError>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Role>, AppError>;
     async fn find_by_slug(&self, slug: &str) -> Result<Option<Role>, AppError>;
     async fn create(&self, new: NewRole) -> Result<Role, AppError>;

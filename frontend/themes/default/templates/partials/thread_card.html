@@ -1,0 +1,45 @@
+{% import "default/templates/macros.html" as m %}
+<div class="fr-thread-row {% if thread.is_pinned %}fr-thread-row--pinned{% endif %}">
+
+  {% if thread.thumbnail_url %}
+    <img src="{{ thread.thumbnail_url }}" class="fr-thread-thumb d-none d-sm-block" alt="" loading="lazy">
+  {% endif %}
+
+  <div class="fr-thread-body">
+    <div class="d-flex align-items-center gap-1">
+      {{ m::thread_status_icons(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked) }}
+      <a href="/forum/t/{{ thread.slug }}" class="fr-thread-title stretched-link">{{ thread.title }}</a>
+    </div>
+
+    {% if thread.excerpt %}
+      <p class="fr-thread-excerpt mb-0">{{ thread.excerpt }}</p>
+    {% endif %}
+
+    <div class="fr-thread-meta">
+      {{ m::avatar(url=thread.author_avatar_url, name=thread.author_display_name, size=28) }}
+      <a href="/u/{{ thread.author_username }}" class="fr-link-elevated">{{ thread.author_display_name }}</a>
+      <span aria-hidden="true">·</span>
+      <a href="/forum/{{ thread.category_slug }}" class="fr-category-pill fr-link-elevated">{{ thread.category_name }}</a>
+      {% if thread.tags %}
+        <span class="fr-thread-meta-tags">
+          {{ m::tag_list(tags=thread.tags, max=3, linked=true, extra_class="fr-link-elevated") }}
+        </span>
+      {% endif %}
+      <span aria-hidden="true">·</span>
+      <time class="fr-notif-time" data-rel datetime="{{ thread.created_at }}">{{ thread.created_at | date(format="%b %d, %Y") }}</time>
+      {# Reply count — visible only on mobile where fr-thread-stats column is hidden #}
+      <span class="d-md-none" aria-hidden="true">·</span>
+      <span class="d-md-none fr-notif-time"><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>{{ thread.reply_count }}</span>
+    </div>
+  </div>
+
+  <div class="fr-thread-stats fr-link-elevated d-none d-md-flex">
+    <span title="{{ thread.reply_count }} replies"><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>{{ thread.reply_count }}</span>
+    <span title="{{ thread.view_count }} views"><i class="fa-regular fa-eye me-1" aria-hidden="true"></i>{{ thread.view_count }}</span>
+    {% if thread.last_post_at %}
+      <time class="fr-notif-time" data-rel datetime="{{ thread.last_post_at }}" title="Last reply">
+        <i class="fa-regular fa-clock me-1" aria-hidden="true"></i>{{ thread.last_post_at | date(format="%b %d, %Y") }}
+      </time>
+    {% endif %}
+  </div>
+</div>

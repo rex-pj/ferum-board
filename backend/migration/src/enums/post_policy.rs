@@ -12,4 +12,6 @@ pub enum PostPolicyEnum {
     StaffOnly,
     #[iden = "closed"]
     Closed,
+    #[iden = "moderated"]
+    Moderated,
 }

@@ -29,6 +29,20 @@ pub enum Categories {
     UpdatedById,
 }
 
+#[derive(Iden)]
+pub enum UserMutedCategories {
+    Table,
+    UserId,
+    CategoryId,
+}
+
+#[derive(Iden)]
+pub enum UserWatchedCategories {
+    Table,
+    UserId,
+    CategoryId,
+}
+
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
@@ -106,12 +120,120 @@ impl MigrationTrait for Migration {
                             .to(Users::Table, Users::Id)
                             .on_delete(ForeignKeyAction::SetNull),
                     )
+                    .check(Expr::cust("char_length(slug) BETWEEN 1 AND 255"))
+                    .to_owned(),
+            )
+            .await?;
+
+        // User category preferences junction tables (depend on both users and categories)
+        manager
+            .create_table(
+                Table::create()
+                    .table(UserMutedCategories::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(UserMutedCategories::UserId).uuid().not_null())
+                    .col(ColumnDef::new(UserMutedCategories::CategoryId).uuid().not_null())
+                    .primary_key(
+                        Index::create()
+                            .col(UserMutedCategories::UserId)
+                            .col(UserMutedCategories::CategoryId),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_user_muted_cat_user_id")
+                            .from(UserMutedCategories::Table, UserMutedCategories::UserId)
+                            .to(Users::Table, Users::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_user_muted_cat_category_id")
+                            .from(UserMutedCategories::Table, UserMutedCategories::CategoryId)
+                            .to(Categories::Table, Categories::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_table(
+                Table::create()
+                    .table(UserWatchedCategories::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(UserWatchedCategories::UserId).uuid().not_null())
+                    .col(ColumnDef::new(UserWatchedCategories::CategoryId).uuid().not_null())
+                    .primary_key(
+                        Index::create()
+                            .col(UserWatchedCategories::UserId)
+                            .col(UserWatchedCategories::CategoryId),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_user_watched_cat_user_id")
+                            .from(UserWatchedCategories::Table, UserWatchedCategories::UserId)
+                            .to(Users::Table, Users::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_user_watched_cat_category_id")
+                            .from(UserWatchedCategories::Table, UserWatchedCategories::CategoryId)
+                            .to(Categories::Table, Categories::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_user_muted_cat_user")
+                    .table(UserMutedCategories::Table)
+                    .col(UserMutedCategories::UserId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_user_watched_cat_user")
+                    .table(UserWatchedCategories::Table)
+                    .col(UserWatchedCategories::UserId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_categories_slug")
+                    .table(Categories::Table)
+                    .col(Categories::Slug)
                     .to_owned(),
             )
             .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(UserWatchedCategories::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(UserMutedCategories::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await?;
         manager
             .drop_table(
                 Table::drop()

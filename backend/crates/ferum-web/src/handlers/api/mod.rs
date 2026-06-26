@@ -1,0 +1,17 @@
+pub mod auth;
+pub mod bookmarks;
+pub mod uploads;
+pub mod categories;
+#[cfg(debug_assertions)]
+pub mod dev;
+pub mod follows;
+pub mod health;
+pub mod notifications;
+pub mod posts;
+pub mod profile;
+pub mod reactions;
+pub mod search;
+pub mod setup;
+pub mod tags;
+pub mod threads;
+pub mod users;

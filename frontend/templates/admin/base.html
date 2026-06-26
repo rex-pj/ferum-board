@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Admin{% endblock %} — {{ site.name }}</title>
+  <script src="/static/js/ferum-preload.js"></script>
+  <link rel="icon" href="{% if site.favicon_url %}{{ site.favicon_url }}{% else %}/static/favicon.svg{% endif %}">
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/fontawesome/all.min.css">
+  <link rel="stylesheet" href="/themes/{{ default_theme_slug }}/assets/theme.css">
+  {% if site.primary_color %}
+  <style>
+    :root,[data-bs-theme="light"],[data-bs-theme="dark"]{
+      --ferum-primary:{{ site.primary_color }};
+      --bs-primary:{{ site.primary_color }};
+      {% if site.primary_color_rgb %}--bs-primary-rgb:{{ site.primary_color_rgb }};{% endif %}
+      --bs-link-color:{{ site.primary_color }};
+      --bs-link-hover-color:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
+    }
+    .btn-primary{
+      --bs-btn-bg:{{ site.primary_color }};
+      --bs-btn-border-color:{{ site.primary_color }};
+      --bs-btn-hover-bg:color-mix(in srgb,{{ site.primary_color }} 85%,#000);
+      --bs-btn-hover-border-color:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
+      --bs-btn-active-bg:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
+      --bs-btn-active-border-color:color-mix(in srgb,{{ site.primary_color }} 75%,#000);
+      --bs-btn-disabled-bg:{{ site.primary_color }};
+      --bs-btn-disabled-border-color:{{ site.primary_color }};
+      {% if site.primary_color_rgb %}--bs-btn-focus-shadow-rgb:{{ site.primary_color_rgb }};{% endif %}
+    }
+    .btn-outline-primary{
+      --bs-btn-color:{{ site.primary_color }};
+      --bs-btn-border-color:{{ site.primary_color }};
+      --bs-btn-hover-bg:{{ site.primary_color }};
+      --bs-btn-hover-border-color:{{ site.primary_color }};
+      --bs-btn-active-bg:{{ site.primary_color }};
+      --bs-btn-active-border-color:{{ site.primary_color }};
+      {% if site.primary_color_rgb %}--bs-btn-focus-shadow-rgb:{{ site.primary_color_rgb }};{% endif %}
+    }
+  </style>
+  {% endif %}
+  {% block styles %}{% endblock %}
+  <style>
+    /* ── Alpine: hide x-cloak elements until Alpine initialises ── */
+    [x-cloak] { display: none !important; }
+
+    /* ── Filter/search rows — all sibling controls match input height ── */
+    .adm-filter-row {
+      display: flex;
+      align-items: stretch;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    html, body { height: 100%; margin: 0; }
+
+    .adm-shell {
+      /* Shared header height: keeps the sidebar brand bar and the content
+         topbar exactly level so their bottom borders form one continuous line. */
+      --adm-header-h: 64px;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────────── */
+    .adm-sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bs-body-bg);
+      border-right: 1px solid var(--bs-border-color);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    /* Brand / logo area */
+    .adm-brand {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      height: var(--adm-header-h);
+      padding: 0 1.25rem;
+      text-decoration: none;
+      border-bottom: 1px solid var(--bs-border-color);
+      flex-shrink: 0;
+    }
+    .adm-brand-logo {
+      width: 30px;
+      height: 30px;
+      border-radius: .375rem;
+      background: var(--bs-primary, #0d6efd);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: .85rem;
+      flex-shrink: 0;
+    }
+    .adm-brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+    .adm-brand-name {
+      font-weight: 700;
+      font-size: .85rem;
+      color: var(--bs-body-color);
+    }
+    .adm-brand-sub {
+      font-size: .7rem;
+      color: var(--bs-secondary-color);
+    }
+
+    /* Nav */
+    .adm-nav {
+      flex: 1;
+      padding: .5rem .75rem 0;
+      overflow-y: auto;
+    }
+
+    .adm-nav-label {
+      display: block;
+      padding: .75rem .5rem .2rem;
+      font-size: .6rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--bs-secondary-color);
+    }
+    .adm-nav-label:first-child { padding-top: .35rem; }
+
+    .adm-nav-link {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .375rem .75rem;
+      border-radius: .375rem;
+      font-size: .8125rem;
+      color: var(--bs-body-color);
+      text-decoration: none;
+      transition: background .1s, color .1s;
+    }
+    .adm-nav-link:hover {
+      background: var(--bs-secondary-bg);
+      color: var(--bs-body-color);
+    }
+    .adm-nav-link.active {
+      background: var(--bs-primary-bg-subtle);
+      color: var(--bs-primary);
+      font-weight: 600;
+    }
+    .adm-nav-icon {
+      width: .875rem;
+      text-align: center;
+      opacity: .7;
+      flex-shrink: 0;
+      font-size: .8rem;
+    }
+    .adm-nav-link.active .adm-nav-icon { opacity: 1; }
+
+    .adm-sidebar-footer {
+      padding: .625rem .75rem .875rem;
+      border-top: 1px solid var(--bs-border-color);
+    }
+
+    /* ── Main body ────────────────────────────────────────────── */
+    .adm-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--bs-secondary-bg);
+    }
+
+    /* Top bar */
+    .adm-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: var(--adm-header-h);
+      padding: 0 1.5rem;
+      background: var(--bs-body-bg);
+      border-bottom: 1px solid var(--bs-border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+    .adm-topbar-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+      color: var(--bs-body-color);
+    }
+
+    /* Content */
+    .adm-content {
+      flex: 1;
+      padding: 1.5rem;
+    }
+
+    /* ── Hover row utility (used across admin list pages) ────── */
+    .hover-bg:hover { background: var(--bs-secondary-bg); }
+
+    /* ── Table: thead typographic style (replaces table-active) ─ */
+    .adm-content thead.table-active {
+      --bs-table-active-bg: transparent;
+      --bs-table-bg-state: transparent;
+      background-color: transparent !important;
+    }
+    .adm-content thead.table-active > tr > th {
+      font-size: .6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--bs-secondary-color);
+      border-bottom: 2px solid var(--bs-border-color);
+      white-space: nowrap;
+    }
+
+    /* ── Table: horizontal inset so cells clear the card border ─ */
+    .adm-content .table > * > tr > *:first-child { padding-left: 1rem; }
+    .adm-content .table > * > tr > *:last-child  { padding-right: 1rem; }
+
+    /* ── Table: comfortable data-row height ──────────────────── */
+    .adm-content .table > tbody > tr > td {
+      padding-top: .5625rem;
+      padding-bottom: .5625rem;
+    }
+
+    /* ── Theme card preview area ─────────────────────────────── */
+    .adm-theme-preview {
+      height: 140px;
+      overflow: hidden;
+      border-bottom: 1px solid var(--bs-border-color);
+    }
+    .adm-theme-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    /* ── Dashboard stat icon circle ──────────────────────────── */
+    .adm-stat-icon {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ── Quick-action / sidebar link icon width lock ─────────── */
+    .adm-action-icon { width: 1rem; text-align: center; }
+
+    /* ── Settings section sub-label (Branding > Logo, Favicon) ─ */
+    .adm-section-label {
+      font-size: .7rem;
+      letter-spacing: .06em;
+    }
+
+    /* ── Mobile toggle ────────────────────────────────────────── */
+    @media (max-width: 991.98px) {
+      .adm-sidebar { display: none; }
+      .adm-sidebar.show {
+        display: flex;
+        position: fixed;
+        z-index: 1050;
+        box-shadow: 0 0 24px rgba(0,0,0,.2);
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="adm-shell">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────── -->
+  <nav class="adm-sidebar" id="adminSidebar">
+
+    <!-- Brand -->
+    <a href="/" class="adm-brand">
+      {% if site.logo_url %}
+        <img src="{{ site.logo_url }}" alt="{{ site.name }}"
+             style="width:30px;height:30px;object-fit:contain;border-radius:.375rem;flex-shrink:0">
+      {% else %}
+        <div class="adm-brand-logo">Fe</div>
+      {% endif %}
+      <div class="adm-brand-text">
+        <span class="adm-brand-name">{{ site.name }}</span>
+        <span class="adm-brand-sub">{% block panel_subtitle %}Admin Panel{% endblock %}</span>
+      </div>
+    </a>
+
+    {% block sidebar_nav %}
+    <div class="adm-nav">
+
+      <!-- Overview -->
+      <span class="adm-nav-label">Overview</span>
+      <a href="/admin/dashboard" class="adm-nav-link {% block nav_dashboard %}{% endblock %}">
+        <i class="fa-solid fa-gauge adm-nav-icon"></i>Dashboard
+      </a>
+
+      <!-- Content -->
+      <span class="adm-nav-label">Content</span>
+      <a href="/admin/threads" class="adm-nav-link {% block nav_threads %}{% endblock %}">
+        <i class="fa-regular fa-comments adm-nav-icon"></i>Threads
+      </a>
+      <a href="/admin/categories" class="adm-nav-link {% block nav_categories %}{% endblock %}">
+        <i class="fa-regular fa-folder adm-nav-icon"></i>Categories
+      </a>
+
+      <!-- Users & Access -->
+      <span class="adm-nav-label">Users &amp; Access</span>
+      <a href="/admin/users" class="adm-nav-link {% block nav_users %}{% endblock %}">
+        <i class="fa-solid fa-users adm-nav-icon"></i>Users
+      </a>
+      <a href="/admin/roles" class="adm-nav-link {% block nav_roles %}{% endblock %}">
+        <i class="fa-solid fa-shield-halved adm-nav-icon"></i>Roles
+      </a>
+      <a href="/admin/permissions" class="adm-nav-link {% block nav_permissions %}{% endblock %}">
+        <i class="fa-solid fa-key adm-nav-icon"></i>Permissions
+      </a>
+
+      <!-- Moderation -->
+      <span class="adm-nav-label">Moderation</span>
+      <a href="/admin/reports" class="adm-nav-link {% block nav_reports %}{% endblock %}">
+        <i class="fa-solid fa-flag adm-nav-icon"></i>Reports
+      </a>
+      <a href="/admin/log" class="adm-nav-link {% block nav_log %}{% endblock %}">
+        <i class="fa-solid fa-scroll adm-nav-icon"></i>Audit Log
+      </a>
+
+      <!-- System -->
+      <span class="adm-nav-label">System</span>
+      <a href="/admin/plugins" class="adm-nav-link {% block nav_plugins %}{% endblock %}">
+        <i class="fa-solid fa-puzzle-piece adm-nav-icon"></i>Plugins
+      </a>
+      <a href="/admin/themes" class="adm-nav-link {% block nav_themes %}{% endblock %}">
+        <i class="fa-solid fa-palette adm-nav-icon"></i>Themes
+      </a>
+      <a href="/admin/settings" class="adm-nav-link {% block nav_settings %}{% endblock %}">
+        <i class="fa-solid fa-gear adm-nav-icon"></i>Settings
+      </a>
+
+    </div>
+    {% endblock %}
+
+    <div class="adm-sidebar-footer">
+      {% block sidebar_footer_links %}{% endblock %}
+      <a href="/" class="adm-nav-link text-muted">
+        <i class="fa-solid fa-arrow-left adm-nav-icon"></i>Back to Forum
+      </a>
+    </div>
+  </nav>
+
+  <!-- ── Main body ───────────────────────────────────────────── -->
+  <div class="adm-body">
+
+    <!-- Top bar -->
+    <header class="adm-topbar">
+      <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none"
+                data-action="toggle-admin-sidebar">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <h1 class="adm-topbar-title">{% block page_title %}{% endblock %}</h1>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+
+        <!-- Dark / light toggle -->
+        <button type="button" class="fr-icon-btn" data-ferum-theme-btn title="Toggle theme" aria-label="Toggle theme">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+
+        <!-- Notification bell -->
+        {% include "partials/notif_bell.html" %}
+
+        <!-- Profile dropdown -->
+        {% include "partials/user_dropdown.html" %}
+
+      </div>
+    </header>
+
+    <!-- Page content -->
+    <div class="adm-content">
+      {% block content %}{% endblock %}
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-top d-flex align-items-center justify-content-between px-4 py-2"
+            style="font-size:.73rem;color:var(--bs-tertiary-color);flex-shrink:0">
+      <span class="fw-medium" style="color:var(--bs-secondary-color)">{{ site.name }}</span>
+      <span>Powered by <strong style="color:var(--bs-secondary-color)">Ferum Board</strong></span>
+    </footer>
+
+  </div>
+</div>
+
+<script src="/static/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/htmx.min.js"></script>
+<script src="/static/js/ferum-utils.js?v={{ asset_version() }}"></script>
+<script src="/static/js/ferum-progress.js?v={{ asset_version() }}"></script>
+<script src="/static/js/ferum-api.js?v={{ asset_version() }}" defer></script>
+<script src="/static/js/ferum-admin.js?v={{ asset_version() }}" defer></script>
+<script src="/static/js/alpine.min.js" defer></script>
+<script src="/static/js/ferum-widgets.iife.js?v={{ asset_version() }}" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

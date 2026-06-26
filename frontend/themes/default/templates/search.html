@@ -1,0 +1,120 @@
+{% extends "default/templates/base.html" %}
+
+{% block title %}Search{% if query %}: {{ query }}{% endif %} — {{ site.name }}{% endblock %}
+
+{% block content %}
+<h1 class="h4 fw-bold mb-3">
+  Search{% if query %}<span class="fw-normal text-body-secondary"> — {{ query }}</span>{% endif %}
+</h1>
+
+<form class="mb-4" action="/search" method="get">
+  <div class="d-flex flex-column gap-2">
+    <div class="input-group">
+      <input type="search" class="form-control" name="q" value="{{ query }}"
+             placeholder="Search threads and posts…" autofocus>
+      <button class="btn btn-primary" type="submit">
+        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      </button>
+    </div>
+
+    {# Category filter dropdown — only shown when categories are available #}
+    {% if search_categories %}
+    <div class="d-flex align-items-center gap-2 flex-wrap" x-data>
+      <label class="form-label mb-0 text-muted small" style="white-space:nowrap">Filter by category:</label>
+      <select name="category_id" class="form-select form-select-sm" style="max-width:260px"
+              @change="$el.form.submit()">
+        <option value="">All categories</option>
+        {% for cat in search_categories %}
+          <option value="{{ cat.id }}"
+            {% if active_category_id and active_category_id == cat.id %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+        {% endfor %}
+      </select>
+      {% if active_category_id %}
+        <a href="/search?q={{ query }}" class="btn btn-sm btn-outline-secondary">
+          <i class="fa-solid fa-xmark me-1"></i>Clear filter
+        </a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+{% if query %}
+  {% if results %}
+    <p class="mb-3" style="font-size:0.875rem;color:var(--bs-secondary-color)">
+      <strong>{{ pagination.total }}</strong> result{% if pagination.total != 1 %}s{% endif %} for
+      "<strong>{{ query }}</strong>"
+      {% if active_category_id %}
+        {% for cat in search_categories %}
+          {% if cat.id == active_category_id %}
+            in <strong>{{ cat.name }}</strong>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </p>
+    <div class="fr-feed mb-3">
+      {% for result in results %}
+        <div class="fr-thread-row">
+          <div class="fr-thread-body">
+            <a href="/forum/t/{{ result.thread_slug }}" class="fr-thread-title stretched-link">
+              {{ result.thread_title }}
+            </a>
+            {% if result.excerpt %}
+              <p class="fr-thread-excerpt mb-0">{{ result.excerpt | safe }}</p>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% include "default/templates/partials/pagination.html" %}
+  {% else %}
+    <div class="text-center py-5" style="color:var(--bs-secondary-color)">
+      <i class="fa-solid fa-magnifying-glass fa-3x mb-3 d-block opacity-25" aria-hidden="true"></i>
+      No results found for "<strong>{{ query }}</strong>"
+      {% if active_category_id %} in this category{% endif %}.
+      {% if active_category_id %}
+        <div class="mt-2">
+          <a href="/search?q={{ query }}" class="btn btn-sm btn-outline-secondary">
+            Search all categories
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Search Tips</div>
+    <div class="fr-panel-body">
+      <ul class="small text-muted ps-3 mb-0" style="line-height:2">
+        <li>Use specific keywords</li>
+        <li>Search is case-insensitive</li>
+        <li>Searches thread titles and post content</li>
+        <li>Use the category filter to narrow results</li>
+        <li>Shorter queries return more results</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Browse</div>
+    <div class="fr-panel-body">
+      <a href="/forum" class="fr-panel-row">
+        <i class="fa-regular fa-folder" style="width:1rem;opacity:.5;text-align:center;font-size:.8rem;flex-shrink:0"></i>
+        <span class="small">All Categories</span>
+      </a>
+      <a href="/" class="fr-panel-row">
+        <i class="fa-solid fa-house" style="width:1rem;opacity:.5;text-align:center;font-size:.8rem;flex-shrink:0"></i>
+        <span class="small">Home Feed</span>
+      </a>
+    </div>
+  </div>
+
+</aside>
+{% endblock %}

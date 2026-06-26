@@ -1,0 +1,9 @@
+{# Shared notification bell — public nav, admin topbar, mod topbar.
+   Replaces the static SSR badge with the live web component so the count
+   updates in real-time via SSE (with polling fallback) without a page reload.
+   initial-count seeds the badge from the server-rendered value so there is no
+   flash of "0" before the component's first API call resolves. #}
+<ferum-notification-bell
+  user-id="{{ current_user.id }}"
+  initial-count="{{ current_user.unread_count }}">
+</ferum-notification-bell>

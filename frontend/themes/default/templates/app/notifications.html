@@ -1,0 +1,196 @@
+{% extends "default/templates/base.html" %}
+
+{% block title %}Notifications — {{ site.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h1 class="h4 fw-bold mb-0">Notifications</h1>
+  {% if notifications %}
+  <button type="button" class="btn btn-sm btn-outline-secondary" id="mark-all-btn">
+    <i class="fa-solid fa-check-double me-1"></i>Mark all read
+  </button>
+  {% endif %}
+</div>
+
+{% if notifications %}
+<div class="fr-notif-feed" id="notif-list">
+  {% for n in notifications %}
+  <div class="fr-notif-row {% if not n.is_read %}fr-notif-row--unread{% endif %}"
+       id="notif-{{ n.id }}">
+    <div class="fr-notif-icon">
+      {% if n.kind == "reply" %}
+        <i class="fa-solid fa-reply fr-notif-icon--reply"></i>
+      {% elif n.kind == "mention" %}
+        <i class="fa-solid fa-at fr-notif-icon--mention"></i>
+      {% elif n.kind == "reaction" %}
+        <i class="fa-solid fa-thumbs-up fr-notif-icon--reaction"></i>
+      {% elif n.kind == "best_answer" %}
+        <i class="fa-solid fa-circle-check fr-notif-icon--solved"></i>
+      {% elif n.kind == "warn" %}
+        <i class="fa-solid fa-triangle-exclamation fr-notif-icon--warn"></i>
+      {% else %}
+        <i class="fa-solid fa-bell fr-notif-icon--system"></i>
+      {% endif %}
+    </div>
+    <div class="fr-notif-content">
+
+      {# ── Warn ── #}
+      {% if n.kind == "warn" %}
+        <div class="fw-semibold text-body">You received a warning</div>
+        <div class="fr-notif-body mt-1">
+          {% if n.payload.actor_username %}<strong>{{ n.payload.actor_username }}</strong> issued a warning
+          {% else %}A moderator issued a warning{% endif %}
+          {% if n.payload.reason %}<span class="text-muted">· {{ n.payload.reason }}</span>{% endif %}
+        </div>
+
+      {# ── Follow / system ── #}
+      {# All system notifications in this app are "user followed you" events. #}
+      {# actor_username = new payload format; follower_username = legacy format. #}
+      {% elif n.kind == "system" %}
+        {% if n.payload.actor_username %}
+          <a href="/u/{{ n.payload.actor_username }}"
+             class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.actor_username }}</a>
+          <div class="fr-notif-body mt-1">started following you</div>
+        {% elif n.payload.follower_username %}
+          <a href="/u/{{ n.payload.follower_username }}"
+             class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.follower_username }}</a>
+          <div class="fr-notif-body mt-1">started following you</div>
+        {% else %}
+          <div class="fw-semibold text-body">New follower</div>
+          <div class="fr-notif-body mt-1">Someone started following you</div>
+        {% endif %}
+
+      {# ── Thread-linked: reply / mention / reaction / best_answer ── #}
+      {% else %}
+        {# Title line: link if we have slug+title, plain label otherwise #}
+        {% if n.payload.thread_slug and n.payload.thread_title %}
+          <a href="/forum/t/{{ n.payload.thread_slug }}"
+             class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.thread_title }}</a>
+        {% elif n.payload.thread_slug %}
+          <a href="/forum/t/{{ n.payload.thread_slug }}"
+             class="fw-semibold text-body text-decoration-none stretched-link">View thread</a>
+        {% else %}
+          <div class="fw-semibold text-body">
+            {% if n.kind == "reply" %}New reply on your thread
+            {% elif n.kind == "mention" %}You were mentioned
+            {% elif n.kind == "reaction" %}Someone reacted to your post
+            {% elif n.kind == "best_answer" %}Best answer marked
+            {% else %}Notification{% endif %}
+          </div>
+        {% endif %}
+
+        {# Body line: actor + action #}
+        <div class="fr-notif-body mt-1">
+          {% if n.payload.actor_username %}<strong>{{ n.payload.actor_username }}</strong>{% endif %}
+          {% if n.kind == "reply" %}
+            {% if n.payload.actor_username %}replied to your thread{% else %}Someone replied to your thread{% endif %}
+          {% elif n.kind == "mention" %}
+            {% if n.payload.actor_username %}mentioned you in a post{% else %}You were mentioned in a post{% endif %}
+          {% elif n.kind == "reaction" %}
+            {% if n.payload.actor_username %}reacted{% else %}Someone reacted{% endif %}
+            {% if n.payload.reaction %}<span class="text-muted">({{ n.payload.reaction }})</span>{% endif %}
+            to your post
+          {% elif n.kind == "best_answer" %}
+            {% if n.payload.actor_username %}marked your post as best answer{% else %}Your post was marked as best answer{% endif %}
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <div class="fr-notif-time mt-1 text-muted small" data-ts="{{ n.created_at }}"></div>
+    </div>
+    {% if not n.is_read %}
+    <div class="flex-shrink-0 d-flex align-items-center">
+      <button type="button" class="fr-icon-btn mark-read-btn" data-id="{{ n.id }}" title="Mark read">
+        <i class="fa-solid fa-circle-dot fa-xs text-primary"></i>
+      </button>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% include "default/templates/partials/pagination.html" %}
+
+{% else %}
+<div class="text-center py-5 text-secondary">
+  <i class="fa-solid fa-bell-slash fa-3x mb-3 opacity-25" aria-hidden="true"></i>
+  <p class="mb-0">You're all caught up — no notifications.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Summary</div>
+    <div class="fr-panel-body">
+      <div class="fr-panel-stat-row">
+        <span class="text-muted small">Unread</span>
+        {% if current_user and current_user.unread_count > 0 %}
+          <span class="badge rounded-pill bg-primary">{{ current_user.unread_count }}</span>
+        {% else %}
+          <span class="fw-semibold small">0</span>
+        {% endif %}
+      </div>
+      <div class="fr-panel-stat-row">
+        <span class="text-muted small">Total shown</span>
+        <span class="fw-semibold small">{{ pagination.total | default(value=0) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Types</div>
+    <div class="fr-panel-body">
+      <div class="fr-panel-row" style="cursor:default;gap:.625rem">
+        <i class="fa-solid fa-reply fa-xs text-primary fr-icon-col" aria-hidden="true"></i>
+        <span class="small">New reply in your thread</span>
+      </div>
+      <div class="fr-panel-row" style="cursor:default;gap:.625rem">
+        <i class="fa-solid fa-at fa-xs text-primary fr-icon-col" aria-hidden="true"></i>
+        <span class="small">You were mentioned</span>
+      </div>
+      <div class="fr-panel-row" style="cursor:default;gap:.625rem">
+        <i class="fa-solid fa-thumbs-up fa-xs text-primary fr-icon-col" aria-hidden="true"></i>
+        <span class="small">Someone reacted to your post</span>
+      </div>
+      <div class="fr-panel-row" style="cursor:default;gap:.625rem">
+        <i class="fa-solid fa-circle-check fa-xs text-primary fr-icon-col" aria-hidden="true"></i>
+        <span class="small">Your post was marked Best Answer</span>
+      </div>
+      <div class="fr-panel-row" style="cursor:default;gap:.625rem">
+        <i class="fa-solid fa-triangle-exclamation fa-xs text-primary fr-icon-col" aria-hidden="true"></i>
+        <span class="small">You received a warning</span>
+      </div>
+      <div class="fr-panel-row" style="cursor:default;gap:.625rem">
+        <i class="fa-solid fa-bell fa-xs text-primary fr-icon-col" aria-hidden="true"></i>
+        <span class="small">System notification</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Account</div>
+    <div class="fr-panel-body">
+      <a href="/account" class="fr-panel-row">
+        <i class="fa-solid fa-user fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
+        <span class="small">Profile settings</span>
+      </a>
+      <a href="/bookmarks" class="fr-panel-row">
+        <i class="fa-solid fa-bookmark fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
+        <span class="small">Bookmarks</span>
+      </a>
+      <a href="/" class="fr-panel-row">
+        <i class="fa-solid fa-house fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
+        <span class="small">Back to feed</span>
+      </a>
+    </div>
+  </div>
+
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-page-notifications.js" defer></script>
+{% endblock %}

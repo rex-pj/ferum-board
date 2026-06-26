@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 use ferum_domain::models::plugin::{Plugin, PluginLog};
 
@@ -136,14 +137,17 @@ pub struct TogglePluginStatusRequest {
     pub active: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct UninstallPluginRequest {
+    #[validate(length(min = 1, max = 100, message = "confirm_slug must be 1–100 characters"))]
     pub confirm_slug: String,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Validate)]
 pub struct PluginLogQueryParams {
+    #[validate(length(max = 20))]
     pub level: Option<String>,
+    #[validate(length(max = 100))]
     pub hook_name: Option<String>,
     #[serde(default = "default_log_limit")]
     pub limit: u64,
@@ -155,8 +159,9 @@ fn default_log_limit() -> u64 {
     100
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct DebugHookRequest {
+    #[validate(length(min = 1, max = 200, message = "hook name must be 1–200 characters"))]
     pub hook: String,
     pub payload: serde_json::Value,
 }
@@ -176,11 +181,13 @@ pub struct ActiveSlotsResponse {
     pub slots: std::collections::HashMap<String, Vec<SlotEntry>>,
 }
 
+/// Public-facing slot entry returned by the unauthenticated `/api/plugins/active-slots`
+/// endpoint. Does NOT include `plugin_slug` or `asset_url` — those fields would reveal
+/// which plugins are installed, helping attackers target known CVEs.
 #[derive(Serialize)]
 pub struct SlotEntry {
-    pub plugin_slug: String,
-    pub asset_url: String,
     pub custom_element_tag: String,
     pub props: Vec<String>,
     pub load_order: i32,
 }
+

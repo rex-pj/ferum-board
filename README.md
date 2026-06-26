@@ -1,9 +1,9 @@
 # Ferum Board
 
-> A modern, self-hosted forum built on Rust + SvelteKit — Reddit-level experience with full data ownership.
+> A modern, self-hosted forum built on Rust + Axum + Tera — Reddit-level experience with full data ownership.
 
 ![Rust](https://img.shields.io/badge/Rust-1.78+-orange?logo=rust)
-![SvelteKit](https://img.shields.io/badge/SvelteKit-2-red?logo=svelte)
+![Axum](https://img.shields.io/badge/Axum-0.8-blue?logo=rust)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)
 ![License](https://img.shields.io/badge/License-Attribution-green)
 
@@ -67,6 +67,13 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 - **Webhooks** — subscribe any ForumEvent to an external URL with HMAC-signed payloads
 - **First-run setup wizard** — create the initial admin account before first use
 
+### Plugins
+- **3-tier plugin system** — Tier 1 (Manifest: declarative webhooks), Tier 2 (Script: sandboxed JS via boa_engine), Tier 3 (Service: sidecar process — planned)
+- **Before-hooks** — plugins can inspect and block requests (post create, thread create, user register…)
+- **After-events** — fire-and-forget event dispatch to all active plugins
+- **UI slots** — plugins can inject Web Components into designated page slots
+- **Circuit breaker** — a misbehaving plugin is isolated; the forum always stays up
+
 ### Developer / Operations
 - **Capability toggles via env vars** — Redis, S3, Meilisearch, read replica are each optional; the system starts and works without them using safe fallbacks
 - **Content-addressed file storage (CAS)** — SHA-256 keyed, ref-counted; backed by S3 (production) or the database (development)
@@ -89,10 +96,13 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 | API server | **Rust** + **Axum 0.8** (async, Tokio) |
 | Database | **PostgreSQL 16** (FTS, JSONB, triggers) |
 | ORM / migrations | **Sea-ORM 1.0** |
-| Frontend | **SvelteKit 2** + **Svelte 5** (SSR, adapter-node) |
+| HTML rendering | **Tera** (Jinja2 syntax, server-rendered) |
+| Interactive islands | **Svelte 5** Web Components (compiled to `ferum-widgets.iife.js`) |
+| Admin / mod UI | **HTMX** + **Alpine.js** + vanilla JS |
 | UI framework | **Bootstrap 5.3** |
 | Auth | JWT (httpOnly cookie) + bcrypt |
 | Email | Lettre 0.11 (SMTP) |
+| Plugin scripts | **boa_engine** (pure Rust JS sandbox, no V8/Deno) |
 | Cache / rate limit | Redis 7 (optional; in-memory fallback) |
 | File storage | S3-compatible / MinIO (optional; PostgreSQL fallback) |
 | Search | Meilisearch (optional; PostgreSQL FTS fallback) |
@@ -104,33 +114,33 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 ### Prerequisites
 
 - Rust 1.78+
-- Node.js 20+
 - PostgreSQL 16
+- Node.js 20+ (only needed when modifying Svelte Web Components)
 
 ```bash
 git clone https://github.com/your-username/ferum-board.git
 cd ferum-board
 ```
 
-**Backend:**
+**Run the app (single process — serves HTML, API, and static files):**
 
 ```bash
 cd backend
-cp .env.example .env        # edit DATABASE_URL to point at your PostgreSQL instance
-cargo run                   # migrations run automatically on startup
+cp .env.example .env   # edit DATABASE_URL — THEMES_DIR/STATIC_DIR already set to ../frontend/*
+cargo run              # app at http://localhost:8080
 ```
 
-**Frontend:**
-
-```bash
-cd client-app
-npm install
-npm run dev                 # http://localhost:5173
-```
-
-On first run, navigate to `/setup` to create the initial admin account.
+The app is at `http://localhost:8080`. On first run, navigate to `/setup` to create the initial admin account.
 
 > No Redis, S3, or Meilisearch required in development. The app uses in-memory fallbacks automatically.
+
+**Rebuild Svelte Web Components (only when modifying widgets in `frontend/client-widgets/`):**
+
+```bash
+cd frontend/client-widgets
+npm install   # first time only
+npm run build # emits frontend/static/js/ferum-widgets.iife.js — commit the result
+```
 
 ---
 
@@ -146,7 +156,7 @@ cp .env.example .env.prod
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-The stack includes: PostgreSQL, Redis, MinIO (S3-compatible), Nginx (TLS termination), SvelteKit frontend, Rust API.
+The stack includes: PostgreSQL, Redis, MinIO (S3-compatible), Nginx (TLS termination), Rust/Axum/Tera API (serves HTML + JSON).
 
 ### TLS
 
@@ -226,7 +236,7 @@ Contributions are welcome. Please open an issue before submitting a pull request
 
 - Follow the architecture rules in [CLAUDE.md](CLAUDE.md)
 - Run `cargo clippy` and `cargo test` before pushing
-- Run `npm run check` in `client-app/` before pushing
+- If you changed Svelte widgets, run `npm run build` in `frontend/client-widgets/` and commit the updated bundle
 
 ---
 

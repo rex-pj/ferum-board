@@ -2,13 +2,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-use chrono::Utc;
-use uuid::Uuid;
 
-use crate::constants::{JWT_EXPIRY_SECS, REFRESH_TOKEN_TTL_SECS};
-use crate::ports::{AccessTokenClaims, BulkSeedService, CacheService, PasswordHasher, TokenService};
+
+use crate::constants::REFRESH_TOKEN_TTL_SECS;
+use crate::ports::{BulkSeedService, CacheService, PasswordHasher, TokenService};
+use super::{build_access_token_claims, refresh_token_key};
+use super::auth_usecase::LoginResult;
 use crate::shared::AppError;
-use ferum_domain::models::user::{TrustLevel, User};
+use ferum_domain::models::user::TrustLevel;
 use ferum_domain::repositories::{NewUser, SiteConfigRepository, UserRepository};
 use ferum_domain::repositories::role_repository::RoleRepository;
 use ferum_domain::repositories::user_role_repository::UserRoleRepository;
@@ -49,11 +50,13 @@ impl SetupUseCase {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn needs_setup(&self) -> Result<bool, AppError> {
         Ok(self.users.count_admins().await? == 0)
     }
 
-    pub async fn run_setup(&self, cmd: RunSetupCmd) -> Result<SetupResult, AppError> {
+    #[tracing::instrument(skip_all)]
+    pub async fn run_setup(&self, cmd: RunSetupCmd) -> Result<LoginResult, AppError> {
         let _lock = self.setup_lock.lock().await;
 
         if !self.needs_setup().await? {
@@ -122,15 +125,7 @@ impl SetupUseCase {
             self.bulk_seed.seed_bulk(user.id).await?;
         }
 
-        let trust_str = format!("{:?}", user.trust_level).to_lowercase();
-        let claims = AccessTokenClaims {
-            sub: user.id,
-            username: user.username.clone(),
-            trust_level: trust_str,
-            is_banned: user.is_banned,
-            banned_until: user.banned_until.map(|t| t.timestamp()),
-            exp: (Utc::now() + chrono::Duration::seconds(JWT_EXPIRY_SECS as i64)).timestamp(),
-        };
+        let claims = build_access_token_claims(&user);
         let access_token = self.tokens.mint_access_token(&claims)?;
         let refresh_token = self.tokens.mint_refresh_token(user.id)?;
         self.cache
@@ -141,7 +136,7 @@ impl SetupUseCase {
             )
             .await?;
 
-        Ok(SetupResult { user, access_token, refresh_token })
+        Ok(LoginResult { user, access_token, refresh_token })
     }
 }
 
@@ -166,18 +161,4 @@ pub struct SetupConfigCmd {
     pub smtp_pass: Option<String>,
 }
 
-pub struct SetupResult {
-    pub user: User,
-    pub access_token: String,
-    pub refresh_token: String,
-}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-fn refresh_token_key(user_id: Uuid, token: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(token.as_bytes());
-    let digest = h.finalize();
-    format!("refresh:{}:{}", user_id, hex::encode(&digest[..16]))
-}

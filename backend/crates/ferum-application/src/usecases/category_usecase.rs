@@ -1,29 +1,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::constants::FORUM_INDEX_THREADS_PER_CATEGORY;
+use crate::constants::DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY;
+use crate::dto::{ForumIndexItem, SubcategoryCount};
 use crate::permission::PermissionChecker;
-use crate::shared::AppError;
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::models::category::Category;
 use ferum_domain::models::thread::Thread;
 use ferum_domain::repositories::category_repository::CategoryRepository;
+use ferum_domain::repositories::site_config_repository::{get_config_u64, SiteConfigRepository};
 use ferum_domain::repositories::tag_repository::TagRepository;
 use ferum_domain::repositories::thread_repository::ThreadRepository;
+use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::AuthUser;
-
-// ─── Forum index types ────────────────────────────────────────────────────────
-
-pub struct SubcategoryCount {
-    pub category: Category,
-    pub thread_count: u64,
-}
-
-pub struct ForumIndexItem {
-    pub category: Category,
-    pub thread_count: u64,
-    pub subcategories: Vec<SubcategoryCount>,
-    pub recent_threads: Vec<Thread>,
-}
+use uuid::Uuid;
 
 // ─── Use case ─────────────────────────────────────────────────────────────────
 
@@ -31,6 +21,8 @@ pub struct CategoryUseCase {
     pub categories: Arc<dyn CategoryRepository>,
     pub threads: Arc<dyn ThreadRepository>,
     pub tags: Arc<dyn TagRepository>,
+    pub site_config: Option<Arc<dyn SiteConfigRepository>>,
+    users: Arc<dyn UserRepository>,
 }
 
 impl CategoryUseCase {
@@ -38,15 +30,24 @@ impl CategoryUseCase {
         categories: Arc<dyn CategoryRepository>,
         threads: Arc<dyn ThreadRepository>,
         tags: Arc<dyn TagRepository>,
+        users: Arc<dyn UserRepository>,
     ) -> Self {
         Self {
             categories,
             threads,
             tags,
+            site_config: None,
+            users,
         }
     }
 
+    pub fn with_site_config(mut self, site_config: Arc<dyn SiteConfigRepository>) -> Self {
+        self.site_config = Some(site_config);
+        self
+    }
+
     /// Public listing — filters by view_policy relative to the calling user.
+    #[tracing::instrument(skip_all)]
     pub async fn list_visible(&self, actor: Option<&AuthUser>) -> Result<Vec<Category>, AppError> {
         let all = self.categories.list_all().await?;
         let visible = all
@@ -56,6 +57,7 @@ impl CategoryUseCase {
         Ok(visible)
     }
 
+    #[tracing::instrument(skip(self, actor))]
     pub async fn get_by_slug(
         &self,
         actor: Option<&AuthUser>,
@@ -65,7 +67,7 @@ impl CategoryUseCase {
             .categories
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         PermissionChecker::can_view_category(actor, &category)?;
         Ok(category)
@@ -79,6 +81,7 @@ impl CategoryUseCase {
     ///   1. list_all (categories)
     ///   2. count_threads_by_categories (one aggregation query)
     ///   3. list_recent_by_categories (one window-function query for threads)
+    #[tracing::instrument(skip_all)]
     pub async fn get_forum_index(
         &self,
         actor: Option<&AuthUser>,
@@ -101,10 +104,14 @@ impl CategoryUseCase {
             .collect();
 
         // Fetch thread counts and recent threads concurrently.
+        let index_threads_count = match &self.site_config {
+            Some(sc) => get_config_u64(sc.as_ref(), "forum_index_threads_per_category", DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY).await,
+            None => DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY,
+        };
         let (counts_vec, recent_threads) = tokio::try_join!(
             self.categories.count_threads_by_categories(&all_ids),
             self.threads
-                .list_recent_by_categories(&parent_ids, FORUM_INDEX_THREADS_PER_CATEGORY),
+                .list_recent_by_categories(&parent_ids, index_threads_count),
         )?;
 
         let counts: HashMap<uuid::Uuid, u64> = counts_vec.into_iter().collect();
@@ -194,5 +201,49 @@ impl CategoryUseCase {
             .collect();
 
         Ok(items)
+    }
+
+    // ─── Watch / Mute ─────────────────────────────────────────────────────────
+
+    async fn require_visible(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        let category = self
+            .categories
+            .find_by_id(category_id)
+            .await?
+            .or_not_found()?;
+        PermissionChecker::can_view_category(Some(actor), &category)
+    }
+
+    pub async fn watch_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        self.require_visible(actor, category_id).await?;
+        self.users.watch_category(actor.id, category_id).await
+    }
+
+    pub async fn unwatch_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        self.require_visible(actor, category_id).await?;
+        self.users.unwatch_category(actor.id, category_id).await
+    }
+
+    pub async fn mute_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        self.require_visible(actor, category_id).await?;
+        self.users.mute_category(actor.id, category_id).await
+    }
+
+    pub async fn unmute_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        self.require_visible(actor, category_id).await?;
+        self.users.unmute_category(actor.id, category_id).await
+    }
+
+    pub async fn get_watch_status(
+        &self,
+        actor: &AuthUser,
+        category_id: Uuid,
+    ) -> Result<(bool, bool), AppError> {
+        self.require_visible(actor, category_id).await?;
+        let (watched, muted) = tokio::try_join!(
+            self.users.get_watched_categories(actor.id),
+            self.users.get_muted_categories(actor.id),
+        )?;
+        Ok((watched.contains(&category_id), muted.contains(&category_id)))
     }
 }

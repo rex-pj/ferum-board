@@ -1,0 +1,73 @@
+/* ── Design tokens — light (default) ─────────────────────────── */
+:root,
+[data-bs-theme="light"] {
+  /* Primary accent */
+  --ferum-primary:       #6366f1;
+  --ferum-primary-dark:  #4f46e5;
+  --bs-primary:          #6366f1;
+  --bs-primary-rgb:      99, 102, 241;
+
+  /* Text hierarchy */
+  --bs-body-color:       #111827;
+  --bs-secondary-color:  #6b7280;
+  --bs-tertiary-color:   #9ca3af;
+  --bs-emphasis-color:   #030712;
+  --bs-link-color:       #4f46e5;
+  --bs-link-hover-color: #3730a3;
+
+  /* Surfaces */
+  --bs-body-bg:          #ffffff;
+  --bs-secondary-bg:     #f3f4f6;
+  --bs-tertiary-bg:      #f9fafb;
+
+  /* Borders & shape */
+  --bs-border-color:     #e5e7eb;
+  --bs-border-radius:    8px;
+  --bs-border-radius-sm: 6px;
+  --bs-border-radius-lg: 12px;
+  --bs-border-radius-xl: 16px;
+
+  /* Shadows */
+  --bs-box-shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.05);
+  --bs-box-shadow:       0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.05);
+  --bs-box-shadow-lg:    0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+
+  /* Navigation */
+  --fr-nav-hover-bg:     rgba(0, 0, 0, 0.04);
+  --fr-nav-active-bg:    rgba(99, 102, 241, 0.10);
+  --fr-nav-active-color: #4f46e5;
+
+  /* Layout */
+  --fr-topbar-height:     56px;
+  --fr-bottom-nav-height: 60px;
+  --fr-tap-target:        44px;
+
+  /* Thread cards */
+  --fr-thread-title-hover: #4f46e5;
+}
+
+/* ── Design tokens — dark ─────────────────────────────────────── */
+[data-bs-theme="dark"] {
+  --ferum-primary:       #818cf8;
+  --ferum-primary-dark:  #a5b4fc;
+  --bs-primary:          #818cf8;
+  --bs-primary-rgb:      129, 140, 248;
+
+  --bs-body-color:       #e2e8f0;
+  --bs-secondary-color:  #94a3b8;
+  --bs-tertiary-color:   #64748b;
+  --bs-emphasis-color:   #f8fafc;
+  --bs-link-color:       #818cf8;
+  --bs-link-hover-color: #a5b4fc;
+
+  --bs-body-bg:          #0f1117;
+  --bs-secondary-bg:     #1a1d27;
+  --bs-tertiary-bg:      #141721;
+  --bs-border-color:     #1f2330;
+
+  --fr-nav-hover-bg:     rgba(255, 255, 255, 0.06);
+  --fr-nav-active-bg:    rgba(129, 140, 248, 0.15);
+  --fr-nav-active-color: #818cf8;
+
+  --fr-thread-title-hover: #818cf8;
+}

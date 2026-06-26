@@ -12,6 +12,8 @@ pub trait CategoryRepository: Send + Sync {
     async fn create(&self, cmd: NewCategory) -> Result<Category, AppError>;
     async fn update(&self, id: Uuid, patch: UpdateCategory) -> Result<Category, AppError>;
     async fn delete(&self, id: Uuid) -> Result<(), AppError>;
+    /// Returns true if any category has `parent_id = id`.
+    async fn has_children(&self, id: Uuid) -> Result<bool, AppError>;
     /// Returns `(category_id, thread_count)` pairs for the given IDs.
     /// Only counts non-deleted threads.
     async fn count_threads_by_categories(&self, ids: &[Uuid])

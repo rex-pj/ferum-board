@@ -1,8 +1,24 @@
 # Ferum Board — Marketplace & Monetization Technical Specification
 
-**Version:** 0.1-draft  
-**Status:** Planning  
+**Version:** 0.2-draft  
+**Status:** Partially superseded — see notes below  
 **Scope:** Plugin extension system, marketplace infrastructure, SaaS multi-tenancy layer
+
+> **⚠ Compatibility note (2026-06-23):**
+> Phase 1 (Plugin Extension System) has been implemented but with a different runtime than what this spec originally proposed.
+>
+> | Spec said | Actual implementation |
+> |---|---|
+> | WASM components + `wasmtime` | **boa_engine** — pure Rust JS engine, no native deps |
+> | WIT interface definitions | `plugin.toml` manifest with `[[hooks]]` / `[ui_slots]` sections |
+> | `ferum_manifest` custom WASM section | `plugin.toml` at root of `.fpkg` archive |
+> | `PluginHost` port with `dispatch()` / `call_rpc()` | `PluginHookRuntime` + `PluginUiRuntime` + `PluginLifecycle` port traits |
+> | Svelte `pluginSlots` store + `<PluginSlot>` component | Server-side injection into Tera context; client bundle.js served as static asset |
+>
+> Sections 2.1–2.9 below are historical reference only — **do not use as implementation guide**.
+> For the actual plugin architecture see `docs/plugin-system/technical-design.md`.
+>
+> Phase 2 (Marketplace) and Phase 3 (SaaS) remain forward-looking and have not been started.
 
 ---
 

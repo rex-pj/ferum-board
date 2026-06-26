@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::ports::{ForumJob, JobQueue, NotificationBus, NullPluginRuntime, PluginRuntime};
+use crate::ports::{ForumJob, JobQueue, NotificationBus, NullPluginRuntime, PluginHookRuntime};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::audit_log::AuditLog;
 use ferum_domain::models::notification::NotificationKind;
@@ -14,7 +14,7 @@ pub struct EventBus {
     notification_bus: Arc<dyn NotificationBus>,
     webhooks: Arc<dyn WebhookRepository>,
     jobs: Arc<dyn JobQueue>,
-    plugin_runtime: Arc<dyn PluginRuntime>,
+    plugin_runtime: Arc<dyn PluginHookRuntime>,
 }
 
 impl EventBus {
@@ -35,17 +35,18 @@ impl EventBus {
         }
     }
 
-    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginRuntime>) -> Self {
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
         self.plugin_runtime = runtime;
         self
     }
 
     pub async fn publish(&self, event: ForumEvent) {
+        tracing::info!(forum_event = event.event_type_str(), "event_bus: publishing");
         if let Err(e) = self.handle(&event).await {
             tracing::error!(
-                "event bus error for {:?}: {:?}",
-                std::mem::discriminant(&event),
-                e
+                forum_event = event.event_type_str(),
+                error = ?e,
+                "event_bus: handler failed"
             );
         }
         // Fire-and-forget plugin after-event dispatch (Tier 2/3 — Milestone 2)
@@ -172,7 +173,9 @@ impl EventBus {
                 post_id,
                 thread_id,
                 thread_slug,
+                thread_title,
                 author_id,
+                author_username,
                 thread_author_id,
                 ..
             } => {
@@ -182,7 +185,8 @@ impl EventBus {
                         "post_id": post_id,
                         "thread_id": thread_id,
                         "thread_slug": thread_slug,
-                        "author_id": author_id,
+                        "thread_title": thread_title,
+                        "actor_username": author_username,
                     });
                     self.notifications
                         .create(*thread_author_id, NotificationKind::Reply, payload.clone())
@@ -207,8 +211,10 @@ impl EventBus {
                 post_id,
                 thread_id,
                 thread_slug,
+                thread_title,
                 post_author_id,
                 reactor_id,
+                reactor_username,
                 kind,
             } => {
                 if post_author_id != reactor_id {
@@ -217,7 +223,8 @@ impl EventBus {
                         "post_id": post_id,
                         "thread_id": thread_id,
                         "thread_slug": thread_slug,
-                        "reactor_id": reactor_id,
+                        "thread_title": thread_title,
+                        "actor_username": reactor_username,
                         "reaction": kind.as_str(),
                     });
                     self.notifications
@@ -243,7 +250,9 @@ impl EventBus {
                 post_id,
                 thread_id,
                 thread_slug,
+                thread_title,
                 post_author_id,
+                by_username,
                 ..
             } => {
                 let payload = serde_json::json!({
@@ -251,6 +260,8 @@ impl EventBus {
                     "post_id": post_id,
                     "thread_id": thread_id,
                     "thread_slug": thread_slug,
+                    "thread_title": thread_title,
+                    "actor_username": by_username,
                 });
                 self.notifications
                     .create(
@@ -278,15 +289,18 @@ impl EventBus {
                 post_id,
                 thread_id,
                 thread_slug,
+                thread_title,
                 mentioned_user_id,
-                author_id,
+                author_id: _,
+                author_username,
             } => {
                 let payload = serde_json::json!({
                     "kind": "mention",
                     "post_id": post_id,
                     "thread_id": thread_id,
                     "thread_slug": thread_slug,
-                    "author_id": author_id,
+                    "thread_title": thread_title,
+                    "actor_username": author_username,
                 });
                 self.notifications
                     .create(*mentioned_user_id, NotificationKind::Mention, payload.clone())
@@ -303,9 +317,9 @@ impl EventBus {
                 followed_id,
             } => {
                 let payload = serde_json::json!({
-                    "kind": "system",
+                    "kind": "follow",
                     "follower_id": follower_id,
-                    "follower_username": follower_username,
+                    "actor_username": follower_username,
                 });
                 self.notifications
                     .create(*followed_id, NotificationKind::System, payload.clone())

@@ -1,0 +1,113 @@
+{% extends "mod/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Threads | Mod Panel{% endblock %}
+{% block page_title %}Threads{% endblock %}
+{% block nav_threads %}active{% endblock %}
+
+{% block content %}
+
+{# ── Threads table ──────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header p-0">
+    <form method="GET" class="adm-filter-row px-3 py-2">
+      <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+        <span class="input-group-text bg-transparent">
+          <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+        </span>
+        <input type="search" name="q" class="form-control border-start-0 ps-0"
+               placeholder="Search threads…" value="{% if q %}{{ q }}{% endif %}"
+               autocomplete="off">
+      </div>
+      <select name="status" class="form-select form-select-sm" style="width:auto">
+        <option value="">All statuses</option>
+        <option value="open"   {% if status == "open" %}selected{% endif %}>Open</option>
+        <option value="locked" {% if status == "locked" %}selected{% endif %}>Locked</option>
+        <option value="deleted"{% if status == "deleted" %}selected{% endif %}>Deleted</option>
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-success">
+        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      </button>
+      {% if q or status %}
+        <a href="/mod/threads" class="btn btn-sm btn-outline-secondary" title="Clear">
+          <i class="fa-solid fa-xmark"></i>
+        </a>
+      {% endif %}
+    </form>
+  </div>
+  {% if threads %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-active">
+        <tr>
+          <th>Title</th>
+          <th style="width:14%">Category</th>
+          <th style="width:12%">Author</th>
+          <th style="width:8%">Status</th>
+          <th style="width:6%" class="text-center">Replies</th>
+          <th style="width:10%">Created</th>
+          <th style="width:7%"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for thread in threads %}
+        <tr>
+          <td style="max-width:240px">
+            <a href="/forum/t/{{ thread.slug }}" target="_blank"
+               class="fw-semibold text-body text-decoration-none d-block text-truncate">
+              {% if thread.is_pinned %}
+                <i class="fa-solid fa-thumbtack text-primary me-1" style="font-size:.75rem" title="Pinned"></i>
+              {% endif %}
+              {{ thread.title }}
+            </a>
+          </td>
+          <td class="small text-muted">{{ thread.category_name | default(value="N/A") }}</td>
+          <td class="small">{{ thread.author_username | default(value="N/A") }}</td>
+          <td>
+            {% if thread.status == "locked" %}
+              <span class="badge bg-warning text-dark">locked</span>
+            {% elif thread.status == "deleted" %}
+              <span class="badge bg-danger">deleted</span>
+            {% else %}
+              <span class="badge bg-success">open</span>
+            {% endif %}
+            {% if thread.is_solved %}
+              <span class="badge bg-info ms-1">solved</span>
+            {% endif %}
+          </td>
+          <td class="small text-center">{{ thread.reply_count | default(value=0) }}</td>
+          <td class="small text-muted text-nowrap">{{ thread.created_at | truncate(length=10, end="") }}</td>
+          <td>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm {% if thread.is_pinned %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                      title="{% if thread.is_pinned %}Unpin{% else %}Pin{% endif %}"
+                      data-mod-action="mod-thread" data-action="pin" data-thread-id="{{ thread.id }}" data-current-state="{% if thread.is_pinned %}true{% else %}false{% endif %}">
+                <i class="fa-solid fa-thumbtack"></i>
+              </button>
+              <button class="btn btn-sm {% if thread.status == 'locked' %}btn-warning{% else %}btn-outline-secondary{% endif %}"
+                      title="{% if thread.status == 'locked' %}Unlock{% else %}Lock{% endif %}"
+                      data-mod-action="mod-thread" data-action="lock" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.status }}">
+                <i class="fa-solid fa-lock"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5 text-secondary">
+    <i class="fa-solid fa-comments fa-3x mb-3 d-block opacity-25"></i>
+    <div class="fw-semibold mb-1">No threads found</div>
+    <div class="small">{% if q %}No threads match "{{ q }}".{% else %}Thread list will appear here.{% endif %}</div>
+  </div>
+  {% endif %}
+
+  {# ── Footer: count + pagination ──────────────────────────────── #}
+  {{ m::card_footer_pagination(pagination=pagination, base_url="/mod/threads", noun="thread", extra_params="&q=" ~ q ~ "&status=" ~ status) }}
+</div>
+
+{% endblock %}
+
+{% block scripts %}{% endblock %}

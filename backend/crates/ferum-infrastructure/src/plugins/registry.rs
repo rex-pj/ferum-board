@@ -7,7 +7,10 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::circuit_breaker::CircuitBreaker;
-use ferum_application::ports::{CacheService, HookContext, HookDecision, PluginRuntime, UiSlotEntry};
+use ferum_application::ports::{
+    CacheService, HookContext, HookDecision, PluginHookRuntime, PluginLifecycle, PluginUiRuntime,
+    UiSlotEntry,
+};
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::{PluginStatus, PluginTier};
 use ferum_domain::repositories::plugin_repository::PluginRepository;
@@ -18,6 +21,7 @@ use super::script_runtime::ScriptPluginRuntime;
 /// Entry in the in-memory dispatch table — one per (plugin, hook_name).
 struct HookEntry {
     plugin_id: Uuid,
+    hook_id: Uuid,
     plugin_slug: String,
     tier: PluginTier,
     circuit_breaker: Arc<CircuitBreaker>,
@@ -74,6 +78,7 @@ impl PluginRegistry {
             for hook in hooks.iter().filter(|h| h.is_active) {
                 table.entry(hook.hook_name.clone()).or_default().push(HookEntry {
                     plugin_id: plugin.id,
+                    hook_id: hook.id,
                     plugin_slug: plugin.slug.clone(),
                     tier: plugin.tier.clone(),
                     // Circuit breaker always starts fresh — in-memory only.
@@ -86,9 +91,11 @@ impl PluginRegistry {
                 });
             }
 
-            // Start Script runtime for active Tier 2 plugins
+            // Start Script runtime for active Tier 2 plugins that declare server-side hooks.
+            // Plugins with an empty hooks list are UI-slot-only; their bundle.js is
+            // browser code and must not be evaluated in boa_engine.
             #[cfg(feature = "script_plugins")]
-            if plugin.tier == PluginTier::Script {
+            if plugin.tier == PluginTier::Script && Self::manifest_has_hooks(&plugin.manifest) {
                 match self.init_script_runtime(plugin) {
                     Ok(rt) => {
                         self.script_runtimes.insert(plugin.id, Arc::new(rt));
@@ -110,6 +117,19 @@ impl PluginRegistry {
     }
 
     // ─── Script runtime helpers ───────────────────────────────────────────────────
+
+    /// Returns true only when the manifest declares at least one server-side hook.
+    /// Plugins whose `capabilities.hooks` is absent or empty are UI-slot-only and
+    /// must not be executed in boa_engine — their bundle.js is browser-only code.
+    #[cfg(feature = "script_plugins")]
+    fn manifest_has_hooks(manifest: &serde_json::Value) -> bool {
+        manifest
+            .get("capabilities")
+            .and_then(|c| c.get("hooks"))
+            .and_then(|h| h.as_array())
+            .map(|arr| !arr.is_empty())
+            .unwrap_or(false)
+    }
 
     #[cfg(feature = "script_plugins")]
     fn init_script_runtime(
@@ -133,29 +153,30 @@ impl PluginRegistry {
     }
 }
 
-// ─── PluginRuntime implementation ─────────────────────────────────────────────
+// ─── PluginHookRuntime implementation ────────────────────────────────────────
 
 #[async_trait]
-impl PluginRuntime for PluginRegistry {
+impl PluginHookRuntime for PluginRegistry {
     async fn dispatch_before_hook(
         &self,
         hook: &str,
         ctx: &HookContext,
     ) -> Result<HookDecision, AppError> {
-        // Snapshot entries without holding the lock across await points
-        let entries: Vec<(Uuid, String, PluginTier, Arc<CircuitBreaker>)> = {
+        // Snapshot entries without holding the lock across await points.
+        // hook_id is stored in HookEntry to avoid a DB query per hook execution.
+        let entries: Vec<(Uuid, Uuid, String, PluginTier, Arc<CircuitBreaker>)> = {
             let table = self.dispatch_table.lock().unwrap();
             table
                 .get(hook)
                 .map(|v| {
                     v.iter()
-                        .map(|e| (e.plugin_id, e.plugin_slug.clone(), e.tier.clone(), e.circuit_breaker.clone()))
+                        .map(|e| (e.plugin_id, e.hook_id, e.plugin_slug.clone(), e.tier.clone(), e.circuit_breaker.clone()))
                         .collect()
                 })
                 .unwrap_or_default()
         };
 
-        for (plugin_id, plugin_slug, tier, cb) in entries {
+        for (plugin_id, hook_id, plugin_slug, tier, cb) in entries {
             if cb.is_open() {
                 tracing::warn!(plugin = %plugin_slug, hook, "Circuit open — skipping");
                 continue;
@@ -187,15 +208,12 @@ impl PluginRuntime for PluginRegistry {
                                 Ok(decision) => {
                                     cb.record_success();
 
-                                    // Update rolling average latency (fire-and-forget)
+                                    // Update rolling average latency (fire-and-forget).
+                                    // hook_id comes from the dispatch table snapshot — no DB query needed.
                                     let repo = self.plugin_repo.clone();
-                                    let hooks = self.plugin_repo.hooks_for_plugin(plugin_id).await.unwrap_or_default();
-                                    if let Some(hook_row) = hooks.iter().find(|h| h.hook_name == hook) {
-                                        let hook_id = hook_row.id;
-                                        tokio::spawn(async move {
-                                            let _ = repo.update_hook_avg_ms(hook_id, elapsed_ms).await;
-                                        });
-                                    }
+                                    tokio::spawn(async move {
+                                        let _ = repo.update_hook_avg_ms(hook_id, elapsed_ms).await;
+                                    });
 
                                     if let HookDecision::Deny { .. } = &decision {
                                         return Ok(decision);
@@ -281,6 +299,12 @@ impl PluginRuntime for PluginRegistry {
         }
     }
 
+}
+
+// ─── PluginUiRuntime implementation ──────────────────────────────────────────
+
+#[async_trait]
+impl PluginUiRuntime for PluginRegistry {
     async fn active_ui_slots(&self) -> Vec<UiSlotEntry> {
         match self.plugin_repo.active_ui_slots().await {
             Ok(slots) => slots
@@ -300,7 +324,12 @@ impl PluginRuntime for PluginRegistry {
             }
         }
     }
+}
 
+// ─── PluginLifecycle implementation ──────────────────────────────────────────
+
+#[async_trait]
+impl PluginLifecycle for PluginRegistry {
     async fn reload_plugin(&self, plugin_id: Uuid) {
         // Step 1: Fetch all needed data from DB before acquiring any lock
         let plugin = match self.plugin_repo.find_by_id(plugin_id).await {
@@ -331,6 +360,7 @@ impl PluginRuntime for PluginRegistry {
             for hook in new_hooks.iter().filter(|h| h.is_active) {
                 table.entry(hook.hook_name.clone()).or_default().push(HookEntry {
                     plugin_id: plugin.id,
+                    hook_id: hook.id,
                     plugin_slug: plugin.slug.clone(),
                     tier: plugin.tier.clone(),
                     // Circuit always resets on reload — circuit_open in DB is admin-visibility only.
@@ -349,7 +379,10 @@ impl PluginRuntime for PluginRegistry {
             // Always remove the old runtime first (Drop sends Shutdown)
             self.script_runtimes.remove(&plugin_id);
 
-            if plugin.status == PluginStatus::Active && plugin.tier == PluginTier::Script {
+            if plugin.status == PluginStatus::Active
+                && plugin.tier == PluginTier::Script
+                && Self::manifest_has_hooks(&plugin.manifest)
+            {
                 match self.init_script_runtime(&plugin) {
                     Ok(rt) => {
                         self.script_runtimes.insert(plugin_id, Arc::new(rt));

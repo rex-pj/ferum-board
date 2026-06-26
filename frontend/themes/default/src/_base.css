@@ -1,0 +1,21 @@
+/* ── Base typography ──────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: 2px;
+}
+
+:target {
+  scroll-margin-top: calc(var(--fr-topbar-height) + 0.5rem);
+}

@@ -13,6 +13,9 @@ pub struct JobExecutor {
     pub storage: Arc<dyn StorageService>,
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub webhooks: Arc<dyn WebhookRepository>,
+    // Shared across all webhook dispatches — reuses the internal connection pool
+    // and avoids allocating a new pool on every call.
+    http_client: reqwest::Client,
 }
 
 impl JobExecutor {
@@ -23,12 +26,17 @@ impl JobExecutor {
         stored_files: Arc<dyn StoredFileRepository>,
         webhooks: Arc<dyn WebhookRepository>,
     ) -> Self {
+        let http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .expect("failed to build HTTP client for job executor");
         Self {
             email,
             app_url,
             storage,
             stored_files,
             webhooks,
+            http_client,
         }
     }
 
@@ -70,7 +78,7 @@ impl JobExecutor {
                 event_type,
                 payload,
             } => {
-                dispatch_webhook(webhook_id, url, secret, event_type, payload, &self.webhooks).await
+                dispatch_webhook(webhook_id, url, secret, event_type, payload, &self.webhooks, &self.http_client).await
             }
         }
     }
@@ -93,6 +101,7 @@ impl JobExecutor {
     }
 }
 
+#[tracing::instrument(skip(secret, payload, webhooks, client), fields(%webhook_id, %event_type, %url))]
 async fn dispatch_webhook(
     webhook_id: uuid::Uuid,
     url: String,
@@ -100,13 +109,9 @@ async fn dispatch_webhook(
     event_type: String,
     payload: serde_json::Value,
     webhooks: &Arc<dyn WebhookRepository>,
+    client: &reqwest::Client,
 ) -> Result<(), AppError> {
     let body = serde_json::to_string(&payload).map_err(|e| AppError::internal(e.to_string()))?;
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| AppError::internal(e.to_string()))?;
 
     let mut req = client
         .post(&url)

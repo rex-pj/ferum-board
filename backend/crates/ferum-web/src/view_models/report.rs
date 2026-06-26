@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 use ferum_domain::models::report::Report;
 
@@ -10,6 +11,7 @@ pub struct ReportListQuery {
     pub per_page: Option<u64>,
     pub status: Option<String>,
     pub target_type: Option<String>,
+    pub q: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -20,26 +22,31 @@ pub struct AuditLogQuery {
     pub target_type: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct CreateReportRequest {
     pub post_id: Option<Uuid>,
     pub thread_id: Option<Uuid>,
+    #[validate(length(min = 1, max = 2000))]
     pub reason: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct ResolveReportRequest {
+    #[validate(custom(function = "crate::view_models::validators::valid_report_status"))]
     pub status: String,
+    #[validate(length(max = 2000, message = "Moderator notes must be at most 2000 characters"))]
     pub moderator_notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct WarnUserRequest {
+    #[validate(length(min = 1, max = 1000))]
     pub reason: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct TempBanRequest {
+    #[validate(length(min = 1, max = 1000))]
     pub reason: String,
     pub until: DateTime<Utc>,
 }

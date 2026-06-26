@@ -1,10 +1,10 @@
-#![allow(dead_code)]
 
 use std::collections::HashMap;
 
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::prelude::*;
+use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query};
 use sea_orm::*;
 use uuid::Uuid;
 
@@ -43,7 +43,6 @@ fn entity_to_kind(k: &reactions::ReactionKind) -> ReactionKind {
 
 fn entity_to_domain(m: reactions::Model) -> Reaction {
     Reaction {
-        id: m.id,
         post_id: m.post_id,
         user_id: m.user_id,
         kind: entity_to_kind(&m.kind),
@@ -75,10 +74,24 @@ impl ReactionRepository for PgReactionRepository {
             count: i64,
         }
 
-        let rows = KindCount::find_by_statement(sea_orm::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Postgres,
-            "SELECT kind::TEXT, COUNT(*)::BIGINT AS count FROM reactions WHERE post_id = $1 GROUP BY kind",
-            vec![post_id.into()],
+        let (sql, values) = Query::select()
+            .expr_as(
+                Expr::col(reactions::Column::Kind).cast_as(Alias::new("text")),
+                Alias::new("kind"),
+            )
+            .expr_as(
+                Expr::cust("COUNT(*)::BIGINT"),
+                Alias::new("count"),
+            )
+            .from(reactions::Entity)
+            .and_where(Expr::col(reactions::Column::PostId).eq(post_id))
+            .group_by_col(reactions::Column::Kind)
+            .build(PostgresQueryBuilder);
+
+        let rows = KindCount::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
         ))
         .all(&self.db)
         .await?;
@@ -109,16 +122,29 @@ impl ReactionRepository for PgReactionRepository {
             count: i64,
         }
 
-        let placeholders: Vec<String> = (1..=post_ids.len()).map(|i| format!("${i}")).collect();
-        let in_clause = placeholders.join(", ");
-        let sql = format!(
-            "SELECT post_id, kind::TEXT AS kind, COUNT(*)::BIGINT AS count \
-             FROM reactions WHERE post_id IN ({in_clause}) GROUP BY post_id, kind"
-        );
-        let values: Vec<sea_orm::Value> = post_ids.iter().map(|id| (*id).into()).collect();
-        let stmt =
-            sea_orm::Statement::from_sql_and_values(sea_orm::DbBackend::Postgres, &sql, values);
-        let rows = PostKindCount::find_by_statement(stmt).all(&self.db).await?;
+        let (sql, values) = Query::select()
+            .column(reactions::Column::PostId)
+            .expr_as(
+                Expr::col(reactions::Column::Kind).cast_as(Alias::new("text")),
+                Alias::new("kind"),
+            )
+            .expr_as(
+                Expr::cust("COUNT(*)::BIGINT"),
+                Alias::new("count"),
+            )
+            .from(reactions::Entity)
+            .and_where(Expr::col(reactions::Column::PostId).is_in(post_ids.to_vec()))
+            .group_by_col(reactions::Column::PostId)
+            .group_by_col(reactions::Column::Kind)
+            .build(PostgresQueryBuilder);
+
+        let rows = PostKindCount::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
+        .all(&self.db)
+        .await?;
 
         let mut result: HashMap<Uuid, Vec<(ReactionKind, u64)>> = HashMap::new();
         for row in rows {
@@ -163,7 +189,6 @@ impl ReactionRepository for PgReactionRepository {
         kind: ReactionKind,
     ) -> Result<Reaction, AppError> {
         let model = reactions::ActiveModel {
-            id: Set(Uuid::new_v4()),
             post_id: Set(post_id),
             user_id: Set(user_id),
             kind: Set(kind_to_entity(&kind)),

@@ -11,8 +11,12 @@ use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 pub struct CreateCategoryRequest {
     #[validate(length(min = 1, max = 80))]
     pub name: String,
-    #[validate(length(min = 1, max = 80))]
+    #[validate(
+        length(min = 1, max = 80),
+        custom(function = "crate::view_models::validators::slug_format")
+    )]
     pub slug: String,
+    #[validate(length(max = 500, message = "Description must be at most 500 characters"))]
     pub description: Option<String>,
     pub parent_id: Option<Uuid>,
     #[serde(default)]
@@ -21,6 +25,7 @@ pub struct CreateCategoryRequest {
     pub view_policy: String,
     #[serde(default = "default_post_policy")]
     pub post_policy: String,
+    #[validate(custom(function = "crate::view_models::validators::hex_color"))]
     pub color: Option<String>,
 }
 
@@ -28,8 +33,12 @@ pub struct CreateCategoryRequest {
 pub struct UpdateCategoryRequest {
     #[validate(length(min = 1, max = 80))]
     pub name: Option<String>,
-    #[validate(length(min = 1, max = 80))]
+    #[validate(
+        length(min = 1, max = 80),
+        custom(function = "crate::view_models::validators::slug_format")
+    )]
     pub slug: Option<String>,
+    // Option<Option<String>> — validated manually in handler (validator derive doesn't handle double-Option)
     pub description: Option<Option<String>>,
     pub parent_id: Option<Option<Uuid>>,
     pub position: Option<i32>,
@@ -110,27 +119,3 @@ impl From<Category> for CategoryResponse {
     }
 }
 
-// ─── Forum index responses ─────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-pub struct SubcategoryIndexResponse {
-    pub id: Uuid,
-    pub slug: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub color: Option<String>,
-    pub thread_count: u64,
-}
-
-#[derive(Serialize)]
-pub struct ForumIndexGroupResponse {
-    pub id: Uuid,
-    pub slug: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub color: Option<String>,
-    pub position: i32,
-    pub thread_count: u64,
-    pub subcategories: Vec<SubcategoryIndexResponse>,
-    pub recent_threads: Vec<crate::view_models::thread::ThreadResponse>,
-}

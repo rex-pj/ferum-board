@@ -34,6 +34,8 @@ pub struct UserRoleAssignment {
     pub user_id: Uuid,
     pub role_id: Uuid,
     pub role_slug: String,
+    pub role_name: String,
+    pub role_color: Option<String>,
     pub category_id: Option<Uuid>,
     pub granted_by: Option<Uuid>,
     pub expires_at: Option<DateTime<Utc>>,

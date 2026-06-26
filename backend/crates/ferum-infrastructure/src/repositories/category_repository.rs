@@ -1,8 +1,9 @@
 use async_trait::async_trait;
+use sea_orm::sea_query::{Alias, CaseStatement, Expr, Func, JoinType, PostgresQueryBuilder, Query};
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::categories;
+use crate::entities::{categories, threads};
 use ferum_application::shared::AppError;
 use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 use ferum_domain::repositories::category_repository::{
@@ -159,6 +160,14 @@ impl CategoryRepository for PgCategoryRepository {
         Ok(())
     }
 
+    async fn has_children(&self, id: Uuid) -> Result<bool, AppError> {
+        let count = categories::Entity::find()
+            .filter(categories::Column::ParentId.eq(id))
+            .count(&self.db)
+            .await?;
+        Ok(count > 0)
+    }
+
     async fn count_threads_by_categories(
         &self,
         ids: &[Uuid],
@@ -167,20 +176,44 @@ impl CategoryRepository for PgCategoryRepository {
             return Ok(vec![]);
         }
 
-        let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${i}")).collect();
-        let in_clause = placeholders.join(", ");
+        let (sql, values) = Query::select()
+            .column((categories::Entity, categories::Column::Id))
+            .expr_as(
+                Func::coalesce([
+                    Func::sum(
+                        CaseStatement::new()
+                            .case(
+                                Expr::col((threads::Entity, threads::Column::DeletedAt)).is_null(),
+                                1i32,
+                            )
+                            .finally(0i32),
+                    )
+                    .into(),
+                    Expr::val(0i64).into(),
+                ]),
+                Alias::new("thread_count"),
+            )
+            .from(categories::Entity)
+            .join(
+                JoinType::LeftJoin,
+                threads::Entity,
+                Expr::col((threads::Entity, threads::Column::CategoryId))
+                    .equals((categories::Entity, categories::Column::Id)),
+            )
+            .and_where(
+                Expr::col((categories::Entity, categories::Column::Id))
+                    .is_in(ids.to_vec()),
+            )
+            .group_by_col((categories::Entity, categories::Column::Id))
+            .build(PostgresQueryBuilder);
 
-        let sql = format!(
-            "SELECT c.id, COUNT(t.id) FILTER (WHERE t.deleted_at IS NULL) AS thread_count
-             FROM categories c
-             LEFT JOIN threads t ON t.category_id = c.id
-             WHERE c.id IN ({in_clause})
-             GROUP BY c.id"
-        );
-
-        let values: Vec<Value> = ids.iter().map(|id| (*id).into()).collect();
-        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, values);
-        let rows = CategoryCount::find_by_statement(stmt).all(&self.db).await?;
+        let rows = CategoryCount::find_by_statement(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
+        .all(&self.db)
+        .await?;
         Ok(rows
             .into_iter()
             .map(|r| (r.id, r.thread_count as u64))

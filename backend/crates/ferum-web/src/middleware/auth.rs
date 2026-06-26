@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 
 use std::time::Duration;
 
@@ -14,11 +13,21 @@ use crate::app_state::AppState;
 /// Cache TTL for user role assignments (per-user, stored as JSON in Redis).
 const USER_ROLES_CACHE_TTL: Duration = Duration::from_secs(300); // 5 min
 
+#[tracing::instrument(skip_all, fields(method = %req.method(), path = %req.uri().path()))]
 pub async fn auth_middleware(
     State(state): State<AppState>,
     mut req: Request,
     next: Next,
 ) -> Response {
+    // Static theme/widget assets never need AuthUser. Skip the Redis/DB permission
+    // lookup on every asset request. /files/ intentionally runs through auth so the
+    // serve handler receives Option<AuthUser> and can enforce per-file access control.
+    let path = req.uri().path();
+    if path.starts_with("/static/") || path.starts_with("/themes/") {
+        req.extensions_mut().insert(Option::<AuthUser>::None);
+        return next.run(req).await;
+    }
+
     let token = extract_bearer(&req).or_else(|| extract_cookie(&req));
 
     if let Some(token) = token {
@@ -52,12 +61,19 @@ pub async fn auth_middleware(
             let user = AuthUser {
                 id: claims.sub,
                 username: claims.username,
+                display_name: claims.display_name,
+                avatar_url: claims.avatar_url,
                 trust_level,
                 is_banned,
                 banned_until,
                 permissions,
                 category_permissions,
             };
+            // Enrich the active request span with auth context so every log line
+            // emitted within this request automatically carries user_id and username.
+            let span = tracing::Span::current();
+            span.record("user_id", user.id.to_string());
+            span.record("username", user.username.as_str());
             req.extensions_mut().insert(Some(user));
         } else {
             req.extensions_mut().insert(Option::<AuthUser>::None);
@@ -71,6 +87,12 @@ pub async fn auth_middleware(
 
 /// Resolve effective permissions for a user. Attempts Redis cache first;
 /// falls back to DB query + RolePermissionCache on miss.
+///
+/// OCP: instrumentation is expressed via `#[tracing::instrument]` — the span and its
+/// fields are observable by any subscriber without changing this function's body.
+/// DIP: the `cache_hit` field is recorded into the abstract `tracing::Span`, not
+/// into any concrete logger.
+#[tracing::instrument(skip(state), fields(cache_hit = tracing::field::Empty))]
 async fn resolve_permissions(
     state: &AppState,
     user_id: uuid::Uuid,
@@ -83,12 +105,13 @@ async fn resolve_permissions(
     // Try cache first
     if let Some(cached) = state.cache.get(&cache_key).await {
         if let Ok(assignments) = serde_json::from_str::<Vec<ferum_domain::models::role::UserRoleAssignment>>(&cached) {
+            tracing::Span::current().record("cache_hit", true);
             let global = state
-                .role_permission_cache
+                .permission_resolver
                 .resolve_global(&assignments)
                 .await;
             let category = state
-                .role_permission_cache
+                .permission_resolver
                 .resolve_category(&assignments)
                 .await;
             return (global, category);
@@ -96,6 +119,7 @@ async fn resolve_permissions(
     }
 
     // Cache miss — fetch from DB
+    tracing::Span::current().record("cache_hit", false);
     let assignments = state
         .user_role_repo
         .list_for_user(user_id)
@@ -111,11 +135,11 @@ async fn resolve_permissions(
     }
 
     let global = state
-        .role_permission_cache
+        .permission_resolver
         .resolve_global(&assignments)
         .await;
     let category = state
-        .role_permission_cache
+        .permission_resolver
         .resolve_category(&assignments)
         .await;
 

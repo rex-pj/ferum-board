@@ -1,0 +1,141 @@
+{% extends "admin/base.html" %}
+{% import "default/templates/macros.html" as m %}
+{% block title %}Users | Admin{% endblock %}
+{% block page_title %}Users{% endblock %}
+{% block nav_users %}active fw-semibold{% endblock %}
+
+{% block content %}
+
+{# ── Users table ────────────────────────────────────────────────── #}
+<div class="card">
+  {{ m::search_form_header(action="/admin/users", query=search_query, placeholder="Search username or email…") }}
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-active">
+        <tr>
+          <th>
+            {% if sort_by == "username" %}
+              <a href="?q={{ search_query }}&sort_by=username&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
+                User <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+              </a>
+            {% else %}
+              <a href="?q={{ search_query }}&sort_by=username&sort_dir=asc" class="text-body text-decoration-none">
+                User <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+              </a>
+            {% endif %}
+          </th>
+          <th>Email</th>
+          <th>
+            {% if sort_by == "trust_level" %}
+              <a href="?q={{ search_query }}&sort_by=trust_level&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
+                Trust <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+              </a>
+            {% else %}
+              <a href="?q={{ search_query }}&sort_by=trust_level&sort_dir=desc" class="text-body text-decoration-none">
+                Trust <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+              </a>
+            {% endif %}
+          </th>
+          <th>Roles</th>
+          <th>
+            {% if sort_by == "post_count" %}
+              <a href="?q={{ search_query }}&sort_by=post_count&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
+                Posts <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+              </a>
+            {% else %}
+              <a href="?q={{ search_query }}&sort_by=post_count&sort_dir=desc" class="text-body text-decoration-none">
+                Posts <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+              </a>
+            {% endif %}
+          </th>
+          <th>
+            {% if sort_by == "created_at" or sort_by == "" %}
+              <a href="?q={{ search_query }}&sort_by=created_at&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
+                Joined <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+              </a>
+            {% else %}
+              <a href="?q={{ search_query }}&sort_by=created_at&sort_dir=desc" class="text-body text-decoration-none">
+                Joined <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+              </a>
+            {% endif %}
+          </th>
+          <th>
+            {% if sort_by == "is_banned" %}
+              <a href="?q={{ search_query }}&sort_by=is_banned&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
+                Status <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+              </a>
+            {% else %}
+              <a href="?q={{ search_query }}&sort_by=is_banned&sort_dir=desc" class="text-body text-decoration-none">
+                Status <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+              </a>
+            {% endif %}
+          </th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              {{ m::avatar(url=user.avatar_url, name=user.display_name, size=32) }}
+              <div>
+                <div class="fw-semibold">{{ user.display_name }}</div>
+                <div class="text-muted small">@{{ user.username }}</div>
+              </div>
+            </div>
+          </td>
+          <td class="text-muted small align-middle">{{ user.email }}</td>
+          <td class="align-middle">
+            {% if user.trust_level == "leader" %}
+              <span class="badge bg-warning text-dark">{{ user.trust_level }}</span>
+            {% elif user.trust_level == "regular" %}
+              <span class="badge bg-info text-dark">{{ user.trust_level }}</span>
+            {% elif user.trust_level == "member" %}
+              <span class="badge bg-success">{{ user.trust_level }}</span>
+            {% elif user.trust_level == "basic" %}
+              <span class="badge bg-primary">{{ user.trust_level }}</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ user.trust_level }}</span>
+            {% endif %}
+          </td>
+          <td class="align-middle">
+            {% for role in user.roles %}
+              <span class="badge" style="background-color:{{ role.color | default(value="#6c757d") }}">
+                {{ role.name }}
+              </span>
+            {% endfor %}
+          </td>
+          <td class="text-muted small align-middle text-nowrap">
+            <time data-rel datetime="{{ user.created_at }}">{{ user.created_at | date(format="%b %d, %Y") }}</time>
+          </td>
+          <td class="align-middle">
+            {% if user.is_banned %}
+              <span class="badge bg-danger">Banned</span>
+            {% else %}
+              <span class="badge bg-success">Active</span>
+            {% endif %}
+          </td>
+          <td class="align-middle">
+            <a href="/admin/users/{{ user.id }}" class="btn btn-sm btn-outline-secondary">
+              <i class="fa-solid fa-pen"></i>
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-5">
+            <i class="fa-solid fa-users fa-2x d-block mb-2 opacity-25"></i>
+            {% if search_query %}No users match "{{ search_query }}".{% else %}No users found.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Footer: count + pagination ─────────────────────────────── #}
+  {{ m::card_footer_pagination(pagination=pagination, base_url="/admin/users", noun="user", extra_params="&q=" ~ search_query ~ "&sort_by=" ~ sort_by ~ "&sort_dir=" ~ sort_dir) }}
+</div>
+
+{% endblock %}

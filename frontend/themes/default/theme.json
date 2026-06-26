@@ -1,0 +1,8 @@
+{
+  "slug": "default",
+  "name": "Default",
+  "author": "Ferum Board",
+  "version": "1.0.0",
+  "description": "Built-in default theme using Bootstrap 5",
+  "parent": "default"
+}

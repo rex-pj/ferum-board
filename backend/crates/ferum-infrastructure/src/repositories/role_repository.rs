@@ -43,6 +43,16 @@ impl RoleRepository for PgRoleRepository {
         Ok(rows.into_iter().map(to_domain).collect())
     }
 
+    async fn list_default(&self) -> Result<Vec<Role>, AppError> {
+        let rows = roles::Entity::find()
+            .filter(roles::Column::IsDefault.eq(true))
+            .order_by_asc(roles::Column::Position)
+            .all(&self.db)
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
+        Ok(rows.into_iter().map(to_domain).collect())
+    }
+
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Role>, AppError> {
         let row = roles::Entity::find_by_id(id)
             .one(&self.db)

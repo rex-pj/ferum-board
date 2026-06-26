@@ -1,0 +1,516 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}{{ thread.title }} — {{ site.name }}{% endblock %}
+{% block description %}{{ thread.title }} by {{ thread.author_display_name }}{% endblock %}
+
+{# Cap the reading column for comfortable line length (see theme.css) #}
+{% block page_inner_class %}fr-page-inner--reading{% endblock %}
+
+{% block content %}
+
+{# Page-level constants for ferum-page-thread.js #}
+<div id="ferum-page-data"
+     data-thread-id="{{ thread.id }}"
+     data-page-offset="{{ (pagination.page - 1) * pagination.per_page }}"
+     {% if current_user %}
+     data-current-user-id="{{ current_user.id }}"
+     data-current-user-username="{{ current_user.username | escape }}"
+     data-current-user-display="{{ current_user.display_name | default(value=current_user.username) | escape }}"
+     data-current-user-avatar="{{ current_user.avatar_url | default(value='') }}"
+     {% endif %}
+     hidden></div>
+
+{# ── Breadcrumb ─────────────────────────────────────────────────────── #}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/forum">Forum</a></li>
+    <li class="breadcrumb-item"><a href="/forum/{{ thread.category_slug }}">{{ thread.category_name }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ thread.title | truncate(length=50) }}</li>
+  </ol>
+</nav>
+
+{# ── Thread hero ─────────────────────────────────────────────────────── #}
+{% if thread.thumbnail_url %}
+<div class="fr-thread-hero mb-3">
+  <img src="{{ thread.thumbnail_url }}" alt="" class="fr-thread-hero-img">
+  <div class="fr-thread-hero-overlay">
+    <div class="fr-thread-hero-body">
+      <div class="d-flex flex-wrap gap-1 mb-2">
+        {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked) }}
+      </div>
+      <h1 class="h3 fw-bold text-white mb-1 lh-sm">{{ thread.title }}</h1>
+      <div class="d-flex align-items-center gap-2 mt-1">
+        {{ m::avatar(url=thread.author_avatar_url, name=thread.author_display_name, size=22) }}
+        <a href="/u/{{ thread.author_username }}" class="small text-white text-decoration-none fw-medium opacity-90">{{ thread.author_display_name }}</a>
+        <span class="text-white-50 small">·</span>
+        <time class="small text-white-50 fr-notif-time" data-rel datetime="{{ thread.created_at }}">
+          {{ thread.created_at | date(format="%b %d, %Y") }}
+        </time>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+{# ── Thread header (no thumbnail) ─────────────────────────────────── #}
+<div class="mb-3">
+  <div class="d-flex flex-wrap gap-1 mb-1">
+    {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked) }}
+  </div>
+  <h1 class="h4 fw-bold mb-1 lh-sm">{{ thread.title }}</h1>
+  <div class="d-flex align-items-center gap-2 mt-1">
+    {{ m::avatar(url=thread.author_avatar_url, name=thread.author_display_name, size=22) }}
+    <a href="/u/{{ thread.author_username }}" class="small text-body text-decoration-none fw-medium">{{ thread.author_display_name }}</a>
+    <span class="text-muted small">·</span>
+    <time class="small text-muted fr-notif-time" data-rel datetime="{{ thread.created_at }}">
+      {{ thread.created_at | date(format="%b %d, %Y") }}
+    </time>
+  </div>
+</div>
+{% endif %}
+
+{# ── Thread meta bar ─────────────────────────────────────────────────── #}
+<div class="mb-3 pb-2 border-bottom d-flex align-items-center justify-content-between gap-2 flex-wrap">
+
+  {# Left: stats + tags #}
+  <div class="d-flex align-items-center flex-wrap gap-2" style="font-size:.8125rem;color:var(--bs-secondary-color)">
+    <span title="{{ thread.reply_count }} replies">
+      <i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i><span id="fr-reply-count">{{ thread.reply_count }}</span>
+    </span>
+    <span title="{{ thread.view_count }} views">
+      <i class="fa-regular fa-eye fa-xs me-1" aria-hidden="true"></i>{{ thread.view_count }}
+    </span>
+    {% if thread.tags %}
+      <span aria-hidden="true">·</span>
+      <div class="d-flex flex-wrap gap-1">
+        {{ m::tag_list(tags=thread.tags, max=5) }}
+      </div>
+    {% endif %}
+  </div>
+
+  {# Right: action buttons #}
+  <div class="d-flex gap-1 flex-wrap align-items-center flex-shrink-0">
+      {% if current_user and not thread.is_locked %}
+        <a href="#reply" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-reply me-1"></i>Reply
+        </a>
+      {% endif %}
+      {% if current_user and (current_user.username == thread.author_username or current_user.is_admin) %}
+        <a href="/edit-thread/{{ thread.slug }}" class="btn btn-outline-secondary btn-sm">
+          <i class="fa-solid fa-pen me-1"></i>Edit
+        </a>
+      {% endif %}
+      {% if current_user and current_user.is_admin %}
+        <button type="button" class="btn btn-outline-danger btn-sm"
+                data-action="delete-thread" data-thread-id="{{ thread.id }}" data-category-slug="{{ thread.category_slug }}">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      {% endif %}
+      {% if current_user and current_user.is_moderator %}
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-label="Moderator actions">
+            <i class="fa-solid fa-shield-halved"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <button type="button" class="dropdown-item"
+                      data-action="mod-thread" data-mod-action="pin" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_pinned }}">
+                {% if thread.is_pinned %}
+                  <i class="fa-solid fa-thumbtack-slash me-2"></i>Unpin
+                {% else %}
+                  <i class="fa-solid fa-thumbtack me-2"></i>Pin
+                {% endif %}
+              </button>
+            </li>
+            <li>
+              <button type="button" class="dropdown-item"
+                      data-action="mod-thread" data-mod-action="lock" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_locked }}">
+                {% if thread.is_locked %}
+                  <i class="fa-solid fa-lock-open me-2"></i>Unlock
+                {% else %}
+                  <i class="fa-solid fa-lock me-2"></i>Lock
+                {% endif %}
+              </button>
+            </li>
+            {% if move_categories %}
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <button type="button" class="dropdown-item"
+                        data-bs-toggle="modal" data-bs-target="#moveThreadModal">
+                  <i class="fa-solid fa-arrow-right-arrow-left me-2"></i>Move thread
+                </button>
+              </li>
+            {% endif %}
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <button type="button" class="dropdown-item text-danger"
+                      data-action="delete-thread" data-thread-id="{{ thread.id }}" data-category-slug="{{ thread.category_slug }}">
+                <i class="fa-solid fa-trash me-2"></i>Delete thread
+              </button>
+            </li>
+          </ul>
+        </div>
+      {% endif %}
+  </div>
+</div>
+
+{# ── Posts ───────────────────────────────────────────────────────────── #}
+{% for post in thread.posts %}
+  {% set post_number = (pagination.page - 1) * pagination.per_page + loop.index %}
+  <div class="card mb-3 {% if post.is_best_answer %}fr-post-best-answer{% endif %} {% if loop.first and pagination.page == 1 %}fr-post-op{% endif %}"
+       id="post-{{ post.id }}">
+
+    {# Best answer banner #}
+    {% if post.is_best_answer %}
+      <div class="card-header small py-1 fr-best-answer-header">
+        <i class="fa-solid fa-circle-check me-1"></i>Best Answer
+      </div>
+    {% endif %}
+
+    <div class="card-body">
+      {# ── Post header ── #}
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div class="d-flex align-items-center gap-2">
+          {{ m::avatar(url=post.author_avatar_url, name=post.author_display_name, size=38) }}
+          <div>
+            <div class="d-flex align-items-center gap-1 flex-wrap">
+              <a href="/u/{{ post.author_username }}" class="fw-semibold text-body text-decoration-none">
+                {{ post.author_display_name }}
+              </a>
+              {% if post.author_trust_level and post.author_trust_level != "" %}
+                <span class="badge fr-trust-badge">{{ post.author_trust_level | capitalize }}</span>
+              {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <time class="small text-muted fr-notif-time" data-rel datetime="{{ post.created_at }}">
+                {{ post.created_at | date(format="%b %d, %Y") }}
+              </time>
+              {% if post.edited_at %}
+                <span class="small text-muted">
+                  · <i class="fa-solid fa-pen fa-xs me-1 opacity-50"></i>edited
+                </span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+          <a href="#post-{{ post.id }}" class="small text-muted text-decoration-none fr-post-num">
+            #{{ post_number }}
+          </a>
+          {% if current_user %}
+            <div class="dropdown">
+              <button class="fr-icon-btn" type="button"
+                      data-bs-toggle="dropdown" aria-label="Post actions">
+                <i class="fa-solid fa-ellipsis"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                {% if current_user.username == post.author_username %}
+                  <li>
+                    <button type="button" class="dropdown-item" data-action="edit-post" data-post-id="{{ post.id }}">
+                      <i class="fa-solid fa-pen me-2"></i>Edit
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" class="dropdown-item text-danger" data-action="delete-post" data-post-id="{{ post.id }}">
+                      <i class="fa-solid fa-trash me-2"></i>Delete
+                    </button>
+                  </li>
+                {% elif current_user.is_moderator %}
+                  <li>
+                    <button type="button" class="dropdown-item text-danger" data-action="delete-post" data-post-id="{{ post.id }}">
+                      <i class="fa-solid fa-trash me-2"></i>Delete post
+                    </button>
+                  </li>
+                {% endif %}
+                {% if current_user.username != post.author_username %}
+                  <li>
+                    <button type="button" class="dropdown-item text-warning"
+                            data-bs-toggle="modal" data-bs-target="#reportModal"
+                            data-post-id="{{ post.id }}" data-author="{{ post.author_display_name | escape }}">
+                      <i class="fa-solid fa-flag me-2"></i>Report
+                    </button>
+                  </li>
+                {% endif %}
+                {% if not post.is_best_answer and not thread.is_solved %}
+                  {% if current_user.username == thread.author_username or current_user.is_admin %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <button type="button" class="dropdown-item text-success"
+                              data-action="best-answer" data-thread-id="{{ thread.id }}" data-post-id="{{ post.id }}">
+                        <i class="fa-solid fa-check-circle me-2"></i>Mark best answer
+                      </button>
+                    </li>
+                  {% endif %}
+                {% endif %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      {# ── Post content ── #}
+      <div id="post-content-{{ post.id }}" class="post-content">
+        {{ post.content_html | safe }}
+      </div>
+      <div id="post-edit-{{ post.id }}" class="d-none mt-2">
+        <ferum-post-composer
+          id="post-edit-composer-{{ post.id }}"
+          mode="edit"
+          thread-id="{{ thread.id }}"
+          initial-content="{{ post.content_md | escape }}">
+        </ferum-post-composer>
+        <div class="d-flex gap-2 mt-2">
+          <button type="button" class="btn btn-primary btn-sm" data-action="save-edit" data-post-id="{{ post.id }}">Save</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-action="cancel-edit" data-post-id="{{ post.id }}">Cancel</button>
+        </div>
+      </div>
+
+      {# ── Reactions ── #}
+      <div class="mt-3 pt-2 border-top">
+        <ferum-reaction-bar
+          post-id="{{ post.id }}"
+          reactions='{{ post.reactions | json_encode }}'
+          user-id="{{ current_user.id | default(value="") }}">
+        </ferum-reaction-bar>
+      </div>
+    </div>
+  </div>
+{% endfor %}
+
+{# ── Pagination — above reply box so it reads as "end of page X" ── #}
+<div class="mt-2 mb-4">
+  {% include "default/templates/partials/pagination.html" %}
+</div>
+
+{# ── Reply box ───────────────────────────────────────────────────────── #}
+{% if current_user and not thread.is_locked %}
+  <div id="reply" class="mt-4">
+    <div class="d-flex align-items-center gap-2 mb-3">
+      {{ m::avatar(url=current_user.avatar_url, name=current_user.display_name, size=32) }}
+      <span class="fw-semibold">Leave a reply</span>
+    </div>
+    <ferum-post-composer id="reply-composer" thread-id="{{ thread.id }}" mode="reply"></ferum-post-composer>
+    <div id="reply-feedback" class="d-none mt-2"></div>
+    <div class="d-flex gap-2 mt-3">
+      <button type="button" class="btn btn-primary px-4" id="reply-submit-btn" data-action="submit-reply">
+        <span id="reply-spinner" class="spinner-border spinner-border-sm me-1 d-none" role="status"></span>
+        <i class="fa-solid fa-paper-plane me-1"></i>Post Reply
+      </button>
+      <button class="btn btn-outline-secondary" type="button" data-action="cancel-reply">
+        Cancel
+      </button>
+    </div>
+  </div>
+{% elif thread.is_locked %}
+  <div class="alert alert-secondary mt-4 d-flex align-items-center gap-2">
+    <i class="fa-solid fa-lock fa-lg opacity-50"></i>
+    <span>This thread is locked and no longer accepts new replies.</span>
+  </div>
+{% else %}
+  <div class="alert alert-info mt-4 d-flex align-items-center gap-2">
+    <i class="fa-solid fa-right-to-bracket fa-lg opacity-50"></i>
+    <span><a href="/login?next=/forum/t/{{ thread.slug }}" class="fw-semibold">Sign in</a> to join the conversation.</span>
+  </div>
+{% endif %}
+
+{# ── Floating reply button (mobile, locked threads excluded) ─────────── #}
+{% if current_user and not thread.is_locked %}
+  <a href="#reply" class="fr-fab d-lg-none" aria-label="Reply">
+    <i class="fa-solid fa-reply"></i>
+  </a>
+{% endif %}
+
+{# ── Generic confirmation modal (replaces all window.confirm calls) ──────── #}
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-1">
+        <h5 class="modal-title fs-6 fw-semibold" id="confirmModalTitle">Confirm</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-1 small text-muted" id="confirmModalBody"></div>
+      <div class="modal-footer border-0 pt-1 gap-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm" id="confirmModalOk">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Report Modal ─────────────────────────────────────────────────────── #}
+<div class="modal fade" id="reportModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-flag me-2 text-warning"></i>Report Post</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Reporting post by <strong id="report-author-name"></strong>.
+        </p>
+        <input type="hidden" id="report-post-id">
+        <div class="mb-3">
+          <label for="report-reason" class="form-label">Reason <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="report-reason" rows="3" maxlength="500"
+                    placeholder="Describe why this post violates the rules…" required></textarea>
+          <div class="form-text">Max 500 characters.</div>
+        </div>
+        <div id="report-feedback" class="d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="report-submit-btn" data-action="submit-report">
+          <i id="report-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Submit Report
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Move Thread Modal ────────────────────────────────────────────────── #}
+{% if current_user and current_user.is_moderator and move_categories %}
+<div class="modal fade" id="moveThreadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-arrow-right-arrow-left me-2"></i>Move Thread</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Select the target category for this thread.</p>
+        <select class="form-select" id="move-category-id">
+          <option value="">Select a category…</option>
+          {% for cat in move_categories %}
+            <option value="{{ cat.id }}">{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+        <div id="move-feedback" class="d-none mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="move-submit-btn" data-action="move-thread" data-thread-id="{{ thread.id }}">
+          <i id="move-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Move
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{# ── Right sidebar ────────────────────────────────────────────────────── #}
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+
+  {# ── Thread Info ─────────────────────────────────────────── #}
+  <div class="fr-panel">
+    <div class="fr-panel-header">Thread Info</div>
+    <div class="fr-panel-body">
+
+      {# Author with avatar #}
+      <div class="d-flex align-items-center gap-2 mb-3">
+        {{ m::avatar(url=thread.author_avatar_url, name=thread.author_display_name, size=36) }}
+        <div class="min-w-0">
+          <div class="small text-muted lh-1 mb-1">Author</div>
+          <a href="/u/{{ thread.author_username }}"
+             class="fw-semibold text-body text-decoration-none small text-truncate d-block">
+            {{ thread.author_display_name }}
+          </a>
+        </div>
+      </div>
+
+      <div class="d-flex flex-column gap-2">
+        {# Posted date #}
+        <div class="d-flex align-items-center gap-2">
+          <i class="fa-regular fa-clock fa-xs text-muted fr-icon-col" aria-hidden="true"></i>
+          <span class="text-muted small">Posted</span>
+          <time class="small ms-auto fr-notif-time" data-rel datetime="{{ thread.created_at }}">
+            {{ thread.created_at | date(format="%b %d, %Y") }}
+          </time>
+        </div>
+
+        {# Category #}
+        <div class="d-flex align-items-center gap-2">
+          <i class="fa-solid fa-folder fa-xs text-muted fr-icon-col" aria-hidden="true"></i>
+          <span class="text-muted small">Category</span>
+          <a href="/forum/{{ thread.category_slug }}"
+             class="small ms-auto text-decoration-none fw-medium text-body text-truncate">
+            {{ thread.category_name }}
+          </a>
+        </div>
+
+        {# Tags #}
+        {% if thread.tags %}
+          <div class="d-flex align-items-start gap-2">
+            <i class="fa-solid fa-tag fa-xs text-muted mt-1 fr-icon-col" aria-hidden="true"></i>
+            <div class="d-flex flex-wrap gap-1">
+              {{ m::tag_list(tags=thread.tags, max=10) }}
+            </div>
+          </div>
+        {% endif %}
+
+        {# Status badges #}
+        {% if thread.is_pinned or thread.is_solved or thread.is_locked %}
+          <div class="d-flex flex-wrap gap-1 mt-1">
+            {% if thread.is_pinned %}
+              <span class="badge bg-primary"><i class="fa-solid fa-thumbtack me-1"></i>Pinned</span>
+            {% endif %}
+            {% if thread.is_solved %}
+              <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+            {% endif %}
+            {% if thread.is_locked %}
+              <span class="badge bg-warning text-dark"><i class="fa-solid fa-lock me-1"></i>Locked</span>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="fr-panel-stat">
+      <span><i class="fa-regular fa-eye me-1" aria-hidden="true"></i>Views</span>
+      <span class="fw-semibold">{{ thread.view_count }}</span>
+    </div>
+    <div class="fr-panel-stat">
+      <span><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>Replies</span>
+      <span class="fw-semibold">{{ thread.reply_count }}</span>
+    </div>
+  </div>
+
+  {# ── CTA ─────────────────────────────────────────────────── #}
+  {% if current_user %}
+    <div class="fr-panel">
+      <div class="fr-panel-header">Actions</div>
+      <div class="fr-panel-body d-grid gap-2">
+        {% if not thread.is_locked %}
+          <a href="#reply" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-reply me-1"></i>Reply to thread
+          </a>
+        {% endif %}
+        <ferum-bookmark-btn thread-id="{{ thread.id }}" user-id="{{ current_user.id }}" class="w-100">
+        </ferum-bookmark-btn>
+        <a href="/new-thread?category_id={{ thread.category_id }}" class="btn btn-outline-secondary btn-sm">
+          <i class="fa-solid fa-plus me-1"></i>New Thread
+        </a>
+      </div>
+    </div>
+  {% else %}
+    <div class="fr-panel">
+      <div class="fr-panel-header">Join the conversation</div>
+      <div class="fr-panel-body d-grid gap-2">
+        <a href="/register" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-user-plus me-1"></i>Create account
+        </a>
+        <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+      </div>
+    </div>
+  {% endif %}
+
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-page-thread.js" defer></script>
+{% endblock %}

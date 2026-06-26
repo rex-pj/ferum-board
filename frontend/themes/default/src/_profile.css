@@ -1,0 +1,41 @@
+/* ── Profile page ─────────────────────────────────────────────── */
+.fr-profile-cover {
+  height: 180px;
+  background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), 0.3) 0%, rgba(var(--bs-primary-rgb), 0.08) 100%);
+  border-radius: var(--bs-border-radius) var(--bs-border-radius) 0 0;
+  overflow: hidden;
+  position: relative;
+}
+.fr-profile-cover img { width: 100%; height: 100%; object-fit: cover; }
+
+.fr-profile-avatar-wrap {
+  display: inline-block;
+  margin-top: -48px;
+  position: relative;
+  z-index: 1;
+}
+.fr-profile-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 4px solid var(--bs-body-bg);
+  background: var(--bs-secondary-bg);
+  object-fit: cover;
+}
+.fr-profile-avatar-placeholder {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 4px solid var(--bs-body-bg);
+  background: var(--ferum-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ── Profile stat labels ──────────────────────────────────────── */
+.fr-stat-value { color: var(--ferum-primary); }
+.fr-stat-label { color: var(--bs-tertiary-color); font-size: 0.875rem; }

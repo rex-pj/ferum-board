@@ -1,8 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 use ferum_domain::models::webhook::Webhook;
+
 
 #[derive(Serialize)]
 pub struct WebhookResponse {
@@ -31,17 +33,21 @@ impl From<Webhook> for WebhookResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct CreateWebhookRequest {
+    #[validate(url, length(max = 2048))]
     pub url: String,
     pub events: Vec<String>,
+    #[validate(length(max = 512))]
     pub secret: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct UpdateWebhookRequest {
+    #[validate(length(max = 2048))]
     pub url: Option<String>,
     pub events: Option<Vec<String>>,
+    #[validate(length(max = 512))]
     pub secret: Option<String>,
     pub is_active: Option<bool>,
 }

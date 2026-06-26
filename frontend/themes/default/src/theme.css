@@ -1,0 +1,25 @@
+/* ================================================================
+   Ferum Board — Default Theme  (source entry)
+   Build:  npm run build  (in themes/default/)
+   Output: assets/theme.css  — served by Axum unchanged
+================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import "_tokens.css";
+@import "_preferences.css";
+@import "_base.css";
+@import "_bootstrap-overrides.css";
+@import "_navbar.css";
+@import "_thread-feed.css";
+@import "_post-content.css";
+@import "_notifications.css";
+@import "_mobile-nav.css";
+@import "_auth.css";
+@import "_sidebar.css";
+@import "_profile.css";
+@import "_admin.css";
+@import "_forum-index.css";
+@import "_avatar.css";
+@import "_utilities.css";
+@import "_transitions.css";

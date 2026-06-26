@@ -33,10 +33,13 @@ pub trait UserRoleRepository: Send + Sync {
         category_id: Option<Uuid>,
     ) -> Result<(), AppError>;
 
-    async fn is_assigned(
-        &self,
-        user_id: Uuid,
-        role_id: Uuid,
-        category_id: Option<Uuid>,
-    ) -> Result<bool, AppError>;
+    /// All active (non-expired) role assignments for a batch of users (one query, no N+1).
+    async fn list_for_users(&self, user_ids: &[Uuid]) -> Result<Vec<UserRoleAssignment>, AppError>;
+
+    /// Count of non-expired assignments per role (global + category-scoped, deduplicated per user).
+    async fn count_by_role(&self) -> Result<std::collections::HashMap<Uuid, u64>, AppError>;
+
+    /// Count of non-expired GLOBAL (category_id IS NULL) assignments per role, deduplicated per user.
+    /// Used to guard last-admin revocation so a category-scoped admin cannot inflate the count.
+    async fn count_global_by_role(&self) -> Result<std::collections::HashMap<Uuid, u64>, AppError>;
 }

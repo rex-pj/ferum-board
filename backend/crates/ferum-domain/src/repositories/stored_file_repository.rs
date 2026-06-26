@@ -5,11 +5,9 @@ use crate::AppError;
 
 #[async_trait]
 pub trait StoredFileRepository: Send + Sync {
-    /// Returns true if a file with this exact CAS key already exists.
-    async fn exists(&self, key: &str) -> Result<bool, AppError>;
-
-    /// Insert a new file row. On conflict (same key), do nothing — file already exists.
-    async fn upsert(
+    /// Atomically insert a new file row (ref_count=1) or, if the key already
+    /// exists, increment its ref_count — all in a single SQL statement.
+    async fn upsert_and_ref(
         &self,
         key: &str,
         content_type: &str,
@@ -17,9 +15,6 @@ pub trait StoredFileRepository: Send + Sync {
         size: i64,
         uploaded_by_id: Option<Uuid>,
     ) -> Result<(), AppError>;
-
-    /// Atomically increment ref_count, return new count.
-    async fn increment_ref(&self, key: &str) -> Result<i32, AppError>;
 
     /// Atomically decrement ref_count (floor 0), return new count.
     /// Returns 0 if the key does not exist.

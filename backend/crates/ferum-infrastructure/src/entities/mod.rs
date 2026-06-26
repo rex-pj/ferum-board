@@ -1,5 +1,6 @@
 pub mod audit_logs;
 pub mod bookmarks;
+pub mod daily_stats;
 pub mod plugin_hooks;
 pub mod plugin_logs;
 pub mod plugin_ui_slots;
@@ -27,3 +28,5 @@ pub mod user_roles;
 pub mod user_watched_categories;
 pub mod users;
 pub mod webhooks;
+pub mod themes;
+pub mod thread_view_dedup;

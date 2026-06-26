@@ -1,0 +1,170 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Forum — {{ site.name }}{% endblock %}
+
+{% block head_extra %}
+<style>
+  .fr-subcat-pill { color: var(--bs-secondary-color); }
+  .fr-subcat-pill:hover { color: var(--bs-body-color); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="fs-5 fw-bold mb-0">All Categories</h1>
+  {% if current_user %}
+    <a href="/new-thread" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-plus me-1"></i>New Thread
+    </a>
+  {% endif %}
+</div>
+
+{% if groups %}
+  {% for group in groups %}
+    <div class="fr-feed mb-4" x-data="{ open: true }">
+      {# ── Category header ── #}
+      <div class="fr-cat-header" :class="open ? 'border-bottom' : ''"
+           @click="open = !open" role="button" :aria-expanded="open.toString()">
+        <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
+          <i class="fa-solid fa-chevron-down text-muted flex-shrink-0 fr-collapse-icon"
+             :class="open ? '' : 'fr-collapse-icon--closed'"
+             aria-hidden="true"></i>
+          {% if group.parent.color %}
+            <div class="flex-shrink-0 d-flex align-items-center justify-content-center rounded-2"
+                 style="width:22px;height:22px;background:color-mix(in srgb,{{ group.parent.color }} 14%,transparent);border:1px solid color-mix(in srgb,{{ group.parent.color }} 28%,transparent)">
+              <span class="rounded-circle" style="width:7px;height:7px;background:{{ group.parent.color }};display:block;flex-shrink:0"></span>
+            </div>
+          {% endif %}
+          <span class="fw-semibold text-truncate">
+            {% if group.children %}
+              {{ group.parent.name }}
+            {% else %}
+              <a href="/forum/{{ group.parent.slug }}" class="text-decoration-none text-body" @click.stop>
+                {{ group.parent.name }}
+              </a>
+            {% endif %}
+          </span>
+          {% if group.parent.description %}
+            <span class="text-muted small d-none d-md-inline text-truncate">— {{ group.parent.description }}</span>
+          {% endif %}
+        </div>
+        {% if group.parent.thread_count > 0 %}
+          <span class="d-flex align-items-center gap-1 flex-shrink-0 text-muted small">
+            <i class="fa-regular fa-comment fa-xs" aria-hidden="true"></i>
+            {{ group.parent.thread_count }}
+          </span>
+        {% endif %}
+      </div>
+
+      <div x-show="open" x-transition:enter="transition" x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100">
+
+        {# ── Category description (mobile) ── #}
+        {% if group.parent.description %}
+          <p class="text-muted small px-3 pt-2 mb-0 d-md-none">{{ group.parent.description }}</p>
+        {% endif %}
+
+        {# ── Subcategory pills ── #}
+        {% if group.children %}
+          <div class="d-flex flex-wrap gap-2 px-3 py-2 border-bottom">
+            {% for cat in group.children %}
+              <a href="/forum/{{ cat.slug }}"
+                 class="fr-subcat-pill d-inline-flex align-items-center gap-1 text-decoration-none
+                        px-2 py-1 rounded border small fw-medium"
+                 style="background:var(--bs-tertiary-bg);border-color:var(--bs-border-color)!important;
+                        transition:color .1s;"
+                 @click.stop>
+                {% if cat.color %}
+                  <span class="rounded-circle"
+                        style="width:7px;height:7px;display:inline-block;flex-shrink:0;background:{{ cat.color }};"></span>
+                {% endif %}
+                {{ cat.name }}
+                {% if cat.thread_count > 0 %}
+                  <span class="text-muted" style="font-size:0.75rem">{{ cat.thread_count }}</span>
+                {% endif %}
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {# ── Recent threads ── #}
+        {% if group.recent_threads %}
+          {% for thread in group.recent_threads %}
+            {% include "default/templates/partials/thread_card.html" %}
+          {% endfor %}
+        {% else %}
+          <p class="text-muted small px-3 py-3 mb-0">No threads yet.</p>
+        {% endif %}
+
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="text-center py-5 text-muted">
+    <i class="fa-solid fa-comments fa-3x mb-3 d-block"></i>
+    No categories yet. An admin needs to create some first.
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+
+  {% if not current_user %}
+  <div class="fr-panel">
+    <div class="fr-panel-header">Get involved</div>
+    <div class="fr-panel-body d-grid gap-2">
+      <a href="/register" class="btn btn-primary btn-sm">
+        <i class="fa-solid fa-user-plus me-1"></i>Create account
+      </a>
+      <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="fr-panel">
+    <div class="fr-panel-body">
+      <a href="/new-thread" class="btn btn-primary btn-sm w-100">
+        <i class="fa-solid fa-plus me-1"></i>New Thread
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  {# Category stats grid — more useful than duplicating the left nav #}
+  {% if groups %}
+  <div class="fr-panel">
+    <div class="fr-panel-header">Categories</div>
+    {% for group in groups %}
+      <a href="/forum/{{ group.parent.slug }}" class="fr-panel-row">
+        {% if group.parent.color %}
+          <span class="rounded-circle flex-shrink-0"
+                style="width:8px;height:8px;background:{{ group.parent.color }};display:inline-block"></span>
+        {% else %}
+          <i class="fa-solid fa-hashtag fr-icon-col text-muted" style="font-size:.75rem"></i>
+        {% endif %}
+        <span class="text-truncate small fw-medium">{{ group.parent.name }}</span>
+        <span class="ms-auto text-muted flex-shrink-0 small">
+          {{ group.parent.thread_count }}
+        </span>
+      </a>
+      {% if group.children %}
+        {% for sub in group.children %}
+        <a href="/forum/{{ sub.slug }}" class="fr-panel-row" style="padding-left:1.5rem">
+          {% if sub.color %}
+            <span class="rounded-circle flex-shrink-0"
+                  style="width:6px;height:6px;background:{{ sub.color }};display:inline-block"></span>
+          {% else %}
+            <span style="width:1rem"></span>
+          {% endif %}
+          <span class="text-truncate" style="font-size:.8125rem;color:var(--bs-secondary-color)">{{ sub.name }}</span>
+          <span class="ms-auto text-muted flex-shrink-0" style="font-size:.75rem">{{ sub.thread_count }}</span>
+        </a>
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</aside>
+{% endblock %}

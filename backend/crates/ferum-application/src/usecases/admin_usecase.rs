@@ -1,15 +1,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::permission::PermissionChecker;
 use crate::ports::CacheService;
-use crate::shared::AppError;
+use crate::shared::{AppError, OptionExt};
+use super::user_usecase::UpdateProfileCmd;
 use ferum_domain::models::audit_log::AuditLog;
 use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 use ferum_domain::models::role::UserRoleAssignment;
-use ferum_domain::models::user::User;
+use ferum_domain::models::user::{TrustLevel, User};
 use ferum_domain::repositories::audit_log_repository::AuditLogRepository;
 use ferum_domain::repositories::category_repository::{
     CategoryRepository, NewCategory, UpdateCategory,
@@ -42,11 +44,13 @@ impl AdminUseCase {
 
     // ─── Categories ───────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn list_categories(&self, actor: &AuthUser) -> Result<Vec<Category>, AppError> {
         PermissionChecker::can_manage_categories(actor)?;
         self.categories.list_all().await
     }
 
+    #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id))]
     pub async fn create_category(
         &self,
         actor: &AuthUser,
@@ -62,7 +66,7 @@ impl AdminUseCase {
         }
 
         if let Some(parent_id) = cmd.parent_id {
-            let parent = self.categories.find_by_id(parent_id).await?.ok_or(AppError::NotFound)?;
+            let parent = self.categories.find_by_id(parent_id).await?.or_not_found()?;
             if parent.parent_id.is_some() {
                 return Err(AppError::unprocessable("Max 2 levels of category nesting"));
             }
@@ -83,6 +87,7 @@ impl AdminUseCase {
             .await
     }
 
+    #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id, category_id = %id))]
     pub async fn update_category(
         &self,
         actor: &AuthUser,
@@ -91,7 +96,7 @@ impl AdminUseCase {
     ) -> Result<Category, AppError> {
         PermissionChecker::can_manage_categories(actor)?;
 
-        self.categories.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        self.categories.find_by_id(id).await?.or_not_found()?;
 
         if let Some(ref slug) = cmd.slug {
             if crate::validators::is_reserved_slug(slug) {
@@ -122,21 +127,33 @@ impl AdminUseCase {
             .await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, category_id = %id))]
     pub async fn delete_category(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         PermissionChecker::can_manage_categories(actor)?;
-        self.categories.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        self.categories.find_by_id(id).await?.or_not_found()?;
+
+        if self.categories.has_children(id).await? {
+            return Err(AppError::Conflict("category_has_subcategories".to_string()));
+        }
+
+        let counts = self.categories.count_threads_by_categories(&[id]).await?;
+        if counts.first().map(|(_, c)| *c).unwrap_or(0) > 0 {
+            return Err(AppError::Conflict("category_has_threads".to_string()));
+        }
+
         self.categories.delete(id).await
     }
 
     // ─── Category-scoped moderator assignment (via user_roles) ────────────────
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, category_id = %category_id))]
     pub async fn list_category_moderators(
         &self,
         actor: &AuthUser,
         category_id: Uuid,
     ) -> Result<Vec<(UserRoleAssignment, User)>, AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.categories.find_by_id(category_id).await?.ok_or(AppError::NotFound)?;
+        self.categories.find_by_id(category_id).await?.or_not_found()?;
 
         let mod_role = self
             .roles
@@ -154,12 +171,13 @@ impl AdminUseCase {
         assignments
             .into_iter()
             .map(|a| {
-                let user = user_map.get(&a.user_id).cloned().ok_or(AppError::NotFound)?;
+                let user = user_map.get(&a.user_id).cloned().or_not_found()?;
                 Ok((a, user))
             })
             .collect()
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, category_id = %category_id, target_user_id = %user_id))]
     pub async fn assign_moderator(
         &self,
         actor: &AuthUser,
@@ -167,8 +185,8 @@ impl AdminUseCase {
         user_id: Uuid,
     ) -> Result<UserRoleAssignment, AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.categories.find_by_id(category_id).await?.ok_or(AppError::NotFound)?;
-        self.users.find_by_id(user_id).await?.ok_or(AppError::NotFound)?;
+        self.categories.find_by_id(category_id).await?.or_not_found()?;
+        self.users.find_by_id(user_id).await?.or_not_found()?;
 
         let mod_role = self
             .roles
@@ -179,6 +197,7 @@ impl AdminUseCase {
         self.user_roles.assign(user_id, mod_role.id, Some(category_id), actor.id, None).await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, category_id = %category_id, target_user_id = %user_id))]
     pub async fn revoke_moderator(
         &self,
         actor: &AuthUser,
@@ -200,22 +219,27 @@ impl AdminUseCase {
 
     // ─── User management ──────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
     pub async fn list_users(
         &self,
         actor: &AuthUser,
         page: u64,
         per_page: u64,
         search: Option<&str>,
+        sort_by: Option<&str>,
+        sort_dir: Option<&str>,
     ) -> Result<(Vec<User>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.users.list_paginated(page, per_page, search).await
+        self.users.list_paginated(page, per_page, search, sort_by, sort_dir).await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
     pub async fn get_user(&self, actor: &AuthUser, id: Uuid) -> Result<User, AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.users.find_by_id(id).await?.ok_or(AppError::NotFound)
+        self.users.find_by_id(id).await?.or_not_found()
     }
 
+    #[tracing::instrument(skip(self, actor, reason), fields(user_id = %actor.id, target_user_id = %id))]
     pub async fn permanent_ban(
         &self,
         actor: &AuthUser,
@@ -223,7 +247,7 @@ impl AdminUseCase {
         reason: String,
     ) -> Result<(), AppError> {
         PermissionChecker::can_ban_permanent(actor)?;
-        self.users.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        self.users.find_by_id(id).await?.or_not_found()?;
         self.users
             .update(
                 id,
@@ -244,9 +268,10 @@ impl AdminUseCase {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
     pub async fn unban(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         PermissionChecker::can_ban_permanent(actor)?;
-        self.users.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        self.users.find_by_id(id).await?.or_not_found()?;
         self.users
             .update(
                 id,
@@ -262,20 +287,101 @@ impl AdminUseCase {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
     pub async fn list_audit_log(
         &self,
         actor: &AuthUser,
         actor_id: Option<Uuid>,
         target_type: Option<&str>,
+        action_contains: Option<&str>,
+        created_from: Option<DateTime<Utc>>,
+        created_to: Option<DateTime<Utc>>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<AuditLog>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.audit_log.list(actor_id, target_type, page, per_page.min(50)).await
+        self.audit_log
+            .list(
+                actor_id,
+                target_type,
+                action_contains,
+                created_from,
+                created_to,
+                page,
+                per_page.min(50),
+            )
+            .await
+    }
+
+    #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id, target_user_id = %id))]
+    pub async fn edit_user(
+        &self,
+        actor: &AuthUser,
+        id: Uuid,
+        cmd: UpdateProfileCmd,
+    ) -> Result<User, AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.users.find_by_id(id).await?.or_not_found()?;
+        self.users
+            .update(
+                id,
+                ferum_domain::repositories::user_repository::UpdateUser {
+                    display_name: cmd.display_name.map(Some),
+                    bio: Some(cmd.bio),
+                    website: Some(cmd.website),
+                    ..Default::default()
+                },
+            )
+            .await
+    }
+
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
+    pub async fn set_trust_level(
+        &self,
+        actor: &AuthUser,
+        id: Uuid,
+        level: TrustLevel,
+    ) -> Result<(), AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.users.find_by_id(id).await?.or_not_found()?;
+        self.users.set_trust_level(id, level).await
+    }
+
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
+    pub async fn unlock_user(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.users.find_by_id(id).await?.or_not_found()?;
+        self.users.reset_failed_login(id).await
+    }
+
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
+    pub async fn verify_user_email(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.users.find_by_id(id).await?.or_not_found()?;
+        self.users.set_email_verified(id).await
+    }
+
+    /// Lightweight user search for remote-select pickers (author/actor filters).
+    /// Returns a page of users matching `q` ordered by username, plus the total
+    /// match count so the picker can drive infinite scroll.
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
+    pub async fn search_users_lookup(
+        &self,
+        actor: &AuthUser,
+        q: Option<&str>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<User>, u64), AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        self.users
+            .list_paginated(page.max(1), per_page.clamp(1, 50), q, Some("username"), Some("asc"))
+            .await
     }
 }
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
+
 
 #[derive(Debug)]
 pub struct CreateCategoryCmd {

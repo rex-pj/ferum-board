@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::config::Config;
+use crate::tera_engine::TeraEngine;
 use ferum_application::event_bus::EventBus;
 use ferum_application::ports::{
-    CacheService, JobQueue, NotificationBus, RateLimiter, SearchService, StorageService,
+    CacheService, JobQueue, NotificationBus, PermissionResolver, PluginHookRuntime,
+    PluginLifecycle, PluginUiRuntime, RateLimiter, SearchService, StorageService,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
@@ -24,7 +26,9 @@ use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
 use ferum_application::usecases::plugin_usecase::PluginUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
-use ferum_domain::repositories::SiteConfigRepository;
+use ferum_application::usecases::theme_usecase::ThemeUseCase;
+use ferum_infrastructure::repositories::PgThemeRepository;
+use ferum_domain::repositories::{SiteConfigRepository, ThemeRepository};
 #[cfg(feature = "meilisearch")]
 use ferum_infrastructure::search::MeilisearchService;
 #[cfg(feature = "s3")]
@@ -43,7 +47,8 @@ use ferum_infrastructure::{
         PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository, PgFollowRepository,
         PgNotificationRepository, PgPermissionRepository, PgPluginRepository, PgPostRepository,
         PgReactionRepository, PgReportRepository, PgRoleRepository, PgSiteConfigRepository,
-        PgStoredFileRepository, PgTagRepository, PgThreadRepository, PgUserRepository,
+        PgStatsRepository, PgStoredFileRepository, PgTagRepository, PgThreadRepository,
+        PgUserRepository,
         PgUserRoleRepository, PgWebhookRepository,
     },
     role_permission_cache::RolePermissionCache,
@@ -57,10 +62,16 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // ─── PostgreSQL ─────────────────────────────────────────────────────────
     let mut write_opts = ConnectOptions::new(&config.database_url);
     write_opts
-        .max_connections(50)
-        .min_connections(5)
+        .max_connections(20)
+        .min_connections(2)
         .connect_timeout(std::time::Duration::from_secs(5))
-        .acquire_timeout(std::time::Duration::from_secs(5));
+        .acquire_timeout(std::time::Duration::from_secs(5))
+        .idle_timeout(std::time::Duration::from_secs(300))
+        .max_lifetime(std::time::Duration::from_secs(1800))
+        // SeaORM logs every statement through `tracing` by default; disable to remove
+        // per-query formatting overhead on the hot path. Re-enable with a level filter
+        // only when debugging queries.
+        .sqlx_logging(false);
     let pg_write = Database::connect(write_opts).await?;
 
     // ─── Run database migrations ─────────────────────────────────────────────
@@ -73,10 +84,13 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             tracing::info!("Read replica enabled");
             let mut read_opts = ConnectOptions::new(url);
             read_opts
-                .max_connections(50)
-                .min_connections(5)
+                .max_connections(20)
+                .min_connections(2)
                 .connect_timeout(std::time::Duration::from_secs(5))
-                .acquire_timeout(std::time::Duration::from_secs(5));
+                .acquire_timeout(std::time::Duration::from_secs(5))
+                .idle_timeout(std::time::Duration::from_secs(300))
+                .max_lifetime(std::time::Duration::from_secs(1800))
+                .sqlx_logging(false);
             Database::connect(read_opts).await?
         }
         None => {
@@ -102,8 +116,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     }
 
     // ─── SSE broadcaster ─────────────────────────────────────────────────────
-    let broadcaster = Arc::new(SseBroadcaster::new());
-    let sse_bus: Arc<dyn NotificationBus> = Arc::new(SseNotificationBus::new(broadcaster.clone()));
+    let broadcaster_concrete = Arc::new(SseBroadcaster::new());
+    let sse_bus: Arc<dyn NotificationBus> =
+        Arc::new(SseNotificationBus::new(broadcaster_concrete.clone()));
+    // DIP: web layer holds the trait object, not the concrete SseBroadcaster.
+    let broadcaster = broadcaster_concrete as Arc<dyn ferum_application::ports::NotificationSubscriber>;
 
     // ─── Storage ────────────────────────────────────────────────────────────
     #[cfg(feature = "s3")]
@@ -153,6 +170,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let role_permission_cache = Arc::new(RolePermissionCache::new(pg_write.clone()));
     role_permission_cache.load().await?;
     tracing::info!("Role permission cache loaded");
+    // DIP: web layer holds the trait object, not the concrete RolePermissionCache.
+    let permission_resolver: Arc<dyn PermissionResolver> = role_permission_cache;
 
     // ─── Search ──────────────────────────────────────────────────────────────
     #[cfg(feature = "meilisearch")]
@@ -246,7 +265,10 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     if let Err(e) = plugin_registry.load_from_db().await {
         tracing::warn!("Plugin registry failed to load from DB: {:?}", e);
     }
-    let plugin_runtime: Arc<dyn ferum_application::ports::PluginRuntime> = plugin_registry;
+    // ISP: cast once to each focused trait so each consumer receives only the interface it needs.
+    let plugin_hooks: Arc<dyn PluginHookRuntime> = plugin_registry.clone();
+    let plugin_ui: Arc<dyn PluginUiRuntime> = plugin_registry.clone();
+    let plugin_lifecycle: Arc<dyn PluginLifecycle> = plugin_registry;
 
     let event_bus = Arc::new(
         EventBus::new(
@@ -256,20 +278,56 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             webhook_repo.clone(),
             job_queue.clone(),
         )
-        .with_plugin_runtime(plugin_runtime.clone()),
+        .with_plugin_runtime(plugin_hooks.clone()),
     );
+
+    // ─── Site config (before use cases — they read from it) ──────────────────
+    let site_config: Arc<dyn SiteConfigRepository> =
+        Arc::new(PgSiteConfigRepository::new(pg_write.clone()));
+
+    // Seed SMTP credentials from env into site_config on first run so admins can
+    // later update them via the settings UI without touching env vars.
+    if config.smtp_host.is_some() {
+        let existing_smtp = site_config.get("smtp_host").await.unwrap_or(None);
+        if existing_smtp.is_none() || existing_smtp.as_deref() == Some("") {
+            let mut smtp_seed = std::collections::HashMap::new();
+            if let Some(h) = &config.smtp_host {
+                smtp_seed.insert("smtp_host".to_string(), h.clone());
+            }
+            smtp_seed.insert("smtp_port".to_string(), config.smtp_port.to_string());
+            if let Some(u) = &config.smtp_user {
+                smtp_seed.insert("smtp_user".to_string(), u.clone());
+            }
+            if let Some(p) = &config.smtp_pass {
+                smtp_seed.insert("smtp_pass".to_string(), p.clone());
+            }
+            if let Err(e) = site_config.set_many(&smtp_seed).await {
+                tracing::warn!("Failed to seed SMTP config from env: {e}");
+            }
+        }
+    }
+
+    let site_config_cache = Arc::new(tokio::sync::RwLock::new(
+        site_config.get_all().await.unwrap_or_else(|e| {
+            tracing::warn!("Failed to load site config at startup: {e}, using defaults");
+            std::collections::HashMap::new()
+        }),
+    ));
 
     // ─── Use cases ───────────────────────────────────────────────────────────
     let auth = Arc::new(
         AuthUseCase::new(
             user_repo.clone(),
+            role_repo.clone(),
+            user_role_repo.clone(),
             hasher,
             token_service.clone(),
             cache.clone(),
             job_queue.clone(),
         )
         .with_auto_verify_email(!smtp_enabled)
-        .with_plugin_runtime(plugin_runtime.clone()),
+        .with_site_config(site_config.clone())
+        .with_plugin_runtime(plugin_hooks.clone()),
     );
 
     let admin = Arc::new(AdminUseCase::new(
@@ -287,7 +345,10 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         user_role_repo.clone(),
     ));
 
-    let category = Arc::new(CategoryUseCase::new(category_repo.clone(), thread_repo.clone(), tag_repo.clone()));
+    let category = Arc::new(
+        CategoryUseCase::new(category_repo.clone(), thread_repo.clone(), tag_repo.clone(), user_repo.clone())
+            .with_site_config(site_config.clone()),
+    );
 
     let thread = Arc::new(
         ThreadUseCase::new(
@@ -301,11 +362,19 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             tag_repo.clone(),
             user_repo.clone(),
         )
-        .with_plugin_runtime(plugin_runtime.clone()),
+        .with_dedup_view_counts(config.dedup_view_counts)
+        .with_site_config(site_config.clone())
+        .with_plugin_runtime(plugin_hooks.clone()),
     );
 
-    let site_config: Arc<dyn SiteConfigRepository> =
-        Arc::new(PgSiteConfigRepository::new(pg_write.clone()));
+    // ─── Theme slug cache ────────────────────────────────────────────────────────
+    let theme_repo_for_cache = Arc::new(PgThemeRepository::new(pg_write.clone()));
+    let initial_active_slug = theme_repo_for_cache
+        .get_active()
+        .await
+        .map(|t| t.slug)
+        .unwrap_or_else(|_| ferum_application::constants::DEFAULT_THEME_SLUG.to_string());
+    let active_theme_cache = Arc::new(tokio::sync::RwLock::new(initial_active_slug.clone()));
 
     let post = Arc::new(
         PostUseCase::new(
@@ -317,7 +386,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             site_config.clone(),
             event_bus.clone(),
         )
-        .with_plugin_runtime(plugin_runtime.clone()),
+        .with_plugin_runtime(plugin_hooks.clone()),
     );
 
     let reaction = Arc::new(ReactionUseCase::new(
@@ -343,8 +412,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     let search = Arc::new(SearchUseCase::new(search_svc));
 
-    let pg_write_arc = Arc::new(pg_write.clone());
-    let admin_stats = Arc::new(AdminStatsUseCase::new(pg_write_arc));
+    let stats_repo = Arc::new(PgStatsRepository::new(pg_write.clone()));
+    let admin_stats = Arc::new(AdminStatsUseCase::new(stats_repo).with_cache(cache.clone()));
 
     let hasher2 = Arc::new(BcryptPasswordHasher);
     let user = Arc::new(UserUseCase::new(
@@ -366,7 +435,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let plugin = Arc::new(PluginUseCase::new(
         plugin_repo,
         webhook_repo.clone(),
-        plugin_runtime.clone(),
+        plugin_lifecycle,
+        std::path::PathBuf::from(&config.plugins_dir),
     ));
 
     let hasher3 = Arc::new(BcryptPasswordHasher);
@@ -381,6 +451,71 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         site_config.clone(),
         bulk_seed,
     ));
+
+    // ─── Theme system ────────────────────────────────────────────────────────
+    let theme_repo = Arc::new(PgThemeRepository::new(pg_write.clone()));
+    let theme = Arc::new(ThemeUseCase::new(theme_repo));
+
+    let initial_chain = theme
+        .resolve_chain(&initial_active_slug)
+        .await;
+    let active_theme_chain_cache = Arc::new(tokio::sync::RwLock::new(initial_chain));
+
+    let initial_color_scheme = read_theme_color_scheme(&config.themes_dir, &initial_active_slug);
+    let active_theme_color_scheme_cache = Arc::new(tokio::sync::RwLock::new(initial_color_scheme));
+
+    let tera = TeraEngine::new(
+        std::path::PathBuf::from(&config.themes_dir),
+        std::path::PathBuf::from(&config.admin_templates_dir),
+        std::path::PathBuf::from(&config.static_dir),
+    )
+    .unwrap_or_else(|e| {
+        tracing::warn!("TeraEngine init failed ({}), templates unavailable", e);
+        TeraEngine::new(
+            std::path::PathBuf::from("./frontend/themes"),
+            std::path::PathBuf::from("./frontend/templates"),
+            std::path::PathBuf::from("./frontend/static"),
+        )
+        .expect("TeraEngine fallback init failed")
+    });
+
+    // ─── Background: flush daily stats mỗi 5 phút ──────────────────────────────
+    // One-time backfill: populate daily_stats for all past dates from source tables.
+    // Idempotent (ON CONFLICT DO NOTHING) — safe to run on every restart.
+    if let Err(e) = admin_stats.backfill_history().await {
+        tracing::warn!("daily_stats backfill failed: {:?}", e);
+    }
+    // Flush today's data immediately so chart is up-to-date from the first request.
+    if let Err(e) = admin_stats.flush_daily_stats().await {
+        tracing::warn!("startup daily_stats flush failed: {:?}", e);
+    }
+    {
+        let stats_uc = admin_stats.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                if let Err(e) = stats_uc.flush_daily_stats().await {
+                    tracing::warn!("daily_stats flush failed: {:?}", e);
+                }
+            }
+        });
+    }
+
+    // ─── Background: flush view count buffer mỗi 60s ───────────────────────────
+    // Batches threads.view_count UPDATE to avoid hot-row contention under load.
+    {
+        let thread_uc = thread.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if let Err(e) = thread_uc.flush_view_counts().await {
+                    tracing::warn!("view count flush failed: {:?}", e);
+                }
+            }
+        });
+    }
 
     let cookies_secure = config.app_url.starts_with("https://");
     warn_degraded_capabilities(config);
@@ -405,20 +540,29 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         tag,
         webhook,
         plugin,
-        plugin_runtime,
+        plugin_hooks,
+        plugin_ui,
         site_config,
+        site_config_cache,
+        active_theme_cache,
+        active_theme_chain_cache,
+        active_theme_color_scheme_cache,
         stored_files: stored_file_repo,
         user_role_repo,
         user_repo,
-        role_permission_cache,
+        permission_resolver,
         token_service,
         cache,
         rate_limiter,
-        storage,
-        notification_bus,
         broadcaster,
+        theme,
+        tera,
+        themes_dir: config.themes_dir.clone(),
+        static_dir: config.static_dir.clone(),
         cookies_secure,
+        trusted_proxy_count: config.trusted_proxy_count,
         plugins_dir: config.plugins_dir.clone(),
+        setup_complete: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     })
 }
 
@@ -466,4 +610,19 @@ fn warn_degraded_capabilities(config: &Config) {
     if !config.rate_limit_enabled {
         tracing::warn!("Rate limiting disabled — do NOT use in production");
     }
+}
+
+/// Read the `color_scheme` field from `themes/{slug}/theme.json`.
+/// Returns "auto" when the file is missing, unreadable, or has no `color_scheme` key.
+pub fn read_theme_color_scheme(themes_dir: &str, slug: &str) -> String {
+    let path = std::path::Path::new(themes_dir).join(slug).join("theme.json");
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| {
+            v.get("color_scheme")
+                .and_then(|c| c.as_str())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "auto".to_string())
 }

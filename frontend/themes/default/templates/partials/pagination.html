@@ -1,0 +1,76 @@
+{% if pagination.total_pages > 1 %}
+<nav aria-label="Page navigation" class="mt-4">
+  <ul class="pagination justify-content-center flex-wrap">
+
+    {# Prev #}
+    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+      <a class="page-link" href="?page={{ pagination.page - 1 }}{{ pagination.extra_params }}" aria-label="Previous">
+        <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+      </a>
+    </li>
+
+    {# First page #}
+    {% if pagination.page == 1 %}
+      <li class="page-item active" aria-current="page">
+        <span class="page-link">1</span>
+      </li>
+    {% else %}
+      <li class="page-item">
+        <a class="page-link" href="?page=1{{ pagination.extra_params }}">1</a>
+      </li>
+    {% endif %}
+
+    {# Left ellipsis: show when current page is far from start #}
+    {% if pagination.page > 4 %}
+      <li class="page-item disabled" aria-hidden="true">
+        <span class="page-link">&hellip;</span>
+      </li>
+    {% endif %}
+
+    {# Window of pages around current (excluding first and last) #}
+    {% for p in range(start=1, end=pagination.total_pages + 1) %}
+      {% if p >= 2 and p <= pagination.total_pages - 1 %}
+        {% if p >= pagination.page - 2 and p <= pagination.page + 2 %}
+          {% if p == pagination.page %}
+            <li class="page-item active" aria-current="page">
+              <span class="page-link">{{ p }}</span>
+            </li>
+          {% else %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ p }}{{ pagination.extra_params }}">{{ p }}</a>
+            </li>
+          {% endif %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+
+    {# Right ellipsis: show when current page is far from end #}
+    {% if pagination.page < pagination.total_pages - 3 %}
+      <li class="page-item disabled" aria-hidden="true">
+        <span class="page-link">&hellip;</span>
+      </li>
+    {% endif %}
+
+    {# Last page (only when total > 1) #}
+    {% if pagination.total_pages > 1 %}
+      {% if pagination.page == pagination.total_pages %}
+        <li class="page-item active" aria-current="page">
+          <span class="page-link">{{ pagination.total_pages }}</span>
+        </li>
+      {% else %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ pagination.total_pages }}{{ pagination.extra_params }}">{{ pagination.total_pages }}</a>
+        </li>
+      {% endif %}
+    {% endif %}
+
+    {# Next #}
+    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+      <a class="page-link" href="?page={{ pagination.page + 1 }}{{ pagination.extra_params }}" aria-label="Next">
+        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+      </a>
+    </li>
+
+  </ul>
+</nav>
+{% endif %}

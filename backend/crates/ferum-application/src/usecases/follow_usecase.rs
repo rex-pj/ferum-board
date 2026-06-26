@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
+use crate::dto::FollowStatus;
 use crate::event_bus::EventBus;
 use crate::permission::PermissionChecker;
-use crate::shared::AppError;
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::follow::Follow;
 use ferum_domain::models::user::User;
@@ -40,7 +41,7 @@ impl FollowUseCase {
             .users
             .find_by_id(target_user_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         if self.follows.find(actor.id, target_user_id).await?.is_some() {
             return Ok(true);
@@ -107,8 +108,3 @@ impl FollowUseCase {
     }
 }
 
-pub struct FollowStatus {
-    pub following: bool,
-    pub follower_count: u64,
-    pub following_count: u64,
-}

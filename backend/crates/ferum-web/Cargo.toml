@@ -25,7 +25,6 @@ bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.14"
 dotenvy = "0.15"
-mime = "0.3"
 sea-orm = { version = "1", features = [
     "sqlx-postgres",
     "runtime-tokio-rustls",
@@ -38,9 +37,19 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
 tower = { version = "0.5" }
-tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "util"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "util", "fs", "set-header", "limit"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
 uuid = { version = "1", features = ["v4", "serde"] }
 validator = { version = "0.19", features = ["derive"] }
 tokio-stream = "0.1.18"
+tera = "1"
+zip = "2"
+colored = "2"
+
+# Drop-in high-concurrency allocator for the production (Linux/macOS) build. Reduces
+# malloc contention and long-uptime fragmentation under heavy async load. Falls back
+# to the system allocator on MSVC (Windows dev), so behaviour there is unchanged.
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6"

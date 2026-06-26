@@ -61,8 +61,10 @@ impl NotificationRepository for PgNotificationRepository {
             .filter(notifications::Column::UserId.eq(user_id))
             .order_by_desc(notifications::Column::CreatedAt);
 
-        let total = query.clone().count(&self.db).await?;
-        let rows = query.limit(per_page).offset(offset).all(&self.db).await?;
+        let (total, rows) = tokio::try_join!(
+            query.clone().count(&self.db),
+            query.limit(per_page).offset(offset).all(&self.db),
+        )?;
         Ok((rows.into_iter().map(entity_to_domain).collect(), total))
     }
 

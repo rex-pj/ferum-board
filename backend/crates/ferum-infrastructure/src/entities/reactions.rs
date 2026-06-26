@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 #[sea_orm(table_name = "reactions")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: Uuid,
     pub post_id: Uuid,
+    #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: Uuid,
+    #[sea_orm(primary_key, auto_increment = false)]
     pub kind: ReactionKind,
     pub created_at: DateTimeWithTimeZone,
 }

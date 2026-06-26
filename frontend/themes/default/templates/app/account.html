@@ -1,0 +1,393 @@
+{% extends "default/templates/base.html" %}
+
+{% block title %}Account Settings — {{ site.name }}{% endblock %}
+
+{# Cap the settings form column for readable form width, keep the right rail #}
+{% block page_inner_class %}fr-page-inner--reading{% endblock %}
+
+{% block content %}
+<div x-data="{ active: 'profile', dnLen: {% if profile %}{{ profile.display_name | length }}{% else %}0{% endif %}, bioLen: {% if profile and profile.bio %}{{ profile.bio | length }}{% else %}0{% endif %} }">
+
+  <h1 class="h4 fw-bold mb-3">Account Settings</h1>
+
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <button type="button" class="nav-link" :class="active==='profile'?'active':''" @click="active='profile'">
+        <i class="fa-solid fa-user fa-sm me-1"></i>Profile
+      </button>
+    </li>
+    <li class="nav-item">
+      <button type="button" class="nav-link" :class="active==='security'?'active':''" @click="active='security'">
+        <i class="fa-solid fa-lock fa-sm me-1"></i>Security
+      </button>
+    </li>
+    <li class="nav-item">
+      <button type="button" class="nav-link" :class="active==='preferences'?'active':''" @click="active='preferences'">
+        <i class="fa-solid fa-sliders fa-sm me-1"></i>Preferences
+      </button>
+    </li>
+  </ul>
+
+  {# ── Profile tab ── #}
+  <div x-show="active==='profile'">
+    <div class="card mb-0">
+      <div class="card-body">
+
+        {# Cover image #}
+        <div class="mb-4 pb-4 border-bottom">
+          <label class="form-label fw-semibold">Cover Image</label>
+          <div class="fr-cover-preview mb-3 rounded overflow-hidden">
+            {% if profile and profile.cover_url %}
+              <img src="{{ profile.cover_url }}" alt="Cover" class="fr-cover-preview-img">
+            {% else %}
+              <div class="fr-cover-placeholder d-flex align-items-center justify-content-center">
+                <span class="small text-white opacity-75">No cover image — a gradient is shown on your profile</span>
+              </div>
+            {% endif %}
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <label class="btn btn-outline-secondary btn-sm" style="min-height:44px;display:inline-flex;align-items:center">
+              <i class="fa-solid fa-image me-1"></i>{% if profile and profile.cover_url %}Change cover{% else %}Upload cover{% endif %}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="d-none" id="cover-upload">
+            </label>
+            <span id="cover-upload-status" class="small text-muted"></span>
+            {% if profile and profile.cover_url %}
+              <button type="button" class="btn btn-outline-danger btn-sm" style="min-height:44px" data-account-action="remove-cover">
+                <i class="fa-solid fa-trash me-1"></i>Remove
+              </button>
+            {% endif %}
+          </div>
+          <div class="form-text mt-1">Recommended: 1200×400 px, JPEG/PNG/WebP, max 8 MB.</div>
+        </div>
+
+        {# Avatar #}
+        <div class="d-flex align-items-center gap-3 mb-4 pb-4 border-bottom">
+          <div class="flex-shrink-0">
+            {% if profile and profile.avatar_url %}
+              <img src="{{ profile.avatar_url }}" alt="" class="rounded-circle" style="width:72px;height:72px;object-fit:cover">
+            {% else %}
+              <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white fw-bold"
+                   style="width:72px;height:72px;font-size:1.5rem">
+                {% if profile %}{{ profile.display_name | truncate(length=1, end="") | upper }}{% endif %}
+              </div>
+            {% endif %}
+          </div>
+          <div>
+            <div class="fw-semibold mb-1">{% if profile %}{{ profile.display_name }}{% endif %}</div>
+            <div class="small text-muted">{% if profile %}@{{ profile.username }}{% endif %}</div>
+            {% if profile %}
+            <a href="/u/{{ profile.username }}" class="small mb-2 d-inline-block">
+              <i class="fa-solid fa-arrow-up-right-from-square fa-xs me-1"></i>View public profile
+            </a>
+            {% endif %}
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <label class="btn btn-outline-secondary btn-sm" style="min-height:44px;display:inline-flex;align-items:center">
+                <i class="fa-solid fa-camera me-1"></i>{% if profile and profile.avatar_url %}Change photo{% else %}Upload photo{% endif %}
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="d-none" id="avatar-upload">
+              </label>
+              <span id="avatar-upload-status" class="small text-muted"></span>
+              {% if profile and profile.avatar_url %}
+                <button type="button" class="btn btn-outline-danger btn-sm" style="min-height:44px" data-account-action="remove-avatar">
+                  <i class="fa-solid fa-trash me-1"></i>Remove
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        {# Profile form #}
+        <form id="profile-form" method="post">
+          <div class="mb-3">
+            <label for="display_name" class="form-label d-flex justify-content-between">
+              <span><i class="fa-solid fa-id-card fa-sm me-1 text-muted"></i>Display name</span>
+              <span class="small fw-normal" :class="dnLen > 57 ? 'text-danger' : dnLen > 48 ? 'text-warning' : 'text-muted'" x-text="dnLen + '/60'"></span>
+            </label>
+            <input type="text" class="form-control" id="display_name" name="display_name"
+                   maxlength="60" value="{% if profile %}{{ profile.display_name }}{% endif %}"
+                   placeholder="Leave blank to use username"
+                   @input="dnLen = $el.value.length">
+          </div>
+          <div class="mb-3">
+            <label for="bio" class="form-label d-flex justify-content-between">
+              <span><i class="fa-solid fa-align-left fa-sm me-1 text-muted"></i>Bio</span>
+              <span class="small fw-normal" :class="bioLen > 475 ? 'text-danger' : bioLen > 400 ? 'text-warning' : 'text-muted'" x-text="bioLen + '/500'"></span>
+            </label>
+            <textarea class="form-control" id="bio" name="bio" rows="3" maxlength="500"
+                      @input="bioLen = $el.value.length"
+            >{% if profile and profile.bio %}{{ profile.bio }}{% endif %}</textarea>
+          </div>
+          <div class="mb-4">
+            <label for="website" class="form-label">Website</label>
+            <div class="input-group has-validation">
+              <span class="input-group-text"><i class="fa-solid fa-link fa-sm"></i></span>
+              <input type="url" class="form-control" id="website" name="website"
+                     maxlength="255" value="{% if profile and profile.website %}{{ profile.website }}{% endif %}"
+                     placeholder="https://example.com"
+                     pattern="https?://.+">
+              <div class="invalid-feedback" id="website-error">Please enter a valid URL starting with http:// or https://</div>
+            </div>
+          </div>
+          <div id="profile-feedback" class="d-none mb-3"></div>
+          <button type="submit" class="btn btn-primary" id="profile-submit-btn" style="min-height:44px">
+            <i id="profile-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Save Profile
+          </button>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  {# ── Security tab ── #}
+  <div x-show="active==='security'">
+    <div class="card mb-3">
+      <div class="card-header fw-semibold"><i class="fa-solid fa-key fa-sm me-2 text-warning"></i>Change Password</div>
+      <div class="card-body">
+        <form id="password-form" method="post">
+          <input type="text" name="username" value="{% if profile %}{{ profile.username }}{% endif %}"
+                 autocomplete="username" aria-hidden="true" style="display:none">
+          <div class="mb-3">
+            <label for="current_password" class="form-label">Current password</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="fa-solid fa-lock fa-sm"></i></span>
+              <input type="password" class="form-control" id="current_password" required autocomplete="current-password">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label for="new_password" class="form-label">New password</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="fa-solid fa-lock-open fa-sm"></i></span>
+              <input type="password" class="form-control" id="new_password" minlength="8" required
+                     autocomplete="new-password">
+            </div>
+            <div style="height:4px;border-radius:4px;background:var(--bs-border-color,#dee2e6);overflow:hidden;margin-top:6px">
+              <div id="new-pw-strength-fill" style="height:100%;width:0;transition:width .25s,background-color .25s"></div>
+            </div>
+            <div id="new-pw-strength-text" class="form-text" style="min-height:1.2em"></div>
+            <div class="form-text"><i class="fa-solid fa-circle-info fa-xs me-1"></i>Minimum 8 characters, including a digit and a special character.</div>
+          </div>
+          <div class="mb-4">
+            <label for="confirm_password" class="form-label">Confirm new password</label>
+            <div class="input-group has-validation">
+              <span class="input-group-text"><i class="fa-solid fa-lock-open fa-sm"></i></span>
+              <input type="password" class="form-control" id="confirm_password" minlength="8" required
+                     autocomplete="new-password">
+              <div class="invalid-feedback" id="pw-mismatch">Passwords do not match.</div>
+            </div>
+          </div>
+          <div id="password-feedback" class="d-none mb-3"></div>
+          <button type="submit" class="btn btn-primary" id="pw-submit-btn" style="min-height:44px">
+            <i id="pw-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Change Password
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card bg-body-tertiary">
+      <div class="card-body py-3">
+        <p class="small fw-semibold text-muted text-uppercase mb-2" style="letter-spacing:.05em">
+          <i class="fa-solid fa-lightbulb fa-xs text-warning me-1"></i>Tips for a strong password
+        </p>
+        <ul class="list-unstyled small mb-0 text-muted" style="line-height:2">
+          <li><i class="fa-solid fa-ruler-horizontal fa-xs me-2 text-muted opacity-75"></i>Use at least 8 characters</li>
+          <li><i class="fa-solid fa-shuffle fa-xs me-2 text-muted opacity-75"></i>Mix letters, numbers &amp; symbols</li>
+          <li><i class="fa-solid fa-ban fa-xs me-2 text-muted opacity-75"></i>Don't reuse passwords from other sites</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  {# ── Preferences tab ── #}
+  <div x-show="active==='preferences'">
+    <div class="card mb-3">
+      <div class="card-body">
+        <form id="prefs-form" method="post">
+
+          {# Theme #}
+          <div class="mb-4">
+            <label class="form-label fw-semibold d-block mb-2">Theme</label>
+            <div class="d-flex gap-2 flex-wrap" id="theme-btns">
+              <button type="button" data-account-action="set-theme" data-value="auto"
+                      class="btn {% if preferences and preferences.theme == 'auto' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
+                      style="min-width:80px;min-height:70px">
+                <i class="fa-solid fa-circle-half-stroke"></i><span class="small">Auto</span>
+              </button>
+              <button type="button" data-account-action="set-theme" data-value="light"
+                      class="btn {% if preferences and preferences.theme == 'light' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
+                      style="min-width:80px;min-height:70px">
+                <i class="fa-solid fa-sun"></i><span class="small">Light</span>
+              </button>
+              <button type="button" data-account-action="set-theme" data-value="dark"
+                      class="btn {% if preferences and preferences.theme == 'dark' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
+                      style="min-width:80px;min-height:70px">
+                <i class="fa-solid fa-moon"></i><span class="small">Dark</span>
+              </button>
+            </div>
+            <input type="hidden" id="theme-val" value="{% if preferences and preferences.theme %}{{ preferences.theme }}{% else %}auto{% endif %}">
+          </div>
+
+          {# Font size #}
+          <div class="mb-4">
+            <label class="form-label fw-semibold d-block mb-2">Font Size</label>
+            <div class="btn-group" id="font-btns" role="group">
+              <button type="button" data-account-action="set-font-size" data-value="small"
+                      class="btn {% if preferences and preferences.font_size == 'small' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                      style="min-height:44px;min-width:90px">Small</button>
+              <button type="button" data-account-action="set-font-size" data-value="medium"
+                      class="btn {% if not preferences or not preferences.font_size or preferences.font_size == 'medium' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                      style="min-height:44px;min-width:90px">Medium</button>
+              <button type="button" data-account-action="set-font-size" data-value="large"
+                      class="btn {% if preferences and preferences.font_size == 'large' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                      style="min-height:44px;min-width:90px">Large</button>
+            </div>
+            <input type="hidden" id="font-size-val" value="{% if preferences and preferences.font_size %}{{ preferences.font_size }}{% else %}medium{% endif %}">
+          </div>
+
+          {# Layout #}
+          <div class="mb-4">
+            <label class="form-label fw-semibold d-block mb-2">Post Layout</label>
+            <div class="d-flex gap-2 flex-wrap" id="layout-btns">
+              <button type="button" data-account-action="set-layout" data-value="comfortable"
+                      class="btn {% if not preferences or not preferences.layout or preferences.layout == 'comfortable' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
+                      style="min-width:110px;min-height:80px">
+                <i class="fa-solid fa-align-justify"></i>
+                <span class="small fw-semibold">Comfortable</span>
+                <span style="font-size:.7rem;opacity:.75">More spacing</span>
+              </button>
+              <button type="button" data-account-action="set-layout" data-value="compact"
+                      class="btn {% if preferences and preferences.layout == 'compact' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
+                      style="min-width:110px;min-height:80px">
+                <i class="fa-solid fa-bars"></i>
+                <span class="small fw-semibold">Compact</span>
+                <span style="font-size:.7rem;opacity:.75">Denser list</span>
+              </button>
+            </div>
+            <input type="hidden" id="layout-val" value="{% if preferences and preferences.layout %}{{ preferences.layout }}{% else %}comfortable{% endif %}">
+          </div>
+
+          <div id="prefs-feedback" class="d-none mb-3"></div>
+          <button type="submit" class="btn btn-primary" id="prefs-submit-btn" style="min-height:44px">
+            <i id="prefs-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Save Preferences
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {# Watching & Muted #}
+    <div class="card" x-data="watchedMuted()">
+      <div class="card-body">
+        <h2 class="h6 fw-semibold mb-3">Watching &amp; Muted</h2>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold d-block mb-2 small text-muted text-uppercase" style="letter-spacing:.05em">
+            <i class="fa-solid fa-eye me-1"></i>Watching
+          </label>
+          <p class="small text-muted mb-0" x-show="watched.length===0">
+            Not watching any categories. Visit a category page and click <strong>Watch</strong> to follow it.
+          </p>
+          <div class="d-flex flex-wrap gap-2" x-show="watched.length>0">
+            <template x-for="cat in watched" :key="cat.id">
+              <button class="badge bg-primary-subtle text-primary-emphasis d-inline-flex align-items-center gap-1 border-0 py-1 px-2"
+                      @click="unwatch(cat.id)" :title="'Stop watching '+cat.name">
+                <span class="rounded-circle flex-shrink-0" x-show="cat.color"
+                      :style="`background:${cat.color};width:7px;height:7px;display:inline-block`"></span>
+                <span x-text="cat.name"></span>
+                <i class="fa-solid fa-xmark fa-xs"></i>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label fw-semibold d-block mb-2 small text-muted text-uppercase" style="letter-spacing:.05em">
+            <i class="fa-solid fa-eye-slash me-1"></i>Muted
+          </label>
+          <p class="small text-muted mb-0" x-show="muted.length===0">
+            Not muting any categories. Visit a category page and click <strong>Mute</strong> to hide it.
+          </p>
+          <div class="d-flex flex-wrap gap-2" x-show="muted.length>0">
+            <template x-for="cat in muted" :key="cat.id">
+              <button class="badge bg-secondary-subtle text-secondary-emphasis d-inline-flex align-items-center gap-1 border-0 py-1 px-2"
+                      @click="unmute(cat.id)" :title="'Unmute '+cat.name">
+                <span class="rounded-circle flex-shrink-0" x-show="cat.color"
+                      :style="`background:${cat.color};width:7px;height:7px;display:inline-block`"></span>
+                <span x-text="cat.name"></span>
+                <i class="fa-solid fa-xmark fa-xs"></i>
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+
+  {% if profile %}
+  <div class="fr-panel">
+    <div class="fr-panel-section"><i class="fa-solid fa-circle-user fa-xs me-1"></i>Your Account</div>
+    <div class="px-3 py-3 d-flex align-items-center gap-3">
+      {% if profile.avatar_url %}
+        <img src="{{ profile.avatar_url }}" alt="" class="rounded-circle flex-shrink-0"
+             style="width:40px;height:40px;object-fit:cover">
+      {% else %}
+        <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
+             style="width:40px;height:40px">
+          {{ profile.display_name | truncate(length=1, end="") | upper }}
+        </div>
+      {% endif %}
+      <div style="min-width:0">
+        <div class="fw-semibold text-truncate small">{{ profile.display_name }}</div>
+        <div class="text-muted text-truncate" style="font-size:.75rem">@{{ profile.username }}</div>
+      </div>
+    </div>
+    <div class="fr-panel-stat border-top">
+      <span class="text-muted small"><i class="fa-solid fa-pen-to-square fa-xs me-1"></i>Posts</span>
+      <span class="fw-semibold small">{{ profile.post_count }}</span>
+    </div>
+    {% if profile.trust_score %}
+    <div class="fr-panel-stat">
+      <span class="text-muted small"><i class="fa-solid fa-star fa-xs text-warning me-1"></i>Trust score</span>
+      <span class="fw-semibold small">{{ profile.trust_score }} / 100</span>
+    </div>
+    {% endif %}
+    <div class="fr-panel-stat">
+      <span class="text-muted small"><i class="fa-solid fa-shield-halved fa-xs me-1 text-info"></i>Trust level</span>
+      <span class="badge bg-secondary-subtle text-secondary-emphasis" style="font-size:.7rem">{{ profile.trust_level }}</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Quick Links</div>
+    <div class="fr-panel-body">
+      <a href="/notifications" class="fr-panel-row">
+        <i class="fa-solid fa-bell fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
+        <span class="small">Notifications</span>
+      </a>
+      <a href="/bookmarks" class="fr-panel-row">
+        <i class="fa-solid fa-bookmark fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
+        <span class="small">Bookmarks</span>
+      </a>
+      {% if profile %}
+      <a href="/u/{{ profile.username }}" class="fr-panel-row">
+        <i class="fa-regular fa-user fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
+        <span class="small">Public Profile</span>
+      </a>
+      {% endif %}
+      <a href="/" class="fr-panel-row">
+        <i class="fa-solid fa-house fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
+        <span class="small">Home Feed</span>
+      </a>
+    </div>
+  </div>
+
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-page-account.js" defer></script>
+{% endblock %}

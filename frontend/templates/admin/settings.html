@@ -1,0 +1,688 @@
+{% extends "admin/base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}Site Settings{% endblock %}
+{% block nav_settings %}active fw-semibold{% endblock %}
+
+{% block content %}
+
+{# Feedback banner – shown via JS #}
+<div id="settings-alert" class="alert alert-dismissible fade d-none mb-4" role="alert">
+  <span id="settings-alert-msg"></span>
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+
+{# ── Tabs ──────────────────────────────────────────────────────── #}
+<ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-general"
+            type="button" role="tab">General</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-email"
+            type="button" role="tab">Email</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-content-policy"
+            type="button" role="tab">Content Policy</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-security"
+            type="button" role="tab">Security</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-webhooks"
+            type="button" role="tab">Webhooks</button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  {# ═══════════════════════════════════════════════════════════════
+     GENERAL TAB
+  ════════════════════════════════════════════════════════════════ #}
+  <div class="tab-pane fade show active" id="tab-general" role="tabpanel">
+    <div class="row g-4">
+
+      {# ── Branding ─────────────────────────────────────────────── #}
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">Branding</div>
+          <div class="card-body">
+            <div class="row g-4">
+
+              {# Logo #}
+              <div class="col-md-6">
+                <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">Logo</h6>
+
+                <div class="d-flex gap-3 align-items-start mb-3">
+                  <div id="logo-preview-wrap"
+                       class="border rounded d-flex align-items-center justify-content-center bg-body-secondary flex-shrink-0"
+                       style="width:72px;height:72px;overflow:hidden">
+                    {% if config.logo_url %}
+                      <img id="logo-preview" src="{{ config.logo_url }}" alt="Logo"
+                           style="max-width:100%;max-height:100%;object-fit:contain">
+                    {% else %}
+                      <i class="fa-solid fa-image text-muted fa-xl"></i>
+                    {% endif %}
+                  </div>
+                  <div class="flex-grow-1 min-width-0">
+                    <div class="text-muted small mb-2">Current</div>
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                      <label class="btn btn-sm btn-outline-secondary mb-0" for="logo-file-input">
+                        <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>Choose file
+                      </label>
+                      <input type="file" id="logo-file-input" accept="image/*" class="d-none"
+                             data-branding-upload="logo">
+                      {% if config.logo_url %}
+                      <button class="btn btn-sm btn-outline-danger" type="button"
+                              data-admin-action="remove-branding" data-branding-type="logo">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                      {% endif %}
+                    </div>
+                    <div class="text-muted" style="font-size:.72rem">
+                      Accepted: JPEG, PNG, WebP, GIF &middot; Max 2 MB
+                    </div>
+                    <div id="logo-status" class="small mt-1"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="form-label fw-semibold small" for="cfg-logo_url">Logo URL</label>
+                  <input type="text" id="cfg-logo_url" class="form-control form-control-sm"
+                         value="{{ config.logo_url | default(value='') }}"
+                         placeholder="https://example.com/logo.png or /files/…">
+                  <div class="form-text">Set automatically on upload, or enter an external URL.</div>
+                </div>
+              </div>
+
+              {# Favicon #}
+              <div class="col-md-6">
+                <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">Favicon</h6>
+
+                <div class="d-flex gap-3 align-items-start mb-3">
+                  <div id="favicon-preview-wrap"
+                       class="border rounded d-flex align-items-center justify-content-center bg-body-secondary flex-shrink-0"
+                       style="width:48px;height:48px;overflow:hidden">
+                    {% if config.favicon_url %}
+                      <img id="favicon-preview" src="{{ config.favicon_url }}" alt="Favicon"
+                           style="max-width:100%;max-height:100%;object-fit:contain">
+                    {% else %}
+                      <i class="fa-solid fa-star text-muted"></i>
+                    {% endif %}
+                  </div>
+                  <div class="flex-grow-1 min-width-0">
+                    <div class="text-muted small mb-2">Current</div>
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                      <label class="btn btn-sm btn-outline-secondary mb-0" for="favicon-file-input">
+                        <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>Choose file
+                      </label>
+                      <input type="file" id="favicon-file-input" accept="image/*,.ico" class="d-none"
+                             data-branding-upload="favicon">
+                      {% if config.favicon_url %}
+                      <button class="btn btn-sm btn-outline-danger" type="button"
+                              data-admin-action="remove-branding" data-branding-type="favicon">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                      {% endif %}
+                    </div>
+                    <div class="text-muted" style="font-size:.72rem">
+                      Accepted: ICO, SVG, PNG, GIF, JPEG &middot; Max 512 KB
+                    </div>
+                    <div id="favicon-status" class="small mt-1"></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>{# /row #}
+          </div>
+        </div>
+      </div>
+
+      {# ── Site Identity ─────────────────────────────────────────── #}
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">Site Identity</div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-5">
+                <label class="form-label" for="cfg-site_name">Site Name</label>
+                <input type="text" id="cfg-site_name" class="form-control"
+                       value="{{ config.site_name | default(value='') }}" required maxlength="100">
+              </div>
+              <div class="col-md-7">
+                <label class="form-label" for="cfg-site_slogan">Slogan</label>
+                <input type="text" id="cfg-site_slogan" class="form-control"
+                       value="{{ config.site_slogan | default(value='') }}"
+                       placeholder="Your space, your rules" maxlength="100">
+                <div class="form-text">Short text shown beside the logo in the header.</div>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label" for="cfg-site_tagline">Tagline</label>
+                <input type="text" id="cfg-site_tagline" class="form-control"
+                       value="{{ config.site_tagline | default(value='') }}"
+                       placeholder="A modern self-hosted forum" maxlength="255">
+                <div class="form-text">Shown in page meta descriptions (SEO).</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="cfg-primary_color_hex">Primary Color</label>
+                <div class="input-group">
+                  <input type="color" id="cfg-primary_color" aria-label="Color picker"
+                         class="form-control form-control-color flex-shrink-0"
+                         style="width:42px;padding:4px 6px;"
+                         value="{{ config.primary_color | default(value='#0d6efd') }}">
+                  <input type="text" id="primary-color-hex" class="form-control font-monospace"
+                         maxlength="7" placeholder="#0d6efd"
+                         value="{{ config.primary_color | default(value='#0d6efd') }}">
+                </div>
+                <div class="form-text">Applied as the primary accent color across the entire site.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Registration + Post Approval ──────────────────────────── #}
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header fw-semibold">Registration</div>
+          <div class="card-body">
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="cfg-registration_open"
+                     {% if config.registration_open == "true" %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="cfg-registration_open">
+                Allow new user registration
+              </label>
+            </div>
+            <p class="text-muted small mb-0">
+              When disabled, the registration page returns 403 and invite links stop working.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header fw-semibold">Post Approval Queue</div>
+          <div class="card-body">
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="cfg-post_approval_enabled"
+                     {% if config.post_approval_enabled == "true" %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="cfg-post_approval_enabled">
+                Enable global post approval
+              </label>
+            </div>
+            <p class="text-muted small mb-3">
+              When enabled, posts from users below the selected trust level go to the moderator
+              queue before being published. Individual categories can also be set to
+              <em>Moderated</em> in their settings — this always requires approval regardless
+              of the global toggle.
+            </p>
+            <div>
+              <label class="form-label small" for="cfg-post_approval_min_trust">
+                Minimum trust level to skip queue
+              </label>
+              <select id="cfg-post_approval_min_trust" class="form-select form-select-sm">
+                <option value="new"
+                  {% if not config.post_approval_min_trust or config.post_approval_min_trust == "new" %}selected{% endif %}>
+                  New (all users)
+                </option>
+                <option value="basic"
+                  {% if config.post_approval_min_trust == "basic" %}selected{% endif %}>
+                  Basic
+                </option>
+                <option value="member"
+                  {% if config.post_approval_min_trust == "member" %}selected{% endif %}>
+                  Member
+                </option>
+                <option value="regular"
+                  {% if config.post_approval_min_trust == "regular" %}selected{% endif %}>
+                  Regular
+                </option>
+                <option value="leader"
+                  {% if config.post_approval_min_trust == "leader" %}selected{% endif %}>
+                  Leader
+                </option>
+              </select>
+              <div class="form-text">Users at or below this level require approval.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Content Moderation ────────────────────────────────────── #}
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">Content Moderation</div>
+          <div class="card-body">
+            <label class="form-label" for="cfg-keyword_blacklist">Keyword Blacklist</label>
+            <textarea id="cfg-keyword_blacklist" class="form-control font-monospace" rows="4"
+                      placeholder="One keyword per line" maxlength="10000">{{ config.keyword_blacklist | default(value='') }}</textarea>
+            <div class="form-text">
+              Posts containing these keywords will be flagged for moderator review.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>{# /row #}
+
+    <div class="mt-3 d-flex align-items-center gap-3">
+      <button class="btn btn-primary" type="button" data-admin-action="save-settings">
+        <i class="fa-solid fa-floppy-disk me-1"></i>Save Settings
+      </button>
+      <span id="save-spinner" class="text-muted small d-none">
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+      </span>
+    </div>
+
+  </div>{# /tab-general #}
+
+  {# ═══════════════════════════════════════════════════════════════
+     EMAIL TAB
+  ════════════════════════════════════════════════════════════════ #}
+  <div class="tab-pane fade" id="tab-email" role="tabpanel">
+
+    <div class="alert alert-info d-flex gap-2 mb-4" role="alert">
+      <i class="fa-solid fa-circle-info flex-shrink-0 mt-1"></i>
+      <div>
+        SMTP changes are applied immediately for new emails. The initial values are seeded
+        from environment variables on first startup — updating them here overrides the env
+        values without requiring a server restart.
+        <br>
+        If <strong>SMTP Host</strong> is blank, email sending is disabled and new
+        registrations are auto-verified.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header fw-semibold">SMTP Configuration</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label" for="cfg-smtp_host">SMTP Host</label>
+            <input type="text" id="cfg-smtp_host" class="form-control"
+                   value="{{ config.smtp_host | default(value='') }}"
+                   placeholder="smtp.sendgrid.net" maxlength="255">
+            <div class="form-text">Leave blank to disable email sending.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="cfg-smtp_port">Port</label>
+            <input type="number" id="cfg-smtp_port" class="form-control"
+                   value="{{ config.smtp_port | default(value='587') }}"
+                   min="1" max="65535" placeholder="587">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="cfg-smtp_user">Username</label>
+            <input type="text" id="cfg-smtp_user" class="form-control"
+                   value="{{ config.smtp_user | default(value='') }}"
+                   placeholder="apikey or noreply@example.com" maxlength="255">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="cfg-smtp_pass">Password</label>
+            <input type="text" id="cfg-smtp_pass" class="form-control font-monospace"
+                   value=""
+                   autocomplete="off"
+                   maxlength="500"
+                   placeholder="{% if config.smtp_pass %}(set — enter new value to change){% else %}(not set){% endif %}">
+            <div class="form-text">Leave blank to keep the existing password.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 d-flex align-items-center gap-3">
+      <button class="btn btn-primary" type="button" data-admin-action="save-settings"
+              data-settings-tab="email">
+        <i class="fa-solid fa-floppy-disk me-1"></i>Save Email Settings
+      </button>
+      <span id="save-spinner-email" class="text-muted small d-none">
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+      </span>
+    </div>
+
+  </div>{# /tab-email #}
+
+  {# ═══════════════════════════════════════════════════════════════
+     CONTENT POLICY TAB
+  ════════════════════════════════════════════════════════════════ #}
+  <div class="tab-pane fade" id="tab-content-policy" role="tabpanel">
+    <div class="row g-4">
+
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header fw-semibold">Post Edit Window</div>
+          <div class="card-body">
+            <label class="form-label" for="cfg-post_edit_window_hours">
+              Hours after creation users can edit their own posts/threads
+            </label>
+            <div class="input-group" style="max-width:200px">
+              <input type="number" id="cfg-post_edit_window_hours" class="form-control"
+                     value="{{ config.post_edit_window_hours | default(value='24') }}"
+                     min="0" max="8760">
+              <span class="input-group-text">hours</span>
+            </div>
+            <div class="form-text">
+              Set to <code>0</code> to disallow editing entirely.
+              Moderators can always edit regardless of this window.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card h-100">
+          <div class="card-header fw-semibold">Forum Index</div>
+          <div class="card-body">
+            <label class="form-label" for="cfg-forum_index_threads_per_category">
+              Recent threads shown per category on the home page
+            </label>
+            <div class="input-group" style="max-width:200px">
+              <input type="number" id="cfg-forum_index_threads_per_category" class="form-control"
+                     value="{{ config.forum_index_threads_per_category | default(value='5') }}"
+                     min="1" max="20">
+              <span class="input-group-text">threads</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">Pagination</div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="cfg-max_posts_per_page">
+                  Max posts per page
+                </label>
+                <div class="input-group" style="max-width:200px">
+                  <input type="number" id="cfg-max_posts_per_page" class="form-control"
+                         value="{{ config.max_posts_per_page | default(value='20') }}"
+                         min="5" max="100">
+                  <span class="input-group-text">posts</span>
+                </div>
+                <div class="form-text">Hard ceiling on the <code>per_page</code> query parameter for the post list API.</div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="cfg-max_threads_per_page">
+                  Max threads per page
+                </label>
+                <div class="input-group" style="max-width:200px">
+                  <input type="number" id="cfg-max_threads_per_page" class="form-control"
+                         value="{{ config.max_threads_per_page | default(value='30') }}"
+                         min="5" max="100">
+                  <span class="input-group-text">threads</span>
+                </div>
+                <div class="form-text">Hard ceiling on the <code>per_page</code> query parameter for all thread list APIs.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>{# /row #}
+
+    <div class="mt-3 d-flex align-items-center gap-3">
+      <button class="btn btn-primary" type="button" data-admin-action="save-settings"
+              data-settings-tab="content-policy">
+        <i class="fa-solid fa-floppy-disk me-1"></i>Save Content Policy
+      </button>
+      <span id="save-spinner-content-policy" class="text-muted small d-none">
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+      </span>
+    </div>
+
+  </div>{# /tab-content-policy #}
+
+  {# ═══════════════════════════════════════════════════════════════
+     SECURITY TAB
+  ════════════════════════════════════════════════════════════════ #}
+  <div class="tab-pane fade" id="tab-security" role="tabpanel">
+    <div class="row g-4">
+
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">Account Lockout</div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="cfg-account_lockout_attempts">
+                  Failed login attempts before lockout
+                </label>
+                <div class="input-group" style="max-width:200px">
+                  <input type="number" id="cfg-account_lockout_attempts" class="form-control"
+                         value="{{ config.account_lockout_attempts | default(value='5') }}"
+                         min="1" max="20">
+                  <span class="input-group-text">attempts</span>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="cfg-account_lockout_duration_minutes">
+                  Lockout duration
+                </label>
+                <div class="input-group" style="max-width:200px">
+                  <input type="number" id="cfg-account_lockout_duration_minutes" class="form-control"
+                         value="{{ config.account_lockout_duration_minutes | default(value='15') }}"
+                         min="1" max="1440">
+                  <span class="input-group-text">minutes</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">Rate Limiting</div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">
+              Changes take effect immediately — the in-memory config cache is updated on save.
+              Rate limiting must be enabled via the <code>RATE_LIMIT_ENABLED=true</code>
+              environment variable.
+            </p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="cfg-auth_rate_limit_per_min">
+                  Auth endpoints (login, register, password reset)
+                </label>
+                <div class="input-group" style="max-width:220px">
+                  <input type="number" id="cfg-auth_rate_limit_per_min" class="form-control"
+                         value="{{ config.auth_rate_limit_per_min | default(value='10') }}"
+                         min="1" max="1000">
+                  <span class="input-group-text">req / min</span>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="cfg-public_write_rate_limit_per_min">
+                  Public write endpoints (create post, thread, reaction)
+                </label>
+                <div class="input-group" style="max-width:220px">
+                  <input type="number" id="cfg-public_write_rate_limit_per_min" class="form-control"
+                         value="{{ config.public_write_rate_limit_per_min | default(value='30') }}"
+                         min="1" max="1000">
+                  <span class="input-group-text">req / min</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>{# /row #}
+
+    <div class="mt-3 d-flex align-items-center gap-3">
+      <button class="btn btn-primary" type="button" data-admin-action="save-settings"
+              data-settings-tab="security">
+        <i class="fa-solid fa-floppy-disk me-1"></i>Save Security Settings
+      </button>
+      <span id="save-spinner-security" class="text-muted small d-none">
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+      </span>
+    </div>
+
+  </div>{# /tab-security #}
+
+  {# ═══════════════════════════════════════════════════════════════
+     WEBHOOKS TAB
+  ════════════════════════════════════════════════════════════════ #}
+  <div class="tab-pane fade" id="tab-webhooks" role="tabpanel" x-data="webhooksPanel()">
+
+    <p class="text-muted mb-4" style="max-width:640px">
+      Webhooks fire an HTTP POST to your URL when forum events occur.
+      Optionally set a secret to verify the <code>X-Ferum-Signature</code> header (HMAC-SHA256).
+      A webhook is auto-disabled after 5 consecutive delivery failures.
+    </p>
+
+    {# Loading #}
+    <template x-if="loading">
+      <div class="text-center text-muted py-5">
+        <i class="fa-solid fa-spinner fa-spin fa-lg"></i>
+      </div>
+    </template>
+
+    {# Empty state #}
+    <template x-if="!loading && webhooks.length === 0">
+      <div class="card mb-4">
+        <div class="card-body text-center text-muted py-5">
+          <i class="fa-solid fa-plug-circle-xmark fa-2x mb-3 d-block opacity-50"></i>
+          No webhooks configured yet.
+        </div>
+      </div>
+    </template>
+
+    {# Webhook list #}
+    <template x-if="!loading && webhooks.length > 0">
+      <div class="card mb-4">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-active">
+              <tr>
+                <th>URL</th>
+                <th>Events</th>
+                <th>Status</th>
+                <th class="text-end" style="width:100px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="wh in webhooks" :key="wh.id">
+                <tr>
+                  <td>
+                    <span class="font-monospace small" x-text="wh.url"></span>
+                    <template x-if="wh.has_secret">
+                      <span class="badge bg-secondary-subtle text-secondary-emphasis ms-1 small">
+                        <i class="fa-solid fa-lock fa-xs"></i> signed
+                      </span>
+                    </template>
+                  </td>
+                  <td style="max-width:260px">
+                    <div class="d-flex flex-wrap gap-1">
+                      <template x-for="ev in wh.events" :key="ev">
+                        <span class="badge bg-body-secondary text-body border font-monospace"
+                              style="font-size:.6rem" x-text="ev"></span>
+                      </template>
+                    </div>
+                  </td>
+                  <td>
+                    <span x-show="wh.is_active"
+                          class="badge bg-success-subtle text-success-emphasis">Active</span>
+                    <span x-show="!wh.is_active"
+                          class="badge bg-warning-subtle text-warning-emphasis">Disabled</span>
+                    <template x-if="wh.failure_count > 0">
+                      <span class="badge bg-danger-subtle text-danger-emphasis ms-1"
+                            :title="'Consecutive failures: ' + wh.failure_count">
+                        <i class="fa-solid fa-triangle-exclamation fa-xs"></i>
+                        <span x-text="wh.failure_count"></span>
+                      </span>
+                    </template>
+                  </td>
+                  <td class="text-end">
+                    <div class="d-flex gap-1 justify-content-end">
+                      <button class="btn btn-sm btn-outline-secondary"
+                              :title="wh.is_active ? 'Disable' : 'Enable'"
+                              @click="toggleWebhook(wh)">
+                        <i class="fa-solid" :class="wh.is_active ? 'fa-pause' : 'fa-play'"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger" title="Delete"
+                              @click="deleteWebhook(wh.id)">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+
+    {# Add Webhook ─────────────────────────────────────────────── #}
+    <div class="card">
+      <div class="card-header fw-semibold">Add Webhook</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-7">
+            <label class="form-label">
+              URL <span class="text-danger">*</span>
+            </label>
+            <input type="url" class="form-control" x-model="form.url"
+                   placeholder="https://example.com/webhook" maxlength="500">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">
+              Secret
+              <span class="text-muted fw-normal small">(optional)</span>
+            </label>
+            <input type="text" class="form-control font-monospace" x-model="form.secret"
+                   placeholder="Leave blank for unsigned" maxlength="255">
+          </div>
+          <div class="col-12">
+            <label class="form-label">
+              Events <span class="text-danger">*</span>
+            </label>
+            <div class="row g-2">
+              <template x-for="ev in allEvents" :key="ev">
+                <div class="col-md-4 col-sm-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox"
+                           :id="'ev-new-' + ev"
+                           :value="ev"
+                           x-model="form.events">
+                    <label class="form-check-label font-monospace small"
+                           :for="'ev-new-' + ev"
+                           x-text="ev"></label>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 d-flex align-items-center gap-3">
+          <button class="btn btn-primary" type="button"
+                  :disabled="!form.url || form.events.length === 0 || saving"
+                  @click="addWebhook()">
+            <i class="fa-solid fa-plus me-1"></i>Add Webhook
+          </button>
+          <span x-show="saving" x-cloak class="text-muted small">
+            <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+          </span>
+        </div>
+
+        <div x-show="webhookError" x-cloak
+             class="alert alert-danger mt-3 mb-0 py-2 small"
+             x-text="webhookError"></div>
+      </div>
+    </div>
+
+  </div>{# /tab-webhooks #}
+
+</div>{# /tab-content #}
+
+{% endblock %}
+
+{% block scripts %}{% endblock %}

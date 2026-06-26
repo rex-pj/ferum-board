@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -20,9 +19,24 @@ pub struct InMemoryRateLimiter {
 
 impl InMemoryRateLimiter {
     pub fn new() -> Self {
-        Self {
-            store: Arc::new(DashMap::new()),
-        }
+        let store: Arc<DashMap<String, Window>> = Arc::new(DashMap::new());
+
+        // Evict expired windows every 5 minutes. Without this the map grows
+        // unboundedly because entries are only reset (not removed) on re-use,
+        // so IPs that never return accumulate forever.
+        let store_weak = Arc::downgrade(&store);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                let Some(map) = store_weak.upgrade() else { break };
+                let now = Instant::now();
+                map.retain(|_, w| w.reset_at > now);
+            }
+        });
+
+        Self { store }
     }
 }
 

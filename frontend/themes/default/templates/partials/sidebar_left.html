@@ -1,0 +1,58 @@
+<nav aria-label="Site navigation" class="fr-sidebar-nav">
+  <a href="/" class="fr-nav-link" data-nav-exact="true">
+    <i class="fa-solid fa-house fa-fw" aria-hidden="true"></i>
+    Home
+  </a>
+  <a href="/forum" class="fr-nav-link" data-nav-prefix="/forum">
+    <i class="fa-solid fa-layer-group fa-fw" aria-hidden="true"></i>
+    Forum
+  </a>
+
+  {% if nav_categories is defined and nav_categories %}
+    <div class="fr-nav-section">Categories</div>
+    {% for cat in nav_categories %}
+      <a href="/forum/{{ cat.slug }}" class="fr-nav-link" data-nav-exact="true">
+        <span class="fr-color-dot fr-color-dot--8 flex-shrink-0"
+              style="background:{{ cat.color | default(value='#6b7280') }}"></span>
+        <span class="text-truncate">{{ cat.name }}</span>
+      </a>
+      {% for child in cat.children %}
+        <a href="/forum/{{ child.slug }}" class="fr-nav-link fr-nav-link--child" data-nav-exact="true">
+          <span class="fr-color-dot fr-color-dot--8 flex-shrink-0"
+                style="background:{{ child.color | default(value='#6b7280') }}"></span>
+          <span class="text-truncate">{{ child.name }}</span>
+        </a>
+      {% endfor %}
+    {% endfor %}
+  {% endif %}
+
+  {% if current_user is defined and current_user %}
+    <div class="fr-nav-section">Account</div>
+    <a href="/notifications" class="fr-nav-link" data-nav-prefix="/notifications">
+      <i class="fa-solid fa-bell fa-fw" aria-hidden="true"></i>
+      Notifications
+      {% if current_user.unread_count > 0 %}
+        <span class="badge bg-danger rounded-pill ms-auto fr-nav-link-badge">
+          {{ current_user.unread_count }}
+        </span>
+      {% endif %}
+    </a>
+    <a href="/bookmarks" class="fr-nav-link" data-nav-prefix="/bookmarks">
+      <i class="fa-solid fa-bookmark fa-fw" aria-hidden="true"></i>
+      Bookmarks
+    </a>
+  {% endif %}
+</nav>
+<script>
+(function() {
+  var path = window.location.pathname;
+  var nav = document.currentScript.previousElementSibling;
+  nav.querySelectorAll('a[data-nav-exact], a[data-nav-prefix]').forEach(function(a) {
+    var exact = a.getAttribute('data-nav-exact');
+    var prefix = a.getAttribute('data-nav-prefix');
+    var href = a.getAttribute('href');
+    var isActive = exact ? path === href : (prefix ? path.startsWith(prefix) : false);
+    if (isActive) a.classList.add('active');
+  });
+})();
+</script>

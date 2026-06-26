@@ -2,28 +2,34 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use dashmap::DashMap;
+
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::constants::{MAX_THREADS_PER_PAGE, MAX_THUMBNAIL_BYTES, POST_EDIT_WINDOW_HOURS};
+use crate::constants::{DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS, MAX_TAGS_PER_THREAD, MAX_THUMBNAIL_BYTES};
 use crate::event_bus::EventBus;
 use crate::permission::PermissionChecker;
-use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginRuntime};
-use crate::shared::AppError;
+use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginHookRuntime};
+use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
-use crate::validators::generate_thread_slug;
+use crate::validators::{generate_thread_slug, validate_thread_title};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::role::perm;
 use ferum_domain::models::thread::{Thread, ThreadStatus};
 use ferum_domain::repositories::category_repository::CategoryRepository;
 use ferum_domain::repositories::post_repository::PostRepository;
+use ferum_domain::repositories::site_config_repository::{
+    get_config_i64, get_config_u64, SiteConfigRepository,
+};
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::tag_repository::TagRepository;
-use ferum_domain::repositories::thread_repository::{NewThread, ThreadRepository, UpdateThread};
+use ferum_domain::repositories::thread_repository::{
+    AdminThreadFilter, NewThread, ThreadFilter, ThreadRepository, ThreadSort, UpdateThread,
+};
 use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::AuthUser;
 
-#[allow(dead_code)]
 pub struct ThreadUseCase {
     pub threads: Arc<dyn ThreadRepository>,
     pub categories: Arc<dyn CategoryRepository>,
@@ -34,7 +40,14 @@ pub struct ThreadUseCase {
     pub cache: Arc<dyn CacheService>,
     pub tags: Arc<dyn TagRepository>,
     pub users: Arc<dyn UserRepository>,
-    pub plugin_runtime: Arc<dyn PluginRuntime>,
+    pub plugin_runtime: Arc<dyn PluginHookRuntime>,
+    pub site_config: Option<Arc<dyn SiteConfigRepository>>,
+    /// Khi true: dùng DB thread_view_dedup để dedup view (mỗi user chỉ tính 1 lần/thread/ngày).
+    /// Khi false: mọi request đều đếm view.
+    pub dedup_view_counts: bool,
+    /// In-memory buffer: batches view count increments and flushes to DB every 60s.
+    /// Eliminates per-request hot-row UPDATE on threads.view_count under concurrent load.
+    view_count_buffer: Arc<DashMap<Uuid, u32>>,
 }
 
 impl ThreadUseCase {
@@ -60,12 +73,66 @@ impl ThreadUseCase {
             tags,
             users,
             plugin_runtime: Arc::new(NullPluginRuntime),
+            site_config: None,
+            dedup_view_counts: false,
+            view_count_buffer: Arc::new(DashMap::new()),
         }
     }
 
-    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginRuntime>) -> Self {
+    pub fn with_dedup_view_counts(mut self, enabled: bool) -> Self {
+        self.dedup_view_counts = enabled;
+        self
+    }
+
+    /// Drains the in-memory view count buffer and flushes accumulated counts to the DB.
+    /// Called by a background task in startup.rs every 60 seconds.
+    /// On server restart, buffered counts not yet flushed are lost — acceptable for view counts.
+    pub async fn flush_view_counts(&self) -> Result<(), AppError> {
+        // Atomically drain each key. Entries added to already-visited keys during
+        // DB writes are captured by remove(); entries on brand-new keys stay in
+        // the buffer for the next flush cycle.
+        let snapshot: Vec<(Uuid, u32)> = self
+            .view_count_buffer
+            .iter()
+            .map(|e| *e.key())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter_map(|k| self.view_count_buffer.remove(&k).map(|(k, v)| (k, v)))
+            .collect();
+
+        for (thread_id, count) in snapshot {
+            if count == 0 {
+                continue;
+            }
+            if let Err(e) = self.threads.add_view_count(thread_id, count as i32).await {
+                tracing::warn!("view count flush failed for {}: {:?}", thread_id, e);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
         self.plugin_runtime = runtime;
         self
+    }
+
+    pub fn with_site_config(mut self, site_config: Arc<dyn SiteConfigRepository>) -> Self {
+        self.site_config = Some(site_config);
+        self
+    }
+
+    async fn max_threads_per_page(&self) -> u64 {
+        match &self.site_config {
+            Some(sc) => get_config_u64(sc.as_ref(), "max_threads_per_page", DEFAULT_MAX_THREADS_PER_PAGE).await,
+            None => DEFAULT_MAX_THREADS_PER_PAGE,
+        }
+    }
+
+    async fn post_edit_window_hours(&self) -> i64 {
+        match &self.site_config {
+            Some(sc) => get_config_i64(sc.as_ref(), "post_edit_window_hours", DEFAULT_POST_EDIT_WINDOW_HOURS).await,
+            None => DEFAULT_POST_EDIT_WINDOW_HOURS,
+        }
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
@@ -75,7 +142,7 @@ impl ThreadUseCase {
             .threads
             .find_by_id(id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if thread.deleted_at.is_some() {
             return Err(AppError::NotFound);
         }
@@ -91,6 +158,7 @@ impl ThreadUseCase {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(cache_hit = tracing::field::Empty))]
     async fn visible_category_map(
         &self,
         actor: Option<&AuthUser>,
@@ -99,9 +167,13 @@ impl ThreadUseCase {
 
         let all_categories = if let Some(cached) = self.cache.get(CACHE_KEY).await {
             match serde_json::from_str(&cached) {
-                Ok(cats) => cats,
+                Ok(cats) => {
+                    tracing::Span::current().record("cache_hit", true);
+                    cats
+                }
                 Err(_) => {
                     // Corrupt cache entry — fetch from DB and overwrite.
+                    tracing::Span::current().record("cache_hit", false);
                     let cats = self.categories.list_all().await?;
                     if let Ok(json) = serde_json::to_string(&cats) {
                         self.cache
@@ -113,6 +185,7 @@ impl ThreadUseCase {
                 }
             }
         } else {
+            tracing::Span::current().record("cache_hit", false);
             let cats = self.categories.list_all().await?;
             if let Ok(json) = serde_json::to_string(&cats) {
                 self.cache
@@ -130,6 +203,21 @@ impl ThreadUseCase {
             .collect())
     }
 
+    /// TTL for cached thread-list totals. Short enough that a newly created thread is
+    /// reflected in the total within seconds, long enough to absorb listing traffic.
+    const COUNT_CACHE_TTL: Duration = Duration::from_secs(30);
+
+    async fn read_cached_count(&self, key: &str) -> Option<u64> {
+        self.cache.get(key).await.and_then(|s| s.parse::<u64>().ok())
+    }
+
+    async fn write_cached_count(&self, key: &str, total: u64) {
+        self.cache
+            .set(key, &total.to_string(), Self::COUNT_CACHE_TTL)
+            .await
+            .ok();
+    }
+
     fn enrich_threads(threads: &mut [Thread], map: &HashMap<Uuid, (String, String)>) {
         for thread in threads {
             if let Some((slug, name)) = map.get(&thread.category_id) {
@@ -141,10 +229,12 @@ impl ThreadUseCase {
 
     // ── Public API ───────────────────────────────────────────────────────────
 
+    #[tracing::instrument(skip_all, fields(category_slug = %category_slug, page = page))]
     pub async fn list_by_category(
         &self,
         actor: Option<&AuthUser>,
         category_slug: &str,
+        sort: ThreadSort,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Thread>, u64), AppError> {
@@ -152,15 +242,24 @@ impl ThreadUseCase {
             .categories
             .find_by_slug(category_slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         PermissionChecker::can_view_category(actor, &category)?;
 
-        let per_page = per_page.min(MAX_THREADS_PER_PAGE);
+        let per_page = per_page.min(self.max_threads_per_page().await);
+        let filter = ThreadFilter { sort };
+        // The category thread count is identical for every viewer (no per-user filter),
+        // so cache it briefly and skip the COUNT(*) on the hot path. Sort matters because
+        // Unanswered/Solved add WHERE predicates that change the total.
+        let count_key = format!("threads:count:cat:{}:{}", category.id, filter.sort.as_str());
+        let cached_total = self.read_cached_count(&count_key).await;
         let (mut threads, total) = self
             .threads
-            .list_by_category(category.id, page, per_page)
+            .list_by_category(category.id, &filter, page, per_page, cached_total)
             .await?;
+        if cached_total.is_none() {
+            self.write_cached_count(&count_key, total).await;
+        }
         let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
         let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
         for t in threads.iter_mut() {
@@ -171,15 +270,17 @@ impl ThreadUseCase {
         Ok((threads, total))
     }
 
+    #[tracing::instrument(skip_all, fields(page = page))]
     pub async fn list_feed(
         &self,
         actor: Option<&AuthUser>,
+        sort: ThreadSort,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Thread>, u64), AppError> {
         let category_map = self.visible_category_map(actor).await?;
         let visible_ids: Vec<Uuid> = category_map.keys().cloned().collect();
-        let per_page = per_page.min(MAX_THREADS_PER_PAGE);
+        let per_page = per_page.min(self.max_threads_per_page().await);
 
         // Personalized feed: filter by watched/muted when the user is logged in.
         let feed_ids = if let Some(actor) = actor {
@@ -227,7 +328,25 @@ impl ThreadUseCase {
             feed_ids
         };
 
-        let (mut threads, total) = self.threads.list_feed(&feed_ids, page, per_page).await?;
+        let filter = ThreadFilter { sort };
+        // Only cache the count for the guest feed, whose category set is stable. A
+        // logged-in user's feed is personalized (watched/muted), so its count is not
+        // shared and not worth caching — pass None to compute it normally.
+        let count_key = (actor.is_none())
+            .then(|| format!("threads:count:feed:guest:{}", filter.sort.as_str()));
+        let cached_total = match &count_key {
+            Some(k) => self.read_cached_count(k).await,
+            None => None,
+        };
+        let (mut threads, total) = self
+            .threads
+            .list_feed(&feed_ids, &filter, page, per_page, cached_total)
+            .await?;
+        if let Some(k) = &count_key {
+            if cached_total.is_none() {
+                self.write_cached_count(k, total).await;
+            }
+        }
         Self::enrich_threads(&mut threads, &category_map);
         let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
         let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
@@ -237,31 +356,59 @@ impl ThreadUseCase {
         Ok((threads, total))
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
+    pub async fn list_threads_for_admin(
+        &self,
+        actor: &AuthUser,
+        filter: AdminThreadFilter,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Thread>, u64), AppError> {
+        PermissionChecker::can_manage_users(actor)?;
+        let per_page = per_page.min(self.max_threads_per_page().await);
+        let category_map = self.visible_category_map(Some(actor)).await?;
+
+        let (mut threads, total) = self
+            .threads
+            .list_admin_threads(&filter, page, per_page)
+            .await?;
+
+        Self::enrich_threads(&mut threads, &category_map);
+        let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
+        let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
+        for t in threads.iter_mut() {
+            t.tags = tag_map.get(&t.id).cloned().unwrap_or_default();
+        }
+        Ok((threads, total))
+    }
+
+    #[tracing::instrument(skip_all, fields(tag_slug = %tag_slug, page = page))]
     pub async fn list_by_tag(
         &self,
         actor: Option<&AuthUser>,
         tag_slug: &str,
+        sort: ThreadSort,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Thread>, u64), AppError> {
         let category_map = self.visible_category_map(actor).await?;
         let visible_ids: Vec<Uuid> = category_map.keys().cloned().collect();
-        let per_page = per_page.min(MAX_THREADS_PER_PAGE);
+        let per_page = per_page.min(self.max_threads_per_page().await);
+        let filter = ThreadFilter { sort };
         let (mut threads, total) = self
             .threads
-            .list_by_tag(tag_slug, &visible_ids, page, per_page)
+            .list_by_tag(tag_slug, &visible_ids, &filter, page, per_page)
             .await?;
         Self::enrich_threads(&mut threads, &category_map);
+        let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
+        let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
         for t in threads.iter_mut() {
-            t.tags = self
-                .tags
-                .find_by_thread(t.id)
-                .await
-                .unwrap_or_default();
+            t.tags = tag_map.get(&t.id).cloned().unwrap_or_default();
         }
         Ok((threads, total))
     }
 
+    #[tracing::instrument(skip_all, fields(author_id = %author_id, page = page))]
     pub async fn list_by_author(
         &self,
         actor: Option<&AuthUser>,
@@ -271,25 +418,32 @@ impl ThreadUseCase {
     ) -> Result<(Vec<Thread>, u64), AppError> {
         let category_map = self.visible_category_map(actor).await?;
         let visible_ids: Vec<Uuid> = category_map.keys().cloned().collect();
-        let per_page = per_page.min(MAX_THREADS_PER_PAGE);
+        let per_page = per_page.min(self.max_threads_per_page().await);
         let (mut threads, total) = self
             .threads
             .list_by_author(author_id, &visible_ids, page, per_page)
             .await?;
         Self::enrich_threads(&mut threads, &category_map);
+        let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
+        let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
+        for t in threads.iter_mut() {
+            t.tags = tag_map.get(&t.id).cloned().unwrap_or_default();
+        }
         Ok((threads, total))
     }
 
+    #[tracing::instrument(skip_all, fields(slug = %slug))]
     pub async fn get_by_slug(
         &self,
         actor: Option<&AuthUser>,
         slug: &str,
+        guest_key: Option<&str>,
     ) -> Result<Thread, AppError> {
         let mut thread = self
             .threads
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         if thread.status == ThreadStatus::Deleted {
             return Err(AppError::NotFound);
@@ -299,44 +453,74 @@ impl ThreadUseCase {
             .categories
             .find_by_id(thread.category_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         PermissionChecker::can_view_category(actor, &category)?;
 
         // Fire-and-forget: view count does not block the response.
+        // Buffer accumulates increments; background task (startup.rs, 60s) flushes to DB.
         let threads_clone = self.threads.clone();
+        let buf = self.view_count_buffer.clone();
         let thread_id = thread.id;
-        tokio::spawn(async move {
-            if let Err(e) = threads_clone.increment_view_count(thread_id).await {
-                tracing::warn!("view count increment failed for {}: {:?}", thread_id, e);
+
+        if self.dedup_view_counts {
+            // Derive viewer key and type from authenticated user or guest fingerprint.
+            let (viewer_key, viewer_type): (Option<String>, &'static str) = match actor {
+                Some(user) => (Some(user.id.to_string()), "user"),
+                None => (guest_key.map(str::to_owned), "guest"),
+            };
+
+            if let Some(key) = viewer_key {
+                tokio::spawn(async move {
+                    match threads_clone.try_record_view(thread_id, &key, viewer_type).await {
+                        Ok(true) => {
+                            *buf.entry(thread_id).or_insert(0) += 1;
+                        }
+                        Ok(false) => {}
+                        Err(e) => tracing::warn!("view dedup record failed for {}: {:?}", thread_id, e),
+                    }
+                });
             }
-        });
+            // Guest with no fingerprint (missing header) — skip, do not count.
+        } else {
+            tokio::spawn(async move {
+                *buf.entry(thread_id).or_insert(0) += 1;
+            });
+        }
 
         thread.category_slug = category.slug;
         thread.tags = self.tags.find_by_thread(thread.id).await.unwrap_or_default();
         Ok(thread)
     }
 
+    #[tracing::instrument(skip(self), fields(thread_id = %id))]
     pub async fn get_by_id(&self, id: Uuid) -> Result<Thread, AppError> {
         let thread = self
             .threads
             .find_by_id(id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if thread.status == ThreadStatus::Deleted {
             return Err(AppError::NotFound);
         }
         Ok(thread)
     }
 
+    #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id, category_id = %cmd.category_id))]
     pub async fn create(&self, actor: &AuthUser, cmd: CreateThreadCmd) -> Result<Thread, AppError> {
         let category = self
             .categories
             .find_by_id(cmd.category_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         PermissionChecker::can_create_post(actor, &category)?;
+
+        if !validate_thread_title(&cmd.title) {
+            return Err(AppError::unprocessable(
+                "Thread title must be 5–255 characters",
+            ));
+        }
 
         // Before-hook: allow plugins to inspect or block thread creation
         let hook_ctx = HookContext {
@@ -378,7 +562,7 @@ impl ThreadUseCase {
 
         if !cmd.tag_names.is_empty() {
             let mut tag_ids = Vec::new();
-            for raw in cmd.tag_names.iter().take(5) {
+            for raw in cmd.tag_names.iter().take(MAX_TAGS_PER_THREAD) {
                 let name = raw.trim().to_string();
                 if name.is_empty() {
                     continue;
@@ -420,6 +604,7 @@ impl ThreadUseCase {
         Ok(thread)
     }
 
+    #[tracing::instrument(skip(self, actor, title), fields(user_id = %actor.id, thread_id = %id))]
     pub async fn update_title(
         &self,
         actor: &AuthUser,
@@ -428,8 +613,14 @@ impl ThreadUseCase {
     ) -> Result<Thread, AppError> {
         let thread = self.find_live_thread(id).await?;
 
+        if thread.status == ThreadStatus::Locked
+            && !actor.has_perm_in(perm::THREAD_EDIT_ANY, thread.category_id)
+        {
+            return Err(AppError::forbidden("thread_locked"));
+        }
+
         let is_author_within_window = thread.author_id == actor.id
-            && Utc::now() - thread.created_at <= chrono::Duration::hours(POST_EDIT_WINDOW_HOURS);
+            && Utc::now() - thread.created_at <= chrono::Duration::hours(self.post_edit_window_hours().await);
 
         if !is_author_within_window
             && !actor.has_perm_in(perm::THREAD_EDIT_ANY, thread.category_id)
@@ -438,6 +629,12 @@ impl ThreadUseCase {
         }
 
         PermissionChecker::require_not_banned(actor)?;
+
+        if !validate_thread_title(&title) {
+            return Err(AppError::unprocessable(
+                "Thread title must be 5–255 characters",
+            ));
+        }
 
         self.threads
             .update(
@@ -450,6 +647,64 @@ impl ThreadUseCase {
             .await
     }
 
+    /// Replace the tag set of a thread.  Author within edit window or any mod can do this.
+    #[tracing::instrument(skip(self, actor, tag_names), fields(user_id = %actor.id, thread_id = %thread_id))]
+    pub async fn update_tags(
+        &self,
+        actor: &AuthUser,
+        thread_id: Uuid,
+        tag_names: Vec<String>,
+    ) -> Result<(), AppError> {
+        PermissionChecker::require_not_banned(actor)?;
+
+        let thread = self.find_live_thread(thread_id).await?;
+
+        if thread.status == ThreadStatus::Locked
+            && !actor.has_perm_in(perm::THREAD_EDIT_ANY, thread.category_id)
+        {
+            return Err(AppError::forbidden("thread_locked"));
+        }
+
+        let is_author_within_window = thread.author_id == actor.id
+            && Utc::now() - thread.created_at <= chrono::Duration::hours(self.post_edit_window_hours().await);
+
+        if !is_author_within_window
+            && !actor.has_perm_in(perm::THREAD_EDIT_ANY, thread.category_id)
+        {
+            return Err(AppError::forbidden("edit_window_expired"));
+        }
+
+        let mut tag_ids: Vec<uuid::Uuid> = Vec::new();
+        for raw in tag_names.iter().take(MAX_TAGS_PER_THREAD) {
+            let name = raw.trim().to_string();
+            if name.is_empty() {
+                continue;
+            }
+            let tag_slug = slug::slugify(&name);
+            let tag = match self.tags.find_by_slug(&tag_slug).await? {
+                Some(t) => t,
+                None => {
+                    if !actor.has_perm(perm::TAG_CREATE) {
+                        continue;
+                    }
+                    self.tags
+                        .create(ferum_domain::models::tag::NewTag {
+                            id: uuid::Uuid::new_v4(),
+                            name,
+                            slug: tag_slug,
+                            color: None,
+                            created_by_id: Some(actor.id),
+                        })
+                        .await?
+                }
+            };
+            tag_ids.push(tag.id);
+        }
+
+        self.tags.replace_thread_tags(thread_id, &tag_ids).await
+    }
+
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %id))]
     pub async fn soft_delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         let thread = self.find_live_thread(id).await?;
         Self::require_author_or_mod(actor, &thread)?;
@@ -477,17 +732,14 @@ impl ThreadUseCase {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %id, pin = pin))]
     pub async fn pin(
         &self,
         actor: &AuthUser,
         id: Uuid,
         pin: bool,
     ) -> Result<Thread, AppError> {
-        let thread = self
-            .threads
-            .find_by_id(id)
-            .await?
-            .ok_or(AppError::NotFound)?;
+        let thread = self.find_live_thread(id).await?;
         PermissionChecker::can_pin(actor, thread.category_id)?;
         self.threads
             .update(
@@ -500,20 +752,18 @@ impl ThreadUseCase {
             .await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %id, lock = lock))]
     pub async fn lock(
         &self,
         actor: &AuthUser,
         id: Uuid,
         lock: bool,
     ) -> Result<Thread, AppError> {
-        let thread = self
-            .threads
-            .find_by_id(id)
-            .await?
-            .ok_or(AppError::NotFound)?;
+        let thread = self.find_live_thread(id).await?;
         PermissionChecker::can_lock(actor, thread.category_id)?;
         let status = if lock { ThreadStatus::Locked } else { ThreadStatus::Open };
-        self.threads
+        let result = self
+            .threads
             .update(
                 id,
                 UpdateThread {
@@ -521,9 +771,19 @@ impl ThreadUseCase {
                     ..Default::default()
                 },
             )
-            .await
+            .await?;
+        if lock {
+            self.event_bus
+                .publish(ForumEvent::ThreadLocked {
+                    thread_id: id,
+                    by_user_id: actor.id,
+                })
+                .await;
+        }
+        Ok(result)
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %id, target_category_id = %target_category_id))]
     pub async fn move_to(
         &self,
         actor: &AuthUser,
@@ -534,13 +794,15 @@ impl ThreadUseCase {
             .threads
             .find_by_id(id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         PermissionChecker::can_move(actor, thread.category_id)?;
         self.categories
             .find_by_id(target_category_id)
             .await?
-            .ok_or(AppError::NotFound)?;
-        self.threads
+            .or_not_found()?;
+        let from_category = thread.category_id;
+        let result = self
+            .threads
             .update(
                 id,
                 UpdateThread {
@@ -548,9 +810,19 @@ impl ThreadUseCase {
                     ..Default::default()
                 },
             )
-            .await
+            .await?;
+        self.event_bus
+            .publish(ForumEvent::ThreadMoved {
+                thread_id: id,
+                from_category,
+                to_category: target_category_id,
+                by_user_id: actor.id,
+            })
+            .await;
+        Ok(result)
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %id, best_answer_id = %best_answer_id))]
     pub async fn mark_solved(
         &self,
         actor: &AuthUser,
@@ -568,7 +840,7 @@ impl ThreadUseCase {
             .posts
             .find_by_id(best_answer_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if best_post.thread_id != id {
             return Err(AppError::unprocessable(
                 "best_answer must belong to this thread",
@@ -592,8 +864,10 @@ impl ThreadUseCase {
                 post_id: best_answer_id,
                 thread_id: id,
                 thread_slug: thread.slug,
+                thread_title: thread.title,
                 post_author_id: best_post.author_id,
                 by_user_id: actor.id,
+                by_username: actor.username.clone(),
             })
             .await;
 
@@ -609,6 +883,7 @@ impl ThreadUseCase {
         Ok(result)
     }
 
+    #[tracing::instrument(skip(self, actor, data, content_type), fields(user_id = %actor.id, thread_id = %thread_id))]
     pub async fn set_thumbnail(
         &self,
         actor: &AuthUser,
@@ -634,20 +909,9 @@ impl ThreadUseCase {
 
         let key = cas_key("thumbnails", &data, &content_type);
 
-        // CAS: upsert or increment ref
-        if self.stored_files.exists(&key).await? {
-            self.stored_files.increment_ref(&key).await?;
-        } else {
-            self.stored_files
-                .upsert(
-                    &key,
-                    &content_type,
-                    &data,
-                    data.len() as i64,
-                    Some(actor.id),
-                )
-                .await?;
-        }
+        self.stored_files
+            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .await?;
 
         // Release old ref
         let old_key = self.threads.find_thumbnail_key(thread_id).await?;
@@ -677,6 +941,7 @@ impl ThreadUseCase {
         Ok(format!("/files/{key}"))
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %thread_id))]
     pub async fn remove_thumbnail(
         &self,
         actor: &AuthUser,

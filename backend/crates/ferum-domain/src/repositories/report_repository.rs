@@ -4,13 +4,21 @@ use uuid::Uuid;
 use crate::models::report::{Report, ReportStatus};
 use crate::AppError;
 
+pub struct ReportStatusCounts {
+    pub pending: u64,
+    pub resolved: u64,
+    pub dismissed: u64,
+}
+
 #[async_trait]
 pub trait ReportRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Report>, AppError>;
+    async fn count_by_status(&self) -> Result<ReportStatusCounts, AppError>;
     async fn list_all(
         &self,
         status: Option<ReportStatus>,
         target_type: Option<&str>,
+        q: Option<&str>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError>;

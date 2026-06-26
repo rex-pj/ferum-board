@@ -3,7 +3,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::permission::PermissionChecker;
-use crate::shared::AppError;
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::models::bookmark::Bookmark;
 use ferum_domain::models::thread::Thread;
 use ferum_domain::repositories::bookmark_repository::BookmarkRepository;
@@ -31,7 +31,7 @@ impl BookmarkUseCase {
             .threads
             .find_by_id(thread_id)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         if matches!(
             thread.status,
             ferum_domain::models::thread::ThreadStatus::Deleted

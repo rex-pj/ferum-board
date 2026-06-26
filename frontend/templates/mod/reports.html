@@ -1,0 +1,173 @@
+{% extends "mod/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Reports | Mod Panel{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block nav_reports %}active{% endblock %}
+
+{% block content %}
+
+{# ── Reports table ──────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header p-0">
+    <form method="get" action="/mod/reports" class="adm-filter-row px-3 py-2">
+      {% if filter %}<input type="hidden" name="status" value="{{ filter }}">{% endif %}
+
+      <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+        <span class="input-group-text bg-transparent">
+          <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+        </span>
+        <input type="search" name="q" class="form-control border-start-0 ps-0"
+               placeholder="Search reason…" value="{{ search_query }}" autocomplete="off">
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-success">
+        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      </button>
+      {% if search_query %}
+        <a href="/mod/reports{% if filter %}?status={{ filter }}{% endif %}"
+           class="btn btn-sm btn-outline-secondary" title="Clear search">
+          <i class="fa-solid fa-xmark"></i>
+        </a>
+      {% endif %}
+
+      <div class="vr opacity-25 align-self-stretch"></div>
+
+      {# Status filter pills #}
+      <a href="/mod/reports{% if search_query %}?q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == '' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        All
+        <span class="badge rounded-pill ms-1
+                     {% if filter == '' %}bg-white text-primary{% else %}bg-secondary bg-opacity-25 text-body{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_pending + count_resolved + count_dismissed }}
+        </span>
+      </a>
+      <div class="vr opacity-25 align-self-stretch"></div>
+      <a href="/mod/reports?status=pending{% if search_query %}&q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == 'pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        <span class="rounded-circle flex-shrink-0"
+              style="width:.55rem;height:.55rem;background:var(--bs-warning)"></span>
+        Pending
+        <span class="badge rounded-pill ms-1
+                     {% if filter == 'pending' %}bg-white text-primary{% else %}bg-warning bg-opacity-25 text-warning-emphasis{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_pending }}
+        </span>
+      </a>
+      <a href="/mod/reports?status=resolved{% if search_query %}&q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == 'resolved' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        <span class="rounded-circle flex-shrink-0"
+              style="width:.55rem;height:.55rem;background:var(--bs-success)"></span>
+        Resolved
+        <span class="badge rounded-pill ms-1
+                     {% if filter == 'resolved' %}bg-white text-primary{% else %}bg-success bg-opacity-25 text-success-emphasis{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_resolved }}
+        </span>
+      </a>
+      <a href="/mod/reports?status=dismissed{% if search_query %}&q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == 'dismissed' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        <span class="rounded-circle flex-shrink-0"
+              style="width:.55rem;height:.55rem;background:var(--bs-secondary)"></span>
+        Dismissed
+        <span class="badge rounded-pill ms-1
+                     {% if filter == 'dismissed' %}bg-white text-primary{% else %}bg-secondary bg-opacity-25 text-body{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_dismissed }}
+        </span>
+      </a>
+
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-active">
+        <tr>
+          <th style="width:12%">Target</th>
+          <th>Reason</th>
+          <th style="width:12%">Reporter</th>
+          <th style="width:10%">Date</th>
+          <th style="width:9%">Status</th>
+          <th style="width:7%"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if reports %}
+          {% for report in reports %}
+          <tr>
+            <td class="small">
+              {% if report.post_id %}
+                <span class="badge bg-secondary">Post</span>
+                <code class="ms-1 opacity-75" style="font-size:.7rem">{{ report.post_id | truncate(length=8, end="…") }}</code>
+              {% elif report.thread_id %}
+                <span class="badge bg-secondary">Thread</span>
+                <code class="ms-1 opacity-75" style="font-size:.7rem">{{ report.thread_id | truncate(length=8, end="…") }}</code>
+              {% else %}
+                <span class="badge bg-danger-subtle text-danger-emphasis">Deleted</span>
+              {% endif %}
+            </td>
+            <td class="small" style="max-width:280px">
+              <span class="d-block text-truncate" title="{{ report.reason }}">{{ report.reason }}</span>
+            </td>
+            <td class="small">
+              <code style="font-size:.7rem">{{ report.reporter_id | truncate(length=8, end="…") }}</code>
+            </td>
+            <td class="small text-muted text-nowrap">{{ report.created_at | truncate(length=10, end="") }}</td>
+            <td>
+              {% if report.status == "pending" %}
+                <span class="badge bg-warning text-dark">pending</span>
+              {% elif report.status == "resolved" %}
+                <span class="badge bg-success">resolved</span>
+              {% else %}
+                <span class="badge bg-secondary">dismissed</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if report.status == "pending" %}
+              <div class="d-flex gap-1">
+                <button class="btn btn-success btn-sm" title="Resolve"
+                        data-mod-action="resolve-report" data-report-id="{{ report.id }}" data-status="resolved">
+                  <i class="fa-solid fa-check"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" title="Dismiss"
+                        data-mod-action="resolve-report" data-report-id="{{ report.id }}" data-status="dismissed">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6">
+              <div class="text-center py-5 text-secondary">
+                <i class="fa-solid fa-inbox fa-3x mb-3 d-block opacity-25"></i>
+                <div class="fw-semibold mb-1">All clear!</div>
+                <div class="small">No reports to review.</div>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Footer: count + pagination ──────────────────────────────── #}
+  {{ m::card_footer_pagination(pagination=pagination, base_url="/mod/reports", noun="report", extra_params="&status=" ~ filter ~ "&q=" ~ search_query) }}
+</div>
+
+<div id="report-toast" class="toast align-items-center position-fixed bottom-0 end-0 m-3 d-none" role="alert">
+  <div class="d-flex">
+    <div class="toast-body" id="report-toast-msg"></div>
+    <button type="button" class="btn-close me-2 m-auto" data-action="close-toast"></button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}{% endblock %}

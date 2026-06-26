@@ -12,6 +12,8 @@ use crate::models::user::TrustLevel;
 pub struct AuthUser {
     pub id: Uuid,
     pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
     pub trust_level: TrustLevel,
     pub is_banned: bool,
     pub banned_until: Option<DateTime<Utc>>,

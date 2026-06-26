@@ -5,8 +5,10 @@ use ferum_application::shared::AppError;
 
 pub mod auth;
 pub mod bookmark;
+pub mod validators;
 pub mod follow;
 pub mod category;
+pub mod lookup;
 pub mod notification;
 pub mod post;
 pub mod reaction;
@@ -19,6 +21,20 @@ pub mod thread;
 pub mod user;
 pub mod plugin;
 pub mod webhook;
+pub mod page_context;
+
+// ─── Shared author info ───────────────────────────────────────────────────────
+
+/// Minimal author info embedded in post/thread responses.
+/// `role` is present only for posts (the primary role badge); skip on threads.
+#[derive(Serialize)]
+pub struct AuthorInfo {
+    pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+}
 
 // ─── Response envelope ────────────────────────────────────────────────────────
 

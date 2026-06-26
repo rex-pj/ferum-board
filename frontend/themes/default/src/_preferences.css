@@ -1,0 +1,7 @@
+/* ── User preference selectors ────────────────────────────────── */
+[data-font-size="small"]  { font-size: 87.5%; }
+[data-font-size="large"]  { font-size: 112.5%; }
+
+[data-layout="compact"] .fr-thread-row   { padding: 0.4375rem 1rem; }
+[data-layout="compact"] .fr-notif-row    { padding: 0.4375rem 1rem; }
+[data-layout="compact"] .fr-thread-thumb { width: 56px; height: 36px; }

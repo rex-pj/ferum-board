@@ -25,12 +25,13 @@ pub struct Config {
 
     #[serde(default = "default_true")]
     pub rate_limit_enabled: bool,
+    /// Bật dedup view count qua cache (set_nx 24h/user/thread).
+    /// Chỉ có tác dụng với user đã đăng nhập; guest không được tính khi bật.
+    /// Nên bật khi đã cấu hình REDIS_URL. Mặc định: false.
+    #[serde(default = "default_false")]
+    pub dedup_view_counts: bool,
     #[serde(default = "default_cors")]
     pub cors_origins: String,
-    #[allow(dead_code)]
-    #[serde(default = "default_true")]
-    pub registration_open: bool,
-    #[allow(dead_code)]
     #[serde(default = "default_max_upload_mb")]
     pub max_upload_size_mb: u64,
 
@@ -39,16 +40,51 @@ pub struct Config {
     pub setup_admin_email: Option<String>,
     pub setup_admin_password: Option<String>,
 
+    // Theme system
+    #[serde(default = "default_themes_dir")]
+    pub themes_dir: String,
+    #[serde(default = "default_admin_templates_dir")]
+    pub admin_templates_dir: String,
+    #[serde(default = "default_static_dir")]
+    pub static_dir: String,
+
     // Plugin system
     #[serde(default = "default_plugins_dir")]
     pub plugins_dir: String,
-    /// Internal signing secret for Plugin Service Tokens (NOT the user JWT_SECRET) — used in Milestone 2
-    #[allow(dead_code)]
-    pub plugin_internal_secret: Option<String>,
     #[serde(default = "default_plugin_hook_timeout_ms")]
     pub plugin_hook_timeout_ms: u64,
     #[serde(default = "default_plugin_circuit_threshold")]
     pub plugin_circuit_threshold: u32,
+
+    /// Number of trusted reverse proxies in front of this app.
+    /// When > 0, X-Forwarded-For is read; the real client IP is the Nth-from-last entry.
+    /// When 0 (default), X-Forwarded-For is ignored and the TCP peer address is used directly.
+    /// Set to 1 when deployed behind a single Nginx/Cloudflare proxy.
+    #[serde(default = "default_trusted_proxy_count")]
+    pub trusted_proxy_count: u32,
+
+    // Observability
+    /// "pretty" (default, human-readable) or "json" (structured, for production log aggregators)
+    #[serde(default = "default_log_format")]
+    pub log_format: String,
+    /// Fallback log level filter when RUST_LOG is not set (e.g. "info", "debug")
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+    /// Emit a WARN log for any repository query taking longer than this many ms
+    #[serde(default = "default_slow_query_ms")]
+    pub slow_query_ms: u64,
+    /// Directory to write rotating log files. If unset, logs go to stdout only.
+    pub log_dir: Option<String>,
+}
+
+fn default_log_format() -> String {
+    "pretty".to_string()
+}
+fn default_log_level() -> String {
+    "ferum_web=info,ferum_application=info,ferum_domain=info,ferum_infrastructure=info,tower_http=info".to_string()
+}
+fn default_slow_query_ms() -> u64 {
+    500
 }
 
 impl std::fmt::Debug for Config {
@@ -84,18 +120,25 @@ impl std::fmt::Debug for Config {
                 &self.meilisearch_key.as_ref().map(|_| "[redacted]"),
             )
             .field("rate_limit_enabled", &self.rate_limit_enabled)
+            .field("dedup_view_counts", &self.dedup_view_counts)
             .field("cors_origins", &self.cors_origins)
-            .field("registration_open", &self.registration_open)
             .field("max_upload_size_mb", &self.max_upload_size_mb)
+            .field("themes_dir", &self.themes_dir)
+            .field("admin_templates_dir", &self.admin_templates_dir)
+            .field("static_dir", &self.static_dir)
             .field("plugins_dir", &self.plugins_dir)
             .field("plugin_hook_timeout_ms", &self.plugin_hook_timeout_ms)
             .field("plugin_circuit_threshold", &self.plugin_circuit_threshold)
+            .field("log_format", &self.log_format)
+            .field("log_level", &self.log_level)
+            .field("slow_query_ms", &self.slow_query_ms)
             .field("setup_admin_username", &self.setup_admin_username)
             .field("setup_admin_email", &self.setup_admin_email)
             .field(
                 "setup_admin_password",
                 &self.setup_admin_password.as_ref().map(|_| "[redacted]"),
             )
+            .field("trusted_proxy_count", &self.trusted_proxy_count)
             .finish()
     }
 }
@@ -106,11 +149,23 @@ fn default_smtp_port() -> u16 {
 fn default_true() -> bool {
     true
 }
+fn default_false() -> bool {
+    false
+}
 fn default_cors() -> String {
     "http://localhost:5173".to_string()
 }
 fn default_max_upload_mb() -> u64 {
     5
+}
+fn default_themes_dir() -> String {
+    "./frontend/themes".to_string()
+}
+fn default_admin_templates_dir() -> String {
+    "./frontend/templates".to_string()
+}
+fn default_static_dir() -> String {
+    "./frontend/static".to_string()
 }
 fn default_plugins_dir() -> String {
     "./plugins".to_string()
@@ -120,6 +175,9 @@ fn default_plugin_hook_timeout_ms() -> u64 {
 }
 fn default_plugin_circuit_threshold() -> u32 {
     10
+}
+fn default_trusted_proxy_count() -> u32 {
+    0
 }
 
 impl Config {

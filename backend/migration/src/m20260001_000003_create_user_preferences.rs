@@ -18,8 +18,6 @@ pub enum UserPreferences {
     FontSize,
     Layout,
     EmailNotifications,
-    MutedCategories,
-    WatchedCategories,
     UpdatedAt,
 }
 
@@ -58,18 +56,6 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(UserPreferences::EmailNotifications)
                             .json_binary()
-                            .not_null()
-                            .extra("DEFAULT '{}'"),
-                    )
-                    .col(
-                        ColumnDef::new(UserPreferences::MutedCategories)
-                            .custom(Alias::new("uuid[]"))
-                            .not_null()
-                            .extra("DEFAULT '{}'"),
-                    )
-                    .col(
-                        ColumnDef::new(UserPreferences::WatchedCategories)
-                            .custom(Alias::new("uuid[]"))
                             .not_null()
                             .extra("DEFAULT '{}'"),
                     )

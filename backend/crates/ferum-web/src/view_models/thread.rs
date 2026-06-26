@@ -5,6 +5,7 @@ use uuid::Uuid;
 use ferum_domain::models::thread::Thread;
 
 use super::tag::TagResponse;
+use super::AuthorInfo;
 
 // ─── Requests ─────────────────────────────────────────────────────────────────
 
@@ -23,16 +24,11 @@ pub struct ThreadListQuery {
     pub page: Option<u64>,
     pub per_page: Option<u64>,
     pub tag: Option<String>,
+    /// Sort preset: latest (default) | newest | hottest | unanswered | solved
+    pub sort: Option<String>,
 }
 
 // ─── Nested response types ─────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-pub struct ThreadAuthorResponse {
-    pub username: String,
-    pub display_name: Option<String>,
-    pub avatar_url: Option<String>,
-}
 
 #[derive(Serialize)]
 pub struct ThreadCategoryResponse {
@@ -59,7 +55,7 @@ pub struct ThreadResponse {
     pub last_post_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     // Enriched fields (present on list queries, None on single-thread get)
-    pub author: Option<ThreadAuthorResponse>,
+    pub author: Option<AuthorInfo>,
     pub category: Option<ThreadCategoryResponse>,
     pub excerpt: Option<String>,
     pub thumbnail_url: Option<String>,
@@ -71,10 +67,11 @@ impl From<Thread> for ThreadResponse {
         let author = t
             .author_username
             .as_ref()
-            .map(|username| ThreadAuthorResponse {
+            .map(|username| AuthorInfo {
                 username: username.clone(),
                 display_name: t.author_display_name.clone(),
                 avatar_url: t.author_avatar_url.clone(),
+                role: None,
             });
 
         let category = t.category_name.as_ref().map(|name| ThreadCategoryResponse {

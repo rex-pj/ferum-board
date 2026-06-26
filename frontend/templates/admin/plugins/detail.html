@@ -1,0 +1,271 @@
+{% extends "admin/base.html" %}
+{% block title %}Plugin: {{ plugin.name }}{% endblock %}
+{% block page_title %}Plugin Detail{% endblock %}
+{% block nav_plugins %}active fw-semibold{% endblock %}
+
+{% block content %}
+
+{% if flash_success %}
+<div class="alert alert-success alert-dismissible fade show mb-3" role="alert">
+  <i class="fa-solid fa-circle-check me-2"></i>{{ flash_success }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if flash_error %}
+<div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+  <i class="fa-solid fa-circle-exclamation me-2"></i>{{ flash_error }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb" style="font-size:.82rem">
+    <li class="breadcrumb-item"><a href="/admin/plugins" class="text-decoration-none">Plugins</a></li>
+    <li class="breadcrumb-item active">{{ plugin.name }}</li>
+  </ol>
+</nav>
+
+<!-- Header card -->
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-start gap-3 flex-wrap">
+      <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+           style="width:52px;height:52px;background:var(--bs-primary-bg-subtle)">
+        <i class="fa-solid fa-puzzle-piece fa-lg" style="color:var(--bs-primary)"></i>
+      </div>
+      <div class="flex-grow-1 min-w-0">
+        <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+          <h1 class="h5 fw-bold mb-0">{{ plugin.name }}</h1>
+          <span class="badge bg-secondary">{{ plugin.tier }}</span>
+          {% if plugin.status == "active" %}
+            <span class="badge bg-success">Active</span>
+          {% elif plugin.status == "inactive" %}
+            <span class="badge bg-secondary">Inactive</span>
+          {% elif plugin.status == "error" %}
+            <span class="badge bg-danger">Error</span>
+          {% elif plugin.status == "disabled" %}
+            <span class="badge bg-warning text-dark">Disabled</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ plugin.status }}</span>
+          {% endif %}
+          {% if plugin.circuit_open %}
+            <span class="badge bg-danger">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i>Circuit Open
+            </span>
+          {% endif %}
+        </div>
+        <div class="text-body-secondary" style="font-size:.82rem">
+          <code>{{ plugin.slug }}</code>
+          <span class="mx-1 opacity-50">·</span>v{{ plugin.version }}
+          <span class="mx-1 opacity-50">·</span>Installed {{ plugin.installed_at }}
+          {% if plugin.activated_at %}
+            <span class="mx-1 opacity-50">·</span>Activated {{ plugin.activated_at }}
+          {% endif %}
+        </div>
+        <div class="text-body-secondary mt-1" style="font-size:.77rem">
+          <i class="fa-solid fa-folder fa-xs me-1 opacity-50"></i>
+          <code>{{ plugin.install_path }}</code>
+        </div>
+      </div>
+      <div class="d-flex gap-2 flex-shrink-0">
+        {% if plugin.is_active %}
+          <form method="post" action="/admin/plugins/{{ plugin.slug }}/deactivate">
+            <button class="btn btn-outline-warning btn-sm" type="submit">
+              <i class="fa-solid fa-pause me-1"></i>Deactivate
+            </button>
+          </form>
+        {% else %}
+          <form method="post" action="/admin/plugins/{{ plugin.slug }}/activate">
+            <button class="btn btn-success btn-sm" type="submit">
+              <i class="fa-solid fa-play me-1"></i>Activate
+            </button>
+          </form>
+        {% endif %}
+        <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#uninstallModal">
+          <i class="fa-solid fa-trash me-1"></i>Uninstall
+        </button>
+      </div>
+    </div>
+    {% if plugin.error_message %}
+    <div class="alert alert-danger mb-0 mt-3 py-2" style="font-size:.83rem">
+      <i class="fa-solid fa-circle-exclamation me-2"></i>
+      <strong>Last error:</strong> {{ plugin.error_message }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-0" id="pluginTabs" role="tablist" style="border-bottom:none">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-config" type="button" role="tab">
+      <i class="fa-solid fa-sliders me-1 fa-sm"></i>Configuration
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-logs" type="button" role="tab">
+      <i class="fa-solid fa-scroll me-1 fa-sm"></i>Logs
+      <span class="badge bg-secondary ms-1" style="font-size:.65rem">{{ plugin.logs | length }}</span>
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  <!-- Config tab -->
+  <div class="tab-pane fade show active" id="tab-config" role="tabpanel">
+    <div class="card" style="border-top-left-radius:0;border-top-right-radius:0">
+      <div class="card-body">
+        <form method="post" action="/admin/plugins/{{ plugin.slug }}/config" id="config-form">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" for="plugin-config-editor">JSON Config</label>
+            <textarea id="plugin-config-editor" name="config_json"
+                      class="form-control font-monospace" rows="12"
+                      style="font-size:.82rem;resize:vertical"
+                      spellcheck="false" maxlength="65535">{{ plugin.config_json }}</textarea>
+            <div class="invalid-feedback" id="json-error"></div>
+            <div class="form-text">Valid JSON object. Changes take effect after saving.</div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" id="save-config-btn">
+            <i class="fa-solid fa-floppy-disk me-1"></i>Save Configuration
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs tab -->
+  <div class="tab-pane fade" id="tab-logs" role="tabpanel"
+       x-data="{ level: '', hook: '' }">
+    <div class="card" style="border-top-left-radius:0;border-top-right-radius:0">
+      {% if plugin.logs %}
+      <div class="card-header py-2">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <select x-model="level" class="form-select form-select-sm" style="max-width:130px">
+            <option value="">All levels</option>
+            <option value="info">Info</option>
+            <option value="warn">Warn</option>
+            <option value="error">Error</option>
+          </select>
+          <div class="input-group input-group-sm flex-grow-1" style="max-width:280px">
+            <span class="input-group-text bg-transparent">
+              <i class="fa-solid fa-magnifying-glass fa-xs text-muted"></i>
+            </span>
+            <input type="search" x-model="hook" class="form-control border-start-0 ps-0"
+                   placeholder="Filter by hook name…">
+          </div>
+          <span class="text-body-secondary ms-auto" style="font-size:.75rem">
+            Last {{ plugin.logs | length }} entries
+          </span>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" style="font-size:.82rem">
+          <thead class="table-active">
+            <tr>
+              <th style="width:80px">Level</th>
+              <th style="width:160px">Time</th>
+              <th style="width:140px">Hook</th>
+              <th style="width:70px">ms</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in plugin.logs %}
+            <tr x-show="(!level || '{{ log.level }}' === level) && (!hook || $el.dataset.hook.includes(hook))"
+                data-hook="{{ log.hook_name | default(value='') }}">
+              <td class="align-middle">
+                {% if log.level == "error" %}
+                  <span class="badge bg-danger">error</span>
+                {% elif log.level == "warn" %}
+                  <span class="badge bg-warning text-dark">warn</span>
+                {% elif log.level == "info" %}
+                  <span class="badge bg-info text-dark">info</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ log.level }}</span>
+                {% endif %}
+              </td>
+              <td class="align-middle text-body-secondary small text-nowrap">{{ log.created_at }}</td>
+              <td class="align-middle small">
+                {% if log.hook_name %}
+                  <code>{{ log.hook_name }}</code>
+                {% else %}
+                  <span class="text-body-secondary">—</span>
+                {% endif %}
+              </td>
+              <td class="align-middle small text-end text-body-secondary">
+                {% if log.duration_ms %}{{ log.duration_ms }}{% else %}—{% endif %}
+              </td>
+              <td class="align-middle small text-break">{{ log.message }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-body text-center py-5 text-body-secondary">
+        <i class="fa-solid fa-scroll fa-2x mb-3 d-block opacity-40"></i>
+        <p class="mb-0 small">No log entries yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Danger zone -->
+<div class="card border-danger mt-4">
+  <div class="card-header text-danger fw-semibold" style="font-size:.85rem">
+    <i class="fa-solid fa-triangle-exclamation me-1"></i>Danger Zone
+  </div>
+  <div class="card-body">
+    <p class="text-body-secondary small mb-3">
+      Uninstalling removes <strong>{{ plugin.name }}</strong> from the database and deletes its files.
+      This cannot be undone.
+    </p>
+    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#uninstallModal">
+      <i class="fa-solid fa-trash me-1"></i>Uninstall Plugin
+    </button>
+  </div>
+</div>
+
+<!-- Uninstall modal -->
+<div class="modal fade" id="uninstallModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title text-danger" style="font-size:1rem">
+          <i class="fa-solid fa-trash me-2"></i>Uninstall Plugin
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small mb-3">
+          This will permanently remove <strong>{{ plugin.name }}</strong> and delete all plugin files.
+        </p>
+        <form method="post" action="/admin/plugins/{{ plugin.slug }}/uninstall" id="uninstall-form">
+          <label class="form-label small fw-semibold" for="confirm-slug-input">
+            Type <code class="user-select-all">{{ plugin.slug }}</code> to confirm:
+          </label>
+          <input type="text" class="form-control form-control-sm font-monospace"
+                 id="confirm-slug-input" name="confirm_slug"
+                 placeholder="{{ plugin.slug }}" autocomplete="off">
+        </form>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" form="uninstall-form" class="btn btn-danger btn-sm"
+                id="uninstall-confirm-btn" disabled>
+          <i class="fa-solid fa-trash me-1"></i>Uninstall
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-admin-plugins-detail.js?v={{ asset_version() }}"></script>
+{% endblock %}

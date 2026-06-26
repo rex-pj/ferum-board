@@ -9,6 +9,8 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::post::{Post, PostStatus};
 use ferum_domain::repositories::post_repository::{NewPost, PostRepository};
 
+const SLOW_QUERY_MS: u128 = 500;
+
 pub struct PgPostRepository {
     db: DatabaseConnection,
 }
@@ -75,6 +77,7 @@ impl PostRepository for PgPostRepository {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
+        let t0 = std::time::Instant::now();
         let offset = (page.saturating_sub(1)) * per_page;
         let query = posts::Entity::find()
             .filter(posts::Column::ThreadId.eq(thread_id))
@@ -82,8 +85,14 @@ impl PostRepository for PgPostRepository {
             .filter(posts::Column::Status.eq(posts::PostStatus::Published))
             .order_by_asc(posts::Column::CreatedAt);
 
-        let total = query.clone().count(&self.db).await?;
-        let rows = query.limit(per_page).offset(offset).all(&self.db).await?;
+        let (total, rows) = tokio::try_join!(
+            query.clone().count(&self.db),
+            query.limit(per_page).offset(offset).all(&self.db),
+        )?;
+        let elapsed = t0.elapsed();
+        if elapsed.as_millis() > SLOW_QUERY_MS {
+            tracing::warn!(elapsed_ms = elapsed.as_millis(), %thread_id, page, "slow_query: list_by_thread");
+        }
         Ok((rows.into_iter().map(entity_to_domain).collect(), total))
     }
 
@@ -165,8 +174,10 @@ impl PostRepository for PgPostRepository {
             .filter(posts::Column::Status.eq(posts::PostStatus::Published))
             .order_by_desc(posts::Column::CreatedAt);
 
-        let total = query.clone().count(&self.db).await?;
-        let rows = query.limit(per_page).offset(offset).all(&self.db).await?;
+        let (total, rows) = tokio::try_join!(
+            query.clone().count(&self.db),
+            query.limit(per_page).offset(offset).all(&self.db),
+        )?;
 
         let thread_ids: Vec<Uuid> = rows.iter().map(|r| r.thread_id).collect();
         let thread_map: HashMap<Uuid, (String, String)> = threads::Entity::find()
@@ -213,8 +224,10 @@ impl PostRepository for PgPostRepository {
                 .filter(threads::Column::CategoryId.eq(cat_id));
         }
 
-        let total = query.clone().count(&self.db).await?;
-        let rows = query.limit(per_page).offset(offset).all(&self.db).await?;
+        let (total, rows) = tokio::try_join!(
+            query.clone().count(&self.db),
+            query.limit(per_page).offset(offset).all(&self.db),
+        )?;
         Ok((rows.into_iter().map(entity_to_domain).collect(), total))
     }
 }

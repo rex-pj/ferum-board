@@ -1,0 +1,237 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block nav_dashboard %}active fw-semibold{% endblock %}
+
+{% block content %}
+
+{% if stats.oldest_pending_report_hours and stats.oldest_pending_report_hours > 24 %}
+<div class="alert alert-danger d-flex align-items-center gap-2 mb-3 py-2">
+  <i class="fa-solid fa-triangle-exclamation fa-fw flex-shrink-0"></i>
+  <span>Oldest report has been waiting <strong>{{ stats.oldest_pending_report_hours }} hours</strong> — needs immediate attention.</span>
+  <a href="/admin/reports" class="btn btn-danger btn-sm ms-auto flex-shrink-0">View Reports</a>
+</div>
+{% endif %}
+
+{# ── 4 Stat cards ────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <a href="/admin/users" class="card h-100 text-decoration-none text-body adm-stat-link">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="adm-stat-icon bg-primary-subtle flex-shrink-0">
+          <i class="fa-solid fa-users text-primary"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1">{{ stats.total_users }}</div>
+          <div class="text-muted small text-truncate">Total Users</div>
+        </div>
+        <i class="fa-solid fa-arrow-right text-muted ms-auto small flex-shrink-0"></i>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-xl-3">
+    <a href="/forum" class="card h-100 text-decoration-none text-body adm-stat-link">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="adm-stat-icon bg-success-subtle flex-shrink-0">
+          <i class="fa-solid fa-comments text-success"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1">{{ stats.total_threads }}</div>
+          <div class="text-muted small text-truncate">Total Threads</div>
+        </div>
+        <i class="fa-solid fa-arrow-right text-muted ms-auto small flex-shrink-0"></i>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-xl-3">
+    <a href="/forum" class="card h-100 text-decoration-none text-body adm-stat-link">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="adm-stat-icon bg-info-subtle flex-shrink-0">
+          <i class="fa-solid fa-message text-info"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1">{{ stats.total_posts }}</div>
+          <div class="text-muted small text-truncate">Total Posts</div>
+        </div>
+        <i class="fa-solid fa-arrow-right text-muted ms-auto small flex-shrink-0"></i>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-xl-3">
+    <a href="/admin/reports" class="card h-100 text-decoration-none text-body adm-stat-link">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="adm-stat-icon {% if stats.pending_reports > 0 %}bg-danger-subtle{% else %}bg-success-subtle{% endif %} flex-shrink-0">
+          <i class="fa-solid fa-flag {% if stats.pending_reports > 0 %}text-danger{% else %}text-success{% endif %}"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1 {% if stats.pending_reports > 0 %}text-danger{% endif %}">
+            {{ stats.pending_reports }}
+          </div>
+          <div class="text-muted small text-truncate">Pending Reports</div>
+        </div>
+        {% if stats.pending_reports > 0 %}
+          <span class="badge bg-danger ms-auto flex-shrink-0">!</span>
+        {% else %}
+          <i class="fa-solid fa-arrow-right text-muted ms-auto small flex-shrink-0"></i>
+        {% endif %}
+      </div>
+    </a>
+  </div>
+</div>
+
+{# ── Today's stats + Quick Actions ───────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Today</div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0 adm-today-table">
+          <tbody>
+            <tr>
+              <td class="text-muted">New registrations</td>
+              <td class="text-end fw-bold">{{ stats.new_users_today }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">New threads</td>
+              <td class="text-end fw-bold">{{ stats.new_threads_today }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">New posts</td>
+              <td class="text-end fw-bold">{{ stats.new_posts_today }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">New reactions</td>
+              <td class="text-end fw-bold">{{ stats.new_reactions_today }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">New views</td>
+              <td class="text-end fw-bold">{{ stats.new_views_today }}</td>
+            </tr>
+            <tr class="table-divider">
+              <td class="text-muted">
+                Daily active users
+                <span class="badge bg-secondary ms-1" style="font-size:.6rem;font-weight:500">DAU</span>
+              </td>
+              <td class="text-end fw-bold">{{ stats.dau }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">
+                Monthly active users
+                <span class="badge bg-secondary ms-1" style="font-size:.6rem;font-weight:500">MAU</span>
+              </td>
+              <td class="text-end fw-bold">{{ stats.mau }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">
+                Engagement ratio
+                <span class="text-muted" style="font-size:.7rem" title="DAU / MAU × 100 — % of monthly users who returned today. Reddit ~25–30%.">ⓘ</span>
+              </td>
+              <td class="text-end fw-bold
+                {% if stats.dau_mau_ratio >= 25 %}text-success
+                {% elif stats.dau_mau_ratio >= 10 %}text-warning
+                {% else %}text-danger{% endif %}">
+                {{ stats.dau_mau_ratio }}%
+              </td>
+            </tr>
+            <tr>
+              <td class="text-muted">
+                Activation rate
+                <span class="text-muted" style="font-size:.7rem" title="% of yesterday's registrations who posted at least once today.">ⓘ</span>
+              </td>
+              <td class="text-end fw-bold">{{ stats.activation_rate_pct }}%</td>
+            </tr>
+            {% if stats.oldest_pending_report_hours and stats.oldest_pending_report_hours <= 24 %}
+            <tr>
+              <td class="text-muted text-warning">Oldest pending report</td>
+              <td class="text-end fw-bold text-warning">{{ stats.oldest_pending_report_hours }}h</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Quick Actions</div>
+      <div class="card-body p-0">
+        <a href="/admin/users"
+           class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
+          <i class="fa-solid fa-users fa-fw text-muted flex-shrink-0"></i>
+          <span>Manage Users</span>
+        </a>
+        <a href="/admin/categories"
+           class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
+          <i class="fa-regular fa-folder fa-fw text-muted flex-shrink-0"></i>
+          <span>Manage Categories</span>
+        </a>
+        <a href="/admin/reports"
+           class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
+          <i class="fa-solid fa-flag fa-fw text-muted flex-shrink-0"></i>
+          <span>Review Reports</span>
+          {% if stats.pending_reports > 0 %}
+            <span class="badge bg-danger ms-auto">{{ stats.pending_reports }}</span>
+          {% endif %}
+        </a>
+        <a href="/admin/roles"
+           class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
+          <i class="fa-solid fa-shield-halved fa-fw text-muted flex-shrink-0"></i>
+          <span>Roles &amp; Permissions</span>
+        </a>
+        <a href="/admin/log"
+           class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
+          <i class="fa-solid fa-scroll fa-fw text-muted flex-shrink-0"></i>
+          <span>Audit Log</span>
+        </a>
+        <a href="/admin/settings"
+           class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
+          <i class="fa-solid fa-gear fa-fw text-muted flex-shrink-0"></i>
+          <span>Site Settings</span>
+        </a>
+        <a href="/admin/themes"
+           class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body hover-bg">
+          <i class="fa-solid fa-palette fa-fw text-muted flex-shrink-0"></i>
+          <span>Themes &amp; Appearance</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Activity trend chart ─────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">Activity Trend</div>
+  <div class="card-body">
+    <admin-stats-chart
+      dau="{{ stats.dau }}"
+      mau="{{ stats.mau }}"
+      new-threads="{{ stats.new_threads_today }}"
+      new-users="{{ stats.new_users_today }}"
+      new-posts="{{ stats.new_posts_today }}"
+      new-reactions="{{ stats.new_reactions_today }}"
+      new-views="{{ stats.new_views_today }}"
+      activation-rate-pct="{{ stats.activation_rate_pct }}"
+      dau-mau-ratio="{{ stats.dau_mau_ratio }}"
+      days="30"
+    ></admin-stats-chart>
+  </div>
+</div>
+
+<style>
+.adm-stat-link { transition: box-shadow .15s; }
+.adm-stat-link:hover { box-shadow: 0 0 0 2px var(--bs-primary); }
+.adm-stat-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+}
+.adm-today-table td:first-child {
+  padding-left: 1rem; padding-right: 0.5rem;
+  max-width: 0; width: 70%;
+  white-space: normal; word-break: break-word;
+}
+.adm-today-table td:last-child { padding-right: 1rem; white-space: nowrap; }
+</style>
+
+{% endblock %}

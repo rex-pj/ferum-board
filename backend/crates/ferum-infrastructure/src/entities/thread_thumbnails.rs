@@ -6,8 +6,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub thread_id: Uuid,
     pub file_key: String,
-    pub created_at: DateTimeWithTimeZone,
-    pub updated_at: Option<DateTimeWithTimeZone>,
+    pub updated_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

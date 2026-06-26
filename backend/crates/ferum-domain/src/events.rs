@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::reaction::ReactionKind;
-use crate::models::user::TrustLevel;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ForumEvent {
@@ -11,7 +10,9 @@ pub enum ForumEvent {
         post_id: Uuid,
         thread_id: Uuid,
         thread_slug: String,
+        thread_title: String,
         author_id: Uuid,
+        author_username: String,
         thread_author_id: Uuid,
         category_id: Uuid,
     },
@@ -44,8 +45,10 @@ pub enum ForumEvent {
         post_id: Uuid,
         thread_id: Uuid,
         thread_slug: String,
+        thread_title: String,
         post_author_id: Uuid,
         reactor_id: Uuid,
+        reactor_username: String,
         kind: ReactionKind,
     },
     ReactionRemoved {
@@ -54,24 +57,23 @@ pub enum ForumEvent {
         reactor_id: Uuid,
         kind: ReactionKind,
     },
-    TrustLevelChanged {
-        user_id: Uuid,
-        from: TrustLevel,
-        to: TrustLevel,
-    },
     BestAnswerMarked {
         post_id: Uuid,
         thread_id: Uuid,
         thread_slug: String,
+        thread_title: String,
         post_author_id: Uuid,
         by_user_id: Uuid,
+        by_username: String,
     },
     MentionAdded {
         post_id: Uuid,
         thread_id: Uuid,
         thread_slug: String,
+        thread_title: String,
         mentioned_user_id: Uuid,
         author_id: Uuid,
+        author_username: String,
     },
     ThreadCreated {
         thread_id: Uuid,
@@ -102,7 +104,6 @@ impl ForumEvent {
             ForumEvent::UserWarned { .. } => "user.warned",
             ForumEvent::ReactionAdded { .. } => "reaction.added",
             ForumEvent::ReactionRemoved { .. } => "reaction.removed",
-            ForumEvent::TrustLevelChanged { .. } => "trust_level.changed",
             ForumEvent::BestAnswerMarked { .. } => "best_answer.marked",
             ForumEvent::MentionAdded { .. } => "mention.added",
             ForumEvent::ThreadCreated { .. } => "thread.created",

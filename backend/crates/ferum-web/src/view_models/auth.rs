@@ -15,7 +15,10 @@ pub struct RegisterRequest {
     pub username: String,
     #[validate(email(message = "Invalid email address"))]
     pub email: String,
-    #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
+    #[validate(
+        length(min = 8, message = "Password must be at least 8 characters"),
+        custom(function = "crate::view_models::validators::password_complexity")
+    )]
     pub password: String,
 }
 
@@ -23,6 +26,7 @@ pub struct RegisterRequest {
 pub struct LoginRequest {
     #[validate(email)]
     pub email: String,
+    #[validate(length(min = 1, max = 1024, message = "Password must be 1–1024 characters"))]
     pub password: String,
 }
 
@@ -34,7 +38,10 @@ pub struct ForgotPasswordRequest {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ResetPasswordRequest {
-    #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
+    #[validate(
+        length(min = 8, message = "Password must be at least 8 characters"),
+        custom(function = "crate::view_models::validators::password_complexity")
+    )]
     pub new_password: String,
 }
 
@@ -93,11 +100,4 @@ impl From<User> for UserResponse {
 #[derive(Serialize)]
 pub struct LoginResponse {
     pub user: UserResponse,
-    pub access_token: String,
-    pub refresh_token: String,
-}
-
-#[derive(Serialize)]
-pub struct RefreshResponse {
-    pub access_token: String,
 }

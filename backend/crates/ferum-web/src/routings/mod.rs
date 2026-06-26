@@ -1,284 +1,238 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
-use axum::http::Request;
+use axum::extract::{ConnectInfo, DefaultBodyLimit};
+use axum::http::{Request, StatusCode};
 use axum::http::{header, HeaderValue, Method};
-use axum::middleware;
-use axum::routing::{delete, get, patch, post};
+use axum::middleware::{self, Next};
+use axum::response::Response;
+use axum::routing::get;
 use axum::Router;
 use tower_http::cors::CorsLayer;
-use tower_http::request_id::{MakeRequestUuid, SetRequestIdLayer};
+use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
-
-use crate::middleware::auth::auth_middleware;
-use crate::middleware::rate_limit::{rate_limit_middleware, RateLimitConfig};
+use tracing::Span;
 
 use crate::app_state::AppState;
-use crate::handlers::{
-    admin_handler::*,
-    admin_stats_handler::*,
-    auth_handler::*,
-    bookmark_handler::*,
-    category_handler::{
-        get_category_handler, get_category_watch_status_handler, get_forum_index_handler,
-        list_public_categories_handler,
-        mute_category_handler, unmute_category_handler,
-        unwatch_category_handler, watch_category_handler,
-    },
-    health_handler::health_handler,
-    moderation_handler::*,
-    notification_handler::*,
-    post_handler::*,
-    profile_handler::*,
-    reaction_handler::*,
-    role_handler::*,
-    search_handler::search_handler,
-    setup_handler::{run_setup_handler, setup_status_handler},
-    site_config_handler::*,
-    tag_handler::{create_tag_handler, list_tags_handler},
-    thread_handler::*,
-    upload_handler::serve_upload_handler,
-    follow_handler::{
-        follow_user_handler, get_follow_status_handler, list_followers_handler,
-        list_following_handler, unfollow_user_handler,
-    },
-    user_handler::{
-        get_me_handler, get_public_profile_handler, list_user_posts_handler,
-        list_user_threads_handler,
-    },
-    webhook_handler::*,
-    plugin_handler::*,
-};
+use crate::handlers::admin::api::plugins::get_active_slots;
+use crate::handlers::pages::{render_404_page, render_error_page};
+use crate::middleware::auth::auth_middleware;
+use crate::middleware::AuthUser;
+use crate::middleware::csrf::csrf_origin_check;
+use crate::middleware::rate_limit::RateLimitConfig;
+use crate::middleware::security_headers::security_headers;
+use crate::middleware::setup_guard::setup_guard;
 
-pub fn build_router(state: AppState, cors_origins: &str) -> Router {
+mod admin_routes;
+mod mod_routes;
+mod public_routes;
+
+use admin_routes::{admin_api_routes, admin_page_routes, files_routes, setup_routes};
+use mod_routes::{mod_api_routes, mod_page_routes};
+use public_routes::{api_routes, auth_routes, public_page_routes};
+
+// ─── Error page handlers ──────────────────────────────────────────────────────
+
+async fn page_not_found(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    axum::Extension(auth_user): axum::Extension<Option<AuthUser>>,
+) -> Response {
+    render_404_page(&state, auth_user.as_ref()).await
+}
+
+// Intercepts 4xx/5xx responses on page routes and replaces them with themed
+// error pages. API routes (/api/, /static/, /themes/, /files/, /plugins/) are
+// skipped so their JSON error format is preserved.
+async fn error_page_layer(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    axum::Extension(auth_user): axum::Extension<Option<AuthUser>>,
+    req: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let path = req.uri().path().to_owned();
+    let skip = path.starts_with("/api/")
+        || path.starts_with("/static/")
+        || path.starts_with("/themes/")
+        || path.starts_with("/plugins/")
+        || path.starts_with("/files/");
+
+    let response = next.run(req).await;
+
+    if skip {
+        return response;
+    }
+
+    match response.status() {
+        StatusCode::NOT_FOUND => render_404_page(&state, auth_user.as_ref()).await,
+        s if s.is_client_error() || s.is_server_error() => {
+            render_error_page(&state, auth_user.as_ref()).await
+        }
+        _ => response,
+    }
+}
+
+/// Replace token values in paths that carry one-time credentials with `[token]`
+/// so that email verification and password reset tokens never appear in server logs.
+fn mask_sensitive_path(path: &str) -> std::borrow::Cow<'_, str> {
+    const SENSITIVE_PREFIXES: &[&str] = &[
+        "/api/auth/verify-email/",
+        "/api/auth/password-resets/",
+    ];
+    for prefix in SENSITIVE_PREFIXES {
+        if path.starts_with(prefix) {
+            return std::borrow::Cow::Owned(format!("{prefix}[token]"));
+        }
+    }
+    std::borrow::Cow::Borrowed(path)
+}
+
+pub fn build_router(
+    state: AppState,
+    cors_origins: &str,
+    app_url: &str,
+    max_upload_size_mb: u64,
+) -> Router {
     let cors = build_cors(cors_origins);
 
-    let auth_rl = Arc::new(RateLimitConfig::auth());
-    let auth_routes = Router::new()
-        .route("/sessions", post(login_handler))
-        .route("/sessions", delete(logout_handler))
-        .route("/refresh", post(refresh_handler))
-        .route("/registrations", post(register_handler))
-        .route("/verify-email/{token}", get(verify_email_handler))
-        .route("/password-resets", post(forgot_password_handler))
-        .route("/password-resets/{token}", patch(reset_password_handler))
-        .layer(axum::middleware::from_fn_with_state(
+    // Axum 0.8 applies DefaultBodyLimit (2 MB by default) to the Multipart extractor.
+    // We disable it here so that the per-handler size checks (MAX_AVATAR_BYTES,
+    // MAX_COVER_BYTES, MAX_FPKG_SIZE, …) are the real per-type enforcers.
+    //
+    // The global backstop against memory exhaustion is RequestBodyLimitLayer below.
+    // It must never sit below the largest *legitimate* upload:
+    //   plugin package (.fpkg) = 50 MB, cover = 8 MB, avatar = 5 MB.
+    // Per-handler limits remain the real, per-type enforcement.
+    const PLUGIN_PACKAGE_CEILING_MB: u64 = 50;
+    let body_cap_bytes = (max_upload_size_mb.max(PLUGIN_PACKAGE_CEILING_MB) as usize)
+        .saturating_mul(1024 * 1024)
+        .saturating_add(1024 * 1024); // multipart envelope/field overhead
+    let body_limit = tower_http::limit::RequestBodyLimitLayer::new(body_cap_bytes);
+
+    // Build the CSRF allowed-origin list: the server's own origin + every configured CORS origin.
+    let csrf_allowed: Arc<Vec<String>> = {
+        let mut origins: Vec<String> = cors_origins
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty() && s != "*")
+            .collect();
+        let app = app_url.trim_end_matches('/').to_string();
+        if !app.is_empty() && !origins.contains(&app) {
+            origins.push(app);
+        }
+        Arc::new(origins)
+    };
+
+    let write_rl = Arc::new(RateLimitConfig::public_write());
+
+    #[cfg(debug_assertions)]
+    let router = Router::new()
+        .route("/api/dev/reload-templates", axum::routing::post(crate::handlers::api::dev::reload_templates));
+    #[cfg(not(debug_assertions))]
+    let router = Router::new();
+
+    router
+        .route("/health", get(crate::handlers::api::health::health))
+        .merge(files_routes())
+        // Static files (Bootstrap, HTMX, Alpine, theme CSS, widgets).
+        // Cache 1 day; ServeDir sets ETag + Last-Modified automatically so
+        // browsers send conditional GETs after TTL and get 304 when unchanged.
+        .nest_service(
+            "/static",
+            tower::ServiceBuilder::new()
+                .layer(tower_http::set_header::SetResponseHeaderLayer::if_not_present(
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("public, max-age=86400"),
+                ))
+                .service(ServeDir::new(&state.static_dir).append_index_html_on_directories(false)),
+        )
+        // Theme assets: shorter TTL because themes can be reloaded at runtime
+        .nest_service("/themes", ServeDir::new(&state.themes_dir))
+        // Plugin assets: only files under {slug}/assets/ are served.
+        // The full plugins_dir is NOT exposed via ServeDir to prevent leaking
+        // manifests, hook scripts, and plugin configs to unauthenticated users.
+        .route("/plugins/{slug}/assets/{*path}", axum::routing::get(crate::handlers::api::uploads::serve_plugin_asset))
+        .merge(public_page_routes())
+        .nest("/admin", admin_page_routes())
+        .nest("/mod", mod_page_routes())
+        .nest("/api/setup", setup_routes())
+        .nest("/api/auth", auth_routes(state.clone()))
+        .nest("/api", api_routes(state.clone(), write_rl))
+        .nest("/api/mod", mod_api_routes())
+        .nest("/api/admin", admin_api_routes())
+        .route("/api/plugins/active-slots", get(get_active_slots))
+        .fallback(page_not_found)
+        // Disable axum's 2 MB DefaultBodyLimit so Multipart uploads are governed
+        // exclusively by RequestBodyLimitLayer (below) and the per-handler checks.
+        // In axum 0.8, DefaultBodyLimit applies to Multipart; without disabling it,
+        // files > ~2 MB cause an aborted TCP connection (ERR_CONNECTION_ABORTED in
+        // Chrome), which the JS catch block surfaces as "Network error."
+        .layer(DefaultBodyLimit::disable())
+        .layer(middleware::from_fn_with_state(
             state.clone(),
-            rate_limit_middleware,
+            setup_guard,
         ))
-        .layer(axum::Extension(auth_rl));
-
-    let admin_category_routes = Router::new()
-        .route(
-            "/",
-            get(list_categories_handler).post(create_category_handler),
-        )
-        .route(
-            "/{id}",
-            patch(update_category_handler).delete(delete_category_handler),
-        )
-        .route(
-            "/{id}/moderators",
-            get(list_category_moderators_handler).post(assign_moderator_handler),
-        )
-        .route(
-            "/{id}/moderators/{user_id}",
-            delete(revoke_moderator_handler),
-        );
-
-    // Extended admin routes
-    let admin_user_routes = Router::new()
-        .route("/", get(admin_list_users_handler))
-        .route("/{id}", get(admin_get_user_handler))
-        .route(
-            "/{id}/ban",
-            post(admin_ban_user_handler).delete(admin_unban_user_handler),
-        )
-        .route("/{id}/roles", post(assign_user_role_handler))
-        .route("/{id}/roles/{role_id}", delete(revoke_user_role_handler));
-
-    let admin_role_routes = Router::new()
-        .route("/", get(list_roles_handler).post(create_role_handler))
-        .route("/{id}", patch(update_role_handler).delete(delete_role_handler))
-        .route(
-            "/{id}/permissions",
-            get(get_role_permissions_handler).put(set_role_permissions_handler),
-        )
-        .route("/permissions", get(list_all_permissions_handler));
-
-    let admin_routes = Router::new()
-        .route("/stats", get(admin_stats_handler))
-        .route("/reports", get(list_admin_reports_handler))
-        .route("/audit-log", get(list_audit_log_handler))
-        .route(
-            "/config",
-            get(get_site_config_handler).put(update_site_config_handler),
-        )
-        .route(
-            "/config/logo",
-            post(upload_logo_handler).delete(delete_logo_handler),
-        )
-        .route(
-            "/config/favicon",
-            post(upload_favicon_handler).delete(delete_favicon_handler),
-        )
-        .route(
-            "/webhooks",
-            get(list_webhooks_handler).post(create_webhook_handler),
-        )
-        .route(
-            "/webhooks/{id}",
-            patch(update_webhook_handler).delete(delete_webhook_handler),
-        )
-        // Static plugin routes must come before parameterized /{slug} routes
-        .route("/plugins", get(list_plugins_handler))
-        .route("/plugins/upload", post(upload_plugin_handler))
-        .route("/plugins/install", post(install_plugin_handler))
-        .route("/plugins/debug/hooks", post(debug_hook_handler))
-        // Parameterized routes
-        .route(
-            "/plugins/{slug}",
-            get(get_plugin_handler).delete(uninstall_plugin_handler),
-        )
-        .route("/plugins/{slug}/config", patch(configure_plugin_handler))
-        .route("/plugins/{slug}/status", patch(toggle_plugin_status_handler))
-        .route("/plugins/{slug}/logs", get(get_plugin_logs_handler))
-        .nest("/categories", admin_category_routes)
-        .nest("/users", admin_user_routes)
-        .nest("/roles", admin_role_routes);
-
-    // Public category routes
-    let category_routes = Router::new()
-        .route("/", get(list_public_categories_handler))
-        .route("/{slug}", get(get_category_handler))
-        .route("/{slug}/threads", get(list_threads_handler))
-        .route("/{id}/watch", post(watch_category_handler).delete(unwatch_category_handler))
-        .route("/{id}/mute", post(mute_category_handler).delete(unmute_category_handler))
-        .route("/{id}/watch-status", get(get_category_watch_status_handler));
-
-    // Thread routes — the single-segment param is a slug for GET, a UUID for mutations
-    let thread_routes = Router::new()
-        .route("/", get(list_threads_by_feed).post(create_thread_handler))
-        .route(
-            "/{slug}",
-            get(get_thread_handler)
-                .patch(update_thread_handler)
-                .delete(delete_thread_handler),
-        )
-        .route("/{slug}/pin", patch(pin_thread_handler))
-        .route("/{slug}/lock", patch(lock_thread_handler))
-        .route("/{slug}/move", patch(move_thread_handler))
-        .route("/{slug}/solve", patch(solve_thread_handler))
-        .route(
-            "/{slug}/posts",
-            get(list_posts_handler).post(create_post_handler),
-        )
-        .route(
-            "/{slug}/bookmarks",
-            get(get_bookmark_status_handler)
-                .post(add_bookmark_handler)
-                .delete(remove_bookmark_handler),
-        )
-        .route(
-            "/{id}/thumbnail",
-            post(upload_thumbnail_handler).delete(delete_thumbnail_handler),
-        );
-
-    // Post routes (edit, delete, reactions)
-    let post_routes = Router::new()
-        .route(
-            "/{id}",
-            patch(update_post_handler).delete(delete_post_handler),
-        )
-        .route("/{id}/reactions", post(add_reaction_handler))
-        .route("/{id}/reactions/{kind}", delete(remove_reaction_handler));
-
-    // User routes
-    let user_routes = Router::new()
-        .route("/me", get(get_me_handler).patch(update_profile_handler))
-        .route("/me/password", patch(change_password_handler))
-        .route(
-            "/me/avatar",
-            post(upload_avatar_handler).delete(delete_avatar_handler),
-        )
-        .route(
-            "/me/cover",
-            post(upload_cover_handler).delete(delete_cover_handler),
-        )
-        .route(
-            "/me/preferences",
-            get(get_preferences_handler).put(update_preferences_handler),
-        )
-        .route("/me/bookmarks", get(list_bookmarks_handler))
-        .route("/{username}", get(get_public_profile_handler))
-        .route("/{username}/threads", get(list_user_threads_handler))
-        .route("/{username}/posts", get(list_user_posts_handler))
-        .route(
-            "/{id}/follow",
-            post(follow_user_handler).delete(unfollow_user_handler),
-        )
-        .route("/{id}/follow-status", get(get_follow_status_handler))
-        .route("/{id}/followers", get(list_followers_handler))
-        .route("/{id}/following", get(list_following_handler));
-
-    // Notification routes
-    let notification_routes = Router::new()
-        .route("/", get(list_notifications_handler))
-        .route("/unread-count", get(unread_count_handler))
-        .route("/stream", get(sse_notifications_handler))
-        .route("/read-all", patch(mark_all_read_handler))
-        .route("/{id}/read", patch(mark_read_handler));
-
-    // Report route (member+)
-    let report_routes = Router::new().route("/", post(create_report_handler));
-
-    // Mod routes
-    let mod_routes = Router::new()
-        .route("/reports", get(list_mod_reports_handler))
-        .route("/reports/{id}", patch(resolve_report_handler))
-        .route("/users/{id}/warn", post(warn_user_handler))
-        .route("/users/{id}/ban", post(temp_ban_handler))
-        .route("/audit-log", get(list_mod_audit_log_handler))
-        .route("/queue", get(list_pending_posts_handler))
-        .route("/queue/{id}/approve", post(approve_post_handler))
-        .route("/queue/{id}/reject", delete(reject_post_handler));
-
-    let setup_routes = Router::new()
-        .route("/status", get(setup_status_handler))
-        .route("/run", post(run_setup_handler));
-
-    Router::new()
-        .route("/health", get(health_handler))
-        .route("/files/{*key}", get(serve_upload_handler))
-        .route("/api/search", get(search_handler))
-        .route("/api/tags", get(list_tags_handler).post(create_tag_handler))
-        .route("/api/public-config", get(get_public_config_handler))
-        .route("/api/forum-index", get(get_forum_index_handler))
-        .nest("/api/setup", setup_routes)
-        .nest("/api/auth", auth_routes)
-        .nest("/api/categories", category_routes)
-        .nest("/api/threads", thread_routes)
-        .nest("/api/posts", post_routes)
-        .nest("/api/users", user_routes)
-        .nest("/api/notifications", notification_routes)
-        .nest("/api/reports", report_routes)
-        .nest("/api/mod", mod_routes)
-        .nest("/api/admin", admin_routes)
-        .route("/api/plugins/active-slots", get(get_active_slots_handler))
+        .layer(middleware::from_fn(csrf_origin_check))
+        .layer(axum::Extension(csrf_allowed))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            error_page_layer,
+        ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
         ))
         .layer(cors)
+        .layer(middleware::from_fn(security_headers))
         .layer(
-            TraceLayer::new_for_http().make_span_with(|req: &Request<_>| {
-                tracing::error_span!(
-                    "request",
-                    method = %req.method(),
-                    uri = %req.uri().path(),
-                )
-            }),
+            TraceLayer::new_for_http()
+                .make_span_with(|req: &Request<_>| {
+                    let request_id = req
+                        .headers()
+                        .get("x-request-id")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("-");
+                    let ip = req
+                        .extensions()
+                        .get::<ConnectInfo<SocketAddr>>()
+                        .map(|ci| ci.0.ip().to_string())
+                        .unwrap_or_default();
+                    // Mask token values in paths to prevent credential leakage in logs.
+                    // e.g. /api/auth/verify-email/<token>  →  /api/auth/verify-email/[token]
+                    //      /api/auth/password-resets/<token> → /api/auth/password-resets/[token]
+                    let raw_path = req.uri().path();
+                    let logged_path = mask_sensitive_path(raw_path);
+                    tracing::info_span!(
+                        "request",
+                        request_id = %request_id,
+                        method     = %req.method(),
+                        path       = %logged_path,
+                        ip         = %ip,
+                        status     = tracing::field::Empty,
+                        latency_ms = tracing::field::Empty,
+                        user_id    = tracing::field::Empty,
+                        username   = tracing::field::Empty,
+                    )
+                })
+                .on_response(|res: &axum::http::Response<_>, latency: Duration, span: &Span| {
+                    span.record("status", res.status().as_u16());
+                    span.record("latency_ms", latency.as_millis());
+                    tracing::info!(parent: span, "response_sent");
+                })
+                .on_failure(|error: tower_http::classify::ServerErrorsFailureClass, latency: Duration, span: &Span| {
+                    span.record("latency_ms", latency.as_millis());
+                    tracing::error!(
+                        parent: span,
+                        error = %error,
+                        latency_ms = latency.as_millis(),
+                        "request_failed"
+                    );
+                }),
         )
+        .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(body_limit)
         .with_state(state)
 }
 

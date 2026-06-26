@@ -3,9 +3,8 @@ use sea_orm_migration::prelude::*;
 
 use crate::enums::{
     notification_kind::NotificationKindEnum, post_policy::PostPolicyEnum,
-    reaction_kind::ReactionKindEnum, report_status::ReportStatusEnum,
-    thread_status::ThreadStatusEnum, trust_level::TrustLevelEnum, user_role::UserRoleEnum,
-    view_policy::ViewPolicyEnum,
+    post_status::PostStatusEnum, reaction_kind::ReactionKindEnum, report_status::ReportStatusEnum,
+    thread_status::ThreadStatusEnum, trust_level::TrustLevelEnum, view_policy::ViewPolicyEnum,
 };
 
 pub struct Migration;
@@ -19,19 +18,6 @@ impl MigrationName for Migration {
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_type(
-                Type::create()
-                    .as_enum(UserRoleEnum::Type)
-                    .values([
-                        UserRoleEnum::Member,
-                        UserRoleEnum::Moderator,
-                        UserRoleEnum::Admin,
-                    ])
-                    .to_owned(),
-            )
-            .await?;
-
         manager
             .create_type(
                 Type::create()
@@ -125,7 +111,17 @@ impl MigrationTrait for Migration {
                         PostPolicyEnum::Trusted,
                         PostPolicyEnum::StaffOnly,
                         PostPolicyEnum::Closed,
+                        PostPolicyEnum::Moderated,
                     ])
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_type(
+                Type::create()
+                    .as_enum(PostStatusEnum::Type)
+                    .values([PostStatusEnum::Pending, PostStatusEnum::Published])
                     .to_owned(),
             )
             .await?;
@@ -134,6 +130,14 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_type(
+                Type::drop()
+                    .name(PostStatusEnum::Type)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await?;
         manager
             .drop_type(
                 Type::drop()
@@ -189,9 +193,6 @@ impl MigrationTrait for Migration {
                     .if_exists()
                     .to_owned(),
             )
-            .await?;
-        manager
-            .drop_type(Type::drop().name(UserRoleEnum::Type).if_exists().to_owned())
             .await?;
         Ok(())
     }

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::permission::PermissionChecker;
-use crate::ports::PluginRuntime;
-use crate::shared::AppError;
+use crate::ports::PluginLifecycle;
+use crate::shared::{AppError, OptionExt};
 use ferum_domain::models::plugin::{
     NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginLog, PluginLogQuery,
     PluginStatus, PluginTier, PluginUiSlot,
@@ -16,19 +16,22 @@ use ferum_domain::AuthUser;
 pub struct PluginUseCase {
     pub plugins: Arc<dyn PluginRepository>,
     pub webhooks: Arc<dyn WebhookRepository>,
-    pub plugin_runtime: Arc<dyn PluginRuntime>,
+    pub plugin_runtime: Arc<dyn PluginLifecycle>,
+    plugins_dir: std::path::PathBuf,
 }
 
 impl PluginUseCase {
     pub fn new(
         plugins: Arc<dyn PluginRepository>,
         webhooks: Arc<dyn WebhookRepository>,
-        plugin_runtime: Arc<dyn PluginRuntime>,
+        plugin_runtime: Arc<dyn PluginLifecycle>,
+        plugins_dir: std::path::PathBuf,
     ) -> Self {
         Self {
             plugins,
             webhooks,
             plugin_runtime,
+            plugins_dir,
         }
     }
 
@@ -44,7 +47,7 @@ impl PluginUseCase {
         self.plugins
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)
+            .or_not_found()
     }
 
     // ─── Register (called by handler after package extraction) ────────────────
@@ -106,7 +109,7 @@ impl PluginUseCase {
         self.plugins
             .find_by_id(plugin.id)
             .await?
-            .ok_or(AppError::NotFound)
+            .or_not_found()
     }
 
     // ─── Configure ────────────────────────────────────────────────────────────
@@ -124,7 +127,7 @@ impl PluginUseCase {
             .plugins
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         // Validate config against config_schema if present in manifest
         if let Some(schema) = plugin.manifest.get("config_schema") {
@@ -158,7 +161,7 @@ impl PluginUseCase {
             .plugins
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         if plugin.status == PluginStatus::Active {
             return Ok(plugin);
@@ -192,7 +195,7 @@ impl PluginUseCase {
         self.plugins
             .find_by_id(plugin.id)
             .await?
-            .ok_or(AppError::NotFound)
+            .or_not_found()
     }
 
     // ─── Deactivate ───────────────────────────────────────────────────────────
@@ -204,7 +207,7 @@ impl PluginUseCase {
             .plugins
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         self.plugins
             .update_status(plugin.id, PluginStatus::Inactive, None)
@@ -213,6 +216,10 @@ impl PluginUseCase {
         // Remove webhooks owned by this plugin so they stop firing while deactivated.
         // On uninstall, ON DELETE CASCADE handles cleanup automatically.
         self.webhooks.delete_by_plugin(plugin.id).await?;
+
+        // Remove UI slots so they are not injected into page context while inactive.
+        // Re-activation calls register_ui_slots_from_manifest() which re-creates them.
+        self.plugins.delete_ui_slots_for_plugin(plugin.id).await?;
 
         // Hook rows remain in DB with is_active=true; the registry reload empties
         // the in-memory dispatch table for this plugin, which is sufficient to stop dispatch.
@@ -228,13 +235,13 @@ impl PluginUseCase {
 
     /// Uninstall a plugin.
     /// `confirm_slug` must match the plugin's slug — guard against accidental deletions.
-    /// Caller (handler) is responsible for deleting files from disk after this returns Ok.
+    /// Removes DB rows and then cleans up plugin files from disk (non-fatal if dir missing).
     pub async fn uninstall(
         &self,
         actor: &AuthUser,
         slug: &str,
         confirm_slug: &str,
-    ) -> Result<String, AppError> {
+    ) -> Result<(), AppError> {
         PermissionChecker::can_manage_plugins(actor)?;
 
         if slug != confirm_slug {
@@ -247,7 +254,7 @@ impl PluginUseCase {
             .plugins
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
 
         // Mark as uninstalling first so hooks stop being dispatched
         self.plugins
@@ -259,7 +266,23 @@ impl PluginUseCase {
         let install_path = plugin.install_path.clone();
         self.plugins.delete(plugin.id).await?;
 
-        Ok(install_path)
+        // Clean up files from disk. Non-fatal: if already removed, that's fine.
+        let disk_path = if install_path.is_empty() {
+            self.plugins_dir.join(slug)
+        } else {
+            std::path::PathBuf::from(&install_path)
+        };
+        if disk_path.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&disk_path) {
+                tracing::warn!(
+                    path = %disk_path.display(),
+                    "Failed to remove plugin directory during uninstall: {}",
+                    e
+                );
+            }
+        }
+
+        Ok(())
     }
 
     // ─── Logs ─────────────────────────────────────────────────────────────────
@@ -275,7 +298,7 @@ impl PluginUseCase {
             .plugins
             .find_by_slug(slug)
             .await?
-            .ok_or(AppError::NotFound)?;
+            .or_not_found()?;
         self.plugins.get_logs(plugin.id, query).await
     }
 

@@ -1,0 +1,73 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Bookmarks — {{ site.name }}{% endblock %}
+
+{% block content %}
+<h1 class="h4 fw-bold mb-4">Saved Threads</h1>
+
+{% if threads %}
+<div class="fr-feed mb-3">
+  {% for thread in threads %}
+    {% include "default/templates/partials/thread_card.html" %}
+  {% endfor %}
+</div>
+
+{% include "default/templates/partials/pagination.html" %}
+
+{% else %}
+<div class="text-center py-5 text-body-secondary">
+  <i class="fa-regular fa-bookmark fa-3x mb-3 opacity-25" aria-hidden="true"></i>
+  <h2 class="h5 mb-2">No bookmarks yet</h2>
+  <p class="mb-3 small">Save threads for later by clicking the bookmark icon on any thread page.</p>
+  <a href="/" class="btn btn-primary btn-sm px-4">Browse discussions</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block right_sidebar_wrap %}
+<aside class="fr-right-col">
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Stats</div>
+    <div class="fr-panel-body">
+      <div class="fr-panel-stat-row">
+        <span class="text-muted small">Saved threads</span>
+        <span class="fw-semibold small">{{ pagination.total | default(value=0) }}</span>
+      </div>
+      <div class="fr-panel-stat-row">
+        <span class="text-muted small">Page</span>
+        <span class="fw-semibold small">{{ pagination.page | default(value=1) }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Account</div>
+    <div class="fr-panel-body">
+      <a href="/notifications" class="fr-panel-row">
+        <i class="fa-solid fa-bell fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
+        <span class="small">Notifications</span>
+      </a>
+      <a href="/account" class="fr-panel-row">
+        <i class="fa-solid fa-user fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
+        <span class="small">Profile settings</span>
+      </a>
+      <a href="/" class="fr-panel-row">
+        <i class="fa-solid fa-house fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
+        <span class="small">Back to feed</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="fr-panel">
+    <div class="fr-panel-section">Tip</div>
+    <div class="px-3 py-3">
+      <p class="mb-0 text-muted small" style="line-height:1.6">
+        Open any thread and click the <i class="fa-solid fa-bookmark mx-1 text-primary"></i> icon to save or unsave it.
+      </p>
+    </div>
+  </div>
+
+</aside>
+{% endblock %}

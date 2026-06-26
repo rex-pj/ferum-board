@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -28,6 +27,8 @@ pub trait UserRepository: Send + Sync {
         page: u64,
         per_page: u64,
         search: Option<&str>,
+        sort_by: Option<&str>,
+        sort_dir: Option<&str>,
     ) -> Result<(Vec<User>, u64), AppError>;
     async fn get_preferences(&self, user_id: Uuid) -> Result<UserPreferences, AppError>;
     async fn upsert_preferences(&self, prefs: UserPreferences) -> Result<(), AppError>;

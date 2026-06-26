@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::entities::reports;
 use ferum_application::shared::AppError;
 use ferum_domain::models::report::{Report, ReportStatus};
-use ferum_domain::repositories::report_repository::ReportRepository;
+use ferum_domain::repositories::report_repository::{ReportRepository, ReportStatusCounts};
 
 pub struct PgReportRepository {
     db: DatabaseConnection,
@@ -48,10 +48,26 @@ impl ReportRepository for PgReportRepository {
             .map(entity_to_domain))
     }
 
+    async fn count_by_status(&self) -> Result<ReportStatusCounts, AppError> {
+        let (pending, resolved, dismissed) = tokio::try_join!(
+            reports::Entity::find()
+                .filter(reports::Column::Status.eq(reports::ReportStatus::Pending))
+                .count(&self.db),
+            reports::Entity::find()
+                .filter(reports::Column::Status.eq(reports::ReportStatus::Resolved))
+                .count(&self.db),
+            reports::Entity::find()
+                .filter(reports::Column::Status.eq(reports::ReportStatus::Dismissed))
+                .count(&self.db),
+        )?;
+        Ok(ReportStatusCounts { pending, resolved, dismissed })
+    }
+
     async fn list_all(
         &self,
         status: Option<ReportStatus>,
         target_type: Option<&str>,
+        q: Option<&str>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
@@ -73,13 +89,22 @@ impl ReportRepository for PgReportRepository {
             _ => {}
         }
 
-        let total = query.clone().count(&self.db).await?;
-        let rows = query
-            .order_by_asc(reports::Column::CreatedAt)
-            .limit(per_page)
-            .offset(offset)
-            .all(&self.db)
-            .await?;
+        if let Some(search) = q.filter(|s| !s.is_empty()) {
+            let pattern = format!("%{}%", search.to_lowercase());
+            query = query.filter(
+                sea_orm::sea_query::Expr::col(reports::Column::Reason)
+                    .like(pattern),
+            );
+        }
+
+        let (total, rows) = tokio::try_join!(
+            query.clone().count(&self.db),
+            query
+                .order_by_asc(reports::Column::CreatedAt)
+                .limit(per_page)
+                .offset(offset)
+                .all(&self.db),
+        )?;
         Ok((rows.into_iter().map(entity_to_domain).collect(), total))
     }
 
@@ -115,22 +140,19 @@ impl ReportRepository for PgReportRepository {
             ReportStatus::Dismissed => reports::ReportStatus::Dismissed,
         };
 
-        let mut update = reports::Entity::update_many()
-            .col_expr(reports::Column::Status, Expr::value(entity_status))
-            .col_expr(reports::Column::ResolvedById, Expr::value(resolved_by_id))
-            .col_expr(
-                reports::Column::ResolvedAt,
-                Expr::value(Utc::now().fixed_offset()),
-            );
+        let mut active = reports::ActiveModel {
+            id: Set(id),
+            status: Set(entity_status),
+            resolved_by_id: Set(Some(resolved_by_id)),
+            resolved_at: Set(Some(Utc::now().fixed_offset())),
+            ..Default::default()
+        };
 
         if let Some(notes) = moderator_notes {
-            update = update.col_expr(reports::Column::ModeratorNotes, Expr::value(notes));
+            active.moderator_notes = Set(Some(notes));
         }
 
-        update
-            .filter(reports::Column::Id.eq(id))
-            .exec(&self.db)
-            .await?;
+        active.update(&self.db).await?;
         Ok(())
     }
 }

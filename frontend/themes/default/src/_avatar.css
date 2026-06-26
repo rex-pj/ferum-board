@@ -1,0 +1,28 @@
+/* ── Avatar sizes ─────────────────────────────────────────────── */
+.fr-avatar {
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+}
+.fr-avatar--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  background: var(--ferum-primary);
+  flex-shrink: 0;
+}
+.fr-avatar--24 { width: 24px; height: 24px; font-size: 10px;    border-radius: 50%; }
+.fr-avatar--32 { width: 32px; height: 32px; font-size: 12px;    border-radius: 50%; }
+.fr-avatar--40 { width: 40px; height: 40px; font-size: 16px;    border-radius: 50%; }
+.fr-avatar--80 { width: 80px; height: 80px; font-size: 28px;    border-radius: 50%; }
+.fr-avatar--96 { width: 96px; height: 96px; font-size: 2.25rem; border-radius: 50%; border: 4px solid var(--bs-body-bg); }
+
+/* ── Trust badge ──────────────────────────────────────────────── */
+.fr-trust-badge {
+  background: rgba(var(--bs-primary-rgb), 0.1);
+  color: var(--ferum-primary);
+  font-size: 0.65rem;
+  font-weight: 600;
+}

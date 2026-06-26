@@ -1,0 +1,56 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ category_name }} — Moderators{% endblock %}
+{% block page_title %}Category: {{ category_name }} — Moderators{% endblock %}
+{% block nav_categories %}active fw-semibold{% endblock %}
+
+{% block content %}
+<a href="/admin/categories" class="btn btn-sm btn-outline-secondary mb-3">
+  <i class="fa-solid fa-arrow-left me-1"></i>Back to Categories
+</a>
+
+<div class="card mb-4">
+  <div class="card-header fw-semibold">Current Moderators</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-active">
+        <tr><th>User</th><th>Assigned</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for mod in moderators %}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{ mod.display_name }}</div>
+            <div class="text-muted small">@{{ mod.username }}</div>
+          </td>
+          <td class="text-muted small align-middle text-nowrap">{{ mod.granted_at | date(format="%b %d, %Y") }}</td>
+          <td class="align-middle">
+            <button class="btn btn-sm btn-outline-danger" type="button"
+                    data-admin-action="revoke-moderator"
+                    data-category-id="{{ category_id }}"
+                    data-user-id="{{ mod.user_id }}"
+                    data-display-name="{{ mod.display_name | escape }}">Remove</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="3" class="text-center text-muted py-4">No moderators assigned.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header fw-semibold">Assign Moderator</div>
+  <div class="card-body">
+    <div class="d-flex gap-2">
+      <input type="text" name="username" class="form-control form-control-sm"
+             placeholder="Username" style="max-width:240px;" maxlength="30">
+      <button class="btn btn-sm btn-primary" type="button"
+              data-admin-action="assign-moderator"
+              data-category-id="{{ category_id }}">Assign</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

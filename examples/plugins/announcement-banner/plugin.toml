@@ -1,0 +1,82 @@
+[meta]
+id          = "com.ferum.announcement-banner"
+name        = "Announcement Banner"
+version     = "1.0.0"
+tier        = "script"
+min_ferum   = "0.1.0"
+description = "Displays a configurable announcement banner at the top of every public page via a server-injected UI slot."
+author      = "Ferum Team"
+
+# ─── Script entry point ───────────────────────────────────────────────────────
+# bundle.js registers the <ferum-slot-content-before> custom element.
+# This file is served at /plugins/com.ferum.announcement-banner/assets/bundle.js
+
+[script]
+bundle_file = "bundle.js"
+
+# ─── Config schema ────────────────────────────────────────────────────────────
+# Rendered as a form in Admin → Plugins → Announcement Banner → Configuration.
+# NOTE: config is stored in the DB and is NOT automatically bridged to the
+# custom element. The element reads its config from the data-* attributes
+# declared in [ui_slots.*].props below. To update displayed content after a
+# config change you must deactivate and re-activate the plugin so that
+# register_ui_slots re-reads the manifest and rewrites the slot row.
+#
+# For truly dynamic config (no reactivation needed), have bundle.js call
+# GET /api/plugins/com.ferum.announcement-banner/config (not yet in core).
+
+[config_schema]
+type     = "object"
+required = ["message"]
+
+[config_schema.properties.message]
+type        = "string"
+title       = "Banner message"
+description = "The announcement text shown at the top of every page. Supports plain text only."
+default     = "Welcome to the forum!"
+
+[config_schema.properties.kind]
+type        = "string"
+title       = "Alert style"
+description = "Bootstrap alert variant: info, warning, danger, success, primary, secondary."
+default     = "info"
+
+[config_schema.properties.dismissible]
+type        = "boolean"
+title       = "Allow dismiss"
+description = "Whether visitors can close the banner. Dismissed state is saved in sessionStorage."
+default     = true
+
+# ─── Capabilities ─────────────────────────────────────────────────────────────
+# This plugin runs no server-side hooks — it only injects client-side HTML.
+
+[capabilities]
+hooks = []
+
+# ─── UI Slots ──────────────────────────────────────────────────────────────────
+# Ferum reads this section at activation time and inserts one row per slot into
+# the plugin_ui_slots table. On every page request the server calls
+# PluginUiRuntime::active_ui_slots(), builds HTML like:
+#   <ferum-slot-content-before
+#       data-message="Welcome to the forum!"
+#       data-kind="info"
+#       data-dismissible="true">
+#   </ferum-slot-content-before>
+# and injects it into the Tera context as plugin_slots.content_before.
+#
+# Slot name → custom element tag mapping (auto-derived):
+#   content_before  →  ferum-slot-content-before
+#   content_after   →  ferum-slot-content-after
+#   navbar_end      →  ferum-slot-navbar-end
+#
+# `component` — path at which bundle.js is served (relative to APP_URL).
+# `props`     — static HTML attribute strings added to the element at activation
+#               time. Edit these and re-activate to change displayed values.
+
+[ui_slots.content_before]
+component = "/plugins/com.ferum.announcement-banner/assets/bundle.js"
+props = [
+    'data-message="Welcome to the forum!"',
+    'data-kind="info"',
+    'data-dismissible="true"',
+]

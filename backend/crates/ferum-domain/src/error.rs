@@ -32,8 +32,10 @@ impl AppError {
         AppError::UnprocessableEntity(message.to_string())
     }
 
+    #[track_caller]
     pub fn internal(message: impl Into<String>) -> Self {
-        AppError::Internal(message.into())
+        let loc = std::panic::Location::caller();
+        AppError::Internal(format!("{} [{}:{}]", message.into(), loc.file(), loc.line()))
     }
 
     pub fn status_and_code(&self) -> (StatusCode, &str) {
@@ -62,8 +64,21 @@ impl IntoResponse for AppError {
         } else {
             None
         };
-        if status == StatusCode::INTERNAL_SERVER_ERROR {
-            tracing::error!(error = %self, "internal server error");
+        match status {
+            StatusCode::INTERNAL_SERVER_ERROR => {
+                tracing::error!(
+                    error.code = code,
+                    error.detail = %self,
+                    "internal_server_error"
+                );
+            }
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                tracing::warn!(error.code = code, "auth_error");
+            }
+            StatusCode::TOO_MANY_REQUESTS => {
+                tracing::warn!(error.code = code, "rate_limit_exceeded");
+            }
+            _ => {}
         }
         let message = match &self {
             AppError::Forbidden(c) => format!("Access denied: {}", c),
@@ -88,9 +103,37 @@ impl IntoResponse for AppError {
     }
 }
 
+// ─── Option convenience ───────────────────────────────────────────────────────
+
+pub trait OptionExt<T>: Sized {
+    fn or_not_found(self) -> Result<T, AppError>;
+}
+
+impl<T> OptionExt<T> for Option<T> {
+    fn or_not_found(self) -> Result<T, AppError> {
+        self.ok_or(AppError::NotFound)
+    }
+}
+
 impl From<sea_orm::DbErr> for AppError {
+    #[track_caller]
     fn from(e: sea_orm::DbErr) -> Self {
-        tracing::error!("database error: {:?}", e);
-        AppError::Internal(e.to_string())
+        let loc = std::panic::Location::caller();
+        let kind = match &e {
+            sea_orm::DbErr::ConnectionAcquire(_) => "connection_acquire",
+            sea_orm::DbErr::Exec(_) => "exec",
+            sea_orm::DbErr::Query(_) => "query",
+            sea_orm::DbErr::RecordNotFound(_) => "record_not_found",
+            sea_orm::DbErr::RecordNotInserted => "record_not_inserted",
+            sea_orm::DbErr::RecordNotUpdated => "record_not_updated",
+            _ => "other",
+        };
+        tracing::error!(
+            db.error_kind = kind,
+            db.detail = %e,
+            caller = %format!("{}:{}", loc.file(), loc.line()),
+            "database_error"
+        );
+        AppError::Internal(format!("db:{kind} [{}:{}]", loc.file(), loc.line()))
     }
 }

@@ -5,10 +5,35 @@ use sea_orm::sea_query::OnConflict;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{user_avatars, user_covers, user_muted_categories, user_preferences, user_watched_categories, users};
+use sea_orm::sea_query::extension::postgres::PgExpr;
+use sea_orm::sea_query::{Alias, CaseStatement, Expr, Func, Order, PostgresQueryBuilder, Query, SimpleExpr, SubQueryStatement};
+
+use crate::entities::{roles, user_avatars, user_covers, user_muted_categories, user_preferences, user_roles, user_watched_categories, users};
 use ferum_application::shared::AppError;
 use ferum_domain::models::user::{TrustLevel, User, UserPreferences};
 use ferum_domain::repositories::user_repository::{NewUser, UpdateUser, UserRepository};
+
+const SLOW_QUERY_MS: u128 = 500;
+
+fn primary_role_subexpr() -> SimpleExpr {
+    let subq = Query::select()
+        .column((roles::Entity, roles::Column::Slug))
+        .from(user_roles::Entity)
+        .inner_join(
+            roles::Entity,
+            Expr::col((roles::Entity, roles::Column::Id))
+                .equals((user_roles::Entity, user_roles::Column::RoleId)),
+        )
+        .and_where(
+            Expr::col((user_roles::Entity, user_roles::Column::UserId))
+                .equals((users::Entity, users::Column::Id)),
+        )
+        .and_where(Expr::col((user_roles::Entity, user_roles::Column::CategoryId)).is_null())
+        .order_by((roles::Entity, roles::Column::Position), Order::Asc)
+        .limit(1)
+        .to_owned();
+    SimpleExpr::SubQuery(None, Box::new(SubQueryStatement::SelectStatement(subq)))
+}
 
 pub struct PgUserRepository {
     db: DatabaseConnection,
@@ -20,27 +45,51 @@ impl PgUserRepository {
     }
 }
 
-// ─── Single JOIN query ────────────────────────────────────────────────────────
+// ─── Base select helper ───────────────────────────────────────────────────────
+//
+// Builds a `Select<users::Entity>` with left-joins for avatar/cover and the
+// correlated sub-select for primary_role_slug.  Call `.filter()` / `.order_by()`
+// / `.limit()` / `.offset()` on the returned value, then `.into_model::<UserRow>()`.
 
-const USER_SELECT: &str = r#"
-    SELECT
-        u.id, u.username, u.email, u.is_email_verified,
-        u.display_name, u.password_hash,
-        u.trust_level::TEXT AS trust_level,
-        u.trust_score, u.post_count, u.days_visited,
-        u.bio, u.website, u.is_banned, u.banned_until, u.ban_reason,
-        u.warn_count, u.failed_login_count, u.locked_until,
-        u.created_at, u.updated_at, u.deleted_at, u.last_seen_at,
-        ua.file_key AS avatar_key,
-        uc.file_key AS cover_key,
-        (SELECT r.slug FROM user_roles ur
-             JOIN roles r ON r.id = ur.role_id
-             WHERE ur.user_id = u.id AND ur.category_id IS NULL
-             ORDER BY r.position ASC LIMIT 1) AS primary_role_slug
-    FROM users u
-    LEFT JOIN user_avatars ua ON ua.user_id = u.id
-    LEFT JOIN user_covers uc ON uc.user_id = u.id
-"#;
+fn user_select() -> sea_orm::Select<users::Entity> {
+    use sea_orm::JoinType;
+    users::Entity::find()
+        .select_only()
+        .columns([
+            users::Column::Id,
+            users::Column::Username,
+            users::Column::Email,
+            users::Column::IsEmailVerified,
+            users::Column::DisplayName,
+            users::Column::PasswordHash,
+            // TrustLevel is added below as a ::text cast
+            users::Column::TrustScore,
+            users::Column::PostCount,
+            users::Column::DaysVisited,
+            users::Column::Bio,
+            users::Column::Website,
+            users::Column::IsBanned,
+            users::Column::BannedUntil,
+            users::Column::BanReason,
+            users::Column::WarnCount,
+            users::Column::FailedLoginCount,
+            users::Column::LockedUntil,
+            users::Column::CreatedAt,
+            users::Column::UpdatedAt,
+            users::Column::DeletedAt,
+            users::Column::LastSeenAt,
+        ])
+        .column_as(
+            Expr::col((users::Entity, users::Column::TrustLevel))
+                .cast_as(Alias::new("text")),
+            "trust_level",
+        )
+        .column_as(user_avatars::Column::FileKey, "avatar_key")
+        .column_as(user_covers::Column::FileKey, "cover_key")
+        .column_as(primary_role_subexpr(), "primary_role_slug")
+        .join(JoinType::LeftJoin, users::Relation::UserAvatar.def())
+        .join(JoinType::LeftJoin, users::Relation::UserCover.def())
+}
 
 #[derive(Debug, FromQueryResult)]
 struct UserRow {
@@ -120,9 +169,9 @@ fn domain_trust_to_entity(level: &TrustLevel) -> users::TrustLevel {
 #[async_trait]
 impl UserRepository for PgUserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, AppError> {
-        let sql = format!("{USER_SELECT} WHERE u.id = $1");
-        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [id.into()]);
-        Ok(UserRow::find_by_statement(stmt)
+        Ok(user_select()
+            .filter(users::Column::Id.eq(id))
+            .into_model::<UserRow>()
             .one(&self.db)
             .await?
             .map(row_to_domain))
@@ -132,12 +181,9 @@ impl UserRepository for PgUserRepository {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${i}")).collect();
-        let in_clause = placeholders.join(", ");
-        let sql = format!("{USER_SELECT} WHERE u.id IN ({in_clause})");
-        let values: Vec<Value> = ids.iter().map(|id| (*id).into()).collect();
-        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, values);
-        Ok(UserRow::find_by_statement(stmt)
+        Ok(user_select()
+            .filter(users::Column::Id.is_in(ids.to_vec()))
+            .into_model::<UserRow>()
             .all(&self.db)
             .await?
             .into_iter()
@@ -146,18 +192,24 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
-        let sql = format!("{USER_SELECT} WHERE LOWER(u.email) = LOWER($1)");
-        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [email.into()]);
-        Ok(UserRow::find_by_statement(stmt)
+        let t0 = std::time::Instant::now();
+        let result = user_select()
+            .filter(users::Column::Email.eq(email.to_lowercase()))
+            .into_model::<UserRow>()
             .one(&self.db)
             .await?
-            .map(row_to_domain))
+            .map(row_to_domain);
+        let elapsed = t0.elapsed();
+        if elapsed.as_millis() > SLOW_QUERY_MS {
+            tracing::warn!(elapsed_ms = elapsed.as_millis(), "slow_query: find_by_email");
+        }
+        Ok(result)
     }
 
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, AppError> {
-        let sql = format!("{USER_SELECT} WHERE u.username = $1");
-        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [username.into()]);
-        Ok(UserRow::find_by_statement(stmt)
+        Ok(user_select()
+            .filter(users::Column::Username.eq(username))
+            .into_model::<UserRow>()
             .one(&self.db)
             .await?
             .map(row_to_domain))
@@ -227,18 +279,24 @@ impl UserRepository for PgUserRepository {
             failed_login_count: i32,
         }
 
-        let stmt = Statement::from_sql_and_values(
+        let (sql, values) = Query::update()
+            .table(users::Entity)
+            .value(
+                users::Column::FailedLoginCount,
+                Expr::col(users::Column::FailedLoginCount).add(1i32),
+            )
+            .and_where(users::Column::Id.eq(id))
+            .returning_col(users::Column::FailedLoginCount)
+            .build(PostgresQueryBuilder);
+
+        let row = FailedCount::find_by_statement(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            "UPDATE users \
-             SET failed_login_count = failed_login_count + 1 \
-             WHERE id = $1 \
-             RETURNING failed_login_count",
-            [id.into()],
-        );
-        let row = FailedCount::find_by_statement(stmt)
-            .one(&self.db)
-            .await?
-            .ok_or(AppError::NotFound)?;
+            sql,
+            values,
+        ))
+        .one(&self.db)
+        .await?
+        .ok_or(AppError::NotFound)?;
         Ok(row.failed_login_count)
     }
 
@@ -288,19 +346,32 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn count_admins(&self) -> Result<u64, AppError> {
-        // Count users who have the admin role assigned globally via user_roles table
         #[derive(FromQueryResult)]
         struct CountRow {
             cnt: i64,
         }
-        let row = CountRow::find_by_statement(Statement::from_string(
+
+        let (sql, values) = Query::select()
+            .expr_as(
+                Expr::cust("COUNT(DISTINCT user_id)::BIGINT"),
+                Alias::new("cnt"),
+            )
+            .from(user_roles::Entity)
+            .inner_join(
+                roles::Entity,
+                Expr::col((roles::Entity, roles::Column::Id))
+                    .equals((user_roles::Entity, user_roles::Column::RoleId)),
+            )
+            .and_where(Expr::col((roles::Entity, roles::Column::Slug)).eq("admin"))
+            .and_where(
+                Expr::col((user_roles::Entity, user_roles::Column::CategoryId)).is_null(),
+            )
+            .build(PostgresQueryBuilder);
+
+        let row = CountRow::find_by_statement(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            r#"
-                SELECT COUNT(DISTINCT ur.user_id)::BIGINT AS cnt
-                FROM user_roles ur
-                JOIN roles r ON r.id = ur.role_id
-                WHERE r.slug = 'admin' AND ur.category_id IS NULL
-            "#,
+            sql,
+            values,
         ))
         .one(&self.db)
         .await?
@@ -313,45 +384,53 @@ impl UserRepository for PgUserRepository {
         page: u64,
         per_page: u64,
         search: Option<&str>,
+        sort_by: Option<&str>,
+        sort_dir: Option<&str>,
     ) -> Result<(Vec<User>, u64), AppError> {
         let offset = page.saturating_sub(1) * per_page;
+        let order = match sort_dir.unwrap_or("desc") {
+            "asc" => Order::Asc,
+            _ => Order::Desc,
+        };
 
-        let mut count_query = users::Entity::find().order_by_desc(users::Column::CreatedAt);
+        let mut base = user_select();
+        let mut count_q = users::Entity::find();
+
         if let Some(q) = search.filter(|s| !s.is_empty()) {
-            count_query = count_query.filter(
-                users::Column::Username
-                    .contains(q)
-                    .or(users::Column::Email.contains(q))
-                    .or(users::Column::DisplayName.contains(q)),
-            );
+            let pattern = format!("%{q}%");
+            let cond = Condition::any()
+                .add(Expr::col(users::Column::Username).ilike(pattern.clone()))
+                .add(Expr::col(users::Column::Email).ilike(pattern.clone()))
+                .add(Expr::col(users::Column::DisplayName).ilike(pattern));
+            base = base.filter(cond.clone());
+            count_q = count_q.filter(cond);
         }
-        let total = count_query.count(&self.db).await?;
 
-        let (where_clause, values): (String, Vec<Value>) =
-            if let Some(q) = search.filter(|s| !s.is_empty()) {
-                let pattern = format!("%{q}%");
-                (
-                    "WHERE (u.username ILIKE $1 OR u.email ILIKE $1 OR u.display_name ILIKE $1)"
-                        .to_string(),
-                    vec![pattern.into()],
-                )
-            } else {
-                (String::new(), vec![])
-            };
+        let total = count_q.count(&self.db).await?;
 
-        let limit_pos = values.len() + 1;
-        let offset_pos = values.len() + 2;
-        let sql = format!(
-            "{USER_SELECT} {where_clause} \
-             ORDER BY u.created_at DESC \
-             LIMIT ${limit_pos} OFFSET ${offset_pos}"
-        );
-        let mut all_values = values;
-        all_values.push((per_page as i64).into());
-        all_values.push((offset as i64).into());
+        match sort_by.unwrap_or("created_at") {
+            "username"    => { base = base.order_by(users::Column::Username, order); }
+            "post_count"  => { base = base.order_by(users::Column::PostCount, order); }
+            "trust_level" => { base = base.order_by(users::Column::TrustLevel, order); }
+            "is_banned"   => {
+                base = base
+                    .order_by(users::Column::IsBanned, order)
+                    .order_by(users::Column::CreatedAt, Order::Desc);
+            }
+            _ => { base = base.order_by(users::Column::CreatedAt, order); }
+        }
 
-        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, all_values);
-        let rows = UserRow::find_by_statement(stmt).all(&self.db).await?;
+        let t0 = std::time::Instant::now();
+        let rows = base
+            .limit(per_page)
+            .offset(offset)
+            .into_model::<UserRow>()
+            .all(&self.db)
+            .await?;
+        let elapsed = t0.elapsed();
+        if elapsed.as_millis() > SLOW_QUERY_MS {
+            tracing::warn!(elapsed_ms = elapsed.as_millis(), page, "slow_query: list_paginated");
+        }
         Ok((rows.into_iter().map(row_to_domain).collect(), total))
     }
 
@@ -365,33 +444,23 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn get_preferences(&self, user_id: Uuid) -> Result<UserPreferences, AppError> {
-        let (theme, font_size, layout, email_notifications) =
-            match user_preferences::Entity::find_by_id(user_id)
-                .one(&self.db)
-                .await?
-            {
-                Some(m) => (m.theme, m.font_size, m.layout, m.email_notifications),
-                None => {
-                    let d = UserPreferences::default();
-                    (d.theme, d.font_size, d.layout, d.email_notifications)
-                }
-            };
+        let (prefs_row, muted_rows, watched_rows) = tokio::try_join!(
+            user_preferences::Entity::find_by_id(user_id).one(&self.db),
+            user_muted_categories::Entity::find()
+                .filter(user_muted_categories::Column::UserId.eq(user_id))
+                .all(&self.db),
+            user_watched_categories::Entity::find()
+                .filter(user_watched_categories::Column::UserId.eq(user_id))
+                .all(&self.db),
+        )?;
 
-        let muted_categories = user_muted_categories::Entity::find()
-            .filter(user_muted_categories::Column::UserId.eq(user_id))
-            .all(&self.db)
-            .await?
-            .into_iter()
-            .map(|m| m.category_id)
-            .collect();
-
-        let watched_categories = user_watched_categories::Entity::find()
-            .filter(user_watched_categories::Column::UserId.eq(user_id))
-            .all(&self.db)
-            .await?
-            .into_iter()
-            .map(|m| m.category_id)
-            .collect();
+        let (theme, font_size, layout, email_notifications) = match prefs_row {
+            Some(m) => (m.theme, m.font_size, m.layout, m.email_notifications),
+            None => {
+                let d = UserPreferences::default();
+                (d.theme, d.font_size, d.layout, d.email_notifications)
+            }
+        };
 
         Ok(UserPreferences {
             user_id,
@@ -399,8 +468,8 @@ impl UserRepository for PgUserRepository {
             font_size,
             layout,
             email_notifications,
-            muted_categories,
-            watched_categories,
+            muted_categories: muted_rows.into_iter().map(|m| m.category_id).collect(),
+            watched_categories: watched_rows.into_iter().map(|m| m.category_id).collect(),
         })
     }
 
@@ -532,44 +601,66 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn update_last_seen(&self, user_id: Uuid) -> Result<(), AppError> {
-        // Atomically update last_seen_at and increment days_visited only when
-        // the calendar date (UTC) has changed since the previous visit.
+        // Increment days_visited only when the UTC calendar date has advanced since last visit.
+        let (sql, values) = Query::update()
+            .table(users::Entity)
+            .value(users::Column::LastSeenAt, Expr::current_timestamp())
+            .value(
+                users::Column::DaysVisited,
+                Expr::col(users::Column::DaysVisited).add(
+                    CaseStatement::new()
+                        .case(
+                            Expr::col(users::Column::LastSeenAt)
+                                .is_null()
+                                .or(Expr::cust(
+                                    "DATE(last_seen_at AT TIME ZONE 'UTC') < CURRENT_DATE",
+                                )),
+                            1i32,
+                        )
+                        .finally(0i32),
+                ),
+            )
+            .and_where(users::Column::Id.eq(user_id))
+            .build(PostgresQueryBuilder);
+
         self.db
-            .execute(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                r#"
-                UPDATE users SET
-                    last_seen_at  = NOW(),
-                    days_visited  = days_visited + CASE
-                        WHEN last_seen_at IS NULL
-                          OR DATE(last_seen_at AT TIME ZONE 'UTC') < CURRENT_DATE
-                        THEN 1 ELSE 0 END
-                WHERE id = $1
-                "#,
-                [user_id.into()],
-            ))
+            .execute(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
             .await?;
         Ok(())
     }
 
     async fn increment_post_count(&self, user_id: Uuid, delta: i32) -> Result<(), AppError> {
-        self.db
-            .execute(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                "UPDATE users SET post_count = GREATEST(0, post_count + $1) WHERE id = $2",
-                [delta.into(), user_id.into()],
-            ))
+        users::Entity::update_many()
+            .col_expr(
+                users::Column::PostCount,
+                Func::greatest(vec![
+                    Expr::val(0i32).into(),
+                    Expr::col(users::Column::PostCount).add(delta),
+                ])
+                .into(),
+            )
+            .filter(users::Column::Id.eq(user_id))
+            .exec(&self.db)
             .await?;
         Ok(())
     }
 
     async fn increment_trust_score(&self, user_id: Uuid, amount: i32) -> Result<(), AppError> {
-        self.db
-            .execute(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                "UPDATE users SET trust_score = GREATEST(0, LEAST(100, trust_score + $1)) WHERE id = $2",
-                [amount.into(), user_id.into()],
-            ))
+        users::Entity::update_many()
+            .col_expr(
+                users::Column::TrustScore,
+                Func::greatest(vec![
+                    Expr::val(0i32).into(),
+                    Func::least(vec![
+                        Expr::val(100i32).into(),
+                        Expr::col(users::Column::TrustScore).add(amount),
+                    ])
+                    .into(),
+                ])
+                .into(),
+            )
+            .filter(users::Column::Id.eq(user_id))
+            .exec(&self.db)
             .await?;
         Ok(())
     }

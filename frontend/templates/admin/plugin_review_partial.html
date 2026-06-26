@@ -1,0 +1,53 @@
+{# Partial rendered inside the upload modal after capability review.
+   Swap target: #plugin-review-container via HTMX. #}
+<div class="alert alert-info mb-3" role="alert">
+  <i class="fa-solid fa-shield-halved me-2"></i>
+  <strong>Review plugin capabilities before installing.</strong>
+</div>
+
+<table class="table table-sm mb-3">
+  <tbody>
+    <tr>
+      <th class="w-25">Name</th>
+      <td>{{ plugin.name }} <span class="badge bg-secondary ms-1">{{ plugin.tier }}</span></td>
+    </tr>
+    <tr>
+      <th>Slug</th>
+      <td class="font-monospace">{{ plugin.slug }}</td>
+    </tr>
+    <tr>
+      <th>Version</th>
+      <td>{{ plugin.version }}</td>
+    </tr>
+    {% if plugin.author %}
+    <tr>
+      <th>Author</th>
+      <td>{{ plugin.author }}</td>
+    </tr>
+    {% endif %}
+    {% if plugin.description %}
+    <tr>
+      <th>Description</th>
+      <td>{{ plugin.description }}</td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+{% if plugin.capabilities_json and plugin.capabilities_json != "{}" %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">Capabilities requested</label>
+  <pre class="bg-body-secondary rounded p-2 small mb-0" style="max-height:120px;overflow:auto">{{ plugin.capabilities_json }}</pre>
+</div>
+{% endif %}
+
+<form method="post" action="/admin/plugins/install" enctype="multipart/form-data" id="installForm">
+  {# Re-upload the file since we don't persist it between steps.
+     The file input is hidden and populated from the first upload via JS. #}
+  <input type="file" name="file" id="installFileInput" class="d-none" accept=".fpkg,.zip">
+  <input type="hidden" name="granted_capabilities" value="{{ plugin.capabilities_json }}">
+  <p class="text-muted small">
+    By clicking <strong>Confirm Install</strong> you approve the capabilities listed above.
+    The plugin will be installed and available for activation.
+  </p>
+</form>

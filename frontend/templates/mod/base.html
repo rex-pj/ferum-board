@@ -1,0 +1,40 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Moderator Panel{% endblock %}
+
+{% block panel_subtitle %}Mod Panel{% endblock %}
+
+{% block sidebar_nav %}
+<div class="adm-nav">
+
+  <span class="adm-nav-label">Moderation</span>
+  <a href="/mod/reports" class="adm-nav-link {% block nav_reports %}{% endblock %}">
+    <i class="fa-solid fa-flag adm-nav-icon"></i>Reports
+  </a>
+  <a href="/mod/queue" class="adm-nav-link {% block nav_queue %}{% endblock %}">
+    <i class="fa-solid fa-list-check adm-nav-icon"></i>Approval Queue
+  </a>
+  <a href="/mod/threads" class="adm-nav-link {% block nav_threads %}{% endblock %}">
+    <i class="fa-solid fa-comments adm-nav-icon"></i>Threads
+  </a>
+  <a href="/mod/users" class="adm-nav-link {% block nav_users %}{% endblock %}">
+    <i class="fa-solid fa-users adm-nav-icon"></i>Users
+  </a>
+  <a href="/mod/log" class="adm-nav-link {% block nav_log %}{% endblock %}">
+    <i class="fa-solid fa-clipboard-list adm-nav-icon"></i>Audit Log
+  </a>
+
+</div>
+{% endblock %}
+
+{% block sidebar_footer_links %}
+{% if current_user and current_user.is_admin %}
+<a href="/admin/dashboard" class="adm-nav-link">
+  <i class="fa-solid fa-shield-halved adm-nav-icon"></i>Admin Panel
+</a>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-mod.js" defer></script>
+{% endblock %}

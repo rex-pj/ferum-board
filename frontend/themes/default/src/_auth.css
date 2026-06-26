@@ -1,0 +1,19 @@
+/* ── Auth pages ───────────────────────────────────────────────── */
+.fr-auth-bg {
+  min-height: 100dvh;
+  background:
+    radial-gradient(ellipse at 60% 0%, rgba(var(--bs-primary-rgb), 0.08) 0%, transparent 60%),
+    var(--bs-body-bg);
+  padding: 2rem 1rem;
+}
+.fr-auth-card {
+  border-color: rgba(var(--bs-primary-rgb), 0.15) !important;
+  box-shadow: var(--bs-box-shadow-lg) !important;
+}
+
+/* ── Auth container (centering wrapper) ───────────────────────── */
+.fr-auth-container {
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+}

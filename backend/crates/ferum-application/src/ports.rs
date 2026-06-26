@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -32,6 +31,8 @@ pub trait TokenService: Send + Sync {
 pub struct AccessTokenClaims {
     pub sub: Uuid,
     pub username: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
     pub trust_level: String,
     pub is_banned: bool,
     /// Unix timestamp of ban expiry; None means permanent ban.
@@ -199,8 +200,9 @@ pub struct UiSlotEntry {
     pub load_order: i32,
 }
 
+/// ISP: Use cases (auth, post, thread) and EventBus only need hook dispatch.
 #[async_trait]
-pub trait PluginRuntime: Send + Sync {
+pub trait PluginHookRuntime: Send + Sync {
     /// Dispatch a synchronous before-hook. Returns Allow unless a plugin explicitly denies.
     /// Plugin failures (timeout, crash) are logged and treated as Allow — never fail the request.
     async fn dispatch_before_hook(
@@ -212,11 +214,19 @@ pub trait PluginRuntime: Send + Sync {
     /// Fire-and-forget after-event dispatch.
     /// Runs in a background task; errors are logged and never propagated to the caller.
     async fn dispatch_after_event(&self, event_type: &str, payload: serde_json::Value);
+}
 
+/// ISP: Template handlers need UI slot data — independent of hook execution.
+#[async_trait]
+pub trait PluginUiRuntime: Send + Sync {
     /// Returns all active UI slot registrations, sorted by load_order ASC.
     /// Used by the frontend SSR layer to hydrate plugin Web Components.
     async fn active_ui_slots(&self) -> Vec<UiSlotEntry>;
+}
 
+/// ISP: PluginUseCase needs lifecycle control — independent of hook or UI concerns.
+#[async_trait]
+pub trait PluginLifecycle: Send + Sync {
     /// Reload a plugin's in-memory dispatch table entry after activation or deactivation.
     /// Called by PluginUseCase after updating plugin status in DB.
     async fn reload_plugin(&self, plugin_id: Uuid);
@@ -226,7 +236,7 @@ pub trait PluginRuntime: Send + Sync {
 pub struct NullPluginRuntime;
 
 #[async_trait]
-impl PluginRuntime for NullPluginRuntime {
+impl PluginHookRuntime for NullPluginRuntime {
     async fn dispatch_before_hook(
         &self,
         _hook: &str,
@@ -236,11 +246,47 @@ impl PluginRuntime for NullPluginRuntime {
     }
 
     async fn dispatch_after_event(&self, _event_type: &str, _payload: serde_json::Value) {}
+}
 
+#[async_trait]
+impl PluginUiRuntime for NullPluginRuntime {
     async fn active_ui_slots(&self) -> Vec<UiSlotEntry> {
         vec![]
     }
+}
 
+#[async_trait]
+impl PluginLifecycle for NullPluginRuntime {
     async fn reload_plugin(&self, _plugin_id: Uuid) {}
+}
+
+// ─── PermissionResolver ───────────────────────────────────────────────────────
+
+use std::collections::{HashMap, HashSet};
+use ferum_domain::models::role::UserRoleAssignment;
+
+/// DIP: abstracts RolePermissionCache behind an application-layer port.
+/// Web layer depends on this trait, not on the concrete infrastructure type.
+#[async_trait]
+pub trait PermissionResolver: Send + Sync {
+    async fn resolve_global(&self, assignments: &[UserRoleAssignment]) -> HashSet<String>;
+    async fn resolve_category(
+        &self,
+        assignments: &[UserRoleAssignment],
+    ) -> HashMap<Uuid, HashSet<String>>;
+    async fn permissions_for_role(&self, role_id: Uuid) -> Vec<String>;
+    /// Reload the in-memory permission mapping from DB. Call after admin changes role permissions.
+    async fn reload(&self) -> Result<(), AppError>;
+}
+
+// ─── NotificationSubscriber ───────────────────────────────────────────────────
+
+/// DIP: abstracts SseBroadcaster behind an application-layer port.
+/// The SSE handler depends on this trait, not on the concrete broadcaster type.
+pub trait NotificationSubscriber: Send + Sync {
+    /// Register a new SSE connection for `user_id`. Returns the receive end of
+    /// the channel; the caller streams it to the HTTP response.
+    fn subscribe(&self, user_id: Uuid) -> tokio::sync::mpsc::UnboundedReceiver<String>;
+    fn active_connection_count(&self) -> usize;
 }
 

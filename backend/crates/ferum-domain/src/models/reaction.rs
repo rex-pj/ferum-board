@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -6,7 +5,6 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Reaction {
-    pub id: Uuid,
     pub post_id: Uuid,
     pub user_id: Uuid,
     pub kind: ReactionKind,

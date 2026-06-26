@@ -8,6 +8,7 @@ node_modules/
 build/
 dist/
 .output/
+package-lock.json
 
 # ─── Environment & secrets ────────────────────────────────────────────────────
 .env
@@ -31,3 +32,4 @@ desktop.ini
 
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log
+logs/

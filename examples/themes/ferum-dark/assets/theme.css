@@ -1,0 +1,259 @@
+/*
+ * Ferum Dark — Custom Theme
+ *
+ * HOW CSS LOADING WORKS
+ * ─────────────────────────────────────────────────────────────────────────────
+ * There are two modes depending on whether the theme overrides base.html:
+ *
+ * Mode A — CSS-only (no base.html override):
+ *   The default base.html loads the active theme's CSS automatically:
+ *     <link rel="stylesheet" href="/themes/{{ active_theme }}/assets/theme.css">
+ *   This gives you color and typography changes without touching any template.
+ *   Bootstrap data-bs-theme stays "auto" (follows system preference).
+ *
+ * Mode B — Full override (this theme uses templates/base.html):
+ *   The custom base.html loads both CSS files explicitly:
+ *     <link rel="stylesheet" href="/themes/default/assets/theme.css">   ← fr-* layout classes
+ *     <link rel="stylesheet" href="/themes/ferum-dark/assets/theme.css"> ← dark color overrides
+ *   This lets you force data-bs-theme="dark" (or any value) via the
+ *   {{ theme_bs_theme }} context variable injected by render_with_theme().
+ *   theme_bs_theme value comes from the "color_scheme" field in theme.json.
+ *
+ * TEMPLATE INHERITANCE
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Page templates that extend "ferum-dark/templates/base.html" use this theme's
+ * layout. Pages NOT overridden by this theme fall through to the parent chain
+ * (ferum-dark → default) automatically — no explicit fallback needed.
+ *
+ * For CSS-only customization (colors, typography, spacing) you do NOT need to
+ * override any templates. The fdk-* classes below are only needed because
+ * home.html ships a custom thread list layout.
+ */
+
+/* ── Bootstrap dark mode activation ─────────────────────────────────────────
+   base.html sets data-bs-theme="dark" so Bootstrap applies its dark palette.
+   These vars fine-tune the result.                                           */
+
+[data-bs-theme="dark"],
+:root {
+  --ferum-sidebar-bg: #0e1117;
+  --ferum-card-bg: #161b22;
+  --ferum-border-color: #30363d;
+  --ferum-nav-bg: #0d1117;
+  --ferum-nav-border: #21262d;
+  --ferum-thread-hover-bg: #1c2128;
+  --ferum-badge-new-bg: #238636;
+  --ferum-code-bg: #161b22;
+
+  /* Soften Bootstrap's default dark background slightly */
+  --bs-body-bg: #0d1117;
+  --bs-body-bg-rgb: 13, 17, 23;
+  --bs-body-color: #c9d1d9;
+  --bs-secondary-color: #8b949e;
+  --bs-border-color: #30363d;
+  --bs-card-bg: #161b22;
+}
+
+/* ── Navigation bar ──────────────────────────────────────────────────────── */
+.fr-nav {
+  background-color: var(--ferum-nav-bg, #0d1117) !important;
+  border-bottom-color: var(--ferum-nav-border, #21262d) !important;
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.card {
+  background-color: var(--ferum-card-bg, #161b22);
+  border-color: var(--ferum-border-color, #30363d);
+}
+
+.card-header {
+  background-color: transparent;
+  border-bottom-color: var(--ferum-border-color, #30363d);
+}
+
+/* ── Thread list rows ────────────────────────────────────────────────────── */
+.fr-thread-row {
+  border-bottom-color: var(--ferum-border-color, #30363d) !important;
+}
+
+.fr-thread-row:hover {
+  background-color: var(--ferum-thread-hover-bg, #1c2128) !important;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.fr-sidebar-left {
+  background-color: var(--ferum-sidebar-bg, #0e1117);
+  border-right-color: var(--ferum-border-color, #30363d);
+}
+
+/* ── Code blocks ─────────────────────────────────────────────────────────── */
+code, pre {
+  background-color: var(--ferum-code-bg, #161b22);
+  border-color: var(--ferum-border-color, #30363d);
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
+  --bs-table-hover-bg: var(--ferum-thread-hover-bg);
+  --bs-table-border-color: var(--ferum-border-color);
+}
+
+/* ── Inputs ──────────────────────────────────────────────────────────────── */
+.form-control, .form-select {
+  background-color: #0d1117;
+  border-color: var(--ferum-border-color, #30363d);
+  color: #c9d1d9;
+}
+
+.form-control:focus, .form-select:focus {
+  background-color: #0d1117;
+  border-color: #58a6ff;
+  color: #c9d1d9;
+  box-shadow: 0 0 0 0.25rem rgba(88, 166, 255, 0.15);
+}
+
+/* ── fdk-* — Ferum Dark custom thread list (home.html override) ──────────────
+   These classes exist only in ferum-dark. They implement a compact,
+   GitHub Issues-style thread listing instead of the default card layout.      */
+
+/* Feed header: title + action button */
+.fdk-feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .625rem 1rem;
+  margin-bottom: 0;
+  background: var(--ferum-card-bg, #161b22);
+  border: 1px solid var(--ferum-border-color, #30363d);
+  border-radius: .5rem .5rem 0 0;
+  font-size: .85rem;
+}
+.fdk-feed-title {
+  font-weight: 600;
+  color: var(--bs-body-color);
+}
+.fdk-clear-filter {
+  font-size: .75rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+}
+.fdk-clear-filter:hover { color: var(--bs-body-color); }
+
+/* Thread list container */
+.fdk-list {
+  border: 1px solid var(--ferum-border-color, #30363d);
+  border-top: none;
+  border-radius: 0 0 .5rem .5rem;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+/* Individual thread row */
+.fdk-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .625rem 1rem;
+  border-bottom: 1px solid var(--ferum-border-color, #30363d);
+  background: var(--ferum-card-bg, #161b22);
+  transition: background .1s;
+}
+.fdk-row:last-child { border-bottom: none; }
+.fdk-row:hover { background: var(--ferum-thread-hover-bg, #1c2128); }
+
+/* Left: status icon (fixed width so titles align) */
+.fdk-row-status {
+  flex-shrink: 0;
+  width: 1.125rem;
+  text-align: center;
+  font-size: .875rem;
+}
+
+/* Middle: title + meta (takes remaining space) */
+.fdk-row-body { flex: 1; min-width: 0; }
+
+.fdk-row-title-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .3rem;
+  margin-bottom: .2rem;
+}
+
+.fdk-row-title {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.fdk-row-title:hover { color: #58a6ff; text-decoration: none; }
+
+/* Category pill */
+.fdk-cat-chip {
+  flex-shrink: 0;
+  font-size: .68rem;
+  font-weight: 500;
+  padding: .1rem .45rem;
+  border-radius: 2rem;
+  background: rgba(56, 139, 253, .15);
+  color: #58a6ff;
+  text-decoration: none;
+  border: 1px solid rgba(56, 139, 253, .3);
+  white-space: nowrap;
+}
+.fdk-cat-chip:hover { background: rgba(56, 139, 253, .25); color: #58a6ff; }
+
+/* Tag chip */
+.fdk-tag-chip {
+  flex-shrink: 0;
+  font-size: .68rem;
+  padding: .1rem .4rem;
+  border-radius: 2rem;
+  background: rgba(139, 148, 158, .1);
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  border: 1px solid rgba(139, 148, 158, .2);
+  white-space: nowrap;
+}
+.fdk-tag-chip:hover { color: var(--bs-body-color); border-color: var(--bs-secondary-color); }
+
+/* Row meta line */
+.fdk-row-meta {
+  font-size: .75rem;
+  color: var(--bs-secondary-color);
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.fdk-author {
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+.fdk-author:hover { color: var(--bs-body-color); }
+.fdk-sep { opacity: .4; }
+.fdk-time { color: var(--bs-secondary-color); }
+
+/* Right: reply + view counters */
+.fdk-row-stats {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .2rem;
+  font-size: .75rem;
+  color: var(--bs-secondary-color);
+  min-width: 3.5rem;
+  text-align: right;
+}
+.fdk-row-stats span { white-space: nowrap; }
+
+@media (max-width: 575.98px) {
+  .fdk-row-stats { display: none; }
+}

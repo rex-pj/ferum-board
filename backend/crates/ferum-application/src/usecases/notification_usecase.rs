@@ -17,6 +17,7 @@ impl NotificationUseCase {
         Self { notifications }
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page, per_page))]
     pub async fn inbox(
         &self,
         actor: &AuthUser,
@@ -29,14 +30,17 @@ impl NotificationUseCase {
             .await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn unread_count(&self, actor: &AuthUser) -> Result<u64, AppError> {
         self.notifications.unread_count(actor.id).await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, notification_id = %id))]
     pub async fn mark_read(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         self.notifications.mark_read(id, actor.id).await
     }
 
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn mark_all_read(&self, actor: &AuthUser) -> Result<(), AppError> {
         self.notifications.mark_all_read(actor.id).await
     }

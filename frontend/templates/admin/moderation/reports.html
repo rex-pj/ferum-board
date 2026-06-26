@@ -1,0 +1,170 @@
+{% extends "admin/base.html" %}
+{% import "default/templates/macros.html" as m %}
+{% block title %}Reports | Admin{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block nav_reports %}active fw-semibold{% endblock %}
+
+{% block content %}
+
+{# ── Page header ────────────────────────────────────────────────── #}
+<div class="d-flex align-items-start justify-content-between mb-3">
+  <div>
+    <h4 class="mb-0 fw-semibold">Reports</h4>
+    {% if pagination.total > 0 %}
+      <div class="text-muted small mt-1">{{ pagination.total }} total</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Reports list ───────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header p-0">
+    <form method="get" action="/admin/reports" class="adm-filter-row px-3 py-2">
+      {% if filter %}<input type="hidden" name="status" value="{{ filter }}">{% endif %}
+
+      <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+        <span class="input-group-text bg-transparent">
+          <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+        </span>
+        <input type="search" name="q" class="form-control border-start-0 ps-0"
+               placeholder="Search reason…" value="{{ search_query }}" autocomplete="off">
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-success">
+        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      </button>
+      {% if search_query %}
+        <a href="/admin/reports{% if filter %}?status={{ filter }}{% endif %}"
+           class="btn btn-sm btn-outline-secondary" title="Clear search">
+          <i class="fa-solid fa-xmark"></i>
+        </a>
+      {% endif %}
+
+      <div class="vr opacity-25 align-self-stretch"></div>
+
+      {# Status filter pills #}
+      <a href="/admin/reports{% if search_query %}?q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == '' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        All
+        <span class="badge rounded-pill ms-1
+                     {% if filter == '' %}bg-white text-primary{% else %}bg-secondary bg-opacity-25 text-body{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_pending + count_resolved + count_dismissed }}
+        </span>
+      </a>
+      <div class="vr opacity-25 align-self-stretch"></div>
+      <a href="/admin/reports?status=pending{% if search_query %}&q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == 'pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        <span class="rounded-circle flex-shrink-0"
+              style="width:.55rem;height:.55rem;background:var(--bs-warning)"></span>
+        Pending
+        <span class="badge rounded-pill ms-1
+                     {% if filter == 'pending' %}bg-white text-primary{% else %}bg-warning bg-opacity-25 text-warning-emphasis{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_pending }}
+        </span>
+      </a>
+      <a href="/admin/reports?status=resolved{% if search_query %}&q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == 'resolved' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        <span class="rounded-circle flex-shrink-0"
+              style="width:.55rem;height:.55rem;background:var(--bs-success)"></span>
+        Resolved
+        <span class="badge rounded-pill ms-1
+                     {% if filter == 'resolved' %}bg-white text-primary{% else %}bg-success bg-opacity-25 text-success-emphasis{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_resolved }}
+        </span>
+      </a>
+      <a href="/admin/reports?status=dismissed{% if search_query %}&q={{ search_query }}{% endif %}"
+         class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
+                {% if filter == 'dismissed' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        <span class="rounded-circle flex-shrink-0"
+              style="width:.55rem;height:.55rem;background:var(--bs-secondary)"></span>
+        Dismissed
+        <span class="badge rounded-pill ms-1
+                     {% if filter == 'dismissed' %}bg-white text-primary{% else %}bg-secondary bg-opacity-25 text-body{% endif %}"
+              style="font-size:.65rem;font-weight:600;padding:.2em .5em">
+          {{ count_dismissed }}
+        </span>
+      </a>
+
+    </form>
+  </div>
+  <div class="list-group list-group-flush">
+    {% for report in reports %}
+    <div class="list-group-item px-4 py-3">
+      <div class="d-flex justify-content-between align-items-start gap-3">
+        <div class="flex-grow-1 min-w-0">
+          <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+            {% if report.status == 'pending' %}
+              <span class="badge bg-warning text-dark">pending</span>
+            {% elif report.status == 'resolved' %}
+              <span class="badge bg-success">resolved</span>
+            {% else %}
+              <span class="badge bg-secondary">dismissed</span>
+            {% endif %}
+            <span class="text-muted small">
+              Reported <time data-rel datetime="{{ report.created_at }}">{{ report.created_at | date(format="%b %d, %Y") }}</time>
+              by @{{ report.reporter_username }}
+            </span>
+          </div>
+          <div class="fw-semibold mb-1">{{ report.reason }}</div>
+          {% if report.post_id %}
+            <div class="text-muted small">
+              Post in thread:
+              <a href="/forum/t/{{ report.thread_slug }}#post-{{ report.post_id }}" class="text-decoration-none">
+                {{ report.thread_title }}
+              </a>
+            </div>
+          {% else %}
+            <div class="text-muted small">
+              Thread:
+              <a href="/forum/t/{{ report.thread_slug }}" class="text-decoration-none">
+                {{ report.thread_title }}
+              </a>
+            </div>
+          {% endif %}
+        </div>
+
+        {% if report.status == "pending" %}
+        <div class="d-flex gap-2 flex-shrink-0">
+          <button class="btn btn-sm btn-success"
+                  data-admin-action="resolve-report"
+                  data-report-id="{{ report.id }}">
+            <i class="fa-solid fa-check me-1"></i>Resolve
+          </button>
+          <button class="btn btn-sm btn-outline-secondary"
+                  data-admin-action="dismiss-report"
+                  data-report-id="{{ report.id }}">
+            Dismiss
+          </button>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="fa-solid fa-inbox fa-2x d-block mb-2 opacity-25"></i>
+      <div class="fw-semibold mb-1">All clear!</div>
+      <div class="small">No reports for the current filter.</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Footer: count + pagination ─────────────────────────────── #}
+  {% if pagination.total > 0 %}
+  <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
+    <span class="text-muted small">
+      {{ pagination.total }} report{% if pagination.total != 1 %}s{% endif %}
+      {% if pagination.total_pages > 1 %}
+        — page {{ pagination.page }} of {{ pagination.total_pages }}
+      {% endif %}
+    </span>
+    {{ m::paginate(pagination=pagination, base_url="/admin/reports", extra_params="&status=" ~ filter ~ "&q=" ~ search_query) }}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

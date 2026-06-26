@@ -135,13 +135,13 @@ impl WebhookRepository for PgWebhookRepository {
     }
 
     async fn record_failure(&self, id: Uuid) -> Result<(), AppError> {
-        // Increment failure_count atomically
-        self.db
-            .execute(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                "UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = $1",
-                [id.into()],
-            ))
+        webhooks::Entity::update_many()
+            .col_expr(
+                webhooks::Column::FailureCount,
+                Expr::col(webhooks::Column::FailureCount).add(1i32),
+            )
+            .filter(webhooks::Column::Id.eq(id))
+            .exec(&self.db)
             .await?;
 
         // Auto-disable if threshold reached

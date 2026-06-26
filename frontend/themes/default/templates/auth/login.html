@@ -1,0 +1,54 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Sign in — {{ site.name }}{% endblock %}
+
+{% block topbar %}{% endblock %}
+{% block bottom_nav %}{% endblock %}
+{% block layout_class %}fr-layout--auth{% endblock %}
+
+{% block content %}
+<div class="fr-auth-page">
+  {{ m::auth_brand() }}
+
+  <div class="card fr-auth-card">
+    <div class="card-body p-4 p-sm-5">
+      <h1 class="h5 fw-bold mb-1">Welcome back</h1>
+      <p class="text-body-secondary small mb-4">Sign in to your account to continue.</p>
+
+      <form id="login-form" method="post">
+        <div class="mb-3">
+          <label for="email" class="form-label">Email address</label>
+          <input type="email" class="form-control" id="email" name="email"
+                 required autocomplete="email" autofocus>
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label for="password" class="form-label mb-0">Password</label>
+            <a href="/forgot-password" class="text-decoration-none small">Forgot password?</a>
+          </div>
+          {{ m::password_field(id="password", name="password", autocomplete="current-password") }}
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger" role="alert">Invalid email or password.</div>
+        {% endif %}
+        {{ m::feedback_alert(id="login-error") }}
+
+        {{ m::btn_submit(text="Sign in", btn_id="submit-btn", spinner_id="btn-spinner") }}
+      </form>
+
+      <div class="fr-auth-divider my-3">or</div>
+
+      <div class="text-center small">
+        Don't have an account? <a href="/register" class="text-decoration-none">Create one</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-page-auth.js" defer></script>
+{% endblock %}

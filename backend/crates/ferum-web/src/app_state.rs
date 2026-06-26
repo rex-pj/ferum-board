@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use sea_orm::DatabaseConnection;
 
+use crate::tera_engine::TeraEngine;
 use ferum_application::ports::{
-    CacheService, NotificationBus, PluginRuntime, RateLimiter, StorageService, TokenService,
+    CacheService, NotificationSubscriber, PermissionResolver, PluginHookRuntime, PluginUiRuntime,
+    RateLimiter, TokenService,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
@@ -23,12 +26,10 @@ use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
 use ferum_application::usecases::plugin_usecase::PluginUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
+use ferum_application::usecases::theme_usecase::ThemeUseCase;
 use ferum_domain::repositories::{SiteConfigRepository, StoredFileRepository, UserRoleRepository};
 use ferum_domain::repositories::user_repository::UserRepository;
-use ferum_infrastructure::notification::SseBroadcaster;
-use ferum_infrastructure::role_permission_cache::RolePermissionCache;
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
@@ -50,20 +51,43 @@ pub struct AppState {
     pub tag: Arc<TagUseCase>,
     pub webhook: Arc<WebhookUseCase>,
     pub plugin: Arc<PluginUseCase>,
-    pub plugin_runtime: Arc<dyn PluginRuntime>,
+    pub theme: Arc<ThemeUseCase>,
+    pub tera: TeraEngine,
+    pub themes_dir: String,
+    pub static_dir: String,
+    /// Hook dispatch: used by plugin debug endpoint.
+    pub plugin_hooks: Arc<dyn PluginHookRuntime>,
+    /// UI slot registry: used by SSR layer for frontend hydration.
+    pub plugin_ui: Arc<dyn PluginUiRuntime>,
     pub site_config: Arc<dyn SiteConfigRepository>,
+    /// In-memory authoritative copy of site_config table. Loaded at startup,
+    /// updated synchronously on every write — no TTL, no serialization overhead.
+    pub site_config_cache: Arc<tokio::sync::RwLock<HashMap<String, String>>>,
+    /// In-memory copy of the active theme slug. Loaded at startup, updated on theme activation.
+    pub active_theme_cache: Arc<tokio::sync::RwLock<String>>,
+    /// Ordered inheritance chain for the active theme: [active, parent, …, "default"].
+    /// Used by render_with_theme() to resolve template fallbacks through the hierarchy.
+    pub active_theme_chain_cache: Arc<tokio::sync::RwLock<Vec<String>>>,
+    /// Bootstrap color scheme for the active theme: "light", "dark", or "auto".
+    /// Sourced from theme.json `color_scheme` field; defaults to "auto".
+    pub active_theme_color_scheme_cache: Arc<tokio::sync::RwLock<String>>,
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub user_role_repo: Arc<dyn UserRoleRepository>,
     pub user_repo: Arc<dyn UserRepository>,
-    pub role_permission_cache: Arc<RolePermissionCache>,
+    pub permission_resolver: Arc<dyn PermissionResolver>,
     pub token_service: Arc<dyn TokenService>,
     pub cache: Arc<dyn CacheService>,
     pub rate_limiter: Arc<dyn RateLimiter>,
-    pub storage: Arc<dyn StorageService>,
-    pub notification_bus: Arc<dyn NotificationBus>,
-    pub broadcaster: Arc<SseBroadcaster>,
+    pub broadcaster: Arc<dyn NotificationSubscriber>,
     /// True when APP_URL starts with https:// — adds the Secure flag to auth cookies.
     pub cookies_secure: bool,
+    /// Number of trusted reverse proxies. When > 0, X-Forwarded-For is consulted for
+    /// rate-limit key derivation. When 0, the raw TCP peer address is always used.
+    pub trusted_proxy_count: u32,
     /// Absolute path to the plugins directory on disk.
     pub plugins_dir: String,
+    /// Latch flipped to `true` once first-run setup is complete. Lets `setup_guard`
+    /// skip a `SELECT COUNT(admins)` DB round-trip on every HTML page load — setup
+    /// can never revert to "needed" within a process lifetime.
+    pub setup_complete: Arc<std::sync::atomic::AtomicBool>,
 }
