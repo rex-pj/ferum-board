@@ -2,7 +2,7 @@
 target/
 **/*.rs.bk
 
-# ─── Node / SvelteKit ─────────────────────────────────────────────────────────
+# ─── Node (client-widgets build only) ─────────────────────────────────────────
 node_modules/
 .svelte-kit/
 build/
@@ -10,10 +10,27 @@ dist/
 .output/
 package-lock.json
 
+# ─── Theme build artifacts (Tera themes don't need Node tooling in git) ───────
+frontend/themes/*/node_modules/
+frontend/themes/*/package-lock.json
+frontend/themes/*/package.json
+frontend/themes/*/postcss.config.js
+
 # ─── Environment & secrets ────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
+
+# ─── Runtime plugin install directory ────────────────────────────────────────
+# Installed plugins are extracted to plugins/{slug}/ at runtime.
+# Only examples/ (in the repo root) is committed — not the runtime plugins/ dir.
+/plugins/*/
+
+# ─── Runtime user-installed themes ───────────────────────────────────────────
+# frontend/themes/default/ is committed. User-installed themes extracted by admin upload
+# land in frontend/themes/{slug}/ and should NOT be committed.
+/frontend/themes/*/
+!/frontend/themes/default/
 
 # ─── Uploads ──────────────────────────────────────────────────────────────────
 backend/tmp/
