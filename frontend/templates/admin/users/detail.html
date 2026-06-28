@@ -17,8 +17,10 @@
     {# Profile card #}
     <div class="card mb-3">
       <div class="card-body text-center">
-        {{ m::avatar(url=profile.avatar_url, name=profile.display_name, size=80) }}
-        <h5 class="mt-2 mb-0">{{ profile.display_name }}</h5>
+        <div class="d-flex justify-content-center mb-2">
+          {{ m::avatar(url=profile.avatar_url, name=profile.display_name, size=80) }}
+        </div>
+        <h5 class="mb-0">{{ profile.display_name }}</h5>
         <div class="text-muted small">@{{ profile.username }}</div>
         <div class="mt-2 d-flex flex-wrap gap-1 justify-content-center">
           {% if profile.trust_level == "leader" %}
