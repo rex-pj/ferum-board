@@ -1,4 +1,5 @@
 pub mod bcrypt_password_hasher;
+pub mod network_utils;
 pub mod plugins;
 pub mod role_permission_cache;
 pub mod bulk_seed_service;

@@ -17,7 +17,7 @@ impl SearchUseCase {
     pub async fn search(
         &self,
         q: String,
-        category_id: Option<Uuid>,
+        category_ids: Vec<Uuid>,
         page: u64,
         per_page: u64,
     ) -> Result<SearchResults, AppError> {
@@ -31,7 +31,7 @@ impl SearchUseCase {
         self.search
             .search(SearchQuery {
                 q,
-                category_id,
+                category_ids,
                 page,
                 per_page: per_page.min(30),
             })

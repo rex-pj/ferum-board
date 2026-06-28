@@ -107,15 +107,15 @@
     <a href="/" class="fr-bn-item" aria-label="Home">
       <i class="fa-solid fa-house"></i><span>Home</span>
     </a>
-    <a href="/forum" class="fr-bn-item" aria-label="Forum">
-      <i class="fa-solid fa-comments"></i><span>Forum</span>
+    <a href="/forum" class="fr-bn-item" aria-label="Categories">
+      <i class="fa-solid fa-comments"></i><span>Categories</span>
     </a>
     {% if current_user %}
       <a href="/new-thread" class="fr-bn-item" aria-label="New thread">
         <span class="fr-bn-cta"><i class="fa-solid fa-plus"></i></span><span>New</span>
       </a>
       <a href="/notifications" class="fr-bn-item" aria-label="Notifications">
-        <i class="fa-solid fa-bell"></i><span>Notifs</span>
+        <i class="fa-solid fa-bell"></i><span>Inbox</span>
       </a>
       <a href="/u/{{ current_user.username }}" class="fr-bn-item" aria-label="Profile">
         <i class="fa-solid fa-user"></i><span>Profile</span>

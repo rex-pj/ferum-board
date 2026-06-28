@@ -27,7 +27,7 @@
         {% for cat in search_categories %}
           <option value="{{ cat.id }}"
             {% if active_category_id and active_category_id == cat.id %}selected{% endif %}>
-            {{ cat.name }}
+            {% if cat.parent_id %}-- {% endif %}{{ cat.name }}
           </option>
         {% endfor %}
       </select>

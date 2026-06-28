@@ -72,7 +72,7 @@ impl AdminUseCase {
             }
         }
 
-        self.categories
+        let category = self.categories
             .create(NewCategory {
                 slug: cmd.slug,
                 name: cmd.name,
@@ -84,7 +84,20 @@ impl AdminUseCase {
                 color: cmd.color,
                 created_by_id: Some(actor.id),
             })
+            .await?;
+
+        self.audit_log
+            .append(AuditLog::user_action(
+                actor.id,
+                "category.create",
+                "category",
+                category.id,
+                Some(serde_json::json!({ "name": category.name, "slug": category.slug })),
+            ))
             .await
+            .ok();
+
+        Ok(category)
     }
 
     #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id, category_id = %id))]
@@ -109,7 +122,7 @@ impl AdminUseCase {
             }
         }
 
-        self.categories
+        let category = self.categories
             .update(
                 id,
                 UpdateCategory {
@@ -124,7 +137,20 @@ impl AdminUseCase {
                     updated_by_id: Some(actor.id),
                 },
             )
+            .await?;
+
+        self.audit_log
+            .append(AuditLog::user_action(
+                actor.id,
+                "category.update",
+                "category",
+                category.id,
+                Some(serde_json::json!({ "name": category.name, "slug": category.slug })),
+            ))
             .await
+            .ok();
+
+        Ok(category)
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, category_id = %id))]
@@ -141,7 +167,20 @@ impl AdminUseCase {
             return Err(AppError::Conflict("category_has_threads".to_string()));
         }
 
-        self.categories.delete(id).await
+        self.categories.delete(id).await?;
+
+        self.audit_log
+            .append(AuditLog::user_action(
+                actor.id,
+                "category.delete",
+                "category",
+                id,
+                None,
+            ))
+            .await
+            .ok();
+
+        Ok(())
     }
 
     // ─── Category-scoped moderator assignment (via user_roles) ────────────────
@@ -194,7 +233,20 @@ impl AdminUseCase {
             .await?
             .ok_or_else(|| AppError::internal("moderator role not found".to_string()))?;
 
-        self.user_roles.assign(user_id, mod_role.id, Some(category_id), actor.id, None).await
+        let assignment = self.user_roles.assign(user_id, mod_role.id, Some(category_id), actor.id, None).await?;
+
+        self.audit_log
+            .append(AuditLog::user_action(
+                actor.id,
+                "moderator.assign",
+                "user",
+                user_id,
+                Some(serde_json::json!({ "category_id": category_id })),
+            ))
+            .await
+            .ok();
+
+        Ok(assignment)
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, category_id = %category_id, target_user_id = %user_id))]
@@ -212,8 +264,19 @@ impl AdminUseCase {
             .ok_or_else(|| AppError::internal("moderator role not found".to_string()))?;
 
         self.user_roles.revoke(user_id, mod_role.id, Some(category_id)).await?;
-        // Invalidate user roles cache
         self.cache.del(&format!("user:roles:{}", user_id)).await.ok();
+
+        self.audit_log
+            .append(AuditLog::user_action(
+                actor.id,
+                "moderator.revoke",
+                "user",
+                user_id,
+                Some(serde_json::json!({ "category_id": category_id })),
+            ))
+            .await
+            .ok();
+
         Ok(())
     }
 

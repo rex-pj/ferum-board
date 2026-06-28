@@ -1,0 +1,9 @@
+mod categories;
+mod dashboard;
+mod plugins;
+mod reports;
+mod roles;
+mod settings;
+mod themes;
+mod threads;
+mod users;

@@ -14,7 +14,19 @@ use super::{active_theme, nav_categories_ctx, post_policy_str, render_with_theme
 pub struct SearchQuery {
     pub q: Option<String>,
     pub page: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_optional_uuid")]
     pub category_id: Option<uuid::Uuid>,
+}
+
+fn deserialize_optional_uuid<'de, D>(deserializer: D) -> Result<Option<uuid::Uuid>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(deserializer)?;
+    match s.as_deref() {
+        None | Some("") => Ok(None),
+        Some(v) => v.parse::<uuid::Uuid>().map(Some).map_err(serde::de::Error::custom),
+    }
 }
 
 #[tracing::instrument(skip(state, auth_user), fields(q = q.q.as_deref(), page = q.page))]
@@ -28,12 +40,32 @@ pub async fn search(
     let page = q.page.unwrap_or(1).max(1);
     let per_page = 20u64;
 
+    let raw_categories = state
+        .category
+        .list_visible(auth_user.as_ref())
+        .await
+        .unwrap_or_default();
+
+    // Resolve category filter: include the selected category plus all its children.
+    let category_ids: Vec<uuid::Uuid> = match q.category_id {
+        None => vec![],
+        Some(selected_id) => {
+            let mut ids = vec![selected_id];
+            for cat in &raw_categories {
+                if cat.parent_id == Some(selected_id) {
+                    ids.push(cat.id);
+                }
+            }
+            ids
+        }
+    };
+
     let search_results = if query.is_empty() {
         None
     } else {
         match state
             .search
-            .search(query.clone(), q.category_id, page, per_page)
+            .search(query.clone(), category_ids, page, per_page)
             .await
         {
             Ok(r) => Some(r),
@@ -59,11 +91,7 @@ pub async fn search(
         None => (vec![], 0),
     };
 
-    let all_categories: Vec<CategoryCtx> = state
-        .category
-        .list_visible(auth_user.as_ref())
-        .await
-        .unwrap_or_default()
+    let all_categories: Vec<CategoryCtx> = raw_categories
         .into_iter()
         .map(|c| CategoryCtx {
             id: c.id.to_string(),

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::constants::MAX_BAN_REASON_LEN;
 use crate::dto::ReportWithContext;
-use crate::event_bus::EventBus;
+use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
 use crate::ports::CacheService;
 use crate::shared::{AppError, OptionExt};
@@ -30,7 +30,7 @@ pub struct ModerationUseCase {
     pub users: Arc<dyn UserRepository>,
     pub notifications: Arc<dyn NotificationRepository>,
     pub audit_log_repo: Arc<dyn AuditLogRepository>,
-    pub event_bus: Arc<EventBus>,
+    pub event_bus: Arc<dyn EventPublisher>,
     pub cache: Arc<dyn CacheService>,
 }
 
@@ -42,7 +42,7 @@ impl ModerationUseCase {
         users: Arc<dyn UserRepository>,
         notifications: Arc<dyn NotificationRepository>,
         audit_log_repo: Arc<dyn AuditLogRepository>,
-        event_bus: Arc<EventBus>,
+        event_bus: Arc<dyn EventPublisher>,
         cache: Arc<dyn CacheService>,
     ) -> Self {
         Self { reports, posts, threads, users, notifications, audit_log_repo, event_bus, cache }

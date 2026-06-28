@@ -14,11 +14,11 @@ pub struct ReportStatusCounts {
 pub trait ReportRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Report>, AppError>;
     async fn count_by_status(&self) -> Result<ReportStatusCounts, AppError>;
-    async fn list_all(
+    async fn list_all<'a>(
         &self,
         status: Option<ReportStatus>,
-        target_type: Option<&str>,
-        q: Option<&str>,
+        target_type: Option<&'a str>,
+        q: Option<&'a str>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError>;

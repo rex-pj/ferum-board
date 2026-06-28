@@ -7,6 +7,8 @@ use ferum_application::shared::AppError;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::webhook_repository::WebhookRepository;
 
+use crate::network_utils::assert_no_private_ip;
+
 pub struct JobExecutor {
     pub email: Arc<dyn EmailService>,
     pub app_url: String,
@@ -83,7 +85,7 @@ impl JobExecutor {
         }
     }
 
-    async fn run_gc_storage_key(&self, key: &str) -> Result<(), AppError> {
+    pub async fn run_gc_storage_key(&self, key: &str) -> Result<(), AppError> {
         // Decrement once more — might have raced, check count
         let remaining = self.stored_files.decrement_ref(key).await?;
         if remaining > 0 {
@@ -111,6 +113,15 @@ async fn dispatch_webhook(
     webhooks: &Arc<dyn WebhookRepository>,
     client: &reqwest::Client,
 ) -> Result<(), AppError> {
+    // Re-validate the resolved IP at dispatch time to prevent DNS re-binding attacks.
+    // The URL was validated at webhook creation (hostname string check), but an attacker
+    // can flip the DNS record to a private IP between creation and dispatch.
+    if let Err(reason) = assert_no_private_ip(&url).await {
+        tracing::warn!("webhook {} blocked at dispatch: {}", url, reason);
+        webhooks.record_failure(webhook_id).await.ok();
+        return Ok(());
+    }
+
     let body = serde_json::to_string(&payload).map_err(|e| AppError::internal(e.to_string()))?;
 
     let mut req = client
@@ -148,7 +159,8 @@ async fn dispatch_webhook(
     }
 }
 
-fn hmac_sha256(secret: &str, payload: &str) -> String {
+
+pub fn hmac_sha256(secret: &str, payload: &str) -> String {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
     let mut mac =

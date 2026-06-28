@@ -91,11 +91,12 @@ impl AuthUseCase {
 
         let email = cmd.email.to_lowercase();
 
-        if self.users.find_by_email(&email).await?.is_some() {
-            return Err(AppError::Conflict("email_taken".to_string()));
-        }
-        if self.users.find_by_username(&cmd.username).await?.is_some() {
-            return Err(AppError::Conflict("username_taken".to_string()));
+        // Both checks return the same error code so an attacker cannot enumerate
+        // which credential (email vs username) is already registered.
+        if self.users.find_by_email(&email).await?.is_some()
+            || self.users.find_by_username(&cmd.username).await?.is_some()
+        {
+            return Err(AppError::Conflict("registration_conflict".to_string()));
         }
 
         // Plugin before-hook — allows Tier 2 plugins (e.g. StopForumSpam) to block registration

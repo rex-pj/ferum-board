@@ -1,0 +1,17 @@
+[package]
+name = "ferum-test-support"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ferum-domain = { path = "../../crates/ferum-domain" }
+ferum-application = { path = "../../crates/ferum-application" }
+
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+mockall = "0.13"
+serde_json = "1"
+slug = "0.1"
+tokio = { version = "1", features = ["rt", "macros"] }
+uuid = { version = "1", features = ["v4", "serde"] }

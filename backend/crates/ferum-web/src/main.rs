@@ -1,13 +1,6 @@
-mod app_state;
-mod config;
-mod utils;
-mod handlers;
-mod middleware;
-mod routings;
-mod startup;
-mod telemetry;
-mod tera_engine;
-mod view_models;
+use ferum_web::config;
+use ferum_web::routings;
+use ferum_web::startup;
 
 use colored::Colorize;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};

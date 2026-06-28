@@ -1,4 +1,4 @@
-use std::io::Read;
+﻿use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
@@ -132,7 +132,7 @@ pub fn remove_plugin_dir(install_path: &str) -> Result<(), AppError> {
 
 /// Sanitize a plugin slug for use as a filesystem directory name.
 /// Allows alphanumeric, dots, hyphens, underscores.
-fn sanitize_slug(slug: &str) -> String {
+pub fn sanitize_slug(slug: &str) -> String {
     slug.chars()
         .map(|c| {
             if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' {

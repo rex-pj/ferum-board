@@ -59,9 +59,20 @@ impl SearchService for PostgresFtsService {
         // $1 = tsquery string (reused for match, rank, headline)
         // $2 = category_id filter (optional, appended below)
         // last two params = LIMIT, OFFSET
-        let (cat_clause, mut values): (&str, Vec<sea_orm::Value>) = match query.category_id {
-            Some(cat_id) => ("AND t.category_id = $2", vec![tsquery.clone().into(), cat_id.into()]),
-            None => ("", vec![tsquery.clone().into()]),
+        let (cat_clause, mut values): (String, Vec<sea_orm::Value>) = if query.category_ids.is_empty() {
+            (String::new(), vec![tsquery.clone().into()])
+        } else {
+            let placeholders = query.category_ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("${}", i + 2))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let mut vals: Vec<sea_orm::Value> = vec![tsquery.clone().into()];
+            for id in &query.category_ids {
+                vals.push((*id).into());
+            }
+            (format!("AND t.category_id IN ({})", placeholders), vals)
         };
 
         let limit_idx = values.len() + 1;

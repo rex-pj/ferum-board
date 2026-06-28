@@ -12,7 +12,7 @@ use crate::shared::AppError;
 #[async_trait]
 pub trait PasswordHasher: Send + Sync {
     async fn hash(&self, password: &str) -> Result<String, AppError>;
-    async fn verify(&self, password: &str, hash: &str) -> Result<bool, AppError>;
+    async fn verify<'a>(&self, password: &'a str, hash: &'a str) -> Result<bool, AppError>;
 }
 
 // ─── TokenService ─────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ pub trait TokenService: Send + Sync {
     fn mint_refresh_token(&self, user_id: Uuid) -> Result<String, AppError>;
     fn verify_refresh_token(&self, token: &str) -> Result<Uuid, AppError>;
     fn mint_email_token(&self, user_id: Uuid, purpose: &str) -> Result<String, AppError>;
-    fn verify_email_token(&self, token: &str, expected_purpose: &str) -> Result<Uuid, AppError>;
+    fn verify_email_token<'a>(&self, token: &'a str, expected_purpose: &'a str) -> Result<Uuid, AppError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,10 +45,10 @@ pub struct AccessTokenClaims {
 #[async_trait]
 pub trait CacheService: Send + Sync {
     async fn get(&self, key: &str) -> Option<String>;
-    async fn set(&self, key: &str, value: &str, ttl: Duration) -> Result<(), AppError>;
+    async fn set<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<(), AppError>;
     /// Atomically set the key only if it does not already exist (SET NX EX).
     /// Returns `true` if the key was newly set, `false` if it already existed.
-    async fn set_nx(&self, key: &str, value: &str, ttl: Duration) -> Result<bool, AppError>;
+    async fn set_nx<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<bool, AppError>;
     async fn del(&self, key: &str) -> Result<(), AppError>;
     /// Delete all keys whose name starts with `prefix`.
     async fn del_prefix(&self, prefix: &str) -> Result<(), AppError>;
@@ -129,7 +129,8 @@ pub trait SearchService: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct SearchQuery {
     pub q: String,
-    pub category_id: Option<Uuid>,
+    /// All category IDs to filter by (parent + resolved children). Empty = no filter.
+    pub category_ids: Vec<Uuid>,
     pub page: u64,
     pub per_page: u64,
 }

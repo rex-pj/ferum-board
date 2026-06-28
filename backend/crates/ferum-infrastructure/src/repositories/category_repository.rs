@@ -89,7 +89,7 @@ impl CategoryRepository for PgCategoryRepository {
             .map(entity_to_domain))
     }
 
-    async fn find_by_slug(&self, slug: &str) -> Result<Option<Category>, AppError> {
+    async fn find_by_slug<'a>(&self, slug: &'a str) -> Result<Option<Category>, AppError> {
         Ok(categories::Entity::find()
             .filter(categories::Column::Slug.eq(slug))
             .one(&self.db)
@@ -183,7 +183,8 @@ impl CategoryRepository for PgCategoryRepository {
                     Func::sum(
                         CaseStatement::new()
                             .case(
-                                Expr::col((threads::Entity, threads::Column::DeletedAt)).is_null(),
+                                Expr::col((threads::Entity, threads::Column::Id)).is_not_null()
+                                    .and(Expr::col((threads::Entity, threads::Column::DeletedAt)).is_null()),
                                 1i32,
                             )
                             .finally(0i32),

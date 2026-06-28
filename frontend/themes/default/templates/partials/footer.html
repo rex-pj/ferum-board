@@ -23,6 +23,9 @@
         <a href="/login"    class="fr-footer-link">Log in</a>
         <a href="/register" class="fr-footer-link">Register</a>
       {% endif %}
+      {% if current_user and current_user.is_moderator and not current_user.is_admin %}
+        <a href="/mod/reports" class="fr-footer-link">Mod</a>
+      {% endif %}
       {% if current_user and current_user.is_admin %}
         <a href="/admin/dashboard" class="fr-footer-link">Admin</a>
       {% endif %}

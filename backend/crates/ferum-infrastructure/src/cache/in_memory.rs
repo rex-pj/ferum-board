@@ -1,4 +1,4 @@
-use std::sync::Arc;
+﻿use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -41,7 +41,7 @@ impl CacheService for InMemoryCacheService {
         }
     }
 
-    async fn set(&self, key: &str, value: &str, ttl: Duration) -> Result<(), AppError> {
+    async fn set<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<(), AppError> {
         self.store.insert(
             key.to_string(),
             CacheEntry {
@@ -52,7 +52,7 @@ impl CacheService for InMemoryCacheService {
         Ok(())
     }
 
-    async fn set_nx(&self, key: &str, value: &str, ttl: Duration) -> Result<bool, AppError> {
+    async fn set_nx<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<bool, AppError> {
         use dashmap::mapref::entry::Entry;
         let now = Instant::now();
         match self.store.entry(key.to_string()) {

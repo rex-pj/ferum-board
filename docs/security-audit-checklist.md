@@ -458,10 +458,10 @@ POST /api/admin/plugins {"url": "file:///etc/passwd"}
 **How to check:**
 - [ ] Webhook URL validation: reject `localhost`, `127.x.x.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `::1`
 - [ ] Only `https://` scheme is accepted for webhook URLs — reject `file://`, `ftp://`, `gopher://`
-- [ ] If a fetch-by-URL feature exists: validate and resolve DNS before fetching, reject private IP ranges
+- [ ] `ferum-infrastructure/src/network_utils.rs::assert_no_private_ip()` is called before any outbound HTTP from plugin hooks — it resolves DNS and rejects private/reserved IPs (RFC-1918, loopback, link-local, CGNAT 100.64/10, IPv6 ULA/link-local)
 - [ ] Plugins cannot call arbitrary URLs from the sandbox without an explicit capability grant
 
-**PASS:** Webhook URLs with private/loopback IPs are blocked. Only HTTPS is accepted.
+**PASS:** Webhook URLs with private/loopback IPs are blocked. Only HTTPS is accepted. Plugin outbound HTTP resolves DNS first via `assert_no_private_ip()`.
 
 **FAIL:** A webhook can be sent to `localhost` or `169.254.169.254`.
 

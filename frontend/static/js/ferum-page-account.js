@@ -1,6 +1,23 @@
 (function () {
   'use strict';
 
+  // ── Account tab state (Alpine factory) ───────────────────────────────
+  // Supports deep-linking via URL hash: /account#security, /account#preferences
+  window.accountTabState = function (dnLen, bioLen) {
+    var VALID_TABS = ['profile', 'security', 'preferences'];
+    var hashTab = window.location.hash.slice(1);
+    return {
+      active: VALID_TABS.includes(hashTab) ? hashTab : 'profile',
+      dnLen: dnLen,
+      bioLen: bioLen,
+      init: function () {},
+      setTab: function (tab) {
+        this.active = tab;
+        history.replaceState(null, '', '#' + tab);
+      },
+    };
+  };
+
   function showFeedback(id, type, msg) { Ferum.showFeedback(id, type, msg); }
 
   function setSpinner(btnId, spinnerId, loading) {

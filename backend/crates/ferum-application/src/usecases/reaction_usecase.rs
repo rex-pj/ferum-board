@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use crate::event_bus::EventBus;
+use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
 use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
@@ -20,7 +20,7 @@ pub struct ReactionUseCase {
     pub posts: Arc<dyn PostRepository>,
     pub threads: Arc<dyn ThreadRepository>,
     pub users: Arc<dyn UserRepository>,
-    pub event_bus: Arc<EventBus>,
+    pub event_bus: Arc<dyn EventPublisher>,
 }
 
 impl ReactionUseCase {
@@ -29,7 +29,7 @@ impl ReactionUseCase {
         posts: Arc<dyn PostRepository>,
         threads: Arc<dyn ThreadRepository>,
         users: Arc<dyn UserRepository>,
-        event_bus: Arc<EventBus>,
+        event_bus: Arc<dyn EventPublisher>,
     ) -> Self {
         Self {
             reactions,

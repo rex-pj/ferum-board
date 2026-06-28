@@ -379,13 +379,13 @@ impl UserRepository for PgUserRepository {
         Ok(row.cnt as u64)
     }
 
-    async fn list_paginated(
+    async fn list_paginated<'a>(
         &self,
         page: u64,
         per_page: u64,
-        search: Option<&str>,
-        sort_by: Option<&str>,
-        sort_dir: Option<&str>,
+        search: Option<&'a str>,
+        sort_by: Option<&'a str>,
+        sort_dir: Option<&'a str>,
     ) -> Result<(Vec<User>, u64), AppError> {
         let offset = page.saturating_sub(1) * per_page;
         let order = match sort_dir.unwrap_or("desc") {

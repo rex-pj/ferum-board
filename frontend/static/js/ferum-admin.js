@@ -520,16 +520,48 @@
     });
   };
 
+  function toRoleSlug(s) {
+    return s.toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/-{2,}/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
   (function initRolesModal() {
     var editModal = document.getElementById('editRoleModal');
-    if (!editModal) return;
-    editModal.addEventListener('show.bs.modal', function (e) {
-      var btn = e.relatedTarget;
-      editModal.querySelector('[name=name]').value     = (btn && btn.dataset.name)     || '';
-      editModal.querySelector('[name=color]').value    = (btn && btn.dataset.color)    || '#6c757d';
-      var cb = editModal.querySelector('[name=is_default]');
-      if (cb) cb.checked = (btn && btn.dataset.isDefault) === 'true';
-      editModal._roleId = btn && btn.dataset.id;
+    if (editModal) {
+      editModal.addEventListener('show.bs.modal', function (e) {
+        var btn = e.relatedTarget;
+        editModal.querySelector('[name=name]').value     = (btn && btn.dataset.name)     || '';
+        editModal.querySelector('[name=color]').value    = (btn && btn.dataset.color)    || '#6c757d';
+        var cb = editModal.querySelector('[name=is_default]');
+        if (cb) cb.checked = (btn && btn.dataset.isDefault) === 'true';
+        editModal._roleId = btn && btn.dataset.id;
+      });
+    }
+
+    var newModal = document.getElementById('newRoleModal');
+    if (!newModal) return;
+    var nameInput = newModal.querySelector('[name=name]');
+    var slugInput = newModal.querySelector('[name=slug]');
+    if (!nameInput || !slugInput) return;
+
+    var slugEditedByUser = false;
+    slugInput.addEventListener('input', function () {
+      slugEditedByUser = slugInput.value.length > 0;
+    });
+    nameInput.addEventListener('input', function () {
+      if (!slugEditedByUser) {
+        slugInput.value = toRoleSlug(nameInput.value);
+      }
+    });
+    newModal.addEventListener('hidden.bs.modal', function () {
+      slugEditedByUser = false;
+      nameInput.value = '';
+      slugInput.value = '';
+      newModal.querySelector('[name=color]').value = '#6c757d';
     });
   }());
 

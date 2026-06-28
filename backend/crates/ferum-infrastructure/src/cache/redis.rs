@@ -26,14 +26,14 @@ impl CacheService for RedisCacheService {
         conn.get::<_, Option<String>>(key).await.ok().flatten()
     }
 
-    async fn set(&self, key: &str, value: &str, ttl: Duration) -> Result<(), AppError> {
+    async fn set<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<(), AppError> {
         let mut conn = self.conn.clone();
         conn.set_ex::<_, _, ()>(key, value, ttl.as_secs())
             .await
             .map_err(|e| AppError::internal(e.to_string()))
     }
 
-    async fn set_nx(&self, key: &str, value: &str, ttl: Duration) -> Result<bool, AppError> {
+    async fn set_nx<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<bool, AppError> {
         let mut conn = self.conn.clone();
         // SET key value NX EX seconds — returns "OK" if set, nil if already existed
         let result: Option<String> = redis::cmd("SET")

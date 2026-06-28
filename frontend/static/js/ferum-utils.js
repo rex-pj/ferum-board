@@ -286,6 +286,28 @@
     });
   }
 
+  // ── Login return URL ──────────────────────────────────────────────
+  // Injects ?next=<current-path> into every a[href="/login"] so the
+  // login page can redirect back after a successful sign-in.
+  // Skipped on auth pages themselves to prevent redirect loops.
+  function initLoginReturnUrl() {
+    var path = window.location.pathname;
+    if (path === '/login' || path === '/register' ||
+        path === '/forgot-password' || path.startsWith('/reset-password')) return;
+    var next = path + window.location.search;
+    document.querySelectorAll('a[href="/login"]').forEach(function (el) {
+      el.href = '/login?next=' + encodeURIComponent(next);
+    });
+  }
+
+  // ── Bootstrap tooltips ─────────────────────────────────────────────
+  function initTooltips() {
+    if (!win.bootstrap || !win.bootstrap.Tooltip) return;
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+      new win.bootstrap.Tooltip(el);
+    });
+  }
+
   // ── Logout button ─────────────────────────────────────────────────
   function initLogout() {
     document.querySelectorAll('[data-action="logout"]').forEach(function (btn) {
@@ -347,6 +369,8 @@
   onReady(initNavActive);
   onReady(initMobileSidebar);
   onReady(initLogout);
+  onReady(initLoginReturnUrl);
+  onReady(initTooltips);
 
   win.Ferum = {
     toast:                toast,

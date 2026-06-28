@@ -22,13 +22,13 @@ pub trait UserRepository: Send + Sync {
     async fn set_password_hash(&self, id: Uuid, hash: String) -> Result<(), AppError>;
     /// Count users who have the admin role assigned globally (used during setup).
     async fn count_admins(&self) -> Result<u64, AppError>;
-    async fn list_paginated(
+    async fn list_paginated<'a>(
         &self,
         page: u64,
         per_page: u64,
-        search: Option<&str>,
-        sort_by: Option<&str>,
-        sort_dir: Option<&str>,
+        search: Option<&'a str>,
+        sort_by: Option<&'a str>,
+        sort_dir: Option<&'a str>,
     ) -> Result<(Vec<User>, u64), AppError>;
     async fn get_preferences(&self, user_id: Uuid) -> Result<UserPreferences, AppError>;
     async fn upsert_preferences(&self, prefs: UserPreferences) -> Result<(), AppError>;

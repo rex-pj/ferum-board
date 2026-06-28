@@ -1,5 +1,5 @@
-use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+﻿use chrono::{Duration, Utc};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -42,7 +42,7 @@ impl TokenService for JwtTokenService {
     }
 
     fn verify_access_token(&self, token: &str) -> Result<AccessTokenClaims, AppError> {
-        let mut validation = Validation::default();
+        let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
         decode::<AccessTokenClaims>(token, &self.decoding_key, &validation)
@@ -61,7 +61,7 @@ impl TokenService for JwtTokenService {
     }
 
     fn verify_refresh_token(&self, token: &str) -> Result<Uuid, AppError> {
-        let mut validation = Validation::default();
+        let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
         let data = decode::<RefreshClaims>(token, &self.decoding_key, &validation)
@@ -84,8 +84,8 @@ impl TokenService for JwtTokenService {
             .map_err(|e| AppError::internal(format!("email token error: {}", e)))
     }
 
-    fn verify_email_token(&self, token: &str, expected_purpose: &str) -> Result<Uuid, AppError> {
-        let mut validation = Validation::default();
+    fn verify_email_token<'a>(&self, token: &'a str, expected_purpose: &'a str) -> Result<Uuid, AppError> {
+        let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
         let data = decode::<EmailClaims>(token, &self.decoding_key, &validation)

@@ -29,6 +29,8 @@ mod inner {
     use ferum_domain::models::plugin::NewPluginLog;
     use ferum_domain::repositories::plugin_repository::PluginRepository;
 
+    use crate::network_utils::assert_no_private_ip;
+
     // ─── Message protocol ─────────────────────────────────────────────────────────
 
     pub enum ScriptMessage {
@@ -268,18 +270,20 @@ var __ferum_hooks = {};
                         return Err(JsNativeError::error().with_message(e).into());
                     }
 
-                    let result = s.rt_handle.block_on(async move {
+                    let result: Result<serde_json::Value, String> = s.rt_handle.block_on(async move {
+                        assert_no_private_ip(&url).await.map_err(|e| e)?;
                         let client = reqwest::Client::new();
                         let mut req = client.get(&url).timeout(Duration::from_secs(10));
                         for (k, v) in &headers { req = req.header(k, v); }
-                        req.send().await?.json::<serde_json::Value>().await
+                        req.send().await.map_err(|e| e.to_string())?
+                            .json::<serde_json::Value>().await.map_err(|e| e.to_string())
                     });
 
                     match result {
                         Ok(v) => Ok(JsValue::from(boa_engine::JsString::from(
                             serde_json::to_string(&v).unwrap_or_else(|_| "null".into()),
                         ))),
-                        Err(e) => Err(JsNativeError::error().with_message(e.to_string()).into()),
+                        Err(e) => Err(JsNativeError::error().with_message(e).into()),
                     }
                 }),
             )
@@ -306,18 +310,20 @@ var __ferum_hooks = {};
                         return Err(JsNativeError::error().with_message(e).into());
                     }
 
-                    let result = s.rt_handle.block_on(async move {
+                    let result: Result<serde_json::Value, String> = s.rt_handle.block_on(async move {
+                        assert_no_private_ip(&url).await.map_err(|e| e)?;
                         let client = reqwest::Client::new();
                         let mut req = client.post(&url).json(&body).timeout(Duration::from_secs(10));
                         for (k, v) in &headers { req = req.header(k, v); }
-                        req.send().await?.json::<serde_json::Value>().await
+                        req.send().await.map_err(|e| e.to_string())?
+                            .json::<serde_json::Value>().await.map_err(|e| e.to_string())
                     });
 
                     match result {
                         Ok(v) => Ok(JsValue::from(boa_engine::JsString::from(
                             serde_json::to_string(&v).unwrap_or_else(|_| "null".into()),
                         ))),
-                        Err(e) => Err(JsNativeError::error().with_message(e.to_string()).into()),
+                        Err(e) => Err(JsNativeError::error().with_message(e).into()),
                     }
                 }),
             )

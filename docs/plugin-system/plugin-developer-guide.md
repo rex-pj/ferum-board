@@ -3,6 +3,15 @@
 **Audience:** Developers building plugins for Ferum Board  
 **Version:** 1.0.0
 
+> **Implementation status (2026-06-26):**
+> - **Tier 1 (Manifest)** — ✅ Implemented
+> - **Tier 2 (Script / boa_engine)** — ✅ Implemented
+> - **Tier 3 (Service / sidecar)** — 🔲 Planned; not yet implemented
+> - **`ferum-plugin-cli`** — 🔲 Planned; the `ferum-plugin` CLI does not exist yet
+> - **`@ferum-board/plugin-sdk`** — 🔲 Planned; the npm package does not exist yet
+>
+> Sections 5, 7.1–7.3 (Tier 3 tutorial, CLI install loop, migration testing) are **forward-looking design documentation** — do not use them as an implementation guide until Tier 3 ships.
+
 ---
 
 ## Table of Contents

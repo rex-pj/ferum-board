@@ -1,4 +1,4 @@
-use ferum_application::constants::BCRYPT_COST;
+﻿use ferum_application::constants::BCRYPT_COST;
 use ferum_application::ports::PasswordHasher;
 use ferum_application::shared::AppError;
 
@@ -16,7 +16,7 @@ impl PasswordHasher for BcryptPasswordHasher {
         .map_err(|e| AppError::internal(format!("thread join error: {}", e)))?
     }
 
-    async fn verify(&self, password: &str, hash: &str) -> Result<bool, AppError> {
+    async fn verify<'a>(&self, password: &'a str, hash: &'a str) -> Result<bool, AppError> {
         let pwd = password.to_string();
         let h = hash.to_string();
         tokio::task::spawn_blocking(move || {

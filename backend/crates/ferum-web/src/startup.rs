@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::app_state::AppState;
 use crate::config::Config;
 use crate::tera_engine::TeraEngine;
-use ferum_application::event_bus::EventBus;
+use ferum_application::event_bus::{EventBus, EventPublisher};
 use ferum_application::ports::{
     CacheService, JobQueue, NotificationBus, PermissionResolver, PluginHookRuntime,
     PluginLifecycle, PluginUiRuntime, RateLimiter, SearchService, StorageService,
@@ -270,7 +270,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let plugin_ui: Arc<dyn PluginUiRuntime> = plugin_registry.clone();
     let plugin_lifecycle: Arc<dyn PluginLifecycle> = plugin_registry;
 
-    let event_bus = Arc::new(
+    let event_bus: Arc<dyn EventPublisher> = Arc::new(
         EventBus::new(
             audit_log_repo,
             notification_repo.clone(),

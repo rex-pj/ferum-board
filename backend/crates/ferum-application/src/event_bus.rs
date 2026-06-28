@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::ports::{ForumJob, JobQueue, NotificationBus, NullPluginRuntime, PluginHookRuntime};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::audit_log::AuditLog;
@@ -7,6 +9,11 @@ use ferum_domain::models::notification::NotificationKind;
 use ferum_domain::repositories::audit_log_repository::AuditLogRepository;
 use ferum_domain::repositories::notification_repository::NotificationRepository;
 use ferum_domain::repositories::webhook_repository::WebhookRepository;
+
+#[async_trait]
+pub trait EventPublisher: Send + Sync {
+    async fn publish(&self, event: ForumEvent);
+}
 
 pub struct EventBus {
     audit_log: Arc<dyn AuditLogRepository>,
@@ -40,7 +47,7 @@ impl EventBus {
         self
     }
 
-    pub async fn publish(&self, event: ForumEvent) {
+    async fn publish_inner(&self, event: ForumEvent) {
         tracing::info!(forum_event = event.event_type_str(), "event_bus: publishing");
         if let Err(e) = self.handle(&event).await {
             tracing::error!(
@@ -393,5 +400,12 @@ impl EventBus {
             };
             self.jobs.enqueue(job).await.ok();
         }
+    }
+}
+
+#[async_trait]
+impl EventPublisher for EventBus {
+    async fn publish(&self, event: ForumEvent) {
+        self.publish_inner(event).await;
     }
 }

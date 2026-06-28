@@ -1,0 +1,120 @@
+//! Integration tests for [`PgReportRepository`].
+//!
+//! `count_by_status` uses a GROUP BY + CASE aggregate; tested here.
+
+use ferum_domain::models::report::ReportStatus;
+use ferum_domain::repositories::report_repository::ReportRepository;
+use ferum_infrastructure::repositories::PgReportRepository;
+
+use crate::common::{insert_category, insert_post, insert_thread, insert_user, TestDb};
+
+#[tokio::test]
+async fn count_by_status_on_empty_returns_zeros() {
+    // GROUP BY + CASE must not error on empty table
+    let db = TestDb::new("rpt_count_empty").await;
+    let repo = PgReportRepository::new(db.conn.clone());
+    let counts = repo.count_by_status().await.expect("count_by_status");
+    assert_eq!(counts.pending, 0);
+    assert_eq!(counts.resolved, 0);
+    assert_eq!(counts.dismissed, 0);
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn create_post_report_and_find_by_id() {
+    let db = TestDb::new("rpt_create_post").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    let post = insert_post(&db.conn, thread.id, user.id).await;
+    let reporter = insert_user(&db.conn, 2).await;
+
+    let repo = PgReportRepository::new(db.conn.clone());
+    let report = repo.create(reporter.id, Some(post.id), None, "spam".to_string())
+        .await.expect("create");
+    assert_eq!(report.status, ReportStatus::Pending);
+    assert_eq!(report.post_id, Some(post.id));
+
+    let found = repo.find_by_id(report.id).await.expect("find_by_id").unwrap();
+    assert_eq!(found.id, report.id);
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn create_thread_report() {
+    let db = TestDb::new("rpt_create_thread").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    let reporter = insert_user(&db.conn, 2).await;
+
+    let repo = PgReportRepository::new(db.conn.clone());
+    let report = repo.create(reporter.id, None, Some(thread.id), "off-topic".to_string())
+        .await.expect("create thread report");
+    assert_eq!(report.thread_id, Some(thread.id));
+    assert!(report.post_id.is_none());
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn count_by_status_counts_pending_reports() {
+    let db = TestDb::new("rpt_count_pending").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    let post = insert_post(&db.conn, thread.id, user.id).await;
+    let reporter = insert_user(&db.conn, 2).await;
+
+    let repo = PgReportRepository::new(db.conn.clone());
+    repo.create(reporter.id, Some(post.id), None, "spam".to_string()).await.expect("create");
+    repo.create(reporter.id, None, Some(thread.id), "off".to_string()).await.expect("create 2");
+
+    let counts = repo.count_by_status().await.expect("count_by_status");
+    assert_eq!(counts.pending, 2);
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn update_status_to_resolved() {
+    let db = TestDb::new("rpt_update_resolved").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    let post = insert_post(&db.conn, thread.id, user.id).await;
+    let reporter = insert_user(&db.conn, 2).await;
+    let mod_user = insert_user(&db.conn, 3).await;
+
+    let repo = PgReportRepository::new(db.conn.clone());
+    let report = repo.create(reporter.id, Some(post.id), None, "spam".to_string()).await.expect("create");
+
+    repo.update_status(report.id, ReportStatus::Resolved, mod_user.id, Some("handled".to_string()))
+        .await.expect("update_status");
+
+    let found = repo.find_by_id(report.id).await.expect("find_by_id").unwrap();
+    assert_eq!(found.status, ReportStatus::Resolved);
+    assert_eq!(found.resolved_by_id, Some(mod_user.id));
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn list_all_with_status_filter() {
+    let db = TestDb::new("rpt_list_all_filter").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    let post_a = insert_post(&db.conn, thread.id, user.id).await;
+    let post_b = insert_post(&db.conn, thread.id, user.id).await;
+    let reporter = insert_user(&db.conn, 2).await;
+    let mod_user = insert_user(&db.conn, 3).await;
+
+    let repo = PgReportRepository::new(db.conn.clone());
+    let r1 = repo.create(reporter.id, Some(post_a.id), None, "sp".to_string()).await.expect("r1");
+    repo.create(reporter.id, Some(post_b.id), None, "sp".to_string()).await.expect("r2");
+    repo.update_status(r1.id, ReportStatus::Dismissed, mod_user.id, None).await.expect("dismiss r1");
+
+    let (pending, total) = repo.list_all(Some(ReportStatus::Pending), None, None, 1, 20)
+        .await.expect("list pending");
+    assert_eq!(total, 1);
+    assert_eq!(pending[0].status, ReportStatus::Pending);
+    db.teardown().await;
+}

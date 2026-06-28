@@ -5,7 +5,7 @@ use regex::Regex;
 use uuid::Uuid;
 
 use crate::constants::{DEFAULT_MAX_POSTS_PER_PAGE, MAX_POST_CONTENT_BYTES};
-use crate::event_bus::EventBus;
+use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
 use crate::ports::{HookContext, HookDecision, PluginHookRuntime};
 use crate::shared::{AppError, OptionExt};
@@ -29,7 +29,7 @@ pub struct PostUseCase {
     pub users: Arc<dyn UserRepository>,
     pub reactions: Arc<dyn ReactionRepository>,
     pub site_config: Arc<dyn SiteConfigRepository>,
-    pub event_bus: Arc<EventBus>,
+    pub event_bus: Arc<dyn EventPublisher>,
     pub plugin_runtime: Arc<dyn PluginHookRuntime>,
 }
 
@@ -41,7 +41,7 @@ impl PostUseCase {
         users: Arc<dyn UserRepository>,
         reactions: Arc<dyn ReactionRepository>,
         site_config: Arc<dyn SiteConfigRepository>,
-        event_bus: Arc<EventBus>,
+        event_bus: Arc<dyn EventPublisher>,
     ) -> Self {
         Self {
             posts,
@@ -383,7 +383,7 @@ impl PostUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
-        let (mut posts, total) = self.posts.list_by_author(author_id, page, per_page).await?;
+        let (mut posts, total) = self.posts.list_by_author(author_id, page, per_page.min(50)).await?;
         if let Ok(Some(user)) = self.users.find_by_id(author_id).await {
             for post in posts.iter_mut() {
                 post.author_username = Some(user.username.clone());

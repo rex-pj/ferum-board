@@ -210,17 +210,32 @@ pub async fn category(
         String::new()
     };
 
+    let parent_category: Option<CategoryCtx> = category.parent_id.and_then(|parent_id| {
+        all_categories.iter().find(|c| c.id == parent_id).map(|c| CategoryCtx {
+            id: c.id.to_string(),
+            parent_id: None,
+            slug: c.slug.clone(),
+            name: c.name.clone(),
+            description: c.description.clone(),
+            color: c.color.clone(),
+            thread_count: 0,
+            post_policy: post_policy_str(&c.post_policy),
+        })
+    });
+
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     ctx.insert("category", &category_ctx);
+    ctx.insert("parent_category", &parent_category);
     ctx.insert("subcategories", &subcategories);
     ctx.insert("sibling_categories", &sibling_categories);
     ctx.insert("threads", &map_threads(&threads));
     ctx.insert("pagination", &PaginationCtx::new(page, per_page, total, extra_params));
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("active_sort", &sort_str);
+    ctx.insert("active_category_slug", &category.slug);
 
     render_with_theme(&state, &active, "forum/category.html", &ctx).await
 }
@@ -350,6 +365,7 @@ pub async fn thread_detail(
     ctx.insert("pagination", &pagination);
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("move_categories", &move_categories);
+    ctx.insert("active_category_slug", &category.slug);
 
     render_with_theme(&state, &active, "forum/thread.html", &ctx).await
 }

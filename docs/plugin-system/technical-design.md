@@ -626,9 +626,9 @@ CREATE INDEX idx_plugin_ui_slots_lookup
     ON plugin_ui_slots (slot_name, is_active, load_order)
     WHERE is_active = true;
 
--- ─── Plugin Logs (partitioned by month, retained 30 days) ────────────────────
+-- ─── Plugin Logs (rolling; older entries pruned by a background job) ──────────
 CREATE TABLE plugin_logs (
-    id          UUID NOT NULL DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     plugin_id   UUID NOT NULL REFERENCES plugins ON DELETE CASCADE,
     level       TEXT NOT NULL CHECK (level IN ('trace','info','warn','error')),
     hook_name   TEXT,
@@ -636,7 +636,7 @@ CREATE TABLE plugin_logs (
     message     TEXT NOT NULL,
     context     JSONB,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-) PARTITION BY RANGE (created_at);
+);
 ```
 
 ---

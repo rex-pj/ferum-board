@@ -107,7 +107,7 @@ pub async fn upload_favicon(
 
             if !validate_favicon_content_type(&ct) {
                 return Err(
-                    AppError::unprocessable("favicon must be ico, svg, png, gif, or jpeg").into(),
+                    AppError::unprocessable("favicon must be ico, png, gif, or jpeg (SVG not allowed)").into(),
                 );
             }
             if data.len() > MAX_FAVICON_BYTES {

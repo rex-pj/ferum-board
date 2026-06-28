@@ -33,7 +33,7 @@ fn to_domain(m: tags::Model) -> Tag {
 
 #[async_trait]
 impl TagRepository for PgTagRepository {
-    async fn list(&self, query: Option<&str>, limit: u32) -> Result<Vec<Tag>, AppError> {
+    async fn list<'a>(&self, query: Option<&'a str>, limit: u32) -> Result<Vec<Tag>, AppError> {
         let mut q = tags::Entity::find().order_by_asc(tags::Column::Name);
         if let Some(search) = query.filter(|s| !s.is_empty()) {
             let pattern = format!("%{}%", search);
@@ -46,7 +46,7 @@ impl TagRepository for PgTagRepository {
         Ok(q.limit(limit as u64).all(&self.db).await?.into_iter().map(to_domain).collect())
     }
 
-    async fn find_by_slug(&self, slug: &str) -> Result<Option<Tag>, AppError> {
+    async fn find_by_slug<'a>(&self, slug: &'a str) -> Result<Option<Tag>, AppError> {
         Ok(tags::Entity::find()
             .filter(tags::Column::Slug.eq(slug))
             .one(&self.db)

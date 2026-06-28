@@ -1,0 +1,29 @@
+[package]
+name = "ferum-infrastructure-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ferum-domain = { path = "../../crates/ferum-domain" }
+ferum-application = { path = "../../crates/ferum-application" }
+ferum-infrastructure = { path = "../../crates/ferum-infrastructure" }
+migration = { path = "../../migration" }
+
+async-trait = "0.1"
+bcrypt = "0.15"
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dotenvy = "0.15"
+zip = "2"
+sea-orm = { version = "1", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+    "with-uuid",
+    "with-chrono",
+    "with-json",
+] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }

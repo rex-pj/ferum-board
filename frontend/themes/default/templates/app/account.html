@@ -6,23 +6,24 @@
 {% block page_inner_class %}fr-page-inner--reading{% endblock %}
 
 {% block content %}
-<div x-data="{ active: 'profile', dnLen: {% if profile %}{{ profile.display_name | length }}{% else %}0{% endif %}, bioLen: {% if profile and profile.bio %}{{ profile.bio | length }}{% else %}0{% endif %} }">
+<div x-data="accountTabState({% if profile %}{{ profile.display_name | length }}{% else %}0{% endif %}, {% if profile and profile.bio %}{{ profile.bio | length }}{% else %}0{% endif %})"
+     x-init="init()">
 
   <h1 class="h4 fw-bold mb-3">Account Settings</h1>
 
   <ul class="nav nav-tabs mb-4">
     <li class="nav-item">
-      <button type="button" class="nav-link" :class="active==='profile'?'active':''" @click="active='profile'">
+      <button type="button" class="nav-link" :class="active==='profile'?'active':''" @click="setTab('profile')">
         <i class="fa-solid fa-user fa-sm me-1"></i>Profile
       </button>
     </li>
     <li class="nav-item">
-      <button type="button" class="nav-link" :class="active==='security'?'active':''" @click="active='security'">
+      <button type="button" class="nav-link" :class="active==='security'?'active':''" @click="setTab('security')">
         <i class="fa-solid fa-lock fa-sm me-1"></i>Security
       </button>
     </li>
     <li class="nav-item">
-      <button type="button" class="nav-link" :class="active==='preferences'?'active':''" @click="active='preferences'">
+      <button type="button" class="nav-link" :class="active==='preferences'?'active':''" @click="setTab('preferences')">
         <i class="fa-solid fa-sliders fa-sm me-1"></i>Preferences
       </button>
     </li>

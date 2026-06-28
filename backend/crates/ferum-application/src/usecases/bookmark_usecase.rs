@@ -60,6 +60,6 @@ impl BookmarkUseCase {
         per_page: u64,
     ) -> Result<(Vec<(Bookmark, Thread)>, u64), AppError> {
         PermissionChecker::require_not_banned(actor)?;
-        self.bookmarks.list_for_user(actor.id, page, per_page).await
+        self.bookmarks.list_for_user(actor.id, page, per_page.min(50)).await
     }
 }

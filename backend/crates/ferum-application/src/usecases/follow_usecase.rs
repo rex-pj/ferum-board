@@ -3,7 +3,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::dto::FollowStatus;
-use crate::event_bus::EventBus;
+use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
 use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
@@ -16,14 +16,14 @@ use ferum_domain::AuthUser;
 pub struct FollowUseCase {
     pub follows: Arc<dyn FollowRepository>,
     pub users: Arc<dyn UserRepository>,
-    pub event_bus: Arc<EventBus>,
+    pub event_bus: Arc<dyn EventPublisher>,
 }
 
 impl FollowUseCase {
     pub fn new(
         follows: Arc<dyn FollowRepository>,
         users: Arc<dyn UserRepository>,
-        event_bus: Arc<EventBus>,
+        event_bus: Arc<dyn EventPublisher>,
     ) -> Self {
         Self { follows, users, event_bus }
     }
@@ -95,7 +95,7 @@ impl FollowUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<(Follow, User)>, u64), AppError> {
-        self.follows.list_following(user_id, page, per_page).await
+        self.follows.list_following(user_id, page, per_page.min(50)).await
     }
 
     pub async fn list_followers(
@@ -104,7 +104,7 @@ impl FollowUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<(Follow, User)>, u64), AppError> {
-        self.follows.list_followers(user_id, page, per_page).await
+        self.follows.list_followers(user_id, page, per_page.min(50)).await
     }
 }
 

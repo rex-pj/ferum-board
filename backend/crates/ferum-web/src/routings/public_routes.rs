@@ -120,7 +120,9 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         )
         .route("/{id}/follow-status", get(api::follows::get_follow_status))
         .route("/{id}/followers", get(api::follows::list_followers))
-        .route("/{id}/following", get(api::follows::list_following));
+        .route("/{id}/following", get(api::follows::list_following))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
+        .layer(axum::Extension(write_rl.clone()));
 
     let notification_routes = Router::new()
         .route("/", get(api::notifications::list_notifications))
@@ -132,17 +134,27 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
     let report_routes = Router::new()
         .route("/", post(create_report))
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
-        .layer(axum::Extension(write_rl));
+        .layer(axum::Extension(write_rl.clone()));
 
     let search_routes = Router::new()
         .route("/search", get(api::search::search))
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .layer(axum::Extension(search_rl));
 
+    let tag_routes = Router::new()
+        .route("/tags", get(api::tags::list_tags).post(api::tags::create_tag))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
+        .layer(axum::Extension(write_rl.clone()));
+
+    let preview_routes = Router::new()
+        .route("/preview-markdown", post(api::posts::preview_markdown))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
+        .layer(axum::Extension(write_rl.clone()));
+
     Router::new()
         .merge(search_routes)
-        .route("/tags", get(api::tags::list_tags).post(api::tags::create_tag))
-        .route("/preview-markdown", post(api::posts::preview_markdown))
+        .merge(tag_routes)
+        .merge(preview_routes)
         .nest("/categories", category_routes)
         .nest("/threads", thread_routes)
         .nest("/posts", post_routes)

@@ -8,7 +8,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::constants::{DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS, MAX_TAGS_PER_THREAD, MAX_THUMBNAIL_BYTES};
-use crate::event_bus::EventBus;
+use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
 use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginHookRuntime};
 use crate::shared::{AppError, OptionExt};
@@ -36,7 +36,7 @@ pub struct ThreadUseCase {
     pub posts: Arc<dyn PostRepository>,
     pub jobs: Arc<dyn JobQueue>,
     pub stored_files: Arc<dyn StoredFileRepository>,
-    pub event_bus: Arc<EventBus>,
+    pub event_bus: Arc<dyn EventPublisher>,
     pub cache: Arc<dyn CacheService>,
     pub tags: Arc<dyn TagRepository>,
     pub users: Arc<dyn UserRepository>,
@@ -57,7 +57,7 @@ impl ThreadUseCase {
         posts: Arc<dyn PostRepository>,
         jobs: Arc<dyn JobQueue>,
         stored_files: Arc<dyn StoredFileRepository>,
-        event_bus: Arc<EventBus>,
+        event_bus: Arc<dyn EventPublisher>,
         cache: Arc<dyn CacheService>,
         tags: Arc<dyn TagRepository>,
         users: Arc<dyn UserRepository>,

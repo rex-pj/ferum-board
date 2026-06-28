@@ -5,19 +5,23 @@
   </a>
   <a href="/forum" class="fr-nav-link" data-nav-prefix="/forum">
     <i class="fa-solid fa-layer-group fa-fw" aria-hidden="true"></i>
-    Forum
+    Categories
   </a>
 
   {% if nav_categories is defined and nav_categories %}
     <div class="fr-nav-section">Categories</div>
     {% for cat in nav_categories %}
-      <a href="/forum/{{ cat.slug }}" class="fr-nav-link" data-nav-exact="true">
+      <a href="/forum/{{ cat.slug }}"
+         class="fr-nav-link {% if active_category_slug is defined and active_category_slug == cat.slug %}active{% endif %}"
+         data-nav-exact="true">
         <span class="fr-color-dot fr-color-dot--8 flex-shrink-0"
               style="background:{{ cat.color | default(value='#6b7280') }}"></span>
         <span class="text-truncate">{{ cat.name }}</span>
       </a>
       {% for child in cat.children %}
-        <a href="/forum/{{ child.slug }}" class="fr-nav-link fr-nav-link--child" data-nav-exact="true">
+        <a href="/forum/{{ child.slug }}"
+           class="fr-nav-link fr-nav-link--child {% if active_category_slug is defined and active_category_slug == child.slug %}active{% endif %}"
+           data-nav-exact="true">
           <span class="fr-color-dot fr-color-dot--8 flex-shrink-0"
                 style="background:{{ child.color | default(value='#6b7280') }}"></span>
           <span class="text-truncate">{{ child.name }}</span>

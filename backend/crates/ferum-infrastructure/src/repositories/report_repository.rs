@@ -63,11 +63,11 @@ impl ReportRepository for PgReportRepository {
         Ok(ReportStatusCounts { pending, resolved, dismissed })
     }
 
-    async fn list_all(
+    async fn list_all<'a>(
         &self,
         status: Option<ReportStatus>,
-        target_type: Option<&str>,
-        q: Option<&str>,
+        target_type: Option<&'a str>,
+        q: Option<&'a str>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {

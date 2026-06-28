@@ -5,6 +5,10 @@ members = [
     "crates/ferum-infrastructure",
     "crates/ferum-web",
     "migration",
+    "tests/support",
+    "tests/application",
+    "tests/infrastructure",
+    "tests/web",
 ]
 resolver = "2"
 default-members = ["crates/ferum-web"]

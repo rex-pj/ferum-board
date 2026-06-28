@@ -176,7 +176,7 @@ impl PluginHookRuntime for PluginRegistry {
                 .unwrap_or_default()
         };
 
-        for (plugin_id, hook_id, plugin_slug, tier, cb) in entries {
+        for (plugin_id, _hook_id, plugin_slug, tier, cb) in entries {
             if cb.is_open() {
                 tracing::warn!(plugin = %plugin_slug, hook, "Circuit open — skipping");
                 continue;
@@ -191,6 +191,7 @@ impl PluginHookRuntime for PluginRegistry {
                 PluginTier::Script => {
                     #[cfg(feature = "script_plugins")]
                     {
+                        let hook_id = _hook_id;
                         let rt = self.script_runtimes.get(&plugin_id);
                         if let Some(rt) = rt {
                             let ctx_json = serde_json::to_string(ctx).unwrap_or_default();

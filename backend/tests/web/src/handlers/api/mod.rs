@@ -1,0 +1,15 @@
+mod auth;
+mod bookmarks;
+mod categories;
+mod follows;
+mod health;
+mod notifications;
+mod posts;
+mod profile;
+mod reactions;
+mod search;
+mod setup;
+mod tags;
+mod threads;
+mod uploads;
+mod users;

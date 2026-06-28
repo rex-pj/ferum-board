@@ -46,11 +46,11 @@ impl AuditLogRepository for PgAuditLogRepository {
         Ok(())
     }
 
-    async fn list(
+    async fn list<'a>(
         &self,
         actor_id: Option<Uuid>,
-        target_type: Option<&str>,
-        action_contains: Option<&str>,
+        target_type: Option<&'a str>,
+        action_contains: Option<&'a str>,
         created_from: Option<DateTime<Utc>>,
         created_to: Option<DateTime<Utc>>,
         page: u64,

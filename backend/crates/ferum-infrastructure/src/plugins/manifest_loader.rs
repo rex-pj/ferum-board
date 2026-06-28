@@ -1,4 +1,4 @@
-use std::path::Path;
+﻿use std::path::Path;
 
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::PluginTier;
@@ -105,7 +105,7 @@ pub fn parse_manifest_str(content: &str) -> Result<PluginManifest, AppError> {
 
 /// Validate that the plugin ID follows reverse-domain notation.
 /// e.g. "com.example.my-plugin" — alphanumeric, dots, hyphens only.
-fn validate_plugin_id(id: &str) -> Result<(), AppError> {
+pub fn validate_plugin_id(id: &str) -> Result<(), AppError> {
     if id.is_empty() || id.len() > 256 {
         return Err(AppError::unprocessable(
             "Plugin ID must be between 1 and 256 characters",

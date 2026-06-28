@@ -8,6 +8,9 @@
 <nav aria-label="breadcrumb" class="mb-2">
   <ol class="breadcrumb mb-0">
     <li class="breadcrumb-item"><a href="/forum">Forum</a></li>
+    {% if parent_category %}
+      <li class="breadcrumb-item"><a href="/forum/{{ parent_category.slug }}">{{ parent_category.name }}</a></li>
+    {% endif %}
     <li class="breadcrumb-item active">{{ category.name }}</li>
   </ol>
 </nav>
@@ -53,7 +56,7 @@
           </button>
         </div>
       {% else %}
-        <a href="/login?next=/forum/{{ category.slug }}" class="btn btn-primary btn-sm">
+        <a href="/login?next=/new-thread" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-plus me-1"></i>New Thread
         </a>
         <a href="/login?next=/forum/{{ category.slug }}"
@@ -68,10 +71,10 @@
   {# Sort / filter tab bar #}
   <div class="fr-sort-tabs">
     <a href="?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>Latest
+      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>Active
     </a>
     <a href="?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-star fa-xs" aria-hidden="true"></i>Newest
+      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>New
     </a>
     <a href="?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
       <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>Hottest

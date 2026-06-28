@@ -3,6 +3,10 @@ name = "ferum-web"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "ferum_web"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ferum-board"
 path = "src/main.rs"

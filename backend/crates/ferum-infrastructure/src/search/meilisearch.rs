@@ -49,8 +49,13 @@ impl SearchService for MeilisearchService {
             .with_offset(offset as usize);
 
         let filter;
-        if let Some(cat_id) = query.category_id {
-            filter = format!("category_id = \"{}\"", cat_id);
+        if !query.category_ids.is_empty() {
+            let ids = query.category_ids
+                .iter()
+                .map(|id| format!("\"{}\"", id))
+                .collect::<Vec<_>>()
+                .join(", ");
+            filter = format!("category_id IN [{}]", ids);
             search.with_filter(&filter);
         }
 
