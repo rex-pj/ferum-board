@@ -173,7 +173,7 @@ impl PgBulkSeedService {
                     password_hash: Set(Some(hash.into())),
                     trust_level: Set(TrustLevel::Member),
                     trust_score: Set(80),
-                    post_count: Set(12),
+                    post_count: Set(2), // POST_INTRO_1, POST_FAV_LANG_3
                     ..Default::default()
                 },
                 users::ActiveModel {
@@ -185,7 +185,7 @@ impl PgBulkSeedService {
                     password_hash: Set(Some(hash.into())),
                     trust_level: Set(TrustLevel::Member),
                     trust_score: Set(40),
-                    post_count: Set(8),
+                    post_count: Set(5), // POST_WELCOME_2, POST_INTRO_2, POST_FAV_LANG_1, POST_RUST_GO_2, POST_DARK_1
                     ..Default::default()
                 },
                 users::ActiveModel {
@@ -197,7 +197,7 @@ impl PgBulkSeedService {
                     password_hash: Set(Some(hash.into())),
                     trust_level: Set(TrustLevel::Basic),
                     trust_score: Set(10),
-                    post_count: Set(2),
+                    post_count: Set(3), // POST_WELCOME_3, POST_FAV_LANG_2, POST_RUST_GO_1
                     ..Default::default()
                 },
             ],
@@ -330,6 +330,7 @@ impl PgBulkSeedService {
                     reply_count: Set(2),
                     view_count: Set(120),
                     last_post_at: Set(Some(now - Duration::hours(1))),
+                    custom_fields: Set(serde_json::Value::Object(Default::default())),
                     ..Default::default()
                 },
                 threads::ActiveModel {
@@ -343,6 +344,7 @@ impl PgBulkSeedService {
                     reply_count: Set(1),
                     view_count: Set(54),
                     last_post_at: Set(Some(now - Duration::hours(2))),
+                    custom_fields: Set(serde_json::Value::Object(Default::default())),
                     ..Default::default()
                 },
                 threads::ActiveModel {
@@ -356,6 +358,7 @@ impl PgBulkSeedService {
                     reply_count: Set(2),
                     view_count: Set(87),
                     last_post_at: Set(Some(now - Duration::hours(3))),
+                    custom_fields: Set(serde_json::Value::Object(Default::default())),
                     ..Default::default()
                 },
                 threads::ActiveModel {
@@ -369,6 +372,7 @@ impl PgBulkSeedService {
                     reply_count: Set(2),
                     view_count: Set(210),
                     last_post_at: Set(Some(now - Duration::hours(5))),
+                    custom_fields: Set(serde_json::Value::Object(Default::default())),
                     ..Default::default()
                 },
                 threads::ActiveModel {
@@ -382,6 +386,7 @@ impl PgBulkSeedService {
                     reply_count: Set(1),
                     view_count: Set(33),
                     last_post_at: Set(Some(now - Duration::hours(6))),
+                    custom_fields: Set(serde_json::Value::Object(Default::default())),
                     ..Default::default()
                 },
             ],
@@ -397,8 +402,8 @@ impl PgBulkSeedService {
                 thread_id:    Set(TH_WELCOME),
                 author_id:    Set(admin_id),
                 parent_id:    Set(None),
-                content_md:   Set("## Welcome to Ferum Board!\n\nThis forum is built with **Rust** and **SvelteKit**.".into()),
-                content_html: Set("<h2>Welcome to Ferum Board!</h2><p>This forum is built with <strong>Rust</strong> and <strong>SvelteKit</strong>.</p>".into()),
+                content_md:   Set("## Welcome to Ferum Board!\n\nThis forum is built with **Rust**, **Axum**, and **Tera** on the backend, with Svelte Web Components for interactive islands.".into()),
+                content_html: Set("<h2>Welcome to Ferum Board!</h2><p>This forum is built with <strong>Rust</strong>, <strong>Axum</strong>, and <strong>Tera</strong> on the backend, with Svelte Web Components for interactive islands.</p>".into()),
                 created_at:   Set(now - Duration::days(4)),
                 ..Default::default()
             },
@@ -834,8 +839,16 @@ impl PgBulkSeedService {
         let now = Utc::now().fixed_offset();
 
         let mut rows: Vec<posts::ActiveModel> = Vec::with_capacity(bulk_threads.len() * posts_per_thread);
+        let nt = bulk_threads.len();
 
         for (ti, (thread_id, thread_author_id)) in bulk_threads.iter().enumerate() {
+            // bulk_threads is ordered ASC by created_at, so ti=0 is the oldest thread.
+            // Allocate a block of (posts_per_thread + 2) minutes per thread so that
+            // posts from different threads never interleave.  Within each block, pi=0
+            // (the opening post) is the earliest timestamp and pi increases toward now,
+            // ensuring the opening post always sorts first when ORDER BY created_at ASC.
+            let thread_base_minutes = (nt - 1 - ti) as i64 * (posts_per_thread as i64 + 2);
+
             for pi in 0..posts_per_thread {
                 let i = ti * posts_per_thread + pi + 1;
                 // Post #0 within a thread is the opening post — always by the thread author.
@@ -850,13 +863,16 @@ impl PgBulkSeedService {
                 } else {
                     format!("Post #{i} — {body}")
                 };
+                // pi=0 → thread_base_minutes + posts_per_thread (oldest within thread)
+                // pi=17 → thread_base_minutes + 1            (newest within thread)
+                let ts = now - Duration::minutes(thread_base_minutes + posts_per_thread as i64 - pi as i64);
                 rows.push(posts::ActiveModel {
                     thread_id: Set(*thread_id),
                     author_id: Set(author_id),
                     parent_id: Set(None),
                     content_md: Set(content.clone()),
                     content_html: Set(format!("<p>{content}</p>")),
-                    created_at: Set(now - Duration::minutes(i as i64)),
+                    created_at: Set(ts),
                     ..Default::default()
                 });
             }
@@ -947,12 +963,22 @@ impl PgBulkSeedService {
             ReactionKind::Funny,
         ];
 
+        let mut seen: std::collections::HashSet<(Uuid, Uuid, u8)> = std::collections::HashSet::new();
         let rows: Vec<reactions::ActiveModel> = (1usize..=5000)
-            .map(|i| reactions::ActiveModel {
-                post_id: Set(bulk_post_ids[(i * 7) % np]),
-                user_id: Set(all_user_ids[(i * 11) % nu]),
-                kind: Set(kinds[(i - 1) % 4].clone()),
-                ..Default::default()
+            .filter_map(|i| {
+                let post_id = bulk_post_ids[(i * 7) % np];
+                let user_id = all_user_ids[(i * 11) % nu];
+                let kind_idx = ((i - 1) % 4) as u8;
+                if seen.insert((post_id, user_id, kind_idx)) {
+                    Some(reactions::ActiveModel {
+                        post_id: Set(post_id),
+                        user_id: Set(user_id),
+                        kind: Set(kinds[kind_idx as usize].clone()),
+                        ..Default::default()
+                    })
+                } else {
+                    None
+                }
             })
             .collect();
 
@@ -978,15 +1004,44 @@ impl PgBulkSeedService {
             NotificationKind::System,
         ];
 
+        // Realistic thread refs drawn from the example threads seeded above.
+        let thread_refs: [(&str, &str); 5] = [
+            ("welcome-to-ferum-board",                      "Welcome to Ferum Board!"),
+            ("introduce-yourself-here",                     "Introduce yourself here!"),
+            ("what-is-your-favorite-programming-language",  "What is your favorite programming language?"),
+            ("rust-vs-go-for-backend-development",          "Rust vs Go for backend development"),
+            ("feature-request-dark-mode",                   "Feature request: dark mode"),
+        ];
+        let actor_names: [&str; 3] = ["alice", "bob", "moderator"];
+        let reaction_names: [&str; 4] = ["like", "helpful", "insightful", "funny"];
+
         let rows: Vec<notifications::ActiveModel> = (1usize..=2000)
-            .map(|i| notifications::ActiveModel {
-                user_id: Set(all_user_ids[(i * 3) % nu]),
-                kind: Set(kinds[(i - 1) % 4].clone()),
-                payload: Set(
-                    serde_json::json!({ "message": format!("Notification {i}"), "ref": i }),
-                ),
-                is_read: Set(i % 3 == 0),
-                ..Default::default()
+            .map(|i| {
+                let kind = kinds[(i - 1) % 4].clone();
+                let (thread_slug, thread_title) = thread_refs[i % 5];
+                let actor = actor_names[i % 3];
+                let payload = match kind {
+                    NotificationKind::Reply | NotificationKind::Mention => serde_json::json!({
+                        "thread_slug":   thread_slug,
+                        "thread_title":  thread_title,
+                        "actor_username": actor,
+                    }),
+                    NotificationKind::Reaction => serde_json::json!({
+                        "thread_slug":   thread_slug,
+                        "thread_title":  thread_title,
+                        "actor_username": actor,
+                        "reaction":      reaction_names[i % 4],
+                    }),
+                    // System notifications are used for "user followed you" events.
+                    _ => serde_json::json!({ "actor_username": actor }),
+                };
+                notifications::ActiveModel {
+                    user_id: Set(all_user_ids[(i * 3) % nu]),
+                    kind: Set(kind),
+                    payload: Set(payload),
+                    is_read: Set(i % 3 == 0),
+                    ..Default::default()
+                }
             })
             .collect();
 

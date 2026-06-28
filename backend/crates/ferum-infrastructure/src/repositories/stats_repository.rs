@@ -114,16 +114,21 @@ impl StatsRepository for PgStatsRepository {
         // Compute new_views_today live — same formula as flush_daily_stats — so the
         // dashboard reflects views within the 60s buffer flush cycle rather than
         // waiting for the hourly daily_stats snapshot.
-        let view_total_live = Query::select()
-            .expr(Func::coalesce([
-                Func::sum(Expr::col(threads::Column::ViewCount)).into(),
-                Expr::val(0i64).into(),
-            ]))
-            .from(threads::Entity)
-            .and_where(
-                Expr::col(threads::Column::Status).ne(Expr::cust("'deleted'::thread_status")),
-            )
-            .to_owned();
+        //
+        // Fallback: when no yesterday snapshot exists (fresh install or seed data),
+        // COALESCE to view_total so the delta is 0 instead of the full cumulative sum.
+        let view_total_live = || {
+            Query::select()
+                .expr(Func::coalesce([
+                    Func::sum(Expr::col(threads::Column::ViewCount)).into(),
+                    Expr::val(0i64).into(),
+                ]))
+                .from(threads::Entity)
+                .and_where(
+                    Expr::col(threads::Column::Status).ne(Expr::cust("'deleted'::thread_status")),
+                )
+                .to_owned()
+        };
 
         let view_yesterday_snapshot = Query::select()
             .expr(Expr::col(daily_stats::Column::Value))
@@ -139,9 +144,9 @@ impl StatsRepository for PgStatsRepository {
         let new_views_today: SimpleExpr = Func::cust(Alias::new("GREATEST"))
             .args([
                 Expr::val(0i64).into(),
-                Expr::expr(scalar(view_total_live)).sub(Func::coalesce([
+                Expr::expr(scalar(view_total_live())).sub(Func::coalesce([
                     scalar(view_yesterday_snapshot),
-                    Expr::val(0i64).into(),
+                    scalar(view_total_live()), // no snapshot → delta = 0
                 ])),
             ])
             .into();
@@ -229,6 +234,51 @@ impl StatsRepository for PgStatsRepository {
     }
 
     async fn flush_daily_stats(&self) -> Result<(), AppError> {
+        // ── Bootstrap yesterday's snapshot on first run ─────────────────────
+        // When no view_count_snapshot exists for yesterday (fresh install or the
+        // server missed a day), seed it with the current cumulative total so the
+        // next delta computation starts from a meaningful baseline instead of 0.
+        // ON CONFLICT DO NOTHING makes this idempotent across every 5-minute tick.
+        {
+            let view_now = Query::select()
+                .expr(Func::coalesce([
+                    Func::sum(Expr::col(threads::Column::ViewCount)).into(),
+                    Expr::val(0i64).into(),
+                ]))
+                .from(threads::Entity)
+                .and_where(
+                    Expr::col(threads::Column::Status)
+                        .ne(Expr::cust("'deleted'::thread_status")),
+                )
+                .to_owned();
+
+            let seed_row = Query::select()
+                .expr(Expr::cust("CURRENT_DATE - INTERVAL '1 day'"))
+                .expr(Expr::val("view_count_snapshot"))
+                .expr(scalar(view_now))
+                .to_owned();
+
+            let mut seed_ins = Query::insert();
+            seed_ins
+                .into_table(daily_stats::Entity)
+                .columns([
+                    daily_stats::Column::Date,
+                    daily_stats::Column::Metric,
+                    daily_stats::Column::Value,
+                ]);
+            seed_ins.select_from(seed_row).expect("3 columns");
+            seed_ins.on_conflict(
+                OnConflict::columns([daily_stats::Column::Date, daily_stats::Column::Metric])
+                    .target_and_where(Expr::col(daily_stats::Column::CategoryId).is_null())
+                    .do_nothing()
+                    .to_owned(),
+            );
+            let (sql, values) = seed_ins.build(PostgresQueryBuilder);
+            self.db
+                .execute(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
+                .await?;
+        }
+
         // SUM(view_count) over non-deleted threads — needed by both the snapshot
         // and the new_views delta, so built fresh on each use.
         let view_total = || {
@@ -285,10 +335,11 @@ impl StatsRepository for PgStatsRepository {
             Expr::col(reactions::Column::CreatedAt).gte(Expr::current_date()),
         ));
         let snapshot = scalar(view_total());
-        // GREATEST(0, view_total - view_yesterday); COALESCE guards against a
-        // missing snapshot row on the very first flush.
+        // GREATEST(0, view_total - view_yesterday); when no yesterday snapshot exists
+        // (fresh install), fall back to view_total so the delta is 0 rather than
+        // the full cumulative sum appearing as a single day's views.
         let view_yesterday_expr =
-            Func::coalesce([scalar(view_yesterday), Expr::val(0i64).into()]);
+            Func::coalesce([scalar(view_yesterday), scalar(view_total())]);
         let new_views: SimpleExpr = Func::cust(Alias::new("GREATEST"))
             .args([
                 Expr::val(0i64).into(),
