@@ -22,3 +22,16 @@ pub enum NotificationKind {
     Warn,
     System,
 }
+
+impl NotificationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            NotificationKind::Reply => "reply",
+            NotificationKind::Mention => "mention",
+            NotificationKind::Reaction => "reaction",
+            NotificationKind::BestAnswer => "best_answer",
+            NotificationKind::Warn => "warn",
+            NotificationKind::System => "system",
+        }
+    }
+}

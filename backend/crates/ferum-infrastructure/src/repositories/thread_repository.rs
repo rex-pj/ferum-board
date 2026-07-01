@@ -608,20 +608,19 @@ impl ThreadRepository for PgThreadRepository {
         &self,
         id: Uuid,
         reply_count_delta: i32,
-        last_post_at: DateTime<Utc>,
+        last_post_at: Option<DateTime<Utc>>,
     ) -> Result<(), AppError> {
-        threads::Entity::update_many()
-            .col_expr(
-                threads::Column::ReplyCount,
-                Expr::col(threads::Column::ReplyCount).add(reply_count_delta),
-            )
-            .col_expr(
+        let mut query = threads::Entity::update_many().col_expr(
+            threads::Column::ReplyCount,
+            Expr::col(threads::Column::ReplyCount).add(reply_count_delta),
+        );
+        if let Some(last_post_at) = last_post_at {
+            query = query.col_expr(
                 threads::Column::LastPostAt,
                 Expr::value(last_post_at.fixed_offset()),
-            )
-            .filter(threads::Column::Id.eq(id))
-            .exec(&self.db)
-            .await?;
+            );
+        }
+        query.filter(threads::Column::Id.eq(id)).exec(&self.db).await?;
         Ok(())
     }
 

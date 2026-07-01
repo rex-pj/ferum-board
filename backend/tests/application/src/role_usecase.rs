@@ -151,14 +151,51 @@ async fn assign_role_success() {
     let mut roles = MockRoleRepository::new();
     roles.expect_find_by_id().returning(move |_| Ok(Some(role.clone())));
 
+    let mut perms = MockPermissionRepository::new();
+    perms.expect_list_for_role().returning(|_| Ok(vec![]));
+
     let mut user_roles = MockUserRoleRepository::new();
     user_roles.expect_assign().returning(move |_, _, _, _, _| Ok(assignment.clone()));
 
-    let uc = build_uc(roles, MockPermissionRepository::new(), user_roles);
+    let uc = build_uc(roles, perms, user_roles);
     let result = uc.assign_role(&actor, AssignRoleCmd {
         user_id, role_id, category_id: None, expires_at: None,
     }).await;
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn assign_role_cannot_grant_permissions_actor_lacks() {
+    // Actor holds admin.users (enough to manage users) but not admin.roles — the
+    // target role carries admin.roles, which the actor does not have themselves.
+    let actor_id = Uuid::new_v4();
+    let actor = AuthUserBuilder::member()
+        .with_id(actor_id)
+        .with_perm("admin.users")
+        .build();
+    let user_id = Uuid::new_v4();
+    let role_id = Uuid::new_v4();
+    let role = make_role(role_id, "sneaky-admin");
+
+    let mut roles = MockRoleRepository::new();
+    roles.expect_find_by_id().returning(move |_| Ok(Some(role.clone())));
+
+    let mut perms = MockPermissionRepository::new();
+    perms.expect_list_for_role().returning(|_| {
+        Ok(vec![ferum_domain::models::role::Permission {
+            id: Uuid::new_v4(),
+            key: "admin.roles".to_string(),
+            description: "Manage roles".to_string(),
+            group_name: "admin".to_string(),
+            min_trust: ferum_domain::models::user::TrustLevel::New,
+        }])
+    });
+
+    let uc = build_uc(roles, perms, MockUserRoleRepository::new());
+    let result = uc.assign_role(&actor, AssignRoleCmd {
+        user_id, role_id, category_id: None, expires_at: None,
+    }).await;
+    assert!(matches!(result, Err(AppError::Forbidden(c)) if c == "cannot_grant_permissions_you_lack"));
 }
 
 // ─── revoke_role ───────────────────────────────────────────────────────────

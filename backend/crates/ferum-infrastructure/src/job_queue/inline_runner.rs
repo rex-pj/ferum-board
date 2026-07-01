@@ -7,17 +7,12 @@ use ferum_application::shared::AppError;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::webhook_repository::WebhookRepository;
 
-use crate::network_utils::assert_no_private_ip;
-
 pub struct JobExecutor {
     pub email: Arc<dyn EmailService>,
     pub app_url: String,
     pub storage: Arc<dyn StorageService>,
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub webhooks: Arc<dyn WebhookRepository>,
-    // Shared across all webhook dispatches — reuses the internal connection pool
-    // and avoids allocating a new pool on every call.
-    http_client: reqwest::Client,
 }
 
 impl JobExecutor {
@@ -28,24 +23,19 @@ impl JobExecutor {
         stored_files: Arc<dyn StoredFileRepository>,
         webhooks: Arc<dyn WebhookRepository>,
     ) -> Self {
-        let http_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .expect("failed to build HTTP client for job executor");
         Self {
             email,
             app_url,
             storage,
             stored_files,
             webhooks,
-            http_client,
         }
     }
 
     pub async fn run(&self, job: ForumJob) -> Result<(), AppError> {
         match job {
             ForumJob::SendEmailVerification { email, token, .. } => {
-                let url = format!("{}/api/auth/verify-email/{}", self.app_url, token);
+                let url = format!("{}/verify-email/{}", self.app_url, token);
                 let body = format!(
                     "<p>Welcome to Ferum Board! Click the link below to verify your email:</p>\
                      <p><a href=\"{url}\">{url}</a></p>"
@@ -80,7 +70,7 @@ impl JobExecutor {
                 event_type,
                 payload,
             } => {
-                dispatch_webhook(webhook_id, url, secret, event_type, payload, &self.webhooks, &self.http_client).await
+                dispatch_webhook(webhook_id, url, secret, event_type, payload, &self.webhooks).await
             }
         }
     }
@@ -103,7 +93,7 @@ impl JobExecutor {
     }
 }
 
-#[tracing::instrument(skip(secret, payload, webhooks, client), fields(%webhook_id, %event_type, %url))]
+#[tracing::instrument(skip(secret, payload, webhooks), fields(%webhook_id, %event_type, %url))]
 async fn dispatch_webhook(
     webhook_id: uuid::Uuid,
     url: String,
@@ -111,20 +101,43 @@ async fn dispatch_webhook(
     event_type: String,
     payload: serde_json::Value,
     webhooks: &Arc<dyn WebhookRepository>,
-    client: &reqwest::Client,
 ) -> Result<(), AppError> {
-    // Re-validate the resolved IP at dispatch time to prevent DNS re-binding attacks.
-    // The URL was validated at webhook creation (hostname string check), but an attacker
-    // can flip the DNS record to a private IP between creation and dispatch.
-    if let Err(reason) = assert_no_private_ip(&url).await {
-        tracing::warn!("webhook {} blocked at dispatch: {}", url, reason);
-        webhooks.record_failure(webhook_id).await.ok();
-        return Ok(());
-    }
+    // Resolve + validate the IP at dispatch time (an attacker can flip the DNS record
+    // to a private IP between webhook creation and dispatch), then pin the actual
+    // request to the exact address(es) just validated. Letting reqwest re-resolve the
+    // hostname itself would reopen the DNS-rebinding window this check exists to close.
+    let host = match url::Url::parse(&url).ok().and_then(|u| u.host_str().map(str::to_string)) {
+        Some(h) => h,
+        None => {
+            tracing::warn!("webhook {} blocked at dispatch: unparseable URL", url);
+            webhooks.record_failure(webhook_id).await.ok();
+            return Ok(());
+        }
+    };
+    let addrs = match crate::network_utils::resolve_and_validate(&url).await {
+        Ok(addrs) => addrs,
+        Err(reason) => {
+            tracing::warn!("webhook {} blocked at dispatch: {}", url, reason);
+            webhooks.record_failure(webhook_id).await.ok();
+            return Ok(());
+        }
+    };
+    let pinned_client = match reqwest::Client::builder()
+        .resolve_to_addrs(&host, &addrs)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("webhook {} failed to build pinned client: {}", url, e);
+            webhooks.record_failure(webhook_id).await.ok();
+            return Ok(());
+        }
+    };
 
     let body = serde_json::to_string(&payload).map_err(|e| AppError::internal(e.to_string()))?;
 
-    let mut req = client
+    let mut req = pinned_client
         .post(&url)
         .header("Content-Type", "application/json")
         .header("X-Ferum-Event", &event_type)

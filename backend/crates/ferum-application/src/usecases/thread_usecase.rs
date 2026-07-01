@@ -357,6 +357,36 @@ impl ThreadUseCase {
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
+    pub async fn list_threads_for_mod(
+        &self,
+        actor: &AuthUser,
+        filter: AdminThreadFilter,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Thread>, u64), AppError> {
+        if !actor.has_perm_any_category(ferum_domain::models::role::perm::MOD_VIEW_REPORTS)
+            && !actor.has_perm(ferum_domain::models::role::perm::ADMIN_USERS)
+        {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+        let per_page = per_page.min(self.max_threads_per_page().await);
+        let category_map = self.visible_category_map(Some(actor)).await?;
+
+        let (mut threads, total) = self
+            .threads
+            .list_admin_threads(&filter, page, per_page)
+            .await?;
+
+        Self::enrich_threads(&mut threads, &category_map);
+        let thread_ids: Vec<Uuid> = threads.iter().map(|t| t.id).collect();
+        let tag_map = self.tags.find_by_threads(&thread_ids).await.unwrap_or_default();
+        for t in threads.iter_mut() {
+            t.tags = tag_map.get(&t.id).cloned().unwrap_or_default();
+        }
+        Ok((threads, total))
+    }
+
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
     pub async fn list_threads_for_admin(
         &self,
         actor: &AuthUser,
@@ -844,11 +874,7 @@ impl ThreadUseCase {
         id: Uuid,
         target_category_id: Uuid,
     ) -> Result<Thread, AppError> {
-        let thread = self
-            .threads
-            .find_by_id(id)
-            .await?
-            .or_not_found()?;
+        let thread = self.find_live_thread(id).await?;
         PermissionChecker::can_move(actor, thread.category_id)?;
         self.categories
             .find_by_id(target_category_id)
@@ -899,6 +925,12 @@ impl ThreadUseCase {
             return Err(AppError::unprocessable(
                 "best_answer must belong to this thread",
             ));
+        }
+
+        // Idempotent no-op if this exact answer is already marked as best — avoids
+        // double-firing the event and double-rewarding trust score on a client retry.
+        if thread.is_solved && thread.best_answer_id == Some(best_answer_id) {
+            return Ok(thread);
         }
 
         let result = self

@@ -63,6 +63,10 @@ pub async fn update_config(
         "primary_color",
         "registration_open",
         "keyword_blacklist",
+        "auth_rate_limit_per_min",
+        "public_write_rate_limit_per_min",
+        "account_lockout_attempts",
+        "account_lockout_duration_minutes",
     ];
 
     let filtered: HashMap<String, String> = body

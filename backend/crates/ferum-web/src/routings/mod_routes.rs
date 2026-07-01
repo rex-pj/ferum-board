@@ -12,7 +12,8 @@ pub fn mod_api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router
     let read_routes = Router::new()
         .route("/reports", get(moderation::api::reports::list_reports))
         .route("/audit-log", get(moderation::api::audit_log::list_audit_log))
-        .route("/queue", get(moderation::api::queue::list_pending_posts));
+        .route("/queue", get(moderation::api::queue::list_pending_posts))
+        .route("/lookups/users", get(moderation::api::users::lookup_users));
 
     // State-changing mod actions — rate limited to prevent abuse of warn/ban/approve.
     let write_routes = Router::new()

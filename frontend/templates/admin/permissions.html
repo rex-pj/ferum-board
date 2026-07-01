@@ -15,40 +15,25 @@
 
 <div x-data="permissionsPanel()">
 
-  {# ── Page header ─────────────────────────────────────────────── #}
-  <div class="d-flex align-items-start justify-content-between mb-3">
-    <div>
-      <h4 class="mb-0 fw-semibold">Permissions</h4>
-      <div class="text-muted small mt-1">
-        <span x-text="filtered.length"></span> of <span x-text="totalCount"></span> permissions
-      </div>
-    </div>
-    <a href="/admin/roles" class="btn btn-sm btn-outline-secondary">
-      <i class="fa-solid fa-shield-halved me-1"></i>Manage Roles
-    </a>
-  </div>
-
   {# ── Permissions table ────────────────────────────────────────── #}
   <div class="card">
-    <div class="card-header py-2">
+    <div class="card-header p-0">
 
-      {# Row 1: search #}
-      <div class="input-group input-group-sm mb-2" style="max-width:360px">
-        <span class="input-group-text bg-transparent">
-          <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
-        </span>
-        <input type="search" class="form-control border-start-0 ps-0"
-               placeholder="Search by key or description…"
-               x-model="search"
-               autocomplete="off">
-      </div>
-
-      {# Row 2: group filter pills — scrollable on mobile #}
-      <div class="d-flex gap-2 align-items-center"
-           style="overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">
+      {# Search + group filter pills + Manage Roles action, all in one row #}
+      <div class="adm-filter-row px-3 py-2">
+        <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+          <span class="input-group-text bg-transparent">
+            <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
+          </span>
+          <input type="search" class="form-control border-start-0 ps-0"
+                 placeholder="Search by key or description…"
+                 x-model="search"
+                 autocomplete="off">
+        </div>
+        <div class="vr opacity-25 align-self-stretch"></div>
         <button
           type="button"
-          class="btn btn-sm rounded-pill flex-shrink-0 d-inline-flex align-items-center gap-1"
+          class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1"
           :class="activeGroup === 'all' ? 'btn-primary' : 'btn-outline-secondary'"
           @click="activeGroup = 'all'">
           All
@@ -59,11 +44,10 @@
                 style="font-size:.65rem;font-weight:600;padding:.2em .5em"
                 x-text="totalCount"></span>
         </button>
-        <div class="vr opacity-25 flex-shrink-0"></div>
         <template x-for="g in groups" :key="g">
           <button
             type="button"
-            class="btn btn-sm rounded-pill flex-shrink-0 d-inline-flex align-items-center gap-1"
+            class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1"
             :class="activeGroup === g ? 'btn-primary' : 'btn-outline-secondary'"
             @click="activeGroup = g">
             <span class="rounded-circle flex-shrink-0"
@@ -83,6 +67,13 @@
                   x-text="groupCount(g)"></span>
           </button>
         </template>
+
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <small class="text-muted text-nowrap"><span x-text="filtered.length"></span> of <span x-text="totalCount"></span></small>
+          <a href="/admin/roles" class="btn btn-sm btn-outline-secondary text-nowrap">
+            <i class="fa-solid fa-shield-halved me-1"></i>Manage Roles
+          </a>
+        </div>
       </div>
 
     </div>

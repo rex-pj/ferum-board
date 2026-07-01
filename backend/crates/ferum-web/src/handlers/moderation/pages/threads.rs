@@ -7,7 +7,7 @@ use crate::handlers::admin::{render_admin, site_ctx};
 use crate::handlers::pages::{PageError, require_page_auth};
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CurrentUserCtx, PaginationCtx, TagCtx, ThreadCtx};
-use ferum_domain::repositories::thread_repository::ThreadSort;
+use ferum_domain::repositories::thread_repository::{AdminThreadFilter, ThreadSort};
 
 use super::super::{require_moderator, ModPageQuery};
 
@@ -24,9 +24,16 @@ pub async fn threads(
     let status_filter = q.status.clone().unwrap_or_default();
     let search_query = q.q.clone().unwrap_or_default();
 
+    let filter = AdminThreadFilter {
+        search: if search_query.is_empty() { None } else { Some(search_query.clone()) },
+        status: if status_filter.is_empty() { None } else { Some(status_filter.clone()) },
+        sort: ThreadSort::default(),
+        ..Default::default()
+    };
+
     let (threads, total) = state
         .thread
-        .list_feed(Some(&auth_user), ThreadSort::default(), page, per_page)
+        .list_threads_for_mod(&auth_user, filter, page, per_page)
         .await?;
 
     let threads_ctx: Vec<ThreadCtx> = threads

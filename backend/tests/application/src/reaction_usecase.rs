@@ -195,6 +195,14 @@ async fn remove_like_publishes_event_without_trust_change() {
 
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    b.reactions.expect_find().return_once(|_, _, _| {
+        Ok(Some(ferum_domain::models::reaction::Reaction {
+            post_id: ids::post_a(),
+            user_id: ids::user_a(),
+            kind: ReactionKind::Like,
+            created_at: chrono::Utc::now(),
+        }))
+    });
     b.reactions.expect_remove().return_once(|_, _, _| Ok(()));
     b.events.expect_publish().return_once(|_| ());
     b.reactions.expect_counts_by_post().return_once(|_| Ok(vec![]));
@@ -211,6 +219,14 @@ async fn remove_helpful_decrements_trust_score() {
 
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    b.reactions.expect_find().return_once(|_, _, _| {
+        Ok(Some(ferum_domain::models::reaction::Reaction {
+            post_id: ids::post_a(),
+            user_id: ids::user_a(),
+            kind: ReactionKind::Helpful,
+            created_at: chrono::Utc::now(),
+        }))
+    });
     b.reactions.expect_remove().return_once(|_, _, _| Ok(()));
     b.events.expect_publish().return_once(|_| ());
     b.reactions.expect_counts_by_post().return_once(|_| Ok(vec![]));

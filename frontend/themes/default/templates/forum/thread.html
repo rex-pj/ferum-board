@@ -106,12 +106,13 @@
           <i class="fa-solid fa-trash me-1"></i>Delete
         </button>
       {% endif %}
-      {% if current_user and current_user.is_moderator %}
+      {% if current_user and (current_user.is_moderator or thread.can_pin or thread.can_lock or thread.can_move) %}
         <div class="dropdown">
           <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-label="Moderator actions">
             <i class="fa-solid fa-shield-halved"></i>
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
+            {% if thread.can_pin %}
             <li>
               <button type="button" class="dropdown-item"
                       data-action="mod-thread" data-mod-action="pin" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_pinned }}">
@@ -122,6 +123,8 @@
                 {% endif %}
               </button>
             </li>
+            {% endif %}
+            {% if thread.can_lock %}
             <li>
               <button type="button" class="dropdown-item"
                       data-action="mod-thread" data-mod-action="lock" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_locked }}">
@@ -132,7 +135,8 @@
                 {% endif %}
               </button>
             </li>
-            {% if move_categories %}
+            {% endif %}
+            {% if thread.can_move and move_categories %}
               <li><hr class="dropdown-divider"></li>
               <li>
                 <button type="button" class="dropdown-item"
@@ -141,6 +145,7 @@
                 </button>
               </li>
             {% endif %}
+            {% if current_user.is_moderator %}
             <li><hr class="dropdown-divider"></li>
             <li>
               <button type="button" class="dropdown-item text-danger"
@@ -148,6 +153,7 @@
                 <i class="fa-solid fa-trash me-2"></i>Delete thread
               </button>
             </li>
+            {% endif %}
           </ul>
         </div>
       {% endif %}

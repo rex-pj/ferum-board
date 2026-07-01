@@ -244,11 +244,11 @@
    noun:        singular noun for the item type, e.g. "user", "thread"
    extra_params: forwarded to paginate, e.g. "&q=foo&status=pending"
 #}
-{% macro card_footer_pagination(pagination, base_url, noun="item", extra_params="") %}
+{% macro card_footer_pagination(pagination, base_url, noun="item", plural="", extra_params="") %}
 {% if pagination.total > 0 %}
 <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
   <span class="text-muted small">
-    {{ pagination.total }} {{ noun }}{% if pagination.total != 1 %}s{% endif %}
+    {{ pagination.total }} {% if pagination.total == 1 %}{{ noun }}{% else %}{% if plural %}{{ plural }}{% else %}{{ noun }}s{% endif %}{% endif %}
     {% if pagination.total_pages > 1 %}— page {{ pagination.page }} of {{ pagination.total_pages }}{% endif %}
   </span>
   {{ self::paginate(pagination=pagination, base_url=base_url, extra_params=extra_params) }}
@@ -261,18 +261,22 @@
    Full numbered pagination: « 1 … 4 5 [6] 7 8 … 20 »
    Preserves any extra query params on every page link.
 
-   base_url:     e.g. "/admin/users"
+   base_url:     e.g. "/admin/users" (empty string = relative to current path)
    extra_params: e.g. "&q=test&status=pending"  (leading & required)
+   nav_class:    extra classes on the <nav> wrapper (e.g. "mt-4" on public pages)
+   list_class:   classes on the <ul> — controls size/alignment
+                 (admin default: compact, left-aligned; pass "justify-content-center flex-wrap"
+                 for the centered, regular-size style used on public pages)
 #}
-{% macro paginate(pagination, base_url, extra_params="") %}
+{% macro paginate(pagination, base_url, extra_params="", nav_class="", list_class="pagination-sm mb-0 flex-wrap gap-0") %}
 {% if pagination.total_pages > 1 %}
-<nav aria-label="Page navigation">
-  <ul class="pagination pagination-sm mb-0 flex-wrap gap-0">
+<nav aria-label="Page navigation" class="{{ nav_class }}">
+  <ul class="pagination {{ list_class }}">
 
     {# ← Prev #}
     <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
       <a class="page-link" href="{{ base_url }}?page={{ pagination.page - 1 }}{{ extra_params }}" aria-label="Previous">
-        <i class="fa-solid fa-chevron-left" style="font-size:.65rem"></i>
+        <i class="fa-solid fa-chevron-left" aria-hidden="true" style="font-size:.65rem"></i>
       </a>
     </li>
 
@@ -318,7 +322,7 @@
     {# Next → #}
     <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
       <a class="page-link" href="{{ base_url }}?page={{ pagination.page + 1 }}{{ extra_params }}" aria-label="Next">
-        <i class="fa-solid fa-chevron-right" style="font-size:.65rem"></i>
+        <i class="fa-solid fa-chevron-right" aria-hidden="true" style="font-size:.65rem"></i>
       </a>
     </li>
 

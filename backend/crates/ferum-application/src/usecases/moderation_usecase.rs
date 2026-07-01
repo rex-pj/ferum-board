@@ -180,7 +180,10 @@ impl ModerationUseCase {
     ) -> Result<(), AppError> {
         PermissionChecker::can_resolve_report(actor, None)?;
 
-        self.reports.find_by_id(report_id).await?.or_not_found()?;
+        let report = self.reports.find_by_id(report_id).await?.or_not_found()?;
+        if report.status != ferum_domain::models::report::ReportStatus::Pending {
+            return Err(AppError::unprocessable("Report has already been resolved"));
+        }
         self.reports.update_status(report_id, status.clone(), actor.id, moderator_notes).await?;
 
         let _ = self.cache.del("stats:dashboard").await;
@@ -393,6 +396,21 @@ impl ModerationUseCase {
         self.audit_log_repo
             .list(actor_id, target_type, action_contains, created_from, created_to, page, per_page.min(50))
             .await
+    }
+
+    pub async fn search_users<'a>(
+        &self,
+        actor: &AuthUser,
+        search: Option<&'a str>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<ferum_domain::models::User>, u64), AppError> {
+        if !actor.has_perm(ferum_domain::models::role::perm::MOD_WARN)
+            && !actor.has_perm(ferum_domain::models::role::perm::ADMIN_USERS)
+        {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+        self.users.list_paginated(page, per_page, search, None, None).await
     }
 }
 

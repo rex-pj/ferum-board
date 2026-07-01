@@ -7,59 +7,77 @@
 
 {% block content %}
 
-{# ── Page header ────────────────────────────────────────────────── #}
-{{ m::page_header(title="Approval Queue", total=pagination.total, count_label="pending") }}
-
-{% if posts %}
-<div class="vstack gap-3">
-  {% for post in posts %}
-  <div class="card" id="queue-item-{{ post.id }}">
-    <div class="card-header py-2 d-flex align-items-center justify-content-between gap-2">
-      <div class="small">
-        <span class="fw-semibold">{{ post.author_username | default(value="Unknown") }}</span>
-        <span class="text-muted ms-1">in</span>
-        <a href="/forum/t/{{ post.thread_slug | default(value='') }}" class="text-decoration-none ms-1" target="_blank">
-          {{ post.thread_title | default(value="Thread") | truncate(length=60) }}
-        </a>
-        <span class="text-muted ms-2">{{ post.created_at | truncate(length=10, end="") }}</span>
-      </div>
-      <div class="d-flex gap-1 flex-shrink-0">
-        <button type="button" class="btn btn-sm btn-success" data-mod-action="approve" data-post-id="{{ post.id }}" title="Approve">
-          <i class="fa-solid fa-check me-1"></i>Approve
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-danger" data-mod-action="reject" data-post-id="{{ post.id }}" title="Reject">
-          <i class="fa-solid fa-xmark me-1"></i>Reject
-        </button>
-      </div>
-    </div>
-    <div class="card-body py-2">
-      <div class="small text-muted" style="white-space:pre-wrap;word-break:break-word;max-height:8rem;overflow:hidden">
-        {{ post.content_md | truncate(length=400) }}
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-</div>
-
-{# ── Pagination ──────────────────────────────────────────────────── #}
-{% if pagination and pagination.total_pages > 1 %}
-  <div class="card mt-3">
-    {{ m::card_footer_pagination(pagination=pagination, base_url="/mod/queue") }}
-  </div>
-{% endif %}
-
-{% else %}
 <div class="card">
+  {# ── Filter ──────────────────────────────────────────────────────── #}
+  <div class="card-header p-0">
+    <form method="GET" action="/mod/queue" class="adm-filter-row px-3 py-2">
+      <select name="category_id" class="form-select form-select-sm" style="width:auto"
+              onchange="this.form.submit()">
+        <option value="">All categories</option>
+        {% for cat in categories %}
+          <option value="{{ cat.id }}"
+            {% if category_id_filter == cat.id %}selected{% endif %}>
+            {% if cat.parent_id %}— {% endif %}{{ cat.name }}
+          </option>
+        {% endfor %}
+      </select>
+      {% if category_id_filter %}
+        <a href="/mod/queue" class="btn btn-sm btn-outline-secondary" title="Clear">
+          <i class="fa-solid fa-xmark"></i>
+        </a>
+      {% endif %}
+      <span class="text-muted small ms-auto align-self-center">{{ pagination.total }} pending</span>
+    </form>
+  </div>
+
+  {# ── Post list ────────────────────────────────────────────────────── #}
+  {% if posts %}
+  <div class="list-group list-group-flush">
+    {% for post in posts %}
+    <div class="list-group-item px-3 py-3" id="queue-item-{{ post.id }}">
+      <div class="d-flex align-items-start gap-3">
+        <div class="flex-grow-1 min-w-0">
+          <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+            <span class="fw-semibold small">{{ post.author_username | default(value="Unknown") }}</span>
+            <span class="text-muted small">replied in</span>
+            <a href="/forum/t/{{ post.thread_slug | default(value='') }}" class="text-decoration-none small fw-semibold text-truncate" style="max-width:260px" target="_blank">
+              {{ post.thread_title | default(value="Thread") }}
+            </a>
+            <span class="text-muted small ms-auto text-nowrap">{{ post.created_at | truncate(length=10, end="") }}</span>
+          </div>
+          <div class="text-muted small" style="white-space:pre-wrap;word-break:break-word;max-height:6rem;overflow:hidden">{{ post.content_md | truncate(length=400) }}</div>
+        </div>
+        <div class="d-flex gap-1 flex-shrink-0">
+          <button type="button" class="btn btn-sm btn-success" data-mod-action="approve" data-post-id="{{ post.id }}" title="Approve">
+            <i class="fa-solid fa-check me-1"></i>Approve
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger" data-mod-action="reject" data-post-id="{{ post.id }}" title="Reject">
+            <i class="fa-solid fa-xmark me-1"></i>Reject
+          </button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
   <div class="text-center py-5 text-secondary">
     <i class="fa-solid fa-list-check fa-3x mb-3 d-block opacity-25"></i>
     <div class="fw-semibold mb-1">Queue is empty</div>
-    <div class="small text-muted">
-      The approval queue is enabled when a category's <code>post_policy</code> is set to require approval.<br>
-      Posts waiting for approval will appear here.
+    <div class="small">
+      {% if category_id_filter %}
+        No pending posts in the selected category.
+      {% else %}
+        No posts are waiting for approval.
+      {% endif %}
     </div>
   </div>
+  {% endif %}
+
+  {# ── Footer: count + pagination ───────────────────────────────────── #}
+  {{ m::card_footer_pagination(pagination=pagination, base_url="/mod/queue", noun="post",
+       extra_params="&category_id=" ~ category_id_filter) }}
 </div>
-{% endif %}
 
 <div id="queue-toast" class="toast align-items-center position-fixed bottom-0 end-0 m-3 d-none" role="alert">
   <div class="d-flex">
@@ -67,6 +85,7 @@
     <button type="button" class="btn-close me-2 m-auto" data-action="close-toast"></button>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}{% endblock %}

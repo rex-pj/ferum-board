@@ -81,6 +81,8 @@
       class="reaction-btn {state[kind].reacted ? 'reacted' : ''}"
       onclick={() => toggle(kind)}
       title={kind}
+      aria-pressed={state[kind].reacted}
+      aria-label="{kind}{state[kind].count > 0 ? ` (${state[kind].count})` : ''}"
     >
       <i class={ICONS[kind]} aria-hidden="true"></i>
       {#if state[kind].count > 0}
@@ -88,9 +90,7 @@
       {/if}
     </button>
   {/each}
-  {#if errorMsg}
-    <span class="reaction-error">{errorMsg}</span>
-  {/if}
+  <span class="reaction-error" role="status" aria-live="polite">{errorMsg}</span>
 </div>
 
 <style>

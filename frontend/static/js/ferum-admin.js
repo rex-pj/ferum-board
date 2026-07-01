@@ -175,7 +175,7 @@
     return {
       loading: true, webhooks: [], saving: false, webhookError: '',
       form: { url: '', secret: '', events: [] },
-      allEvents: ['post.created','post.deleted','thread.locked','thread.moved','reaction.added','thread.best_answer_marked','user.banned','user.warned'],
+      allEvents: ['post.created','post.deleted','thread.created','thread.deleted','thread.locked','thread.moved','reaction.added','reaction.removed','best_answer.marked','mention.added','user.banned','user.warned','user.followed'],
       init: function () {
         var self = this;
         var tab = document.querySelector('[data-bs-target="#tab-webhooks"]');

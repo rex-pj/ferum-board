@@ -10,6 +10,10 @@
       var btn = document.getElementById('submit-btn');
       var spinner = document.getElementById('btn-spinner');
       var errorEl = document.getElementById('login-error');
+      // Retire any server-rendered alert from a prior full-page submit (no-JS
+      // fallback) so a fresh client-side attempt doesn't stack two messages.
+      var serverErrorEl = document.getElementById('login-server-error');
+      if (serverErrorEl) serverErrorEl.classList.add('d-none');
 
       btn.disabled = true;
       spinner.classList.remove('d-none');

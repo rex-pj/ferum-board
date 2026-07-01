@@ -19,14 +19,8 @@
 {% endif %}
 
 <div class="card" x-data="{ q: '', status: '' }">
-  <div class="card-header">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <span class="fw-semibold">Installed Plugins</span>
-      <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal">
-        <i class="fa-solid fa-upload me-1"></i>Upload Plugin
-      </button>
-    </div>
-    <div class="adm-filter-row">
+  <div class="card-header p-0">
+    <div class="adm-filter-row px-3 py-2">
       <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
         <span class="input-group-text bg-transparent">
           <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
@@ -41,6 +35,9 @@
         <option value="disabled">Disabled</option>
         <option value="error">Error</option>
       </select>
+      <button type="button" class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#uploadModal">
+        <i class="fa-solid fa-upload me-1"></i>Upload Plugin
+      </button>
     </div>
   </div>
 

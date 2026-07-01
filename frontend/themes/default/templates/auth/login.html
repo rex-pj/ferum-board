@@ -31,8 +31,13 @@
           {{ m::password_field(id="password", name="password", autocomplete="current-password") }}
         </div>
 
-        {% if error %}
-        <div class="alert alert-danger" role="alert">Invalid email or password.</div>
+        {% if verified %}
+        <div class="alert alert-success" role="alert" id="login-verified-alert">Your email has been verified. You can now sign in.</div>
+        {% endif %}
+        {% if error == "verify_failed" %}
+        <div class="alert alert-danger" role="alert" id="login-server-error">That verification link is invalid or has expired.</div>
+        {% elif error %}
+        <div class="alert alert-danger" role="alert" id="login-server-error">Invalid email or password.</div>
         {% endif %}
         {{ m::feedback_alert(id="login-error") }}
 

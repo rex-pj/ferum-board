@@ -309,6 +309,18 @@ impl AdminUseCase {
         id: Uuid,
         reason: String,
     ) -> Result<(), AppError> {
+        self.ban(actor, id, reason, None).await
+    }
+
+    /// Admin ban with an optional expiry. `banned_until: None` means permanent.
+    #[tracing::instrument(skip(self, actor, reason), fields(user_id = %actor.id, target_user_id = %id))]
+    pub async fn ban(
+        &self,
+        actor: &AuthUser,
+        id: Uuid,
+        reason: String,
+        banned_until: Option<DateTime<Utc>>,
+    ) -> Result<(), AppError> {
         PermissionChecker::can_ban_permanent(actor)?;
         self.users.find_by_id(id).await?.or_not_found()?;
         self.users
@@ -316,14 +328,18 @@ impl AdminUseCase {
                 id,
                 ferum_domain::repositories::user_repository::UpdateUser {
                     is_banned: Some(true),
-                    banned_until: Some(None),
+                    banned_until: Some(banned_until),
                     ban_reason: Some(Some(reason.clone())),
                     ..Default::default()
                 },
             )
             .await?;
+        let ttl = match banned_until {
+            Some(until) => (until - Utc::now()).to_std().unwrap_or(Duration::from_secs(0)),
+            None => Duration::from_secs(365 * 24 * 3600),
+        };
         self.cache
-            .set(&format!("user:banned:{}", id), "1", Duration::from_secs(365 * 24 * 3600))
+            .set(&format!("user:banned:{}", id), "1", ttl)
             .await
             .ok();
         self.cache.del_prefix(&format!("refresh:{}:", id)).await.ok();
@@ -332,10 +348,10 @@ impl AdminUseCase {
         self.audit_log
             .append(AuditLog::user_action(
                 actor.id,
-                "user.ban_permanent",
+                if banned_until.is_some() { "user.ban_temp" } else { "user.ban_permanent" },
                 "user",
                 id,
-                Some(serde_json::json!({ "reason": reason })),
+                Some(serde_json::json!({ "reason": reason, "banned_until": banned_until })),
             ))
             .await
             .ok();

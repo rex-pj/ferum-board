@@ -1266,6 +1266,7 @@ body {
 }
 .fr-topbar-search {
   flex: 1;
+  min-width: 0; /* allow shrinking below content size on narrow viewports */
   max-width: 480px;
   margin: 0 auto;
   display: flex;
@@ -1840,6 +1841,28 @@ html, body { height: 100%; margin: 0; }
 }
 .fr-footer-link:hover { color: var(--bs-body-color); }
 .fr-footer-copy       { color: var(--bs-tertiary-color); }
+/* Footer brand — mirrors .fr-topbar-brand at a smaller scale so the mark/logo
+   never appears without the site name (unlike the old logo-only footer). */
+.fr-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  min-width: 0;
+}
+.fr-footer-brand .fr-brand-mark,
+.fr-footer-brand .fr-brand-img {
+  width: 22px;
+  height: 22px;
+  font-size: 0.75rem;
+  border-radius: 6px;
+}
+.fr-footer-brand-name {
+  font-weight: 600;
+  color: var(--bs-body-color);
+  transition: color 0.1s;
+}
+.fr-footer-brand:hover .fr-footer-brand-name { color: var(--ferum-primary); }
 /* ── Bootstrap primary overrides ─────────────────────────────── */
 .text-primary   { color: var(--ferum-primary) !important; }
 .border-primary { border-color: var(--ferum-primary) !important; }

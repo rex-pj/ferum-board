@@ -6,14 +6,8 @@
 
 {% block content %}
 <div class="card">
-  <div class="card-header">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <span class="fw-semibold">All Categories</span>
-      <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newCategoryModal">
-        <i class="fa-solid fa-plus me-1"></i>New Category
-      </button>
-    </div>
-    <form method="get" action="/admin/categories" class="adm-filter-row">
+  <div class="card-header p-0">
+    <form method="get" action="/admin/categories" class="adm-filter-row px-3 py-2">
       <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
         <span class="input-group-text bg-transparent">
           <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
@@ -29,6 +23,9 @@
           <i class="fa-solid fa-xmark"></i>
         </a>
       {% endif %}
+      <button type="button" class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#newCategoryModal">
+        <i class="fa-solid fa-plus me-1"></i>New Category
+      </button>
     </form>
   </div>
   <div class="table-responsive">

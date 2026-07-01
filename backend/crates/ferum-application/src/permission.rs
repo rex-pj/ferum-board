@@ -129,6 +129,7 @@ impl PermissionChecker {
     // ─── Thread moderation ────────────────────────────────────────────────────
 
     pub fn can_pin(user: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm_in(perm::THREAD_PIN, category_id) {
             Ok(())
         } else {
@@ -137,6 +138,7 @@ impl PermissionChecker {
     }
 
     pub fn can_lock(user: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm_in(perm::THREAD_LOCK, category_id) {
             Ok(())
         } else {
@@ -145,6 +147,7 @@ impl PermissionChecker {
     }
 
     pub fn can_move(user: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm_in(perm::THREAD_MOVE, category_id) {
             Ok(())
         } else {

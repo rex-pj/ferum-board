@@ -1,18 +1,25 @@
 <footer class="fr-footer">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 px-4 py-3">
+  <div class="d-flex flex-wrap justify-content-center justify-content-lg-between align-items-center gap-3 px-4 py-3">
     <div class="d-flex align-items-center gap-2">
-      {% if site.logo_url %}
-        <img src="{{ site.logo_url }}" alt="{{ site.name }}" height="24">
-      {% else %}
-        <span class="fw-semibold fr-brand-name small">{{ site.name }}</span>
-      {% endif %}
+      <a href="/" class="fr-footer-brand">
+        {% if site.logo_url %}
+          <img src="{{ site.logo_url }}" alt="" class="fr-brand-img" loading="lazy">
+        {% else %}
+          <span class="fr-brand-mark" aria-hidden="true">{{ site.name | truncate(length=1, end="") | upper }}</span>
+        {% endif %}
+        <span class="fr-footer-brand-name small">{{ site.name }}</span>
+      </a>
       {% if site.slogan %}
         <span class="text-muted" aria-hidden="true">·</span>
         <span class="fr-footer-copy small">{{ site.slogan }}</span>
       {% endif %}
     </div>
 
-    <nav class="d-flex flex-wrap gap-3 small" aria-label="Footer navigation">
+    {# Hidden below lg: the mobile bottom nav (Home/Categories/New/Inbox/Profile)
+       plus the header's avatar dropdown (Account/Bookmarks/Mod/Admin/Log out) and
+       the always-visible header search bar already cover every link here — showing
+       them a third time in the footer just crowds the space above the fixed bottom nav. #}
+    <nav class="d-none d-lg-flex flex-wrap gap-3 small" aria-label="Footer navigation">
       <a href="/forum"  class="fr-footer-link">Forum</a>
       <a href="/search" class="fr-footer-link">Search</a>
       {% if current_user %}

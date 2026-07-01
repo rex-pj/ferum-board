@@ -42,15 +42,21 @@
 
       {% if current_user %}
 
-        {# Notification bell #}
-        {% include "partials/notif_bell.html" %}
+        {# Notification bell — hidden below lg: the mobile bottom nav's "Inbox"
+           item and the avatar dropdown's "Notifications" entry already cover it,
+           and the topbar has no room to spare once the search bar is present. #}
+        <span class="d-none d-lg-inline-flex">
+          {% include "partials/notif_bell.html" %}
+        </span>
 
-        {# User avatar dropdown — shared partial #}
+        {# User avatar dropdown — shared partial. Always visible: it's the only
+           mobile route to Account settings, Mod/Admin panels, and Log out. #}
         {% include "partials/user_dropdown.html" %}
 
       {% else %}
-        <a href="/login" class="btn btn-outline-primary btn-sm">Log in</a>
-        <a href="/register" class="btn btn-primary btn-sm d-none d-sm-inline-flex">Register</a>
+        {# Hidden below lg — the mobile bottom nav already has Login/Register. #}
+        <a href="/login" class="btn btn-outline-primary btn-sm d-none d-lg-inline-flex">Log in</a>
+        <a href="/register" class="btn btn-primary btn-sm d-none d-lg-inline-flex">Register</a>
       {% endif %}
 
       {# Plugin slot: navbar_end — plugins inject Web Components here #}

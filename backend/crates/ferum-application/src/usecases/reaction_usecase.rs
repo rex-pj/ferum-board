@@ -126,24 +126,27 @@ impl ReactionUseCase {
 
         let post = self.find_active_post(post_id).await?;
 
+        let existed = self.reactions.find(post_id, actor.id, kind).await?.is_some();
         self.reactions.remove(post_id, actor.id, kind).await?;
 
-        self.event_bus
-            .publish(ForumEvent::ReactionRemoved {
-                post_id,
-                post_author_id: post.author_id,
-                reactor_id: actor.id,
-                kind,
-            })
-            .await;
+        if existed {
+            self.event_bus
+                .publish(ForumEvent::ReactionRemoved {
+                    post_id,
+                    post_author_id: post.author_id,
+                    reactor_id: actor.id,
+                    kind,
+                })
+                .await;
 
-        // Undo the trust_score boost when a meaningful reaction is removed.
-        if matches!(kind, ReactionKind::Helpful | ReactionKind::Insightful) {
-            let users = self.users.clone();
-            let author_id = post.author_id;
-            tokio::spawn(async move {
-                let _ = users.increment_trust_score(author_id, -2).await;
-            });
+            // Undo the trust_score boost when a meaningful reaction is removed.
+            if matches!(kind, ReactionKind::Helpful | ReactionKind::Insightful) {
+                let users = self.users.clone();
+                let author_id = post.author_id;
+                tokio::spawn(async move {
+                    let _ = users.increment_trust_score(author_id, -2).await;
+                });
+            }
         }
 
         self.reactions.counts_by_post(post_id).await

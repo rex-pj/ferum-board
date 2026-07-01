@@ -307,6 +307,15 @@ pub async fn thread_detail(
         is_solved: thread.is_solved,
         is_locked: matches!(thread.status, ThreadStatus::Locked),
         created_at: thread.created_at.to_rfc3339(),
+        can_pin: auth_user.as_ref().is_some_and(|u| {
+            u.has_perm_in(ferum_domain::models::role::perm::THREAD_PIN, thread.category_id)
+        }),
+        can_lock: auth_user.as_ref().is_some_and(|u| {
+            u.has_perm_in(ferum_domain::models::role::perm::THREAD_LOCK, thread.category_id)
+        }),
+        can_move: auth_user.as_ref().is_some_and(|u| {
+            u.has_perm_in(ferum_domain::models::role::perm::THREAD_MOVE, thread.category_id)
+        }),
         tags: thread
             .tags
             .iter()
@@ -335,14 +344,16 @@ pub async fn thread_detail(
                     edited_at: p.edited_at.map(|d| d.to_rfc3339()),
                     is_best_answer: Some(p.id) == thread.best_answer_id,
                     reactions: {
-                        let count = |kind: ReactionKind| {
-                            p.reactions.iter().find(|(k, _)| *k == kind).map(|(_, c)| *c as i64).unwrap_or(0)
+                        let for_kind = |kind: ReactionKind| {
+                            let count = p.reactions.iter().find(|(k, _)| *k == kind).map(|(_, c)| *c as i64).unwrap_or(0);
+                            let reacted = p.my_reactions.contains(&kind);
+                            crate::view_models::page_context::ReactionKindCtx { count, reacted }
                         };
                         ReactionSummaryCtx {
-                            like: count(ReactionKind::Like),
-                            helpful: count(ReactionKind::Helpful),
-                            insightful: count(ReactionKind::Insightful),
-                            funny: count(ReactionKind::Funny),
+                            like: for_kind(ReactionKind::Like),
+                            helpful: for_kind(ReactionKind::Helpful),
+                            insightful: for_kind(ReactionKind::Insightful),
+                            funny: for_kind(ReactionKind::Funny),
                         }
                     },
                 }

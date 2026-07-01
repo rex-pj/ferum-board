@@ -320,7 +320,7 @@ async fn update_reply_stats_increments_count() {
     let cat = make_category(&db.conn, "replies").await;
     let thread = make_thread(&db.conn, cat.id, user.id, 1).await;
 
-    repo.update_reply_stats(thread.id, 3, chrono::Utc::now())
+    repo.update_reply_stats(thread.id, 3, Some(chrono::Utc::now()))
         .await
         .expect("update_reply_stats executes");
 

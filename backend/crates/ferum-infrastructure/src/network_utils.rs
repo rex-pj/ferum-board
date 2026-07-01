@@ -1,6 +1,14 @@
 ﻿/// Resolves the hostname in `url` via DNS and rejects any address that falls
 /// in a private, loopback, link-local, or CGNAT range (DNS re-binding defence).
 pub async fn assert_no_private_ip(url: &str) -> Result<(), String> {
+    resolve_and_validate(url).await.map(|_| ())
+}
+
+/// Resolves the hostname in `url`, validates every candidate address is public,
+/// and returns the validated addresses so the caller can pin the connection to
+/// them — re-resolving DNS for the actual request would reopen the TOCTOU window
+/// this check exists to close (DNS re-binding between validation and connect).
+pub async fn resolve_and_validate(url: &str) -> Result<Vec<std::net::SocketAddr>, String> {
     let parsed = url::Url::parse(url)
         .map_err(|_| format!("unparseable URL: {}", url))?;
     let host = parsed
@@ -10,11 +18,12 @@ pub async fn assert_no_private_ip(url: &str) -> Result<(), String> {
         .port()
         .unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
 
-    let addrs = tokio::net::lookup_host(format!("{}:{}", host, port))
+    let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host(format!("{}:{}", host, port))
         .await
-        .map_err(|e| format!("DNS resolution failed for {}: {}", host, e))?;
+        .map_err(|e| format!("DNS resolution failed for {}: {}", host, e))?
+        .collect();
 
-    for socket_addr in addrs {
+    for socket_addr in &addrs {
         let ip = socket_addr.ip();
         if is_private_ip(ip) {
             return Err(format!(
@@ -23,7 +32,7 @@ pub async fn assert_no_private_ip(url: &str) -> Result<(), String> {
             ));
         }
     }
-    Ok(())
+    Ok(addrs)
 }
 
 pub fn is_private_ip(ip: std::net::IpAddr) -> bool {

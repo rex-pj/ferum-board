@@ -21,6 +21,7 @@ pub fn public_page_routes() -> Router<AppState> {
         .route("/register", get(pages::auth::register).post(pages::auth::register_post))
         .route("/forgot-password", get(pages::auth::forgot_password).post(pages::auth::forgot_password_post))
         .route("/reset-password", get(pages::auth::reset_password).post(pages::auth::reset_password_post))
+        .route("/verify-email/{token}", get(pages::auth::verify_email))
         .route("/account", get(pages::account::account))
         .route("/notifications", get(pages::account::notifications))
         .route("/bookmarks", get(pages::account::bookmarks))

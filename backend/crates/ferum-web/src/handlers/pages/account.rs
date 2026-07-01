@@ -105,7 +105,7 @@ pub async fn notifications(
         .iter()
         .map(|n| NotificationCtx {
             id: n.id.to_string(),
-            kind: format!("{:?}", n.kind).to_lowercase(),
+            kind: n.kind.as_str().to_string(),
             payload: n.payload.clone(),
             is_read: n.is_read,
             created_at: n.created_at.to_rfc3339(),

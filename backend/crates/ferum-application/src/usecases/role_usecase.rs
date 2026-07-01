@@ -163,6 +163,19 @@ impl RoleUseCase {
         PermissionChecker::can_manage_users(actor)?;
         self.roles.find_by_id(cmd.role_id).await?.or_not_found()?;
 
+        // Prevent privilege escalation: an actor can only grant a role that carries
+        // permissions they already hold themselves (in the same scope). Without this,
+        // any actor with just `admin.users` could assign a role bundling `admin.roles`,
+        // `admin.config`, etc. to themselves or others and fully escalate.
+        let role_perms = self.permissions.list_for_role(cmd.role_id).await?;
+        let actor_has_all = role_perms.iter().all(|p| match cmd.category_id {
+            Some(category_id) => actor.has_perm(&p.key) || actor.has_perm_in(&p.key, category_id),
+            None => actor.has_perm(&p.key),
+        });
+        if !actor_has_all {
+            return Err(AppError::forbidden("cannot_grant_permissions_you_lack"));
+        }
+
         self.user_roles
             .assign(cmd.user_id, cmd.role_id, cmd.category_id, actor.id, cmd.expires_at)
             .await

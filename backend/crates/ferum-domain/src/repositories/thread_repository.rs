@@ -122,11 +122,13 @@ pub trait ThreadRepository: Send + Sync {
         viewer_key: &str,
         viewer_type: &str,
     ) -> Result<bool, AppError>;
+    /// `last_post_at: None` leaves the column untouched — used when the change (e.g. a
+    /// post deletion) does not represent new latest activity on the thread.
     async fn update_reply_stats(
         &self,
         id: Uuid,
         reply_count_delta: i32,
-        last_post_at: DateTime<Utc>,
+        last_post_at: Option<DateTime<Utc>>,
     ) -> Result<(), AppError>;
     async fn set_thumbnail(&self, thread_id: Uuid, file_key: String) -> Result<(), AppError>;
     async fn remove_thumbnail(&self, thread_id: Uuid) -> Result<(), AppError>;

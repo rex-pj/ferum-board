@@ -164,16 +164,23 @@ pub struct PostCtx {
 }
 
 #[derive(Serialize, Clone)]
+pub struct ReactionKindCtx {
+    pub count: i64,
+    pub reacted: bool,
+}
+
+#[derive(Serialize, Clone)]
 pub struct ReactionSummaryCtx {
-    pub like: i64,
-    pub helpful: i64,
-    pub insightful: i64,
-    pub funny: i64,
+    pub like: ReactionKindCtx,
+    pub helpful: ReactionKindCtx,
+    pub insightful: ReactionKindCtx,
+    pub funny: ReactionKindCtx,
 }
 
 impl Default for ReactionSummaryCtx {
     fn default() -> Self {
-        Self { like: 0, helpful: 0, insightful: 0, funny: 0 }
+        let zero = ReactionKindCtx { count: 0, reacted: false };
+        Self { like: zero.clone(), helpful: zero.clone(), insightful: zero.clone(), funny: zero }
     }
 }
 
@@ -200,6 +207,9 @@ pub struct ThreadDetailCtx {
     pub tags: Vec<TagCtx>,
     pub posts: Vec<PostCtx>,
     pub pagination: PaginationCtx,
+    pub can_pin: bool,
+    pub can_lock: bool,
+    pub can_move: bool,
 }
 
 /// Serializable Role for admin templates.
@@ -402,6 +412,17 @@ pub struct PluginDetailCtx {
     pub installed_at: String,
     pub activated_at: Option<String>,
     pub logs: Vec<PluginLogCtx>,
+}
+
+/// Queue post item for mod/queue.html.
+#[derive(Serialize, Clone)]
+pub struct QueuePostCtx {
+    pub id: String,
+    pub author_username: String,
+    pub thread_slug: String,
+    pub thread_title: String,
+    pub content_md: String,
+    pub created_at: String,
 }
 
 /// Single plugin log entry.

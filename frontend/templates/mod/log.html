@@ -7,23 +7,13 @@
 
 {% block content %}
 
-{# ── Page header ────────────────────────────────────────────────── #}
-<div class="d-flex align-items-start justify-content-between mb-3">
-  <div>
-    <h4 class="mb-0 fw-semibold">Audit Log</h4>
-    {% if pagination and pagination.total > 0 %}
-      <div class="text-muted small mt-1">{{ pagination.total }} entries</div>
-    {% endif %}
-  </div>
-</div>
+{% set has_filters = actor_id_filter or target_type_filter or date_from_filter or date_to_filter %}
 
-{# ── Filter bar ──────────────────────────────────────────────────── #}
-<div class="card mb-3">
-  <div class="card-body p-0">
-    <form class="px-3 py-2" method="get" action="/mod/log">
-
-      {# Row 1: action search + submit #}
-      <div class="d-flex gap-2 mb-2">
+<div class="card">
+  {# ── Filter ──────────────────────────────────────────────────────── #}
+  <div class="card-header p-0">
+    <form method="get" action="/mod/log">
+      <div class="adm-filter-row px-3 py-2">
         <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
           <span class="input-group-text bg-transparent">
             <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
@@ -31,53 +21,68 @@
           <input type="search" class="form-control border-start-0 ps-0" id="audit-q" name="q"
                  value="{{ search_query }}" placeholder="Filter by action…" autocomplete="off">
         </div>
-        <button type="button" id="audit-ref-btn"
-                class="btn btn-sm btn-outline-secondary"
-                title="Browse available actions"
-                aria-label="Browse available actions">
-          <i class="fa-solid fa-circle-question"></i>
-        </button>
         <button class="btn btn-sm btn-outline-success" type="submit">
           <i class="fa-solid fa-magnifying-glass me-1"></i>Search
         </button>
-        {% if search_query or actor_id_filter or target_type_filter or date_from_filter or date_to_filter %}
-          <a href="/mod/log" class="btn btn-sm btn-outline-secondary" title="Clear filters">
-            <i class="fa-solid fa-xmark"></i>
+        <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                data-bs-toggle="collapse" data-bs-target="#auditAdvFilters"
+                aria-expanded="{% if has_filters %}true{% else %}false{% endif %}"
+                aria-controls="auditAdvFilters">
+          <i class="fa-solid fa-sliders" style="font-size:.75rem"></i>
+          Filters
+          {% if has_filters %}
+            <span class="rounded-circle bg-primary ms-1"
+                  style="width:.45rem;height:.45rem;flex-shrink:0;display:inline-block"></span>
+          {% endif %}
+        </button>
+        <button type="button" id="audit-ref-btn" class="btn btn-sm btn-outline-secondary"
+                title="Browse available actions" aria-label="Browse available actions">
+          <i class="fa-solid fa-circle-question"></i>
+        </button>
+        {% if search_query or has_filters %}
+          <a href="/mod/log" class="btn btn-sm btn-outline-secondary ms-auto" title="Clear all">
+            <i class="fa-solid fa-xmark me-1"></i>Clear
           </a>
         {% endif %}
       </div>
 
-      {# Row 2: actor, target type, date range #}
-      <div class="adm-filter-row">
-        <ferum-remote-select name="actor_id" endpoint="/api/admin/lookups/users"
-                             value="{{ actor_id_filter }}" label="{{ actor_label }}"
-                             placeholder="Any actor"></ferum-remote-select>
-        <select name="target_type" class="form-select form-select-sm" style="width:auto">
-          <option value="">All targets</option>
-          <option value="thread"   {% if target_type_filter == "thread" %}selected{% endif %}>Thread</option>
-          <option value="post"     {% if target_type_filter == "post" %}selected{% endif %}>Post</option>
-          <option value="user"     {% if target_type_filter == "user" %}selected{% endif %}>User</option>
-          <option value="report"   {% if target_type_filter == "report" %}selected{% endif %}>Report</option>
-          <option value="category" {% if target_type_filter == "category" %}selected{% endif %}>Category</option>
-        </select>
-        <div class="d-flex align-items-center gap-1">
-          <span class="text-muted small text-nowrap">From</span>
-          <input type="date" class="form-control form-control-sm" style="max-width:145px"
-                 name="date_from" value="{{ date_from_filter }}" aria-label="From date">
-        </div>
-        <div class="d-flex align-items-center gap-1">
-          <span class="text-muted small text-nowrap">to</span>
-          <input type="date" class="form-control form-control-sm" style="max-width:145px"
-                 name="date_to" value="{{ date_to_filter }}" aria-label="To date">
+      <div id="auditAdvFilters"
+           class="collapse {% if has_filters %}show{% endif %} border-top"
+           style="background:var(--bs-tertiary-bg)">
+        <div class="adm-filter-row px-3 py-2">
+          <ferum-remote-select name="actor_id" endpoint="/api/mod/lookups/users"
+                               value="{{ actor_id_filter }}" label="{{ actor_label }}"
+                               placeholder="Any actor"></ferum-remote-select>
+
+          <div class="vr opacity-25 align-self-stretch"></div>
+
+          <select name="target_type" class="form-select form-select-sm" style="width:auto">
+            <option value="">All targets</option>
+            <option value="thread"   {% if target_type_filter == "thread" %}selected{% endif %}>Thread</option>
+            <option value="post"     {% if target_type_filter == "post" %}selected{% endif %}>Post</option>
+            <option value="user"     {% if target_type_filter == "user" %}selected{% endif %}>User</option>
+            <option value="report"   {% if target_type_filter == "report" %}selected{% endif %}>Report</option>
+            <option value="category" {% if target_type_filter == "category" %}selected{% endif %}>Category</option>
+          </select>
+
+          <div class="vr opacity-25 align-self-stretch"></div>
+
+          <div class="d-flex align-items-center gap-1">
+            <span class="text-muted small text-nowrap">From</span>
+            <input type="date" class="form-control form-control-sm" style="max-width:145px"
+                   name="date_from" value="{{ date_from_filter }}" aria-label="From date">
+          </div>
+          <div class="d-flex align-items-center gap-1">
+            <span class="text-muted small text-nowrap">to</span>
+            <input type="date" class="form-control form-control-sm" style="max-width:145px"
+                   name="date_to" value="{{ date_to_filter }}" aria-label="To date">
+          </div>
         </div>
       </div>
-
     </form>
   </div>
-</div>
 
-{# ── Log table ───────────────────────────────────────────────────── #}
-<div class="card">
+  {# ── Table ───────────────────────────────────────────────────────── #}
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead class="table-active">
@@ -91,8 +96,6 @@
       <tbody>
         {% for entry in entries %}
         <tr>
-
-          {# ── Actor ── #}
           <td>
             {% if entry.actor_username %}
               <a href="/admin/users/{{ entry.actor_id }}"
@@ -103,8 +106,6 @@
               </code>
             {% endif %}
           </td>
-
-          {# ── Action — color-coded by severity ── #}
           <td>
             {% if "ban" in entry.action or "delete" in entry.action or "warn" in entry.action %}
               <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ entry.action }}</span>
@@ -118,16 +119,12 @@
             {% if entry.metadata %}
               {% set meta = entry.metadata %}
               {% if meta.reason %}
-                <div class="small text-muted mt-1 text-truncate" style="max-width:220px" title="{{ meta.reason }}">
-                  {{ meta.reason }}
-                </div>
+                <div class="small text-muted mt-1 text-truncate" style="max-width:220px" title="{{ meta.reason }}">{{ meta.reason }}</div>
               {% elif meta.level %}
                 <div class="small text-muted mt-1">→ {{ meta.level }}</div>
               {% endif %}
             {% endif %}
           </td>
-
-          {# ── Target ── #}
           <td>
             <div class="d-flex align-items-center gap-1 flex-wrap">
               <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle flex-shrink-0"
@@ -141,31 +138,28 @@
                 {% else %}
                   <a href="{{ entry.target_url }}" class="text-decoration-none small fw-semibold text-truncate" style="max-width:260px" title="{{ entry.target_label }}">{{ entry.target_label }}</a>
                 {% endif %}
+              {% elif entry.target_label %}
+                <span class="small text-muted font-monospace">{{ entry.target_label }}</span>
               {% elif entry.target_url %}
                 <a href="{{ entry.target_url }}" class="text-decoration-none small">
                   <code class="opacity-75" style="font-size:.7rem">{{ entry.target_id | truncate(length=8, end="…") }}</code>
                 </a>
               {% else %}
-                <code class="opacity-75 small" style="font-size:.7rem" title="{{ entry.target_id }}">
-                  {{ entry.target_id | truncate(length=8, end="…") }}
-                </code>
+                <code class="opacity-75 small" style="font-size:.7rem" title="{{ entry.target_id }}">{{ entry.target_id | truncate(length=8, end="…") }}</code>
               {% endif %}
             </div>
           </td>
-
-          {# ── Time ── #}
           <td class="text-end pe-3 text-muted small text-nowrap">
             <time data-rel datetime="{{ entry.created_at }}">
               {{ entry.created_at | date(format="%b %d, %H:%M") }}
             </time>
           </td>
-
         </tr>
         {% else %}
         <tr>
           <td colspan="4" class="text-center text-muted py-5">
-            <i class="fa-solid fa-scroll fa-2x d-block mb-2 opacity-25"></i>
-            {% if search_query or actor_id_filter or target_type_filter %}
+            <i class="fa-solid fa-scroll fa-3x d-block mb-3 opacity-25"></i>
+            {% if search_query or has_filters %}
               No entries match the current filters.
             {% else %}
               No log entries yet.
@@ -193,6 +187,8 @@
   {% endif %}
 </div>
 
+{% endblock %}
+
 {% block scripts %}
 <div id="audit-action-ref" class="d-none">
   <div class="d-flex flex-column gap-3">
@@ -216,8 +212,6 @@
         <button class="audit-chip" data-action="user.ban_permanent">user.ban_permanent</button>
         <button class="audit-chip" data-action="user.warned">user.warned</button>
         <button class="audit-chip" data-action="user.unban">user.unban</button>
-        <button class="audit-chip" data-action="user.edit">user.edit</button>
-        <button class="audit-chip" data-action="user.set_trust_level">user.set_trust_level</button>
       </div>
     </div>
     <div class="audit-group audit-group--mod">
@@ -229,24 +223,10 @@
         <button class="audit-chip" data-action="report.dismissed">report.dismissed</button>
       </div>
     </div>
-    <div class="audit-group audit-group--admin">
-      <p class="text-muted fw-bold mb-2 audit-group-label">
-        <i class="fa-solid fa-gear me-1"></i>Admin
-      </p>
-      <div class="d-flex flex-wrap gap-1">
-        <button class="audit-chip" data-action="category.create">category.create</button>
-        <button class="audit-chip" data-action="category.update">category.update</button>
-        <button class="audit-chip" data-action="category.delete">category.delete</button>
-        <button class="audit-chip" data-action="moderator.assign">moderator.assign</button>
-        <button class="audit-chip" data-action="moderator.revoke">moderator.revoke</button>
-      </div>
-    </div>
     <p class="audit-ref-hint text-muted mb-0">
       <i class="fa-solid fa-arrow-pointer me-1"></i>Click any action to filter
     </p>
   </div>
 </div>
 <script src="/static/js/ferum-audit-log.js?v={{ asset_version() }}"></script>
-{% endblock %}
-
 {% endblock %}

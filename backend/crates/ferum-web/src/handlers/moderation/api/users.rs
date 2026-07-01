@@ -1,4 +1,4 @@
-use axum::extract::{Extension, Path, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -8,8 +8,9 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
+use crate::view_models::lookup::{LookupOption, LookupQuery};
 use crate::view_models::report::{TempBanRequest, WarnUserRequest};
-use crate::view_models::HandlerResult;
+use crate::view_models::{HandlerResult, PagedResponse};
 use ferum_application::shared::AppError;
 
 pub async fn warn_user(
@@ -23,6 +24,20 @@ pub async fn warn_user(
     let actor = auth_user.require_auth()?;
     state.moderation.warn_user(actor, user_id, body.reason).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn lookup_users(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Query(q): Query<LookupQuery>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.require_auth()?;
+    let page = q.page.unwrap_or(1).max(1);
+    let per_page = q.per_page.unwrap_or(20).clamp(1, 50);
+    let search = q.q.as_deref().filter(|s| !s.is_empty());
+    let (users, total) = state.moderation.search_users(actor, search, page, per_page).await?;
+    let data: Vec<LookupOption> = users.into_iter().map(LookupOption::from).collect();
+    Ok(Json(PagedResponse::new(data, total, page, per_page)))
 }
 
 pub async fn temp_ban(

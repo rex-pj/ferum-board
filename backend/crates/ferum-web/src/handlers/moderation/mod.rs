@@ -12,6 +12,7 @@ pub struct ModPageQuery {
     pub page: Option<u64>,
     pub status: Option<String>,
     pub q: Option<String>,
+    pub category_id: Option<String>,
     pub actor_id: Option<String>,
     pub target_type: Option<String>,
     pub date_from: Option<String>,

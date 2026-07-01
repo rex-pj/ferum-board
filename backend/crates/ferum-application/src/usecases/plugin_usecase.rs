@@ -378,6 +378,18 @@ impl PluginUseCase {
                 continue;
             }
 
+            if let Err(e) = super::webhook_usecase::validate_webhook_url(&resolved_url) {
+                self.append_log(
+                    plugin.id,
+                    "warn",
+                    None,
+                    None,
+                    &format!("Webhook URL rejected ({}): {}", e, resolved_url),
+                )
+                .await;
+                continue;
+            }
+
             self.webhooks
                 .create(NewWebhook {
                     url: resolved_url,

@@ -260,6 +260,77 @@ async fn permanent_ban_success() {
     assert!(result.is_ok());
 }
 
+// ─── ban (with optional expiry) ────────────────────────────────────────────
+// Regression coverage for the bug where the admin ban endpoint silently
+// dropped `banned_until` and always banned permanently regardless of what
+// the caller requested.
+
+#[tokio::test]
+async fn ban_with_expiry_sets_banned_until_on_the_update_patch() {
+    let actor = AuthUserBuilder::admin().build();
+    let target_id = Uuid::new_v4();
+    let target_user = make_user(target_id);
+    let until = chrono::Utc::now() + chrono::Duration::days(7);
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(target_user.clone())));
+    users.expect_update().returning(move |_, patch| {
+        assert_eq!(patch.is_banned, Some(true));
+        assert_eq!(patch.banned_until, Some(Some(until)));
+        Ok(make_user(target_id))
+    });
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache.expect_del_prefix().returning(|_| Ok(()));
+    cache.expect_del().returning(|_| Ok(()));
+
+    let uc = build_uc(
+        MockCategoryRepository::new(), MockRoleRepository::new(), MockUserRoleRepository::new(),
+        users, cache,
+    );
+    let result = uc.ban(&actor, target_id, "spam".to_string(), Some(until)).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn ban_without_expiry_sets_banned_until_to_none() {
+    let actor = AuthUserBuilder::admin().build();
+    let target_id = Uuid::new_v4();
+    let target_user = make_user(target_id);
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(target_user.clone())));
+    users.expect_update().returning(move |_, patch| {
+        assert_eq!(patch.is_banned, Some(true));
+        assert_eq!(patch.banned_until, Some(None));
+        Ok(make_user(target_id))
+    });
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache.expect_del_prefix().returning(|_| Ok(()));
+    cache.expect_del().returning(|_| Ok(()));
+
+    let uc = build_uc(
+        MockCategoryRepository::new(), MockRoleRepository::new(), MockUserRoleRepository::new(),
+        users, cache,
+    );
+    let result = uc.ban(&actor, target_id, "spam".to_string(), None).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn ban_without_perm_returns_403() {
+    let actor = AuthUserBuilder::member().build();
+    let uc = build_uc(
+        MockCategoryRepository::new(), MockRoleRepository::new(), MockUserRoleRepository::new(),
+        MockUserRepository::new(), MockCacheService::new(),
+    );
+    let result = uc.ban(&actor, Uuid::new_v4(), "spam".to_string(), None).await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
 // ─── unban ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]

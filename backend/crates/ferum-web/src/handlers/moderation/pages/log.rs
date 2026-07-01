@@ -137,7 +137,10 @@ pub async fn log(
                         (None, None)
                     }
                 }
-                "report" => (None, Some("/mod/reports".to_string())),
+                "report" => {
+                    let short = &l.target_id.to_string()[..8];
+                    (Some(format!("#{}", short)), None)
+                }
                 _ => (None, None),
             };
             AuditLogCtx {

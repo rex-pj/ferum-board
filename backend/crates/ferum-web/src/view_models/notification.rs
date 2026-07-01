@@ -20,7 +20,7 @@ impl From<Notification> for NotificationResponse {
         Self {
             id: n.id,
             user_id: n.user_id,
-            kind: format!("{:?}", n.kind).to_lowercase(),
+            kind: n.kind.as_str().to_string(),
             payload: n.payload,
             is_read: n.is_read,
             read_at: n.read_at,

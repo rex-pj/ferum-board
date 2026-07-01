@@ -10,6 +10,7 @@ use crate::view_models::thread::{
     MarkSolvedRequest, MoveThreadRequest, ThreadListQuery, ThreadResponse,
 };
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
+use ferum_application::permission::PermissionChecker;
 use ferum_application::shared::AppError;
 use ferum_application::usecases::thread_usecase::CreateThreadCmd;
 use ferum_domain::repositories::thread_repository::ThreadSort;
@@ -195,6 +196,9 @@ pub async fn create_thread(
     if content_md.is_empty() {
         return Err(AppError::UnprocessableEntity("Content is required".to_string()).into());
     }
+    if thumbnail.is_some() {
+        PermissionChecker::can_upload(actor)?;
+    }
 
     let mut thread = state
         .thread
@@ -244,7 +248,8 @@ pub async fn create_thread(
 // ─── Update ────────────────────────────────────────────────────────────────────
 
 /// PATCH /api/threads/:id — accepts multipart/form-data.
-/// Fields: title (text, optional), thumbnail (file, optional). At least one required.
+/// Fields: title (text, optional), content_md (text, optional), tags (text, optional,
+/// comma-separated), thumbnail (file, optional). At least one field is required.
 pub async fn update_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
@@ -254,6 +259,8 @@ pub async fn update_thread(
     let actor = auth_user.require_auth()?;
 
     let mut title: Option<String> = None;
+    let mut content_md: Option<String> = None;
+    let mut tag_names: Option<Vec<String>> = None;
     let mut thumbnail: Option<(bytes::Bytes, String)> = None;
 
     while let Some(field) = multipart
@@ -268,6 +275,27 @@ pub async fn update_thread(
                         .text()
                         .await
                         .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?,
+                );
+            }
+            Some("content_md") => {
+                content_md = Some(
+                    field
+                        .text()
+                        .await
+                        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?,
+                );
+            }
+            Some("tags") => {
+                let raw = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+                tag_names = Some(
+                    raw.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .take(5)
+                        .collect(),
                 );
             }
             Some("thumbnail") => {
@@ -286,9 +314,9 @@ pub async fn update_thread(
         }
     }
 
-    if title.is_none() && thumbnail.is_none() {
+    if title.is_none() && content_md.is_none() && tag_names.is_none() && thumbnail.is_none() {
         return Err(AppError::UnprocessableEntity(
-            "At least one of title or thumbnail must be provided".to_string(),
+            "At least one of title, content_md, tags, or thumbnail must be provided".to_string(),
         )
         .into());
     }
@@ -301,11 +329,26 @@ pub async fn update_thread(
             .into());
         }
     }
+    if thumbnail.is_some() {
+        PermissionChecker::can_upload(actor)?;
+    }
 
     let mut thread = match title {
         Some(t) => state.thread.update_title(actor, id, t).await?,
         None => state.thread.get_by_id(id).await?,
     };
+
+    if let Some(content_md) = content_md {
+        let (first_post, _) = state.post.list_by_thread(Some(actor), id, 1, 1).await?;
+        if let Some(post) = first_post.into_iter().next() {
+            state.post.edit(actor, post.id, content_md).await?;
+        }
+    }
+
+    if let Some(tag_names) = tag_names {
+        state.thread.update_tags(actor, id, tag_names).await?;
+        thread = state.thread.get_by_id(id).await?;
+    }
 
     if let Some((data, content_type)) = thumbnail {
         let url = state

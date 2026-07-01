@@ -23,7 +23,7 @@ mockall::mock! {
         async fn update(&self, id: Uuid, patch: UpdateThread) -> Result<Thread, AppError>;
         async fn add_view_count(&self, id: Uuid, delta: i32) -> Result<(), AppError>;
         async fn try_record_view(&self, thread_id: Uuid, viewer_key: &str, viewer_type: &str) -> Result<bool, AppError>;
-        async fn update_reply_stats(&self, id: Uuid, reply_count_delta: i32, last_post_at: DateTime<Utc>) -> Result<(), AppError>;
+        async fn update_reply_stats(&self, id: Uuid, reply_count_delta: i32, last_post_at: Option<DateTime<Utc>>) -> Result<(), AppError>;
         async fn set_thumbnail(&self, thread_id: Uuid, file_key: String) -> Result<(), AppError>;
         async fn remove_thumbnail(&self, thread_id: Uuid) -> Result<(), AppError>;
         async fn find_thumbnail_key(&self, thread_id: Uuid) -> Result<Option<String>, AppError>;

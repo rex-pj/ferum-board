@@ -234,7 +234,7 @@ impl PostUseCase {
         }
 
         self.threads
-            .update_reply_stats(cmd.thread_id, 1, chrono::Utc::now())
+            .update_reply_stats(cmd.thread_id, 1, Some(chrono::Utc::now()))
             .await
             .ok();
         self.users.increment_post_count(actor.id, 1).await.ok();
@@ -347,9 +347,12 @@ impl PostUseCase {
 
         // Pending posts were never counted in reply_count (create() returns early
         // before calling update_reply_stats when needs_approval is true).
+        // last_post_at is intentionally left untouched — deleting a post (which may
+        // not have been the thread's most recent) must not bump the thread to the
+        // top of "latest activity" sorts.
         if !post.status.is_pending() {
             self.threads
-                .update_reply_stats(post.thread_id, -1, chrono::Utc::now())
+                .update_reply_stats(post.thread_id, -1, None)
                 .await
                 .ok();
             self.users.increment_post_count(post.author_id, -1).await.ok();
@@ -413,7 +416,7 @@ impl PostUseCase {
         }
         self.posts.set_status(id, PostStatus::Published).await?;
         self.threads
-            .update_reply_stats(post.thread_id, 1, chrono::Utc::now())
+            .update_reply_stats(post.thread_id, 1, Some(chrono::Utc::now()))
             .await
             .ok();
         self.users.increment_post_count(post.author_id, 1).await.ok();

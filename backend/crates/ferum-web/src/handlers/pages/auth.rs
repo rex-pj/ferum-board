@@ -14,6 +14,7 @@ use super::{active_theme, render_with_theme, PageError};
 #[derive(Deserialize, Default)]
 pub struct LoginPageQuery {
     pub error: Option<String>,
+    pub verified: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -42,6 +43,7 @@ pub async fn login(
     ctx.insert("current_user", &Option::<CurrentUserCtx>::None);
     ctx.insert("active_theme", &active);
     ctx.insert("error", &q.error);
+    ctx.insert("verified", &q.verified.is_some());
 
     render_with_theme(&state, &active, "auth/login.html", &ctx)
         .await
@@ -112,6 +114,19 @@ pub async fn reset_password(
     render_with_theme(&state, &active, "auth/reset_password.html", &ctx)
         .await
         .map(IntoResponse::into_response)
+}
+
+/// GET /verify-email/{token} — consumes the emailed link and redirects to
+/// /login with a success or error flag (the API endpoint of the same name
+/// returns bare JSON and is not meant to be opened directly in a browser).
+pub async fn verify_email(
+    State(state): State<AppState>,
+    axum::extract::Path(token): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    match state.auth.verify_email(&token).await {
+        Ok(_) => Redirect::to("/login?verified=1"),
+        Err(_) => Redirect::to("/login?error=verify_failed"),
+    }
 }
 
 // ─── Form POST fallbacks (for password managers / no-JS) ─────────────────────

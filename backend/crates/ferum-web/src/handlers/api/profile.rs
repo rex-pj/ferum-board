@@ -68,6 +68,8 @@ pub struct UpdatePreferencesRequest {
     pub font_size: Option<String>,
     pub layout: Option<String>,
     pub email_notifications: Option<serde_json::Value>,
+    pub watched_categories: Option<Vec<uuid::Uuid>>,
+    pub muted_categories: Option<Vec<uuid::Uuid>>,
 }
 
 pub async fn update_profile(
@@ -152,9 +154,8 @@ pub async fn update_preferences(
         email_notifications: body
             .email_notifications
             .unwrap_or(existing.email_notifications),
-        // Preserve watched/muted lists — not exposed in this request.
-        muted_categories: existing.muted_categories,
-        watched_categories: existing.watched_categories,
+        muted_categories: body.muted_categories.unwrap_or(existing.muted_categories),
+        watched_categories: body.watched_categories.unwrap_or(existing.watched_categories),
     };
 
     state.user.update_preferences(actor, prefs).await?;

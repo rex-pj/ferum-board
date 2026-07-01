@@ -94,8 +94,10 @@ impl WebhookUseCase {
 }
 
 /// Validate a webhook URL: must be http/https and must not target private or
-/// loopback addresses (SSRF prevention).
-fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppError> {
+/// loopback addresses (SSRF prevention). Also used by plugin-manifest-declared
+/// webhooks — any code path that inserts a row into the webhooks table must
+/// call this first.
+pub(crate) fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppError> {
     use crate::shared::AppError;
 
     if url.is_empty() {

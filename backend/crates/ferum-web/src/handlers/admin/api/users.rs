@@ -24,6 +24,7 @@ pub struct UserListQuery {
 #[derive(Deserialize)]
 pub struct BanUserRequest {
     pub reason: String,
+    pub banned_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Deserialize)]
@@ -108,7 +109,7 @@ pub async fn ban_user(
     Json(body): Json<BanUserRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    state.admin.permanent_ban(actor, id, body.reason).await?;
+    state.admin.ban(actor, id, body.reason, body.banned_until).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
