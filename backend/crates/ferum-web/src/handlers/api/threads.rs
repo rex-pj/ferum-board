@@ -323,10 +323,10 @@ pub async fn update_thread(
 pub async fn delete_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    state.thread.soft_delete(actor, id).await?;
+    state.thread.delete_by_slug(actor, &slug).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

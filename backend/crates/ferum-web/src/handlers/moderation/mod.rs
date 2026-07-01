@@ -14,6 +14,8 @@ pub struct ModPageQuery {
     pub q: Option<String>,
     pub actor_id: Option<String>,
     pub target_type: Option<String>,
+    pub date_from: Option<String>,
+    pub date_to: Option<String>,
 }
 
 /// Guard: caller must hold moderation.view_reports (globally or in any category) OR admin.users.

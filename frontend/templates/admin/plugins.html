@@ -49,24 +49,39 @@
     <table class="table table-hover mb-0">
       <thead class="table-active">
         <tr>
-          <th>Name</th>
-          <th>Slug</th>
-          <th>Version</th>
-          <th>Tier</th>
-          <th>Status</th>
-          <th></th>
+          {# IDENTITY: name + slug + version #}
+          <th>Plugin</th>
+          {# STATE: tier + status #}
+          <th style="width:18%">State</th>
+          {# ACTIONS #}
+          <th style="width:16%"></th>
         </tr>
       </thead>
       <tbody>
         {% for plugin in plugins %}
         <tr x-show="(!q || ('{{ plugin.name | lower }} {{ plugin.slug }}').includes(q.toLowerCase())) && (!status || '{{ plugin.status }}' === status)">
-          <td class="fw-semibold align-middle">{{ plugin.name }}</td>
-          <td class="text-muted small align-middle font-monospace">{{ plugin.slug }}</td>
-          <td class="text-muted small align-middle">{{ plugin.version }}</td>
+          {# IDENTITY cell: name + slug (monospace) + version #}
           <td class="align-middle">
-            <span class="badge bg-secondary">{{ plugin.tier }}</span>
+            <div class="fw-semibold">{{ plugin.name }}</div>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <span class="text-muted small font-monospace">{{ plugin.slug }}</span>
+              <span class="text-muted opacity-50">·</span>
+              <span class="text-muted small">v{{ plugin.version }}</span>
+            </div>
           </td>
+          {# STATE cell: tier badge + status badge #}
           <td class="align-middle">
+            <div class="mb-1">
+              {% if plugin.tier == "manifest" %}
+                <span class="badge bg-secondary bg-opacity-75" title="Tier 1 — declarative webhook integration; no code execution">{{ plugin.tier }}</span>
+              {% elif plugin.tier == "script" %}
+                <span class="badge bg-secondary bg-opacity-75" title="Tier 2 — server-side JS hooks run in a sandboxed engine">{{ plugin.tier }}</span>
+              {% elif plugin.tier == "service" %}
+                <span class="badge bg-secondary bg-opacity-75" title="Tier 3 — external sidecar service communicates over HTTP">{{ plugin.tier }}</span>
+              {% else %}
+                <span class="badge bg-secondary bg-opacity-75">{{ plugin.tier }}</span>
+              {% endif %}
+            </div>
             {% if plugin.status == "active" %}
               <span class="badge bg-success">Active</span>
             {% elif plugin.status == "inactive" %}
@@ -83,20 +98,21 @@
               <span class="badge bg-secondary">{{ plugin.status }}</span>
             {% endif %}
           </td>
+          {# ACTIONS #}
           <td class="align-middle">
-            <div class="d-flex gap-1">
+            <div class="d-flex gap-1 flex-wrap">
               <a href="/admin/plugins/{{ plugin.slug }}" class="btn btn-sm btn-outline-secondary" title="View details">
                 <i class="fa-solid fa-circle-info"></i>
               </a>
               {% if plugin.status == "active" %}
                 <form method="post" action="/admin/plugins/{{ plugin.slug }}/deactivate">
-                  <button class="btn btn-sm btn-outline-warning" type="submit">
+                  <button class="btn btn-sm btn-outline-warning" type="submit" title="Stop plugin execution; hooks will no longer fire">
                     <i class="fa-solid fa-pause me-1"></i>Deactivate
                   </button>
                 </form>
               {% elif plugin.status == "inactive" or plugin.status == "disabled" %}
                 <form method="post" action="/admin/plugins/{{ plugin.slug }}/activate">
-                  <button class="btn btn-sm btn-outline-success" type="submit">
+                  <button class="btn btn-sm btn-outline-success" type="submit" title="Start plugin; hooks will begin firing on events">
                     <i class="fa-solid fa-play me-1"></i>Activate
                   </button>
                 </form>

@@ -1,10 +1,11 @@
 /* ── Design tokens — light (default) ─────────────────────────── */
 :root,
 [data-bs-theme="light"] {
-  /* Primary accent */
+  /* Primary accent — dark variant derived via color-mix so any server-injected
+     --ferum-primary override automatically propagates to hover/active states. */
   --ferum-primary:       #6366f1;
-  --ferum-primary-dark:  #4f46e5;
-  --bs-primary:          #6366f1;
+  --ferum-primary-dark:  color-mix(in srgb, var(--ferum-primary) 82%, #000);
+  --bs-primary:          var(--ferum-primary);
   --bs-primary-rgb:      99, 102, 241;
 
   /* Text hierarchy */
@@ -12,8 +13,8 @@
   --bs-secondary-color:  #6b7280;
   --bs-tertiary-color:   #9ca3af;
   --bs-emphasis-color:   #030712;
-  --bs-link-color:       #4f46e5;
-  --bs-link-hover-color: #3730a3;
+  --bs-link-color:       var(--ferum-primary);
+  --bs-link-hover-color: var(--ferum-primary-dark);
 
   /* Surfaces */
   --bs-body-bg:          #ffffff;
@@ -34,8 +35,8 @@
 
   /* Navigation */
   --fr-nav-hover-bg:     rgba(0, 0, 0, 0.04);
-  --fr-nav-active-bg:    rgba(99, 102, 241, 0.10);
-  --fr-nav-active-color: #4f46e5;
+  --fr-nav-active-bg:    rgba(var(--bs-primary-rgb), 0.10);
+  --fr-nav-active-color: var(--ferum-primary);
 
   /* Layout */
   --fr-topbar-height:     56px;
@@ -43,22 +44,23 @@
   --fr-tap-target:        44px;
 
   /* Thread cards */
-  --fr-thread-title-hover: #4f46e5;
+  --fr-thread-title-hover: var(--ferum-primary);
 }
 
 /* ── Design tokens — dark ─────────────────────────────────────── */
 [data-bs-theme="dark"] {
+  /* In dark mode "dark" means lighter (more pastel) for legibility on dark bg */
   --ferum-primary:       #818cf8;
-  --ferum-primary-dark:  #a5b4fc;
-  --bs-primary:          #818cf8;
+  --ferum-primary-dark:  color-mix(in srgb, var(--ferum-primary) 80%, #fff);
+  --bs-primary:          var(--ferum-primary);
   --bs-primary-rgb:      129, 140, 248;
 
   --bs-body-color:       #e2e8f0;
   --bs-secondary-color:  #94a3b8;
   --bs-tertiary-color:   #64748b;
   --bs-emphasis-color:   #f8fafc;
-  --bs-link-color:       #818cf8;
-  --bs-link-hover-color: #a5b4fc;
+  --bs-link-color:       var(--ferum-primary);
+  --bs-link-hover-color: var(--ferum-primary-dark);
 
   --bs-body-bg:          #0f1117;
   --bs-secondary-bg:     #1a1d27;
@@ -66,8 +68,8 @@
   --bs-border-color:     #1f2330;
 
   --fr-nav-hover-bg:     rgba(255, 255, 255, 0.06);
-  --fr-nav-active-bg:    rgba(129, 140, 248, 0.15);
-  --fr-nav-active-color: #818cf8;
+  --fr-nav-active-bg:    rgba(var(--bs-primary-rgb), 0.15);
+  --fr-nav-active-color: var(--ferum-primary);
 
-  --fr-thread-title-hover: #818cf8;
+  --fr-thread-title-hover: var(--ferum-primary);
 }

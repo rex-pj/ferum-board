@@ -135,6 +135,7 @@ pub struct CategoryCtx {
     pub description: Option<String>,
     pub color: Option<String>,
     pub thread_count: u64,
+    pub view_policy: String,
     pub post_policy: String,
 }
 
@@ -374,6 +375,11 @@ pub struct AuditLogCtx {
     pub action: String,
     pub target_type: String,
     pub target_id: String,
+    /// Human-readable label for the target (e.g. username for user targets).
+    pub target_label: Option<String>,
+    /// Navigable URL for the target entity, if resolvable.
+    pub target_url: Option<String>,
+    pub metadata: Option<serde_json::Value>,
     pub created_at: String,
 }
 

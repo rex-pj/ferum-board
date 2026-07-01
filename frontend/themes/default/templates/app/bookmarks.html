@@ -29,44 +29,25 @@
 <aside class="fr-right-col">
 
   <div class="fr-panel">
-    <div class="fr-panel-section">Stats</div>
+    <div class="fr-panel-header">Account</div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span class="text-muted small">Saved threads</span>
-        <span class="fw-semibold small">{{ pagination.total | default(value=0) }}</span>
-      </div>
-      <div class="fr-panel-stat-row">
-        <span class="text-muted small">Page</span>
-        <span class="fw-semibold small">{{ pagination.page | default(value=1) }}</span>
+        <span class="text-muted">Saved threads</span>
+        <span class="fr-panel-stat-val">{{ pagination.total | default(value=0) }}</span>
       </div>
     </div>
-  </div>
-
-  <div class="fr-panel">
-    <div class="fr-panel-section">Account</div>
-    <div class="fr-panel-body">
-      <a href="/notifications" class="fr-panel-row">
-        <i class="fa-solid fa-bell fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
-        <span class="small">Notifications</span>
-      </a>
-      <a href="/account" class="fr-panel-row">
-        <i class="fa-solid fa-user fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
-        <span class="small">Profile settings</span>
-      </a>
-      <a href="/" class="fr-panel-row">
-        <i class="fa-solid fa-house fa-sm fr-icon-col opacity-50" aria-hidden="true"></i>
-        <span class="small">Back to feed</span>
-      </a>
-    </div>
-  </div>
-
-  <div class="fr-panel">
-    <div class="fr-panel-section">Tip</div>
-    <div class="px-3 py-3">
-      <p class="mb-0 text-muted small" style="line-height:1.6">
-        Open any thread and click the <i class="fa-solid fa-bookmark mx-1 text-primary"></i> icon to save or unsave it.
-      </p>
-    </div>
+    <a href="/notifications" class="fr-panel-row">
+      <i class="fa-solid fa-bell fa-fw fr-icon-col" aria-hidden="true"></i>
+      <span>Notifications</span>
+    </a>
+    <a href="/account" class="fr-panel-row">
+      <i class="fa-solid fa-sliders fa-fw fr-icon-col" aria-hidden="true"></i>
+      <span>Profile settings</span>
+    </a>
+    <a href="/" class="fr-panel-row">
+      <i class="fa-solid fa-arrow-left fa-fw fr-icon-col" aria-hidden="true"></i>
+      <span>Back to feed</span>
+    </a>
   </div>
 
 </aside>

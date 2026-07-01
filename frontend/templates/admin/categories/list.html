@@ -35,17 +35,20 @@
     <table class="table table-hover mb-0">
       <thead class="table-active">
         <tr>
-          <th>Name</th>
-          <th>Parent</th>
-          <th>View Policy</th>
-          <th>Post Policy</th>
-          <th>Threads</th>
-          <th></th>
+          {# IDENTITY: name + slug + parent hierarchy #}
+          <th>Category</th>
+          {# POLICY: view policy + post policy #}
+          <th style="width:22%">Access Policies</th>
+          {# STATS: thread count #}
+          <th style="width:8%">Threads</th>
+          {# ACTIONS #}
+          <th style="width:10%"></th>
         </tr>
       </thead>
       <tbody>
         {% for cat in categories %}
         <tr>
+          {# IDENTITY cell: color dot + indent for children + name + slug + parent name #}
           <td>
             <div class="d-flex align-items-center gap-2{% if cat.parent_id %} ps-3{% endif %}">
               {% if cat.color %}
@@ -57,31 +60,42 @@
               <div>
                 <div class="fw-semibold">{{ cat.name }}</div>
                 <div class="text-muted small">/{{ cat.slug }}</div>
+                {% if cat.parent_name %}
+                  <div class="text-muted" style="font-size:.7rem">
+                    <i class="fa-solid fa-turn-up fa-xs me-1 opacity-50" style="transform:rotate(90deg)"></i>{{ cat.parent_name }}
+                  </div>
+                {% endif %}
               </div>
             </div>
           </td>
-          <td class="align-middle text-muted small">{{ cat.parent_name | default(value="—") }}</td>
+          {# POLICY cell: view + post — color encodes restriction level (green=open → red=restricted) #}
           <td class="align-middle">
-            {% if cat.view_policy == "staff_only" %}
-              <span class="badge bg-danger">{{ cat.view_policy }}</span>
-            {% elif cat.view_policy == "members_only" %}
-              <span class="badge bg-info text-dark">{{ cat.view_policy }}</span>
-            {% else %}
-              <span class="badge bg-success">{{ cat.view_policy }}</span>
-            {% endif %}
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <i class="fa-solid fa-eye fa-xs text-muted" style="width:.8rem;text-align:center" title="Who can read this category"></i>
+              {% if cat.view_policy == "staff_only" %}
+                <span class="badge bg-danger" title="Only staff can see this category; guests receive a 404">staff only</span>
+              {% elif cat.view_policy == "members_only" %}
+                <span class="badge bg-primary" title="Requires login to view; hidden from guests">members only</span>
+              {% else %}
+                <span class="badge bg-success" title="Visible to everyone, including guests">public</span>
+              {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-pen fa-xs text-muted" style="width:.8rem;text-align:center" title="Who can create posts in this category"></i>
+              {% if cat.post_policy == "staff_only" %}
+                <span class="badge bg-danger" title="Only staff can post here">staff only</span>
+              {% elif cat.post_policy == "closed" %}
+                <span class="badge bg-secondary" title="No new posts allowed; existing content is read-only">closed</span>
+              {% elif cat.post_policy == "trusted" %}
+                <span class="badge bg-warning text-dark" title="Requires Member trust level or higher (≥30 posts, ≥15 days)">trusted</span>
+              {% else %}
+                <span class="badge bg-primary" title="Any registered member can post">members</span>
+              {% endif %}
+            </div>
           </td>
-          <td class="align-middle">
-            {% if cat.post_policy == "staff_only" %}
-              <span class="badge bg-danger">{{ cat.post_policy }}</span>
-            {% elif cat.post_policy == "closed" %}
-              <span class="badge bg-secondary">{{ cat.post_policy }}</span>
-            {% elif cat.post_policy == "trusted" %}
-              <span class="badge bg-info text-dark">{{ cat.post_policy }}</span>
-            {% else %}
-              <span class="badge bg-success">{{ cat.post_policy }}</span>
-            {% endif %}
-          </td>
+          {# STATS #}
           <td class="align-middle text-muted">{{ cat.thread_count | default(value=0) }}</td>
+          {# ACTIONS #}
           <td class="align-middle">
             <div class="d-flex gap-1">
               <a href="/admin/categories/{{ cat.id }}/moderators" class="btn btn-sm btn-outline-secondary" title="Moderators">
@@ -112,7 +126,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="text-center text-muted py-4">
+          <td colspan="4" class="text-center text-muted py-4">
             {% if search_query %}No categories match "{{ search_query }}".{% else %}No categories yet.{% endif %}
           </td>
         </tr>

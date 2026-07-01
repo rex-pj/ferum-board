@@ -29,3 +29,7 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+
+/* ── Subcategory pill link ─────────────────────────────────── */
+.fr-subcat-pill { color: var(--bs-secondary-color); }
+.fr-subcat-pill:hover { color: var(--bs-body-color); }

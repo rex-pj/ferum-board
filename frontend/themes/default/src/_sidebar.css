@@ -32,9 +32,9 @@
   overflow: hidden;
 }
 .fr-panel-header {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--bs-tertiary-color);
   padding: 0.625rem 0.875rem;
@@ -76,3 +76,63 @@
 @media (min-width: 1100px) {
   .fr-right-col { display: block; }
 }
+
+/* ── Right sidebar panels: section separator instead of card boxes ── */
+.fr-right-col .fr-panel {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--bs-border-color);
+  border-radius: 0;
+  margin-bottom: 0;
+  padding-top: 0.875rem;
+  padding-bottom: 0.875rem;
+}
+.fr-right-col .fr-panel:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+/* Stat rows: more breathing room than the 3px global default */
+.fr-right-col .fr-panel-stat-row { padding: 0.3125rem 0; }
+/* Section labels: left accent stripe as rhythm marker + brand signal */
+.fr-right-col .fr-panel-header,
+.fr-right-col .fr-panel-section {
+  border-bottom: none;
+  border-left: 2px solid var(--ferum-primary);
+  padding-left: 0.75rem;          /* 0.75rem + 2px ≈ aligned with panel body */
+  padding-bottom: 0.375rem;
+  color: var(--bs-secondary-color);
+  font-weight: 700;
+}
+/* Stat values: slightly larger than label to create label → value hierarchy */
+.fr-right-col .fr-panel-stat-val {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+/* Same treatment for fr-panel-stat numbers (thread/reply counts) */
+.fr-right-col .fr-panel-stat .fw-semibold {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+/* Nav icons in sidebar rows: primary color at 65% instead of generic gray at 50% */
+.fr-right-col .fr-icon-col {
+  color: var(--ferum-primary);
+  opacity: 0.65;
+}
+.fr-right-col a.fr-panel-row:hover .fr-icon-col {
+  opacity: 1;
+}
+/* Stat-row icons (in home community/thread stats): same treatment */
+.fr-right-col .fr-panel-stat i,
+.fr-right-col .fr-panel-stat-row > span:first-child i {
+  color: var(--ferum-primary);
+  opacity: 0.6;
+}
+/* Preserve explicit semantic colors (text-success, text-warning, text-danger, text-info) */
+.fr-right-col .fr-panel-stat i.text-success,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-success { color: var(--bs-success) !important; opacity: 1; }
+.fr-right-col .fr-panel-stat i.text-warning,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-warning { color: var(--bs-warning) !important; opacity: 1; }
+.fr-right-col .fr-panel-stat i.text-danger,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-danger  { color: var(--bs-danger)  !important; opacity: 1; }
+.fr-right-col .fr-panel-stat i.text-info,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-info    { color: var(--bs-info)    !important; opacity: 1; }

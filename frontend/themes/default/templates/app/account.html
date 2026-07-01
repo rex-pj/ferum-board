@@ -1,4 +1,5 @@
 {% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
 
 {% block title %}Account Settings — {{ site.name }}{% endblock %}
 
@@ -328,63 +329,59 @@
 <aside class="fr-right-col">
 
   {% if profile %}
+  {# Account Status — consistent fr-panel-stat-row system, no Bootstrap .small override #}
   <div class="fr-panel">
-    <div class="fr-panel-section"><i class="fa-solid fa-circle-user fa-xs me-1"></i>Your Account</div>
-    <div class="px-3 py-3 d-flex align-items-center gap-3">
-      {% if profile.avatar_url %}
-        <img src="{{ profile.avatar_url }}" alt="" class="rounded-circle flex-shrink-0"
-             style="width:40px;height:40px;object-fit:cover">
-      {% else %}
-        <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
-             style="width:40px;height:40px">
-          {{ profile.display_name | truncate(length=1, end="") | upper }}
-        </div>
-      {% endif %}
-      <div style="min-width:0">
-        <div class="fw-semibold text-truncate small">{{ profile.display_name }}</div>
-        <div class="text-muted text-truncate" style="font-size:.75rem">@{{ profile.username }}</div>
+    <div class="fr-panel-header">Account Status</div>
+    <div class="fr-panel-body">
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-shield-halved fa-xs me-1 text-info" aria-hidden="true"></i>Trust level</span>
+        {{ m::trust_badge(level=profile.trust_level) }}
       </div>
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>Posts</span>
+        <span class="fr-panel-stat-val">{{ profile.post_count }}</span>
+      </div>
+      {% if profile.trust_score %}
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-star fa-xs text-warning me-1" aria-hidden="true"></i>Trust score</span>
+        <span class="fr-panel-stat-val">{{ profile.trust_score }}<span class="fw-normal text-muted" style="font-size:.75em"> / 100</span></span>
+      </div>
+      {% endif %}
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-calendar-days fa-xs me-1" aria-hidden="true"></i>Member since</span>
+        <time class="fr-panel-stat-val" datetime="{{ profile.created_at }}">{{ profile.created_at | date(format="%b %Y") }}</time>
+      </div>
+      {% if profile.primary_role_name %}
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-id-badge fa-xs me-1" aria-hidden="true"></i>Role</span>
+        {% if profile.primary_role_color %}
+          <span class="badge" style="background:{{ profile.primary_role_color }}">{{ profile.primary_role_name }}</span>
+        {% else %}
+          <span class="badge bg-secondary">{{ profile.primary_role_name }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
-    <div class="fr-panel-stat border-top">
-      <span class="text-muted small"><i class="fa-solid fa-pen-to-square fa-xs me-1"></i>Posts</span>
-      <span class="fw-semibold small">{{ profile.post_count }}</span>
-    </div>
-    {% if profile.trust_score %}
-    <div class="fr-panel-stat">
-      <span class="text-muted small"><i class="fa-solid fa-star fa-xs text-warning me-1"></i>Trust score</span>
-      <span class="fw-semibold small">{{ profile.trust_score }} / 100</span>
-    </div>
+  </div>
+
+  {# Profile navigation — unique links not duplicated in left sidebar nav #}
+  <div class="fr-panel">
+    <div class="fr-panel-header">Profile</div>
+    <a href="/u/{{ profile.username }}" class="fr-panel-row">
+      <i class="fa-solid fa-user fa-sm fr-icon-col" aria-hidden="true"></i>
+      <span>View public profile</span>
+    </a>
+    {% if current_user %}
+    <a href="/notifications" class="fr-panel-row">
+      <i class="fa-solid fa-bell fa-sm fr-icon-col" aria-hidden="true"></i>
+      <span>Notifications</span>
+      {% if current_user.unread_count > 0 %}
+        <span class="badge bg-danger rounded-pill ms-auto">{{ current_user.unread_count }}</span>
+      {% endif %}
+    </a>
     {% endif %}
-    <div class="fr-panel-stat">
-      <span class="text-muted small"><i class="fa-solid fa-shield-halved fa-xs me-1 text-info"></i>Trust level</span>
-      <span class="badge bg-secondary-subtle text-secondary-emphasis" style="font-size:.7rem">{{ profile.trust_level }}</span>
-    </div>
   </div>
   {% endif %}
-
-  <div class="fr-panel">
-    <div class="fr-panel-section">Quick Links</div>
-    <div class="fr-panel-body">
-      <a href="/notifications" class="fr-panel-row">
-        <i class="fa-solid fa-bell fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
-        <span class="small">Notifications</span>
-      </a>
-      <a href="/bookmarks" class="fr-panel-row">
-        <i class="fa-solid fa-bookmark fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
-        <span class="small">Bookmarks</span>
-      </a>
-      {% if profile %}
-      <a href="/u/{{ profile.username }}" class="fr-panel-row">
-        <i class="fa-regular fa-user fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
-        <span class="small">Public Profile</span>
-      </a>
-      {% endif %}
-      <a href="/" class="fr-panel-row">
-        <i class="fa-solid fa-house fa-sm" style="width:1rem;opacity:.5;flex-shrink:0;text-align:center"></i>
-        <span class="small">Home Feed</span>
-      </a>
-    </div>
-  </div>
 
 </aside>
 {% endblock %}

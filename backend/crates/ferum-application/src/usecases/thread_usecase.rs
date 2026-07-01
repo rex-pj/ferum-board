@@ -522,6 +522,22 @@ impl ThreadUseCase {
             ));
         }
 
+        // Pre-validate tag permissions before creating the thread to avoid partial creation:
+        // if a requested tag doesn't exist yet and actor lacks tag.create, fail early
+        // rather than leaving an orphaned thread row with no posts.
+        if !cmd.tag_names.is_empty() && !actor.has_perm(perm::TAG_CREATE) {
+            for raw in cmd.tag_names.iter().take(MAX_TAGS_PER_THREAD) {
+                let name = raw.trim().to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                let tag_slug = slug::slugify(&name);
+                if self.tags.find_by_slug(&tag_slug).await?.is_none() {
+                    return Err(AppError::forbidden("tag_create_permission_required"));
+                }
+            }
+        }
+
         // Before-hook: allow plugins to inspect or block thread creation
         let hook_ctx = HookContext {
             hook_name: "before_thread_create".to_string(),
@@ -611,6 +627,8 @@ impl ThreadUseCase {
         id: Uuid,
         title: String,
     ) -> Result<Thread, AppError> {
+        PermissionChecker::require_not_banned(actor)?;
+
         let thread = self.find_live_thread(id).await?;
 
         if thread.status == ThreadStatus::Locked
@@ -619,16 +637,18 @@ impl ThreadUseCase {
             return Err(AppError::forbidden("thread_locked"));
         }
 
-        let is_author_within_window = thread.author_id == actor.id
+        let is_author = thread.author_id == actor.id;
+        let is_author_within_window = is_author
             && Utc::now() - thread.created_at <= chrono::Duration::hours(self.post_edit_window_hours().await);
+        let has_mod_perm = actor.has_perm_in(perm::THREAD_EDIT_ANY, thread.category_id);
 
-        if !is_author_within_window
-            && !actor.has_perm_in(perm::THREAD_EDIT_ANY, thread.category_id)
-        {
-            return Err(AppError::forbidden("edit_window_expired"));
+        if !is_author_within_window && !has_mod_perm {
+            return Err(if is_author {
+                AppError::forbidden("edit_window_expired")
+            } else {
+                AppError::forbidden("not_author")
+            });
         }
-
-        PermissionChecker::require_not_banned(actor)?;
 
         if !validate_thread_title(&title) {
             return Err(AppError::unprocessable(
@@ -725,6 +745,40 @@ impl ThreadUseCase {
         self.event_bus
             .publish(ForumEvent::ThreadDeleted {
                 thread_id: id,
+                deleted_by_id: actor.id,
+            })
+            .await;
+
+        Ok(())
+    }
+
+    /// Slug-based delete for the HTTP DELETE handler.
+    /// Skips category visibility check — thread ownership/delete permission is sufficient.
+    /// No view count side effects unlike get_by_slug.
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, slug = %slug))]
+    pub async fn delete_by_slug(&self, actor: &AuthUser, slug: &str) -> Result<(), AppError> {
+        let thread = self.threads.find_by_slug(slug).await?.or_not_found()?;
+        if thread.status == ThreadStatus::Deleted {
+            return Err(AppError::NotFound);
+        }
+        Self::require_author_or_mod(actor, &thread)?;
+        PermissionChecker::require_not_banned(actor)?;
+
+        self.threads
+            .update(
+                thread.id,
+                UpdateThread {
+                    status: Some(ThreadStatus::Deleted),
+                    deleted_by_id: Some(actor.id),
+                    deleted_at: Some(Utc::now()),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+        self.event_bus
+            .publish(ForumEvent::ThreadDeleted {
+                thread_id: thread.id,
                 deleted_by_id: actor.id,
             })
             .await;

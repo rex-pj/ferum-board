@@ -90,7 +90,7 @@
 
   {# Right: action buttons #}
   <div class="d-flex gap-1 flex-wrap align-items-center flex-shrink-0">
-      {% if current_user and not thread.is_locked %}
+      {% if can_post %}
         <a href="#reply" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-reply me-1"></i>Reply
         </a>
@@ -99,6 +99,12 @@
         <a href="/edit-thread/{{ thread.slug }}" class="btn btn-outline-secondary btn-sm">
           <i class="fa-solid fa-pen me-1"></i>Edit
         </a>
+      {% endif %}
+      {% if current_user and current_user.username == thread.author_username and not current_user.is_moderator %}
+        <button type="button" class="btn btn-outline-danger btn-sm"
+                data-action="delete-thread" data-thread-slug="{{ thread.slug }}" data-category-slug="{{ thread.category_slug }}">
+          <i class="fa-solid fa-trash me-1"></i>Delete
+        </button>
       {% endif %}
       {% if current_user and current_user.is_moderator %}
         <div class="dropdown">
@@ -138,7 +144,7 @@
             <li><hr class="dropdown-divider"></li>
             <li>
               <button type="button" class="dropdown-item text-danger"
-                      data-action="delete-thread" data-thread-id="{{ thread.id }}" data-category-slug="{{ thread.category_slug }}">
+                      data-action="delete-thread" data-thread-slug="{{ thread.slug }}" data-category-slug="{{ thread.category_slug }}">
                 <i class="fa-solid fa-trash me-2"></i>Delete thread
               </button>
             </li>
@@ -277,7 +283,12 @@
 </div>
 
 {# ── Reply box ───────────────────────────────────────────────────────── #}
-{% if current_user and not thread.is_locked %}
+{% if thread.is_locked %}
+  <div class="alert alert-secondary mt-4 d-flex align-items-center gap-2">
+    <i class="fa-solid fa-lock fa-lg opacity-50"></i>
+    <span>This thread is locked and no longer accepts new replies.</span>
+  </div>
+{% elif can_post %}
   <div id="reply" class="mt-4">
     <div class="d-flex align-items-center gap-2 mb-3">
       {{ m::avatar(url=current_user.avatar_url, name=current_user.display_name, size=32) }}
@@ -295,10 +306,10 @@
       </button>
     </div>
   </div>
-{% elif thread.is_locked %}
-  <div class="alert alert-secondary mt-4 d-flex align-items-center gap-2">
-    <i class="fa-solid fa-lock fa-lg opacity-50"></i>
-    <span>This thread is locked and no longer accepts new replies.</span>
+{% elif current_user %}
+  <div class="alert alert-warning mt-4 d-flex align-items-center gap-2">
+    <i class="fa-solid fa-triangle-exclamation fa-lg opacity-50"></i>
+    <span>Your account does not yet have permission to reply in this category. Verify your email or gain more activity to unlock posting.</span>
   </div>
 {% else %}
   <div class="alert alert-info mt-4 d-flex align-items-center gap-2">
@@ -308,7 +319,7 @@
 {% endif %}
 
 {# ── Floating reply button (mobile, locked threads excluded) ─────────── #}
-{% if current_user and not thread.is_locked %}
+{% if can_post %}
   <a href="#reply" class="fr-fab d-lg-none" aria-label="Reply">
     <i class="fa-solid fa-reply"></i>
   </a>
@@ -427,16 +438,6 @@
           </time>
         </div>
 
-        {# Category #}
-        <div class="d-flex align-items-center gap-2">
-          <i class="fa-solid fa-folder fa-xs text-muted fr-icon-col" aria-hidden="true"></i>
-          <span class="text-muted small">Category</span>
-          <a href="/forum/{{ thread.category_slug }}"
-             class="small ms-auto text-decoration-none fw-medium text-body text-truncate">
-            {{ thread.category_name }}
-          </a>
-        </div>
-
         {# Tags #}
         {% if thread.tags %}
           <div class="d-flex align-items-start gap-2">
@@ -464,13 +465,15 @@
       </div>
     </div>
 
-    <div class="fr-panel-stat">
-      <span><i class="fa-regular fa-eye me-1" aria-hidden="true"></i>Views</span>
-      <span class="fw-semibold">{{ thread.view_count }}</span>
-    </div>
-    <div class="fr-panel-stat">
-      <span><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>Replies</span>
-      <span class="fw-semibold">{{ thread.reply_count }}</span>
+    <div class="fr-panel-body border-top">
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-regular fa-eye fa-xs me-1" aria-hidden="true"></i>Views</span>
+        <span class="fr-panel-stat-val">{{ thread.view_count }}</span>
+      </div>
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Replies</span>
+        <span class="fr-panel-stat-val">{{ thread.reply_count }}</span>
+      </div>
     </div>
   </div>
 
@@ -479,7 +482,7 @@
     <div class="fr-panel">
       <div class="fr-panel-header">Actions</div>
       <div class="fr-panel-body d-grid gap-2">
-        {% if not thread.is_locked %}
+        {% if can_post %}
           <a href="#reply" class="btn btn-primary btn-sm">
             <i class="fa-solid fa-reply me-1"></i>Reply to thread
           </a>

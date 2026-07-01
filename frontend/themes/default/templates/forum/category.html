@@ -116,37 +116,47 @@
 {% endblock %}
 
 {% block right_sidebar_wrap %}
-<aside class="fr-right-col">
+{# Gradient wash gives the sidebar a colour identity without a heavy card border #}
+<aside class="fr-right-col"{% if category.color %} style="background:linear-gradient(to bottom,color-mix(in srgb,{{ category.color }} 10%,transparent) 0px,transparent 96px)"{% endif %}>
 
-  {# About panel — description + stats (no redundant name/dot, already in heading) #}
+  {# Category identity panel — header doubles as the category name + colour accent #}
   <div class="fr-panel">
-    {% if category.color %}
-      <div style="height: 3px; background: {{ category.color }}; border-radius: 8px 8px 0 0;"></div>
-    {% endif %}
-    <div class="fr-panel-header">About</div>
-    <div class="fr-panel-body">
-      {% if category.description %}
-        <p class="small mb-3" style="line-height: 1.6; color: var(--bs-secondary-color)">{{ category.description }}</p>
+    <div class="fr-panel-header d-flex align-items-center gap-2"{% if category.color %} style="border-left-color:{{ category.color }};color:var(--bs-body-color)"{% endif %}>
+      {% if category.color %}
+        <span class="flex-shrink-0" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{{ category.color }}"></span>
       {% endif %}
+      {{ category.name }}
+    </div>
+    <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span class="text-muted"><i class="fa-regular fa-message fa-xs me-1" aria-hidden="true"></i>Threads</span>
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Threads</span>
         <span class="fr-panel-stat-val">{{ category.thread_count }}</span>
       </div>
       <div class="fr-panel-stat-row">
-        <span class="text-muted"><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>Posting</span>
-        <span class="fr-panel-stat-val" style="font-size: .8125rem">
-          {% if category.post_policy == "members" %}Members
-          {% elif category.post_policy == "trusted" %}Trusted only
-          {% elif category.post_policy == "moderated" %}Moderated
-          {% elif category.post_policy == "staff_only" %}Staff only
-          {% elif category.post_policy == "closed" %}Closed
+        <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>Posting</span>
+        <span class="fr-panel-stat-val" style="font-size:.8125rem">
+          {% if category.post_policy == "members" %}<i class="fa-solid fa-circle-check fa-xs text-success me-1" aria-hidden="true"></i>Members
+          {% elif category.post_policy == "trusted" %}<i class="fa-solid fa-shield-halved fa-xs text-warning me-1" aria-hidden="true"></i>Trusted
+          {% elif category.post_policy == "staff_only" %}<i class="fa-solid fa-lock fa-xs text-danger me-1" aria-hidden="true"></i>Staff only
+          {% elif category.post_policy == "closed" %}<i class="fa-solid fa-ban fa-xs text-danger me-1" aria-hidden="true"></i>Closed
           {% else %}{{ category.post_policy }}{% endif %}
         </span>
       </div>
     </div>
   </div>
 
-  {# Subcategories #}
+  {# New Thread CTA — persistent in sidebar for logged-in users #}
+  {% if current_user %}
+  <div class="fr-panel">
+    <div class="fr-panel-body">
+      <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm w-100">
+        <i class="fa-solid fa-plus me-1"></i>New Thread
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  {# Subcategories with thread counts for navigation context #}
   {% if subcategories %}
     <div class="fr-panel">
       <div class="fr-panel-header">Subcategories</div>
@@ -159,18 +169,22 @@
               <i class="fa-solid fa-hashtag fa-xs fr-icon-col opacity-50" aria-hidden="true"></i>
             {% endif %}
             <span class="text-truncate">{{ sub.name }}</span>
+            <span class="ms-auto text-muted flex-shrink-0" style="font-size:.75rem">{{ sub.thread_count | default(value=0) }}</span>
           </a>
         {% endfor %}
       </div>
     </div>
   {% endif %}
 
-  {# Related (sibling) categories #}
+  {# Sibling categories — "In [parent]" for clarity; skip staff_only entries #}
   {% if sibling_categories %}
     <div class="fr-panel">
-      <div class="fr-panel-header">Related</div>
+      <div class="fr-panel-header">
+        {% if parent_category %}In {{ parent_category.name }}{% else %}Related{% endif %}
+      </div>
       <div class="py-1">
         {% for sib in sibling_categories %}
+          {% if sib.view_policy != "staff_only" %}
           <a href="/forum/{{ sib.slug }}" class="fr-panel-row">
             {% if sib.color %}
               {{ m::color_dot(color=sib.color, size_px=8) }}
@@ -178,7 +192,9 @@
               <i class="fa-solid fa-hashtag fa-xs fr-icon-col opacity-50" aria-hidden="true"></i>
             {% endif %}
             <span class="text-truncate">{{ sib.name }}</span>
+            <span class="ms-auto text-muted flex-shrink-0" style="font-size:.75rem">{{ sib.thread_count | default(value=0) }}</span>
           </a>
+          {% endif %}
         {% endfor %}
       </div>
     </div>

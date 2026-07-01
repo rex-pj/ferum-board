@@ -19,35 +19,14 @@
   <link rel="stylesheet" href="/themes/{{ active_theme }}/assets/theme.css">
   {% endif %}
 
-  {# Primary color override — must come AFTER bootstrap.min.css so our vars win #}
+  {# Primary color override — sets --ferum-primary only; all component hover/active
+     states derive from it automatically via color-mix() in _tokens.css. #}
   {% if site.primary_color %}
   <style>
     :root,[data-bs-theme="light"],[data-bs-theme="dark"]{
       --ferum-primary:{{ site.primary_color }};
       --bs-primary:{{ site.primary_color }};
-      {% if site.primary_color_rgb %}--bs-primary-rgb:{{ site.primary_color_rgb }};--bs-link-color-rgb:{{ site.primary_color_rgb }};{% endif %}
-      --bs-link-color:{{ site.primary_color }};
-      --bs-link-hover-color:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
-    }
-    .btn-primary{
-      --bs-btn-bg:{{ site.primary_color }};
-      --bs-btn-border-color:{{ site.primary_color }};
-      --bs-btn-hover-bg:color-mix(in srgb,{{ site.primary_color }} 85%,#000);
-      --bs-btn-hover-border-color:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
-      --bs-btn-active-bg:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
-      --bs-btn-active-border-color:color-mix(in srgb,{{ site.primary_color }} 75%,#000);
-      --bs-btn-disabled-bg:{{ site.primary_color }};
-      --bs-btn-disabled-border-color:{{ site.primary_color }};
-      {% if site.primary_color_rgb %}--bs-btn-focus-shadow-rgb:{{ site.primary_color_rgb }};{% endif %}
-    }
-    .btn-outline-primary{
-      --bs-btn-color:{{ site.primary_color }};
-      --bs-btn-border-color:{{ site.primary_color }};
-      --bs-btn-hover-bg:{{ site.primary_color }};
-      --bs-btn-hover-border-color:{{ site.primary_color }};
-      --bs-btn-active-bg:{{ site.primary_color }};
-      --bs-btn-active-border-color:{{ site.primary_color }};
-      {% if site.primary_color_rgb %}--bs-btn-focus-shadow-rgb:{{ site.primary_color_rgb }};{% endif %}
+      {% if site.primary_color_rgb %}--bs-primary-rgb:{{ site.primary_color_rgb }};{% endif %}
     }
   </style>
   {% endif %}

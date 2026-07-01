@@ -382,3 +382,17 @@
     escapeHtml:           escapeHtml,
   };
 }(window));
+
+// ── Sidebar nav active state (replaces inline script in sidebar_left.html) ──
+(function () {
+  var nav = document.getElementById('sidebar-nav');
+  if (!nav) return;
+  var path = window.location.pathname;
+  nav.querySelectorAll('a[data-nav-exact], a[data-nav-prefix]').forEach(function (a) {
+    var exact  = a.getAttribute('data-nav-exact');
+    var prefix = a.getAttribute('data-nav-prefix');
+    var href   = a.getAttribute('href');
+    var active = exact ? path === href : (prefix ? path.startsWith(prefix) : false);
+    if (active) a.classList.add('active');
+  });
+}());

@@ -1,4 +1,4 @@
-<nav aria-label="Site navigation" class="fr-sidebar-nav">
+<nav id="sidebar-nav" aria-label="Site navigation" class="fr-sidebar-nav">
   <a href="/" class="fr-nav-link" data-nav-exact="true">
     <i class="fa-solid fa-house fa-fw" aria-hidden="true"></i>
     Home
@@ -47,16 +47,3 @@
     </a>
   {% endif %}
 </nav>
-<script>
-(function() {
-  var path = window.location.pathname;
-  var nav = document.currentScript.previousElementSibling;
-  nav.querySelectorAll('a[data-nav-exact], a[data-nav-prefix]').forEach(function(a) {
-    var exact = a.getAttribute('data-nav-exact');
-    var prefix = a.getAttribute('data-nav-prefix');
-    var href = a.getAttribute('href');
-    var isActive = exact ? path === href : (prefix ? path.startsWith(prefix) : false);
-    if (isActive) a.classList.add('active');
-  });
-})();
-</script>

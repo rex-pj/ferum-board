@@ -266,6 +266,87 @@ async fn soft_delete_banned_user_returns_forbidden() {
     assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
+// ─── delete_by_slug ───────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn delete_by_slug_by_author_succeeds() {
+    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
+
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+    b.threads.expect_update().return_once(move |_, _| Ok(make_thread(ids::thread_a(), ids::category_a(), ids::user_a())));
+    b.events.expect_publish().return_once(|_| ());
+
+    let result = b.build().delete_by_slug(&actor, "test-thread").await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn delete_by_slug_by_moderator_with_cat_perm_succeeds() {
+    let cat_id = ids::category_a();
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_category_perm(cat_id, "thread.delete_any")
+        .build();
+    let thread = make_thread(ids::thread_a(), cat_id, ids::user_b()); // different author
+
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+    b.threads.expect_update().return_once(move |_, _| Ok(make_thread(ids::thread_a(), cat_id, ids::user_b())));
+    b.events.expect_publish().return_once(|_| ());
+
+    let result = b.build().delete_by_slug(&actor, "test-thread").await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn delete_by_slug_non_author_without_perm_fails() {
+    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b()); // different author
+
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+
+    let result = b.build().delete_by_slug(&actor, "test-thread").await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
+#[tokio::test]
+async fn delete_by_slug_already_deleted_returns_not_found() {
+    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let mut thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
+    thread.status = ThreadStatus::Deleted;
+
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+
+    let result = b.build().delete_by_slug(&actor, "test-thread").await;
+    assert!(matches!(result, Err(AppError::NotFound)));
+}
+
+#[tokio::test]
+async fn delete_by_slug_thread_not_found() {
+    let actor = AuthUserBuilder::admin().build();
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(|_| Ok(None));
+
+    let result = b.build().delete_by_slug(&actor, "nonexistent-thread").await;
+    assert!(matches!(result, Err(AppError::NotFound)));
+}
+
+#[tokio::test]
+async fn delete_by_slug_banned_user_returns_forbidden() {
+    let actor = AuthUserBuilder::member().with_id(ids::user_a()).banned().build();
+    let thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
+
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+
+    let result = b.build().delete_by_slug(&actor, "test-thread").await;
+    assert!(matches!(result, Err(AppError::Forbidden(_))));
+}
+
 // ─── mark_solved ──────────────────────────────────────────────────────────────
 
 #[tokio::test]

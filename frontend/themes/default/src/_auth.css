@@ -17,3 +17,51 @@
   max-width: 420px;
   margin-inline: auto;
 }
+
+/* ── Brand above the card — vertical stack: mark → name → slogan ─ */
+.fr-auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  text-decoration: none;
+  margin-bottom: 2rem;
+}
+.fr-auth-brand-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--ferum-primary);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  box-shadow: 0 4px 14px rgba(var(--bs-primary-rgb), 0.35);
+  margin-bottom: 0.25rem;
+}
+.fr-auth-brand-img {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  margin-bottom: 0.25rem;
+}
+.fr-auth-brand-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--bs-body-color);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.fr-auth-brand-slogan {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--bs-secondary-color);
+  line-height: 1.4;
+  max-width: 280px;
+}

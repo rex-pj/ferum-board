@@ -125,11 +125,85 @@ pub async fn audit_log(
         }
     }
 
+    // Batch-fetch target labels and URLs by target_type.
+    let mut target_user_names: std::collections::HashMap<uuid::Uuid, String> =
+        std::collections::HashMap::new();
+    let mut target_thread_info: std::collections::HashMap<uuid::Uuid, (String, String)> =
+        std::collections::HashMap::new(); // id → (title, slug)
+    let mut target_category_info: std::collections::HashMap<uuid::Uuid, (String, String)> =
+        std::collections::HashMap::new(); // id → (name, slug)
+
+    for log in &logs {
+        match log.target_type.as_str() {
+            "user" => {
+                if !target_user_names.contains_key(&log.target_id) {
+                    if let Ok(Some(u)) = state.user_repo.find_by_id(log.target_id).await {
+                        target_user_names.insert(log.target_id, u.username);
+                    }
+                }
+            }
+            "thread" => {
+                if !target_thread_info.contains_key(&log.target_id) {
+                    if let Ok(Some(t)) = state.thread.threads.find_by_id(log.target_id).await {
+                        target_thread_info.insert(log.target_id, (t.title, t.slug));
+                    }
+                }
+            }
+            "post" => {
+                if !target_thread_info.contains_key(&log.target_id) {
+                    if let Ok(Some(p)) = state.moderation.posts.find_by_id(log.target_id).await {
+                        if let Ok(Some(t)) = state.thread.threads.find_by_id(p.thread_id).await {
+                            target_thread_info.insert(log.target_id, (t.title, t.slug));
+                        }
+                    }
+                }
+            }
+            "category" => {
+                if !target_category_info.contains_key(&log.target_id) {
+                    if let Ok(Some(c)) = state.category.categories.find_by_id(log.target_id).await {
+                        target_category_info.insert(log.target_id, (c.name, c.slug));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     let entries: Vec<AuditLogCtx> = logs
         .into_iter()
         .map(|l| {
             let aid_str = l.actor_id.map(|id| id.to_string()).unwrap_or_default();
             let uname = l.actor_id.and_then(|id| actor_names.get(&id)).cloned();
+            let (target_label, target_url) = match l.target_type.as_str() {
+                "user" => {
+                    let label = target_user_names.get(&l.target_id).cloned();
+                    let url = Some(format!("/admin/users/{}", l.target_id));
+                    (label, url)
+                }
+                "thread" => {
+                    if let Some((title, slug)) = target_thread_info.get(&l.target_id) {
+                        (Some(title.clone()), Some(format!("/forum/t/{}", slug)))
+                    } else {
+                        (None, None)
+                    }
+                }
+                "post" => {
+                    if let Some((title, slug)) = target_thread_info.get(&l.target_id) {
+                        (Some(title.clone()), Some(format!("/forum/t/{}", slug)))
+                    } else {
+                        (None, None)
+                    }
+                }
+                "category" => {
+                    if let Some((name, slug)) = target_category_info.get(&l.target_id) {
+                        (Some(name.clone()), Some(format!("/forum/{}", slug)))
+                    } else {
+                        (None, None)
+                    }
+                }
+                "report" => (None, Some("/admin/reports".to_string())),
+                _ => (None, None),
+            };
             AuditLogCtx {
                 id: l.id.to_string(),
                 actor_id: aid_str,
@@ -137,6 +211,9 @@ pub async fn audit_log(
                 action: l.action,
                 target_type: l.target_type,
                 target_id: l.target_id.to_string(),
+                target_label,
+                target_url,
+                metadata: l.metadata,
                 created_at: l.created_at.to_rfc3339(),
             }
         })

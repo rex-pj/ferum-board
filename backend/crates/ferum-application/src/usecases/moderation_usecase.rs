@@ -181,7 +181,22 @@ impl ModerationUseCase {
         PermissionChecker::can_resolve_report(actor, None)?;
 
         self.reports.find_by_id(report_id).await?.or_not_found()?;
-        self.reports.update_status(report_id, status, actor.id, moderator_notes).await
+        self.reports.update_status(report_id, status.clone(), actor.id, moderator_notes).await?;
+
+        let _ = self.cache.del("stats:dashboard").await;
+
+        self.audit_log_repo
+            .append(ferum_domain::models::audit_log::AuditLog::user_action(
+                actor.id,
+                &format!("report.{}", format!("{:?}", status).to_lowercase()),
+                "report",
+                report_id,
+                None,
+            ))
+            .await
+            .ok();
+
+        Ok(())
     }
 
     // ─── User actions (moderator) ─────────────────────────────────────────────
@@ -298,6 +313,62 @@ impl ModerationUseCase {
         self.reports.list_all(status, target_type, q, page, per_page.min(50)).await
     }
 
+    /// Enriched version of `list_reports` — same `can_view_reports` permission so moderators
+    /// can call it. Returns reporter username and thread context alongside each report.
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
+    pub async fn list_reports_with_context(
+        &self,
+        actor: &AuthUser,
+        status: Option<ReportStatus>,
+        target_type: Option<&str>,
+        q: Option<&str>,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<ReportWithContext>, u64), AppError> {
+        PermissionChecker::can_view_reports(actor, None)?;
+        let (reports, total) =
+            self.reports.list_all(status, target_type, q, page, per_page.min(50)).await?;
+
+        let reporter_ids: Vec<Uuid> = reports
+            .iter()
+            .map(|r| r.reporter_id)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        let users = self.users.find_many_by_ids(&reporter_ids).await?;
+        let user_map: HashMap<Uuid, String> =
+            users.into_iter().map(|u| (u.id, u.username)).collect();
+
+        let mut enriched = Vec::with_capacity(reports.len());
+        for report in reports {
+            let reporter_username = user_map
+                .get(&report.reporter_id)
+                .cloned()
+                .unwrap_or_else(|| report.reporter_id.to_string());
+
+            let (thread_slug, thread_title) = if let Some(thread_id) = report.thread_id {
+                match self.threads.find_by_id(thread_id).await? {
+                    Some(t) => (Some(t.slug), Some(t.title)),
+                    None => (None, None),
+                }
+            } else if let Some(post_id) = report.post_id {
+                match self.posts.find_by_id(post_id).await? {
+                    Some(p) => match self.threads.find_by_id(p.thread_id).await? {
+                        Some(t) => (Some(t.slug), Some(t.title)),
+                        None => (None, None),
+                    },
+                    None => (None, None),
+                }
+            } else {
+                (None, None)
+            };
+
+            enriched.push(ReportWithContext { report, reporter_username, thread_slug, thread_title });
+        }
+
+        Ok((enriched, total))
+    }
+
     pub async fn mod_report_status_counts(
         &self,
         actor: &AuthUser,
@@ -313,12 +384,14 @@ impl ModerationUseCase {
         actor_id: Option<Uuid>,
         target_type: Option<&str>,
         action_contains: Option<&str>,
+        created_from: Option<chrono::DateTime<chrono::Utc>>,
+        created_to: Option<chrono::DateTime<chrono::Utc>>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<AuditLog>, u64), AppError> {
         PermissionChecker::can_view_reports(actor, None)?;
         self.audit_log_repo
-            .list(actor_id, target_type, action_contains, None, None, page, per_page.min(50))
+            .list(actor_id, target_type, action_contains, created_from, created_to, page, per_page.min(50))
             .await
     }
 }

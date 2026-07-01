@@ -67,8 +67,11 @@
     };
   };
 
+  var _editThreadSubmitting = false;
+
   document.getElementById('edit-thread-form')?.addEventListener('submit', async function (e) {
     e.preventDefault();
+    if (_editThreadSubmitting) return;
     var btn     = document.getElementById('submit-btn');
     var spinner = document.getElementById('btn-spinner');
     var errorEl = document.getElementById('form-error');
@@ -76,6 +79,7 @@
     var threadSlug = e.currentTarget.dataset.threadSlug || '';
     var id         = document.getElementById('thread-id').value;
 
+    _editThreadSubmitting = true;
     btn.disabled = true;
     spinner.classList.remove('d-none');
     errorEl.classList.add('d-none');
@@ -101,12 +105,14 @@
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
+        _editThreadSubmitting = false;
       }
     } catch (_) {
       errorEl.textContent = 'Network error. Please try again.';
       errorEl.classList.remove('d-none');
       btn.disabled = false;
       spinner.classList.add('d-none');
+      _editThreadSubmitting = false;
     }
   });
 }());

@@ -3,13 +3,6 @@
 
 {% block title %}Forum — {{ site.name }}{% endblock %}
 
-{% block head_extra %}
-<style>
-  .fr-subcat-pill { color: var(--bs-secondary-color); }
-  .fr-subcat-pill:hover { color: var(--bs-body-color); }
-</style>
-{% endblock %}
-
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="fs-5 fw-bold mb-0">All Categories</h1>
@@ -113,17 +106,33 @@
 
   {% if not current_user %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Get involved</div>
-    <div class="fr-panel-body d-grid gap-2">
-      <a href="/register" class="btn btn-primary btn-sm">
-        <i class="fa-solid fa-user-plus me-1"></i>Create account
-      </a>
-      <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+    <div class="fr-panel-header">Get Involved</div>
+    <div class="fr-panel-body">
+      <p class="small text-secondary mb-3">
+        {% if site.tagline %}{{ site.tagline }}{% else %}Join the community and start discussing.{% endif %}
+      </p>
+      <div class="d-grid gap-2">
+        <a href="/register" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-user-plus me-1"></i>Create account
+        </a>
+        <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+      </div>
     </div>
   </div>
   {% else %}
   <div class="fr-panel">
+    <div class="fr-panel-header">Community</div>
     <div class="fr-panel-body">
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Threads</span>
+        <span class="fr-panel-stat-val">{{ total_threads }}</span>
+      </div>
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>Categories</span>
+        <span class="fr-panel-stat-val">{{ total_categories }}</span>
+      </div>
+    </div>
+    <div class="fr-panel-body border-top" style="padding-top:.5rem;padding-bottom:.5rem">
       <a href="/new-thread" class="btn btn-primary btn-sm w-100">
         <i class="fa-solid fa-plus me-1"></i>New Thread
       </a>
@@ -131,36 +140,26 @@
   </div>
   {% endif %}
 
-  {# Category stats grid — more useful than duplicating the left nav #}
+  {# Recent Discussions — one latest thread per category, cross-category bird's-eye view.
+     This is distinct from: left sidebar (nav only) and main column (organized by category). #}
   {% if groups %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Categories</div>
+    <div class="fr-panel-header">Recent Discussions</div>
     {% for group in groups %}
-      <a href="/forum/{{ group.parent.slug }}" class="fr-panel-row">
-        {% if group.parent.color %}
-          <span class="rounded-circle flex-shrink-0"
-                style="width:8px;height:8px;background:{{ group.parent.color }};display:inline-block"></span>
-        {% else %}
-          <i class="fa-solid fa-hashtag fr-icon-col text-muted" style="font-size:.75rem"></i>
-        {% endif %}
-        <span class="text-truncate small fw-medium">{{ group.parent.name }}</span>
-        <span class="ms-auto text-muted flex-shrink-0 small">
-          {{ group.parent.thread_count }}
-        </span>
-      </a>
-      {% if group.children %}
-        {% for sub in group.children %}
-        <a href="/forum/{{ sub.slug }}" class="fr-panel-row" style="padding-left:1.5rem">
-          {% if sub.color %}
-            <span class="rounded-circle flex-shrink-0"
-                  style="width:6px;height:6px;background:{{ sub.color }};display:inline-block"></span>
-          {% else %}
-            <span style="width:1rem"></span>
-          {% endif %}
-          <span class="text-truncate" style="font-size:.8125rem;color:var(--bs-secondary-color)">{{ sub.name }}</span>
-          <span class="ms-auto text-muted flex-shrink-0" style="font-size:.75rem">{{ sub.thread_count }}</span>
+      {% if group.recent_threads %}
+        {% set t = group.recent_threads | first %}
+        <a href="/forum/t/{{ t.slug }}" class="fr-panel-item">
+          <div class="fr-panel-item-title text-truncate">{{ t.title }}</div>
+          <div class="fr-panel-item-meta d-flex align-items-center gap-2">
+            <span class="text-truncate"
+                  {% if group.parent.color %}style="color:{{ group.parent.color }}"{% endif %}>
+              {{ group.parent.name }}
+            </span>
+            <span class="ms-auto flex-shrink-0">
+              <i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>{{ t.reply_count }}
+            </span>
+          </div>
         </a>
-        {% endfor %}
       {% endif %}
     {% endfor %}
   </div>

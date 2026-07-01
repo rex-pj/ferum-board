@@ -11,13 +11,16 @@
     {# Brand #}
     <a href="/" class="fr-topbar-brand">
       {% if site.logo_url %}
-        <img src="{{ site.logo_url }}" alt="{{ site.name }}" height="32" class="me-2">
+        <img src="{{ site.logo_url }}" alt="{{ site.name }}" class="fr-brand-img">
       {% else %}
-        <strong>Fe</strong>rum<span class="fr-brand-suffix">&nbsp;board</span>
+        <span class="fr-brand-mark" aria-hidden="true">F</span>
       {% endif %}
-      {% if site.slogan %}
-        <span class="fr-topbar-tagline d-none d-lg-inline">{{ site.slogan }}</span>
-      {% endif %}
+      <span class="fr-brand-text">
+        <span class="fr-brand-name">{{ site.name }}</span>
+        {% if site.slogan %}
+          <span class="fr-brand-slogan d-none d-sm-block">{{ site.slogan }}</span>
+        {% endif %}
+      </span>
     </a>
 
     {# Search bar #}

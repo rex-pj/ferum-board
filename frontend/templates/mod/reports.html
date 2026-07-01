@@ -87,55 +87,84 @@
     <table class="table table-hover align-middle mb-0">
       <thead class="table-active">
         <tr>
-          <th style="width:12%">Target</th>
-          <th>Reason</th>
-          <th style="width:12%">Reporter</th>
-          <th style="width:10%">Date</th>
+          {# SUBJECT: target type + reason + thread context #}
+          <th>Report</th>
+          {# SOURCE: reporter + date #}
+          <th style="width:18%">Reporter</th>
+          {# STATE #}
           <th style="width:9%">Status</th>
-          <th style="width:7%"></th>
+          {# ACTIONS #}
+          <th style="width:14%"></th>
         </tr>
       </thead>
       <tbody>
         {% if reports %}
           {% for report in reports %}
           <tr>
-            <td class="small">
-              {% if report.post_id %}
-                <span class="badge bg-secondary">Post</span>
-                <code class="ms-1 opacity-75" style="font-size:.7rem">{{ report.post_id | truncate(length=8, end="…") }}</code>
-              {% elif report.thread_id %}
-                <span class="badge bg-secondary">Thread</span>
-                <code class="ms-1 opacity-75" style="font-size:.7rem">{{ report.thread_id | truncate(length=8, end="…") }}</code>
-              {% else %}
-                <span class="badge bg-danger-subtle text-danger-emphasis">Deleted</span>
+            {# SUBJECT cell: target badge + reason + thread link #}
+            <td class="align-middle">
+              <div class="d-flex align-items-center gap-2 mb-1">
+                {% if report.post_id %}
+                  <span class="badge bg-secondary flex-shrink-0">Post</span>
+                {% elif report.thread_id %}
+                  <span class="badge bg-secondary flex-shrink-0">Thread</span>
+                {% else %}
+                  <span class="badge bg-danger-subtle text-danger-emphasis flex-shrink-0">Deleted</span>
+                {% endif %}
+                <span class="text-truncate fw-semibold" style="max-width:400px" title="{{ report.reason }}">
+                  {{ report.reason }}
+                </span>
+              </div>
+              {% if report.post_id and report.thread_slug %}
+                <div class="text-muted small">
+                  Post in thread:
+                  <a href="/forum/t/{{ report.thread_slug }}#post-{{ report.post_id }}" target="_blank" class="text-decoration-none">
+                    {{ report.thread_title }}
+                  </a>
+                </div>
+              {% elif report.thread_slug %}
+                <div class="text-muted small">
+                  Thread:
+                  <a href="/forum/t/{{ report.thread_slug }}" target="_blank" class="text-decoration-none">
+                    {{ report.thread_title }}
+                  </a>
+                </div>
               {% endif %}
             </td>
-            <td class="small" style="max-width:280px">
-              <span class="d-block text-truncate" title="{{ report.reason }}">{{ report.reason }}</span>
+            {# REPORTER cell: username (fallback to UUID) + relative date #}
+            <td class="align-middle">
+              {% if report.reporter_username %}
+                <div class="fw-semibold small">@{{ report.reporter_username }}</div>
+              {% else %}
+                <div class="font-monospace small text-muted" title="Reporter ID: {{ report.reporter_id }}">
+                  {{ report.reporter_id | truncate(length=8, end="…") }}
+                </div>
+              {% endif %}
+              <div class="text-muted small text-nowrap">
+                <time data-rel datetime="{{ report.created_at }}">{{ report.created_at | date(format="%b %d, %Y") }}</time>
+              </div>
             </td>
-            <td class="small">
-              <code style="font-size:.7rem">{{ report.reporter_id | truncate(length=8, end="…") }}</code>
-            </td>
-            <td class="small text-muted text-nowrap">{{ report.created_at | truncate(length=10, end="") }}</td>
-            <td>
+            {# STATUS cell #}
+            <td class="align-middle">
               {% if report.status == "pending" %}
-                <span class="badge bg-warning text-dark">pending</span>
+                <span class="badge bg-warning text-dark">Pending</span>
               {% elif report.status == "resolved" %}
-                <span class="badge bg-success">resolved</span>
+                <span class="badge bg-success">Resolved</span>
               {% else %}
-                <span class="badge bg-secondary">dismissed</span>
+                <span class="badge bg-secondary">Dismissed</span>
               {% endif %}
             </td>
-            <td>
+            {# ACTIONS cell #}
+            <td class="align-middle">
               {% if report.status == "pending" %}
               <div class="d-flex gap-1">
-                <button class="btn btn-success btn-sm" title="Resolve"
+                <button class="btn btn-sm btn-success" title="Mark as resolved"
                         data-mod-action="resolve-report" data-report-id="{{ report.id }}" data-status="resolved">
-                  <i class="fa-solid fa-check"></i>
+                  <i class="fa-solid fa-check me-1"></i>Resolve
                 </button>
-                <button class="btn btn-outline-secondary btn-sm" title="Dismiss"
+                <button class="btn btn-sm btn-outline-secondary" title="Dismiss without action"
                         data-mod-action="resolve-report" data-report-id="{{ report.id }}" data-status="dismissed">
-                  <i class="fa-solid fa-xmark"></i>
+                  <i class="fa-solid fa-xmark me-1"></i>Dismiss
                 </button>
               </div>
               {% endif %}
@@ -144,7 +173,7 @@
           {% endfor %}
         {% else %}
           <tr>
-            <td colspan="6">
+            <td colspan="4">
               <div class="text-center py-5 text-secondary">
                 <i class="fa-solid fa-inbox fa-3x mb-3 d-block opacity-25"></i>
                 <div class="fw-semibold mb-1">All clear!</div>

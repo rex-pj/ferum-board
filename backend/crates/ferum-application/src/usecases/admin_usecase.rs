@@ -317,7 +317,7 @@ impl AdminUseCase {
                 ferum_domain::repositories::user_repository::UpdateUser {
                     is_banned: Some(true),
                     banned_until: Some(None),
-                    ban_reason: Some(Some(reason)),
+                    ban_reason: Some(Some(reason.clone())),
                     ..Default::default()
                 },
             )
@@ -328,6 +328,18 @@ impl AdminUseCase {
             .ok();
         self.cache.del_prefix(&format!("refresh:{}:", id)).await.ok();
         self.cache.del(&format!("user:roles:{}", id)).await.ok();
+
+        self.audit_log
+            .append(AuditLog::user_action(
+                actor.id,
+                "user.ban_permanent",
+                "user",
+                id,
+                Some(serde_json::json!({ "reason": reason })),
+            ))
+            .await
+            .ok();
+
         Ok(())
     }
 
@@ -347,6 +359,12 @@ impl AdminUseCase {
             )
             .await?;
         self.cache.del(&format!("user:banned:{}", id)).await.ok();
+
+        self.audit_log
+            .append(AuditLog::user_action(actor.id, "user.unban", "user", id, None))
+            .await
+            .ok();
+
         Ok(())
     }
 
@@ -386,7 +404,7 @@ impl AdminUseCase {
     ) -> Result<User, AppError> {
         PermissionChecker::can_manage_users(actor)?;
         self.users.find_by_id(id).await?.or_not_found()?;
-        self.users
+        let user = self.users
             .update(
                 id,
                 ferum_domain::repositories::user_repository::UpdateUser {
@@ -396,7 +414,14 @@ impl AdminUseCase {
                     ..Default::default()
                 },
             )
+            .await?;
+
+        self.audit_log
+            .append(AuditLog::user_action(actor.id, "user.edit", "user", id, None))
             .await
+            .ok();
+
+        Ok(user)
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
@@ -408,7 +433,20 @@ impl AdminUseCase {
     ) -> Result<(), AppError> {
         PermissionChecker::can_manage_users(actor)?;
         self.users.find_by_id(id).await?.or_not_found()?;
-        self.users.set_trust_level(id, level).await
+        self.users.set_trust_level(id, level.clone()).await?;
+
+        self.audit_log
+            .append(AuditLog::user_action(
+                actor.id,
+                "user.set_trust_level",
+                "user",
+                id,
+                Some(serde_json::json!({ "level": format!("{:?}", level).to_lowercase() })),
+            ))
+            .await
+            .ok();
+
+        Ok(())
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]

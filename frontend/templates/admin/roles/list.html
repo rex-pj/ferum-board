@@ -24,35 +24,39 @@
     <table class="table table-hover mb-0">
       <thead class="table-active">
         <tr>
+          {# IDENTITY: role badge + slug + type (system/custom) + default flag #}
           <th>Role</th>
-          <th>Type</th>
-          <th>Default</th>
-          <th title="Distinct users holding this role (any scope, active assignments)">Members</th>
-          <th></th>
+          {# STATS: member count #}
+          <th style="width:10%" title="Distinct users holding this role (any scope, active assignments)">Members</th>
+          {# ACTIONS #}
+          <th style="width:22%"></th>
         </tr>
       </thead>
       <tbody>
         {% for role in roles %}
         <tr x-show="!q || '{{ role.name | lower }}/{{ role.slug }}'.includes(q.toLowerCase())">
-          <td>
-            <span class="badge me-2" style="background-color:{{ role.color | default(value="#6c757d") }}">
-              {{ role.name }}
-            </span>
-            <span class="text-muted small">/{{ role.slug }}</span>
-          </td>
+          {# IDENTITY cell: all inline — name badge · slug · type badge · default flag #}
           <td class="align-middle">
-            {% if role.is_system %}
-              <span class="badge bg-info text-dark">System</span>
-            {% else %}
-              <span class="badge bg-secondary">Custom</span>
-            {% endif %}
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="badge fs-6 px-2 py-1" style="background-color:{{ role.color | default(value="#6c757d") }}">
+                {{ role.name }}
+              </span>
+              <span class="text-muted small font-monospace">/{{ role.slug }}</span>
+              {% if role.is_system %}
+                <span class="badge bg-info text-dark" style="font-size:.65rem" title="Built-in system role — cannot be renamed, recolored, or deleted">System</span>
+              {% else %}
+                <span class="badge bg-secondary bg-opacity-50 text-body" style="font-size:.65rem" title="Custom role created by an admin">Custom</span>
+              {% endif %}
+              {% if role.is_default %}
+                <span class="text-success" style="font-size:.75rem" title="Assigned to new users by default">
+                  <i class="fa-solid fa-check me-1"></i>Default
+                </span>
+              {% endif %}
+            </div>
           </td>
-          <td class="align-middle">
-            {% if role.is_default %}
-              <i class="fa-solid fa-check text-success"></i>
-            {% endif %}
-          </td>
+          {# STATS cell #}
           <td class="align-middle text-muted">{{ role.member_count | default(value=0) }}</td>
+          {# ACTIONS #}
           <td class="align-middle">
             <div class="d-flex gap-1">
               <a href="/admin/roles/{{ role.id }}" class="btn btn-sm btn-outline-secondary" title="Permissions">
@@ -81,7 +85,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="5" class="text-center text-muted py-4">No roles found.</td>
+          <td colspan="3" class="text-center text-muted py-4">No roles found.</td>
         </tr>
         {% endfor %}
       </tbody>

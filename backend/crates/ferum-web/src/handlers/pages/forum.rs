@@ -15,7 +15,8 @@ use crate::view_models::page_context::{
 };
 use ferum_domain::models::reaction::ReactionKind;
 
-use super::{active_theme, map_threads, nav_categories_ctx, post_policy_str, render_with_theme, user_ctx, PageError};
+use ferum_application::permission::PermissionChecker;
+use super::{active_theme, map_threads, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -98,6 +99,7 @@ pub async fn forum_index(
                 description: item.category.description.clone(),
                 color: item.category.color.clone(),
                 thread_count: item.thread_count,
+                view_policy: view_policy_str(&item.category.view_policy),
                 post_policy: post_policy_str(&item.category.post_policy),
             };
             let children: Vec<CategoryCtx> = item
@@ -111,6 +113,7 @@ pub async fn forum_index(
                     description: s.category.description.clone(),
                     color: s.category.color.clone(),
                     thread_count: s.thread_count,
+                    view_policy: view_policy_str(&s.category.view_policy),
                     post_policy: post_policy_str(&s.category.post_policy),
                 })
                 .collect();
@@ -121,12 +124,21 @@ pub async fn forum_index(
 
     let nav_categories = nav_categories_ctx(&state, auth_user.as_ref()).await;
 
+    let total_threads: u64 = groups
+        .iter()
+        .map(|g| g.parent.thread_count + g.children.iter().map(|c| c.thread_count).sum::<u64>())
+        .sum();
+    let total_categories: usize =
+        groups.iter().map(|g| 1 + g.children.len()).sum();
+
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     ctx.insert("groups", &groups);
     ctx.insert("nav_categories", &nav_categories);
+    ctx.insert("total_threads", &total_threads);
+    ctx.insert("total_categories", &total_categories);
 
     render_with_theme(&state, &active, "forum/index.html", &ctx).await
 }
@@ -173,6 +185,7 @@ pub async fn category(
             description: c.description.clone(),
             color: c.color.clone(),
             thread_count: 0,
+            view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
         })
         .collect();
@@ -189,6 +202,7 @@ pub async fn category(
             description: c.description.clone(),
             color: c.color.clone(),
             thread_count: 0,
+            view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
         })
         .collect();
@@ -201,6 +215,7 @@ pub async fn category(
         description: category.description.clone(),
         color: category.color.clone(),
         thread_count: total,
+        view_policy: view_policy_str(&category.view_policy),
         post_policy: post_policy_str(&category.post_policy),
     };
 
@@ -219,6 +234,7 @@ pub async fn category(
             description: c.description.clone(),
             color: c.color.clone(),
             thread_count: 0,
+            view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
         })
     });
@@ -353,9 +369,14 @@ pub async fn thread_detail(
             description: c.description.clone(),
             color: c.color.clone(),
             thread_count: 0,
+            view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
         })
         .collect();
+
+    let can_post = auth_user.as_ref().map_or(false, |u| {
+        PermissionChecker::can_create_post(u, &category).is_ok()
+    });
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
@@ -366,6 +387,7 @@ pub async fn thread_detail(
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("move_categories", &move_categories);
     ctx.insert("active_category_slug", &category.slug);
+    ctx.insert("can_post", &can_post);
 
     render_with_theme(&state, &active, "forum/thread.html", &ctx).await
 }

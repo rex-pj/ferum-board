@@ -6,17 +6,7 @@
 
 {% block content %}
 
-{# ── Page header ────────────────────────────────────────────────── #}
-<div class="d-flex align-items-start justify-content-between mb-3">
-  <div>
-    <h4 class="mb-0 fw-semibold">Reports</h4>
-    {% if pagination.total > 0 %}
-      <div class="text-muted small mt-1">{{ pagination.total }} total</div>
-    {% endif %}
-  </div>
-</div>
-
-{# ── Reports list ───────────────────────────────────────────────── #}
+{# ── Reports table ──────────────────────────────────────────────── #}
 <div class="card">
   <div class="card-header p-0">
     <form method="get" action="/admin/reports" class="adm-filter-row px-3 py-2">
@@ -92,79 +82,103 @@
 
     </form>
   </div>
-  <div class="list-group list-group-flush">
-    {% for report in reports %}
-    <div class="list-group-item px-4 py-3">
-      <div class="d-flex justify-content-between align-items-start gap-3">
-        <div class="flex-grow-1 min-w-0">
-          <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-            {% if report.status == 'pending' %}
-              <span class="badge bg-warning text-dark">pending</span>
-            {% elif report.status == 'resolved' %}
-              <span class="badge bg-success">resolved</span>
-            {% else %}
-              <span class="badge bg-secondary">dismissed</span>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-active">
+        <tr>
+          {# SUBJECT: target type + reason + thread context #}
+          <th>Report</th>
+          {# SOURCE: reporter + date #}
+          <th style="width:18%">Reporter</th>
+          {# STATE #}
+          <th style="width:9%">Status</th>
+          {# ACTIONS #}
+          <th style="width:14%"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for report in reports %}
+        <tr>
+          {# SUBJECT cell: target badge + reason + thread link #}
+          <td class="align-middle">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              {% if report.post_id %}
+                <span class="badge bg-secondary flex-shrink-0">Post</span>
+              {% elif report.thread_id %}
+                <span class="badge bg-secondary flex-shrink-0">Thread</span>
+              {% else %}
+                <span class="badge bg-danger-subtle text-danger-emphasis flex-shrink-0">Deleted</span>
+              {% endif %}
+              <span class="text-truncate fw-semibold" style="max-width:400px" title="{{ report.reason }}">
+                {{ report.reason }}
+              </span>
+            </div>
+            {% if report.post_id and report.thread_slug %}
+              <div class="text-muted small">
+                Post in thread:
+                <a href="/forum/t/{{ report.thread_slug }}#post-{{ report.post_id }}" target="_blank" class="text-decoration-none">
+                  {{ report.thread_title }}
+                </a>
+              </div>
+            {% elif report.thread_slug %}
+              <div class="text-muted small">
+                Thread:
+                <a href="/forum/t/{{ report.thread_slug }}" target="_blank" class="text-decoration-none">
+                  {{ report.thread_title }}
+                </a>
+              </div>
             {% endif %}
-            <span class="text-muted small">
-              Reported <time data-rel datetime="{{ report.created_at }}">{{ report.created_at | date(format="%b %d, %Y") }}</time>
-              by @{{ report.reporter_username }}
-            </span>
-          </div>
-          <div class="fw-semibold mb-1">{{ report.reason }}</div>
-          {% if report.post_id %}
-            <div class="text-muted small">
-              Post in thread:
-              <a href="/forum/t/{{ report.thread_slug }}#post-{{ report.post_id }}" class="text-decoration-none">
-                {{ report.thread_title }}
-              </a>
+          </td>
+          {# REPORTER cell: username + relative date #}
+          <td class="align-middle">
+            <div class="fw-semibold small">@{{ report.reporter_username }}</div>
+            <div class="text-muted small text-nowrap">
+              <time data-rel datetime="{{ report.created_at }}">{{ report.created_at | date(format="%b %d, %Y") }}</time>
             </div>
-          {% else %}
-            <div class="text-muted small">
-              Thread:
-              <a href="/forum/t/{{ report.thread_slug }}" class="text-decoration-none">
-                {{ report.thread_title }}
-              </a>
+          </td>
+          {# STATUS cell #}
+          <td class="align-middle">
+            {% if report.status == "pending" %}
+              <span class="badge bg-warning text-dark">Pending</span>
+            {% elif report.status == "resolved" %}
+              <span class="badge bg-success">Resolved</span>
+            {% else %}
+              <span class="badge bg-secondary">Dismissed</span>
+            {% endif %}
+          </td>
+          {# ACTIONS cell #}
+          <td class="align-middle">
+            {% if report.status == "pending" %}
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-success" title="Mark as resolved"
+                      data-admin-action="resolve-report" data-report-id="{{ report.id }}">
+                <i class="fa-solid fa-check me-1"></i>Resolve
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" title="Dismiss without action"
+                      data-admin-action="dismiss-report" data-report-id="{{ report.id }}">
+                <i class="fa-solid fa-xmark me-1"></i>Dismiss
+              </button>
             </div>
-          {% endif %}
-        </div>
-
-        {% if report.status == "pending" %}
-        <div class="d-flex gap-2 flex-shrink-0">
-          <button class="btn btn-sm btn-success"
-                  data-admin-action="resolve-report"
-                  data-report-id="{{ report.id }}">
-            <i class="fa-solid fa-check me-1"></i>Resolve
-          </button>
-          <button class="btn btn-sm btn-outline-secondary"
-                  data-admin-action="dismiss-report"
-                  data-report-id="{{ report.id }}">
-            Dismiss
-          </button>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-    {% else %}
-    <div class="text-center text-muted py-5">
-      <i class="fa-solid fa-inbox fa-2x d-block mb-2 opacity-25"></i>
-      <div class="fw-semibold mb-1">All clear!</div>
-      <div class="small">No reports for the current filter.</div>
-    </div>
-    {% endfor %}
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4">
+            <div class="text-center py-5 text-secondary">
+              <i class="fa-solid fa-inbox fa-3x mb-3 d-block opacity-25"></i>
+              <div class="fw-semibold mb-1">All clear!</div>
+              <div class="small">No reports for the current filter.</div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 
   {# ── Footer: count + pagination ─────────────────────────────── #}
-  {% if pagination.total > 0 %}
-  <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
-    <span class="text-muted small">
-      {{ pagination.total }} report{% if pagination.total != 1 %}s{% endif %}
-      {% if pagination.total_pages > 1 %}
-        — page {{ pagination.page }} of {{ pagination.total_pages }}
-      {% endif %}
-    </span>
-    {{ m::paginate(pagination=pagination, base_url="/admin/reports", extra_params="&status=" ~ filter ~ "&q=" ~ search_query) }}
-  </div>
-  {% endif %}
+  {{ m::card_footer_pagination(pagination=pagination, base_url="/admin/reports", noun="report", extra_params="&status=" ~ filter ~ "&q=" ~ search_query) }}
 </div>
 
 {% endblock %}

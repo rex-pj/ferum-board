@@ -125,12 +125,16 @@
     document.getElementById('post-edit-' + postId)?.classList.add('d-none');
   }
 
+  var _editInFlight = {};
+
   async function saveEdit(postId) {
+    if (_editInFlight[postId]) return;
     var composer = document.getElementById('post-edit-composer-' + postId);
     var content  = (composer?.getContent?.() ?? '').trim();
     if (!content) return;
 
     var saveBtn = document.querySelector('[data-action="save-edit"][data-post-id="' + postId + '"]');
+    _editInFlight[postId] = true;
     if (saveBtn) saveBtn.disabled = true;
 
     try {
@@ -155,10 +159,12 @@
         var body = await res.json().catch(function () { return {}; });
         showToast((body.error && body.error.message) || 'Failed to save changes.');
         if (saveBtn) saveBtn.disabled = false;
+        delete _editInFlight[postId];
       }
     } catch (_) {
       showToast('Network error. Please try again.');
       if (saveBtn) saveBtn.disabled = false;
+      delete _editInFlight[postId];
     }
   }
 
@@ -202,7 +208,10 @@
     }
   }
 
+  var _replySubmitting = false;
+
   async function submitReply() {
+    if (_replySubmitting) return;
     var composer = document.getElementById('reply-composer');
     var content  = (composer?.getContent?.() ?? '').trim();
     var feedback = document.getElementById('reply-feedback');
@@ -216,6 +225,7 @@
       return;
     }
 
+    _replySubmitting = true;
     btn.disabled = true;
     spinner.classList.remove('d-none');
     feedback.classList.add('d-none');
@@ -226,16 +236,23 @@
         var body = await res.json().catch(function () { return {}; });
         var post = body.data;
         if (post && post.id) {
-          var existingCards = document.querySelectorAll('.card[id^="post-"]').length;
-          var postNum       = PAGE_OFFSET + existingCards + 1;
-          var replyBox      = document.getElementById('reply');
-          replyBox.insertAdjacentHTML('beforebegin', buildReplyCard(post, postNum));
-          if (customElements.upgrade) customElements.upgrade(document.getElementById('post-' + post.id));
-          document.getElementById('post-' + post.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          var countEl = document.getElementById('fr-reply-count');
-          if (countEl) countEl.textContent = parseInt(countEl.textContent || '0') + 1;
-          if (composer && composer.reset) composer.reset();
-          feedback.classList.add('d-none');
+          if (post.status === 'pending') {
+            feedback.className   = 'alert alert-info mt-2';
+            feedback.textContent = 'Your reply has been submitted and is awaiting moderator approval.';
+            feedback.classList.remove('d-none');
+            if (composer && composer.reset) composer.reset();
+          } else {
+            var existingCards = document.querySelectorAll('.card[id^="post-"]').length;
+            var postNum       = PAGE_OFFSET + existingCards + 1;
+            var replyBox      = document.getElementById('reply');
+            replyBox.insertAdjacentHTML('beforebegin', buildReplyCard(post, postNum));
+            if (customElements.upgrade) customElements.upgrade(document.getElementById('post-' + post.id));
+            document.getElementById('post-' + post.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            var countEl = document.getElementById('fr-reply-count');
+            if (countEl) countEl.textContent = parseInt(countEl.textContent || '0') + 1;
+            if (composer && composer.reset) composer.reset();
+            feedback.classList.add('d-none');
+          }
         } else {
           window.location.reload();
         }
@@ -255,6 +272,8 @@
       feedback.classList.remove('d-none');
       btn.disabled = false;
       spinner.classList.add('d-none');
+    } finally {
+      _replySubmitting = false;
     }
   }
 
@@ -305,10 +324,10 @@
     }
   }
 
-  async function deleteThread(threadId, categorySlug) {
+  async function deleteThread(threadSlug, categorySlug) {
     var ok = await showConfirm('Delete Thread', 'Delete this entire thread? This cannot be undone.', 'Delete thread');
     if (!ok) return;
-    var res = await FerumApi.threads.delete(threadId);
+    var res = await FerumApi.threads.delete(threadSlug);
     if (res.ok) {
       window.location.href = categorySlug ? '/forum/' + categorySlug : '/forum';
     } else {
@@ -336,7 +355,7 @@
     var btn = e.target.closest('[data-action]');
     if (!btn) return;
     switch (btn.dataset.action) {
-      case 'delete-thread':  deleteThread(btn.dataset.threadId, btn.dataset.categorySlug); break;
+      case 'delete-thread':  deleteThread(btn.dataset.threadSlug, btn.dataset.categorySlug); break;
       case 'mod-thread':     modAction(btn.dataset.modAction, btn.dataset.threadId, btn.dataset.currentState === 'true', btn); break;
       case 'edit-post':      openEditPost(btn.dataset.postId); break;
       case 'delete-post':    deletePost(btn.dataset.postId); break;

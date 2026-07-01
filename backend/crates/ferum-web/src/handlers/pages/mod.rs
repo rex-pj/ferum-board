@@ -15,7 +15,7 @@ use crate::app_state::AppState;
 use crate::middleware::AuthUser;
 use ferum_application::constants::DEFAULT_THEME_SLUG;
 use ferum_application::shared::AppError;
-use ferum_domain::models::PostPolicy;
+use ferum_domain::models::{PostPolicy, ViewPolicy};
 use crate::view_models::page_context::{
     CurrentUserCtx, NavCategoryCtx, PluginSlotCtx, TagCtx, ThreadCtx,
 };
@@ -37,6 +37,15 @@ pub fn post_policy_str(p: &PostPolicy) -> String {
         PostPolicy::StaffOnly => "staff_only",
         PostPolicy::Closed    => "closed",
         PostPolicy::Moderated => "moderated",
+    }
+    .to_string()
+}
+
+pub fn view_policy_str(p: &ViewPolicy) -> String {
+    match p {
+        ViewPolicy::Public      => "public",
+        ViewPolicy::MembersOnly => "members_only",
+        ViewPolicy::StaffOnly   => "staff_only",
     }
     .to_string()
 }

@@ -30,10 +30,10 @@
 
   {# ── Permissions table ────────────────────────────────────────── #}
   <div class="card">
-    <div class="card-header py-2 adm-filter-row">
+    <div class="card-header py-2">
 
-      {# Search input #}
-      <div class="input-group input-group-sm flex-grow-1" style="max-width:360px">
+      {# Row 1: search #}
+      <div class="input-group input-group-sm mb-2" style="max-width:360px">
         <span class="input-group-text bg-transparent">
           <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
         </span>
@@ -43,11 +43,12 @@
                autocomplete="off">
       </div>
 
-      {# Group filter pills #}
-      <div class="d-flex gap-2 flex-wrap align-items-center">
+      {# Row 2: group filter pills — scrollable on mobile #}
+      <div class="d-flex gap-2 align-items-center"
+           style="overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">
         <button
           type="button"
-          class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1"
+          class="btn btn-sm rounded-pill flex-shrink-0 d-inline-flex align-items-center gap-1"
           :class="activeGroup === 'all' ? 'btn-primary' : 'btn-outline-secondary'"
           @click="activeGroup = 'all'">
           All
@@ -58,11 +59,11 @@
                 style="font-size:.65rem;font-weight:600;padding:.2em .5em"
                 x-text="totalCount"></span>
         </button>
-        <div class="vr opacity-25"></div>
+        <div class="vr opacity-25 flex-shrink-0"></div>
         <template x-for="g in groups" :key="g">
           <button
             type="button"
-            class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1"
+            class="btn btn-sm rounded-pill flex-shrink-0 d-inline-flex align-items-center gap-1"
             :class="activeGroup === g ? 'btn-primary' : 'btn-outline-secondary'"
             @click="activeGroup = g">
             <span class="rounded-circle flex-shrink-0"
@@ -89,32 +90,50 @@
       <table class="table table-hover mb-0">
         <thead class="table-active">
           <tr>
-            <th style="width:30%">Key</th>
-            <th>Description</th>
-            <th style="width:9%">Min Trust</th>
-            <th style="width:9%">Group</th>
+            {# IDENTITY: permission key + description #}
+            <th>Permission</th>
+            {# CLASSIFICATION: min trust level + group #}
+            <th style="width:18%">Classification</th>
           </tr>
         </thead>
         <tbody>
 
           <template x-for="p in filtered" :key="p.key">
             <tr>
+              {# IDENTITY cell: key (code) + description text #}
               <td class="align-middle">
                 <code class="small" x-text="p.key"></code>
+                <div class="text-muted small mt-1" x-text="p.description"></div>
               </td>
-              <td class="align-middle text-muted small" x-text="p.description"></td>
+              {# CLASSIFICATION cell: trust badge + group badge, each with a muted prefix label #}
               <td class="align-middle">
-                <span class="badge" :class="trustClass(p.min_trust)" x-text="trustLabel(p.min_trust)"></span>
-              </td>
-              <td class="align-middle">
-                <span class="badge bg-secondary bg-opacity-50 text-body" style="font-size:.65rem" x-text="p.group"></span>
+                <div class="d-flex align-items-center gap-1 mb-1">
+                  <span class="text-muted text-nowrap"
+                        style="font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;min-width:2.5rem">Trust</span>
+                  <span class="badge" :class="trustClass(p.min_trust)" x-text="trustLabel(p.min_trust)"
+                        :title="p.min_trust === 'new'     ? 'New — any user; no activity required' :
+                                p.min_trust === 'basic'   ? 'Basic — email verified' :
+                                p.min_trust === 'member'  ? 'Member — ≥30 posts, ≥15 days; can upload and create tags' :
+                                p.min_trust === 'regular' ? 'Regular — ≥500 posts, ≥100 days, trust score ≥80' :
+                                                            'Leader — manually assigned by admin'"></span>
+                </div>
+                <div class="d-flex align-items-center gap-1">
+                  <span class="text-muted text-nowrap"
+                        style="font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;min-width:2.5rem">Group</span>
+                  <span class="badge bg-secondary bg-opacity-50 text-body" style="font-size:.65rem"
+                        :title="p.group === 'admin'      ? 'Admin-only actions — requires admin.* permissions' :
+                                 p.group === 'content'    ? 'Content actions — creating threads, posts, reactions' :
+                                 p.group === 'moderation' ? 'Moderation actions — reports, bans, warnings' :
+                                                            p.group"
+                        x-text="p.group"></span>
+                </div>
               </td>
             </tr>
           </template>
 
           {# Empty state #}
           <tr x-show="filtered.length === 0">
-            <td colspan="4" class="text-center text-muted py-5">
+            <td colspan="2" class="text-center text-muted py-5">
               <i class="fa-solid fa-magnifying-glass fa-2x d-block mb-2 opacity-25"></i>
               No permissions match your search.
             </td>

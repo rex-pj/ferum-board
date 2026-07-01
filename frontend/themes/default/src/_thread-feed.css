@@ -19,6 +19,13 @@
 }
 .fr-thread-row:last-child { border-bottom: none; }
 .fr-thread-row:hover { background: var(--bs-tertiary-bg); text-decoration: none; color: inherit; }
+.fr-thread-row--pinned {
+  border-left: 3px solid var(--ferum-primary);
+  background: color-mix(in srgb, var(--ferum-primary) 5%, var(--bs-body-bg));
+}
+.fr-thread-row--pinned:hover {
+  background: color-mix(in srgb, var(--ferum-primary) 8%, var(--bs-tertiary-bg));
+}
 
 .fr-thread-thumb {
   width: 80px;
@@ -41,7 +48,7 @@
 
 .fr-thread-title {
   display: block;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--bs-body-color);
   text-decoration: none;

@@ -155,13 +155,18 @@
 
 {# ── auth_brand ───────────────────────────────────────────────────
    Logo / wordmark used on every auth page (login, register, etc.).
+   Renders: [mark/logo] → site name → slogan (vertical stack, centered).
 #}
 {% macro auth_brand() %}
 <a href="/" class="fr-auth-brand">
   {% if site.logo_url %}
-    <img src="{{ site.logo_url }}" alt="{{ site.name }}" height="32">
+    <img src="{{ site.logo_url }}" alt="{{ site.name }}" class="fr-auth-brand-img">
   {% else %}
-    <strong>Fe</strong>rum<span class="fr-brand-suffix">&nbsp;board</span>
+    <span class="fr-auth-brand-mark" aria-hidden="true">F</span>
+  {% endif %}
+  <span class="fr-auth-brand-name">{{ site.name }}</span>
+  {% if site.slogan %}
+    <span class="fr-auth-brand-slogan">{{ site.slogan }}</span>
   {% endif %}
 </a>
 {% endmacro auth_brand %}

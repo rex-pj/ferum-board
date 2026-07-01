@@ -8,7 +8,7 @@ use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CategoryCtx, TagCtx};
 
-use super::{active_theme, nav_categories_ctx, post_policy_str, render_with_theme, user_ctx, PageError};
+use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct NewThreadQuery {
@@ -36,6 +36,7 @@ pub async fn new_thread(
             description: c.description.clone(),
             color: c.color.clone(),
             thread_count: 0,
+            view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
         })
         .collect();
@@ -94,6 +95,7 @@ pub async fn edit_thread(
             description: c.description.clone(),
             color: c.color.clone(),
             thread_count: 0,
+            view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
         })
         .collect();

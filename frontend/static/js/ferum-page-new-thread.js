@@ -53,12 +53,16 @@
     };
   };
 
+  var _newThreadSubmitting = false;
+
   document.getElementById('new-thread-form')?.addEventListener('submit', async function (e) {
     e.preventDefault();
+    if (_newThreadSubmitting) return;
     var btn     = document.getElementById('submit-btn');
     var spinner = document.getElementById('btn-spinner');
     var errorEl = document.getElementById('form-error');
 
+    _newThreadSubmitting = true;
     btn.disabled = true;
     spinner.classList.remove('d-none');
     errorEl.classList.add('d-none');
@@ -88,12 +92,14 @@
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
+        _newThreadSubmitting = false;
       }
     } catch (_) {
       errorEl.textContent = 'Network error. Please try again.';
       errorEl.classList.remove('d-none');
       btn.disabled = false;
       spinner.classList.add('d-none');
+      _newThreadSubmitting = false;
     }
   });
 }());

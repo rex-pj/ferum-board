@@ -27,6 +27,19 @@ pub async fn account(
         .await
         .unwrap_or_default();
 
+    let (primary_role_slug, primary_role_name, primary_role_color) = {
+        let assignments = state.user_role_repo.list_for_user(auth_user.id).await.unwrap_or_default();
+        let priority = ["admin", "moderator"];
+        let primary = priority
+            .iter()
+            .find_map(|slug| assignments.iter().find(|a| a.category_id.is_none() && a.role_slug == *slug))
+            .or_else(|| assignments.iter().find(|a| a.category_id.is_none() && a.role_slug != "member"));
+        match primary {
+            Some(a) => (Some(a.role_slug.clone()), Some(a.role_name.clone()), a.role_color.clone()),
+            None => (None, None, None),
+        }
+    };
+
     let profile = state
         .user_repo
         .find_by_id(auth_user.id)
@@ -43,9 +56,9 @@ pub async fn account(
             website: u.website.clone(),
             trust_level: format!("{:?}", u.trust_level).to_lowercase(),
             trust_score: Some(u.trust_score),
-            primary_role_slug: None,
-            primary_role_name: None,
-            primary_role_color: None,
+            primary_role_slug,
+            primary_role_name,
+            primary_role_color,
             post_count: u.post_count,
             follower_count: 0,
             following_count: 0,
