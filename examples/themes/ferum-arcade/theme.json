@@ -1,0 +1,9 @@
+{
+  "slug": "ferum-arcade",
+  "name": "Ferum Arcade",
+  "author": "Ferum Board",
+  "version": "1.0.0",
+  "description": "Gaming-inspired theme: neon cyan/magenta HUD accents, scanline overlay, monospace headings on a near-black backdrop. Demonstrates CSS + HTML template customization.",
+  "parent": "default",
+  "color_scheme": "dark"
+}

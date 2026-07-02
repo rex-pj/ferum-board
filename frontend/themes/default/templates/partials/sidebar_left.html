@@ -1,4 +1,7 @@
 <nav id="sidebar-nav" aria-label="Site navigation" class="fr-sidebar-nav">
+  {% if plugin_slots.sidebar_left_top %}
+    {% for slot in plugin_slots.sidebar_left_top %}{{ slot.html | safe }}{% endfor %}
+  {% endif %}
   <a href="/" class="fr-nav-link" data-nav-exact="true">
     <i class="fa-solid fa-house fa-fw" aria-hidden="true"></i>
     Home

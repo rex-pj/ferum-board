@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
+use crate::ports::{HookContext, HookDecision, NullPluginRuntime, PluginHookRuntime};
 use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::post::Post;
@@ -21,6 +22,7 @@ pub struct ReactionUseCase {
     pub threads: Arc<dyn ThreadRepository>,
     pub users: Arc<dyn UserRepository>,
     pub event_bus: Arc<dyn EventPublisher>,
+    pub plugin_runtime: Arc<dyn PluginHookRuntime>,
 }
 
 impl ReactionUseCase {
@@ -37,7 +39,13 @@ impl ReactionUseCase {
             threads,
             users,
             event_bus,
+            plugin_runtime: Arc::new(NullPluginRuntime),
         }
+    }
+
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
+        self.plugin_runtime = runtime;
+        self
     }
 
     async fn find_active_post(&self, post_id: Uuid) -> Result<Post, AppError> {
@@ -85,6 +93,28 @@ impl ReactionUseCase {
             .find_by_id(post.thread_id)
             .await?
             .or_not_found()?;
+
+        let hook_ctx = HookContext {
+            hook_name: "before_reaction_add".to_string(),
+            actor_id: Some(actor.id),
+            actor_trust_level: format!("{:?}", actor.trust_level).to_lowercase(),
+            payload: serde_json::json!({
+                "post_id": post_id,
+                "thread_id": thread.id,
+                "post_author_id": post.author_id,
+                "kind": kind,
+            }),
+        };
+        match self
+            .plugin_runtime
+            .dispatch_before_hook("before_reaction_add", &hook_ctx)
+            .await?
+        {
+            HookDecision::Deny { reason, error_code } => {
+                return Err(AppError::PluginBlocked { reason, error_code });
+            }
+            HookDecision::Allow => {}
+        }
 
         self.reactions.add(post_id, actor.id, kind).await?;
 

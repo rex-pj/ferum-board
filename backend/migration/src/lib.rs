@@ -21,6 +21,7 @@ mod m20260001_000016_create_webhooks;
 mod m20260001_000017_create_themes;
 mod m20260001_000018_create_daily_stats;
 mod m20260001_000019_create_bookmarks;
+mod m20260001_000020_create_plugin_storage;
 
 pub struct Migrator;
 
@@ -47,6 +48,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260001_000017_create_themes::Migration),
             Box::new(m20260001_000018_create_daily_stats::Migration),
             Box::new(m20260001_000019_create_bookmarks::Migration),
+            Box::new(m20260001_000020_create_plugin_storage::Migration),
         ]
     }
 }

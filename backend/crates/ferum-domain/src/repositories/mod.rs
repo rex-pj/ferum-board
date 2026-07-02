@@ -3,7 +3,9 @@
 pub mod audit_log_repository;
 pub mod bookmark_repository;
 pub mod follow_repository;
+pub mod plugin_db_repository;
 pub mod plugin_repository;
+pub mod plugin_storage_repository;
 pub mod category_repository;
 pub mod notification_repository;
 pub mod permission_repository;
@@ -38,6 +40,8 @@ pub use tag_repository::TagRepository;
 pub use thread_repository::{NewThread, ThreadRepository, UpdateThread};
 pub use user_repository::{NewUser, UpdateUser, UserRepository};
 pub use user_role_repository::UserRoleRepository;
+pub use plugin_db_repository::PluginDbGateway;
 pub use plugin_repository::PluginRepository;
+pub use plugin_storage_repository::PluginStorageRepository;
 pub use webhook_repository::{NewWebhook, UpdateWebhook, WebhookRepository};
 pub use theme_repository::ThemeRepository;

@@ -7,6 +7,7 @@ mod category_usecase;
 mod follow_usecase;
 mod moderation_usecase;
 mod notification_usecase;
+mod plugin_usecase;
 mod post_usecase;
 mod reaction_usecase;
 mod role_usecase;

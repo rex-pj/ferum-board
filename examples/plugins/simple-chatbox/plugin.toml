@@ -1,0 +1,48 @@
+[meta]
+id          = "com.ferum.simple-chatbox"
+name        = "Simple Chatbox"
+version     = "1.0.0"
+tier        = "script"
+min_ferum   = "0.1.0"
+description = "A shared, always-visible community chat room embedded in the main content column, backed by durable plugin storage and a plugin-defined RPC endpoint. Polls every few seconds so multiple people chatting see each other's messages. Demonstrates Ferum.storage.* and the /api/plugins/:slug/rpc/:action extension point."
+author      = "Ferum Team"
+
+# ─── Script entry point ───────────────────────────────────────────────────────
+# bundle.js is dual-purpose:
+#   - Evaluated server-side in boa_engine: registers __ferum_rpc handlers.
+#   - Served to the browser at /plugins/com.ferum.simple-chatbox/assets/bundle.js:
+#     registers the <ferum-slot-content-before> custom element.
+# Each half is guarded by a typeof check so it only runs in the environment
+# that actually provides its globals (__ferum_rpc vs. customElements).
+
+[script]
+bundle_file = "bundle.js"
+
+# ─── Config schema ────────────────────────────────────────────────────────────
+
+[config_schema]
+type     = "object"
+required = []
+
+[config_schema.properties.max_history]
+type        = "integer"
+title       = "Message history length"
+description = "How many recent messages to keep and show to new viewers."
+default     = 50
+
+# ─── Capabilities ─────────────────────────────────────────────────────────────
+# No before-hooks — this plugin only serves RPC actions and a UI slot.
+
+[capabilities]
+hooks = []
+rpc = ["send_message", "get_history"]
+
+# ─── UI Slots ──────────────────────────────────────────────────────────────────
+# home_feed_top is a homepage-only injection point (rendered inside home.html,
+# above the thread feed) — unlike content_before/content_after, which render
+# inside base.html and would put this widget on every page (login, threads,
+# account, etc). A shared chat room only makes sense on the landing page.
+
+[ui_slots.home_feed_top]
+component = "/plugins/com.ferum.simple-chatbox/assets/bundle.js"
+props = []

@@ -1,0 +1,264 @@
+/*
+ * Ferum Sumi — Japanese-inspired custom theme
+ *
+ * HOW CSS LOADING WORKS
+ * ─────────────────────────────────────────────────────────────────────────────
+ * This theme overrides templates/base.html and templates/home.html, so its
+ * custom base.html loads both stylesheets explicitly:
+ *   /themes/default/assets/theme.css    ← fr-* layout classes
+ *   /themes/ferum-sumi/assets/theme.css ← washi/ink palette + fsm-* classes
+ *
+ * Pages NOT overridden by this theme (thread view, category list, profile, …)
+ * fall through to the default theme's own base.html, so they render with
+ * default's layout untouched — this theme intentionally only re-skins the
+ * home feed as a demonstration; a production theme would extend coverage to
+ * every page it wants to restyle.
+ *
+ * No web fonts are loaded — the app's CSP is `default-src 'self'`, so only
+ * fonts already installed on the visitor's OS are used (Japanese serif stacks
+ * degrade gracefully to a plain serif where unavailable).
+ */
+
+:root {
+  --fsm-washi: #f6f1e4;
+  --fsm-washi-alt: #efe7d2;
+  --fsm-ink: #1c1a17;
+  --fsm-ink-soft: #4a453d;
+  --fsm-vermillion: #b53a34;
+  --fsm-vermillion-soft: rgba(181, 58, 52, 0.12);
+  --fsm-border: #ddd0ab;
+  --fsm-solved: #2f6f4f;
+  --fsm-font-serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", "Iowan Old Style", Georgia, serif;
+}
+
+[data-bs-theme="light"] {
+  --bs-body-bg: var(--fsm-washi);
+  --bs-body-bg-rgb: 246, 241, 228;
+  --bs-body-color: var(--fsm-ink);
+  --bs-secondary-color: var(--fsm-ink-soft);
+  --bs-border-color: var(--fsm-border);
+  --bs-card-bg: #fbf8ef;
+  --ferum-primary: var(--fsm-vermillion);
+  --bs-primary: var(--fsm-vermillion);
+  --bs-link-color: var(--fsm-vermillion);
+  --bs-link-hover-color: color-mix(in srgb, var(--fsm-vermillion) 80%, #000);
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 15% 8%, rgba(0, 0, 0, 0.025) 0, transparent 45%),
+    radial-gradient(circle at 85% 92%, rgba(0, 0, 0, 0.02) 0, transparent 40%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, h6,
+.navbar-brand,
+.fr-nav-brand {
+  font-family: var(--fsm-font-serif);
+  letter-spacing: .01em;
+}
+
+/* ── Torii-lintel accent bar ─────────────────────────────────────────────── */
+.fsm-lintel {
+  height: 4px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--fsm-vermillion) 0%, #d9756a 50%, var(--fsm-vermillion) 100%);
+}
+
+/* ── Navigation / sidebar / cards ────────────────────────────────────────── */
+.fr-nav {
+  background-color: #fbf8ef !important;
+  border-bottom: 1px solid var(--fsm-border) !important;
+}
+
+.fr-sidebar-left {
+  background-color: var(--fsm-washi-alt);
+  border-right-color: var(--fsm-border);
+}
+
+.card {
+  background-color: #fbf8ef;
+  border-color: var(--fsm-border);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--fsm-vermillion);
+  --bs-btn-border-color: var(--fsm-vermillion);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--fsm-vermillion) 85%, #000);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--fsm-vermillion) 80%, #000);
+  --bs-btn-active-bg: color-mix(in srgb, var(--fsm-vermillion) 78%, #000);
+}
+
+/* ── Hanko seal — fixed corner stamp ─────────────────────────────────────── */
+.fsm-hanko {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 4.75rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: .35rem;
+  background: var(--fsm-vermillion);
+  color: #f6f1e4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--fsm-font-serif);
+  font-size: 1.25rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transform: rotate(-4deg);
+  opacity: .92;
+  pointer-events: none;
+  z-index: 5;
+}
+
+@media (min-width: 992px) {
+  .fsm-hanko { bottom: 1.5rem; }
+}
+
+/* ── fsm-* — Ferum Sumi custom thread feed (home.html override) ──────────── */
+
+.fsm-feed-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: .875rem 1.125rem;
+  margin-bottom: 0;
+  background: #fbf8ef;
+  border: 1px solid var(--fsm-border);
+  border-radius: .35rem .35rem 0 0;
+}
+.fsm-feed-title {
+  font-family: var(--fsm-font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fsm-ink);
+}
+.fsm-feed-subtitle {
+  margin-left: .6rem;
+  font-size: .75rem;
+  color: var(--fsm-ink-soft);
+  opacity: .7;
+}
+.fsm-clear-filter {
+  font-size: .75rem;
+  color: var(--fsm-ink-soft);
+  text-decoration: none;
+}
+.fsm-clear-filter:hover { color: var(--fsm-vermillion); }
+.fsm-btn { border-radius: .3rem; }
+
+.fsm-list {
+  border: 1px solid var(--fsm-border);
+  border-top: none;
+  border-radius: 0 0 .35rem .35rem;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  background: #fbf8ef;
+}
+
+.fsm-row {
+  display: flex;
+  align-items: center;
+  gap: .875rem;
+  padding: .8rem 1.125rem;
+  border-bottom: 1px solid var(--fsm-border);
+  transition: background .12s;
+}
+.fsm-row:last-child { border-bottom: none; }
+.fsm-row:hover { background: var(--fsm-vermillion-soft); }
+
+.fsm-row-dot {
+  flex-shrink: 0;
+  width: 1.125rem;
+  text-align: center;
+  font-size: .875rem;
+}
+.fsm-dot {
+  display: inline-block;
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: var(--fsm-ink-soft);
+  opacity: .4;
+}
+
+.fsm-row-body { flex: 1; min-width: 0; }
+
+.fsm-row-title-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-bottom: .25rem;
+}
+
+.fsm-row-title {
+  font-family: var(--fsm-font-serif);
+  font-size: .98rem;
+  font-weight: 600;
+  color: var(--fsm-ink);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.fsm-row-title:hover { color: var(--fsm-vermillion); text-decoration: none; }
+
+.fsm-cat-chip {
+  flex-shrink: 0;
+  font-size: .68rem;
+  font-weight: 500;
+  padding: .1rem .5rem;
+  border-radius: .2rem;
+  background: transparent;
+  color: var(--fsm-ink-soft);
+  text-decoration: none;
+  border: 1px solid var(--fsm-border);
+  white-space: nowrap;
+}
+.fsm-cat-chip:hover { border-color: var(--fsm-vermillion); color: var(--fsm-vermillion); }
+
+.fsm-tag-chip {
+  flex-shrink: 0;
+  font-size: .68rem;
+  padding: .1rem .45rem;
+  border-radius: .2rem;
+  background: var(--fsm-vermillion-soft);
+  color: var(--fsm-vermillion);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.fsm-tag-chip:hover { background: var(--fsm-vermillion); color: #f6f1e4; }
+
+.fsm-row-meta {
+  font-size: .75rem;
+  color: var(--fsm-ink-soft);
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.fsm-author { color: var(--fsm-ink-soft); text-decoration: none; font-weight: 500; }
+.fsm-author:hover { color: var(--fsm-vermillion); }
+.fsm-sep { opacity: .5; }
+.fsm-time { color: var(--fsm-ink-soft); }
+
+.fsm-row-stats {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .2rem;
+  font-size: .75rem;
+  color: var(--fsm-ink-soft);
+  min-width: 3.5rem;
+  text-align: right;
+}
+.fsm-row-stats span { white-space: nowrap; }
+
+.fsm-empty { color: var(--fsm-ink-soft); }
+
+@media (max-width: 575.98px) {
+  .fsm-row-stats { display: none; }
+}

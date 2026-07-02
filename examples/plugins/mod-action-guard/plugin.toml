@@ -1,0 +1,43 @@
+[meta]
+id          = "com.ferum.mod-action-guard"
+name        = "Moderation Action Guard"
+version     = "1.0.0"
+tier        = "script"
+min_ferum   = "0.1.0"
+description = "Logs post/thread deletions and enforces a non-empty reason on user bans, demonstrating the destructive-action hook points."
+author      = "Ferum Team"
+
+# ─── Script entry point ───────────────────────────────────────────────────────
+
+[script]
+bundle_file = "bundle.js"
+
+# ─── Config schema ────────────────────────────────────────────────────────────
+
+[config_schema]
+type     = "object"
+required = []
+
+[config_schema.properties.require_ban_reason]
+type        = "boolean"
+title       = "Require a ban reason"
+description = "Block temp/permanent bans that are submitted with an empty or whitespace-only reason."
+default     = true
+
+[config_schema.properties.log_deletes]
+type        = "boolean"
+title       = "Log deletions"
+description = "Write an info log entry each time a post or thread is deleted."
+default     = true
+
+# ─── Capabilities ─────────────────────────────────────────────────────────────
+# before_post_delete   — fires before a post is soft-deleted (author or mod)
+# before_thread_delete — fires before a thread is soft-deleted (author or mod)
+# before_user_ban      — fires before a temp (mod) or permanent (admin) ban is applied
+
+[capabilities]
+hooks = [
+    { name = "before_post_delete",   priority = 10 },
+    { name = "before_thread_delete", priority = 10 },
+    { name = "before_user_ban",      priority = 10 },
+]

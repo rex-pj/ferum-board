@@ -191,3 +191,32 @@ pub struct SlotEntry {
     pub load_order: i32,
 }
 
+/// Admin-facing UI slot row — includes everything needed to build a placement editor.
+#[derive(Serialize)]
+pub struct UiSlotAdminItem {
+    pub id: Uuid,
+    pub slot_name: String,
+    pub custom_element_tag: String,
+    pub load_order: i32,
+    pub is_active: bool,
+}
+
+impl From<ferum_domain::models::plugin::PluginUiSlot> for UiSlotAdminItem {
+    fn from(s: ferum_domain::models::plugin::PluginUiSlot) -> Self {
+        Self {
+            id: s.id,
+            slot_name: s.slot_name,
+            custom_element_tag: s.custom_element_tag,
+            load_order: s.load_order,
+            is_active: s.is_active,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct UpdateUiSlotRequest {
+    pub slot_name: String,
+    #[serde(default)]
+    pub load_order: i32,
+}
+

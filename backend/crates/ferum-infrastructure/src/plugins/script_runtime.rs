@@ -26,8 +26,13 @@ mod inner {
 
     use ferum_application::ports::{CacheService, HookDecision};
     use ferum_application::shared::AppError;
+    use ferum_domain::models::notification::NotificationKind;
     use ferum_domain::models::plugin::NewPluginLog;
+    use ferum_domain::repositories::notification_repository::NotificationRepository;
+    use ferum_domain::repositories::plugin_db_repository::PluginDbGateway;
     use ferum_domain::repositories::plugin_repository::PluginRepository;
+    use ferum_domain::repositories::plugin_storage_repository::PluginStorageRepository;
+    use ferum_domain::repositories::user_repository::UserRepository;
 
     use crate::network_utils::assert_no_private_ip;
 
@@ -38,6 +43,14 @@ mod inner {
             hook_name: String,
             ctx_json: String,
             reply: oneshot::Sender<HookDecision>,
+        },
+        /// Unlike ExecuteHook (fail-open, Allow on any error), RPC results propagate
+        /// real errors to the HTTP caller — the request only exists because a client
+        /// is waiting on a genuine response, not observing a side effect.
+        ExecuteRpc {
+            action: String,
+            ctx_json: String,
+            reply: oneshot::Sender<Result<serde_json::Value, String>>,
         },
         DispatchEvent {
             event_type: String,
@@ -55,6 +68,17 @@ mod inner {
         config: serde_json::Value,
         plugin_repo: Arc<dyn PluginRepository>,
         cache: Arc<dyn CacheService>,
+        /// Durable KV store — the persistent counterpart to `cache` (which is TTL-bound).
+        storage: Arc<dyn PluginStorageRepository>,
+        user_repo: Arc<dyn UserRepository>,
+        notification_repo: Arc<dyn NotificationRepository>,
+        /// Names of `Ferum.forum.*` functions this plugin is allowed to call —
+        /// intersection of manifest-requested and admin-granted, same trust
+        /// model as http_allowlist and RPC actions.
+        granted_api: Vec<String>,
+        /// Scoped Postgres access to the plugin's own `plugin_{slug}` schema.
+        db_gateway: Arc<dyn PluginDbGateway>,
+        db_enabled: bool,
         http_allowlist: Vec<String>,
         /// Handle to the main tokio runtime — allows blocking async calls from sync JS callbacks
         rt_handle: tokio::runtime::Handle,
@@ -97,6 +121,26 @@ var Ferum = (function() {
             },
         },
 
+        // Durable KV store — unlike cache (TTL-bound, may be evicted), storage
+        // persists until the plugin explicitly deletes it or is uninstalled.
+        // Values are arbitrary JSON (objects/arrays/strings/numbers), not just strings.
+        storage: {
+            get: function(key) {
+                var r = __ferum_storage_get(String(key));
+                return r != null ? JSON.parse(r) : null;
+            },
+            set: function(key, value) {
+                __ferum_storage_set(String(key), JSON.stringify(value === undefined ? null : value));
+            },
+            del: function(key) {
+                __ferum_storage_del(String(key));
+            },
+            list: function(prefix, limit) {
+                var r = __ferum_storage_list(prefix ? String(prefix) : '', (limit >>> 0) || 100);
+                return JSON.parse(r);
+            },
+        },
+
         http: {
             get: function(url, headers) {
                 var r = __ferum_http_get(String(url), headers ? JSON.stringify(headers) : '{}');
@@ -119,11 +163,44 @@ var Ferum = (function() {
                 return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
             },
         },
+
+        // Curated, capability-gated calls into core use cases. Each function is
+        // only reachable if its name is granted via granted_capabilities.api —
+        // see registry.rs's manifest ∩ granted intersection for hooks/rpc for
+        // the same pattern. Throws if the plugin wasn't granted the capability.
+        forum: {
+            getUserPublic: function(userId) {
+                var r = __ferum_forum_get_user_public(String(userId));
+                return r != null ? JSON.parse(r) : null;
+            },
+            createNotification: function(userId, message) {
+                __ferum_forum_create_notification(String(userId), String(message));
+            },
+        },
+
+        // Scoped SQL access to this plugin's own Postgres schema (plugin_{slug}).
+        // Only available when granted_capabilities.db === true. SELECT and WITH
+        // (writable CTE — e.g. `WITH x AS (INSERT ... RETURNING ...) SELECT
+        // row_to_json(x) FROM x`) statements must return a single JSON/JSONB
+        // column (wrap with row_to_json/jsonb_agg); other statements return
+        // { rows_affected }. Params are positional ($1, $2, ...), always bound —
+        // never string-interpolate values into sql.
+        db: {
+            query: function(sql, params) {
+                var r = __ferum_db_query(String(sql), params ? JSON.stringify(params) : '[]');
+                return JSON.parse(r);
+            },
+        },
     };
 })();
 
 // Hook registry — plugin bundle registers handlers here
 var __ferum_hooks = {};
+
+// RPC registry — plugin bundle registers request handlers here.
+// Handler signature: function(ctx) -> { ok: true, data: <any> } | { ok: false, error: "..." }
+// Invoked via POST /api/plugins/:slug/rpc/:action (see ferum-web handlers/api/plugin_rpc.rs).
+var __ferum_rpc = {};
 "#;
 
     // ─── Register native functions into boa_engine Context ────────────────────────
@@ -254,6 +331,87 @@ var __ferum_hooks = {};
             .expect("register __ferum_cache_del");
         }
 
+        // __ferum_storage_get(key) → String (JSON) | null
+        {
+            let s = state.clone();
+            ctx.register_global_callable(
+                "__ferum_storage_get".into(),
+                1,
+                NativeFunction::from_closure(move |_, args, ctx| {
+                    let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
+                    let storage = s.storage.clone();
+                    let plugin_id = s.plugin_id;
+                    let result = s.rt_handle.block_on(storage.get(plugin_id, &key));
+                    match result {
+                        Ok(Some(v)) => Ok(JsValue::from(boa_engine::JsString::from(
+                            serde_json::to_string(&v).unwrap_or_else(|_| "null".into()),
+                        ))),
+                        _ => Ok(JsValue::null()),
+                    }
+                }),
+            )
+            .expect("register __ferum_storage_get");
+        }
+
+        // __ferum_storage_set(key, valueJson)
+        {
+            let s = state.clone();
+            ctx.register_global_callable(
+                "__ferum_storage_set".into(),
+                2,
+                NativeFunction::from_closure(move |_, args, ctx| {
+                    let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
+                    let value_json = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
+                    let value: serde_json::Value =
+                        serde_json::from_str(&value_json).unwrap_or(serde_json::Value::Null);
+                    let storage = s.storage.clone();
+                    let plugin_id = s.plugin_id;
+                    let _ = s.rt_handle.block_on(storage.set(plugin_id, &key, value));
+                    Ok(JsValue::undefined())
+                }),
+            )
+            .expect("register __ferum_storage_set");
+        }
+
+        // __ferum_storage_del(key)
+        {
+            let s = state.clone();
+            ctx.register_global_callable(
+                "__ferum_storage_del".into(),
+                1,
+                NativeFunction::from_closure(move |_, args, ctx| {
+                    let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
+                    let storage = s.storage.clone();
+                    let plugin_id = s.plugin_id;
+                    let _ = s.rt_handle.block_on(storage.delete(plugin_id, &key));
+                    Ok(JsValue::undefined())
+                }),
+            )
+            .expect("register __ferum_storage_del");
+        }
+
+        // __ferum_storage_list(prefix, limit) → String (JSON array of keys)
+        {
+            let s = state.clone();
+            ctx.register_global_callable(
+                "__ferum_storage_list".into(),
+                2,
+                NativeFunction::from_closure(move |_, args, ctx| {
+                    let prefix = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
+                    let limit = args.get_or_undefined(1).to_u32(ctx).unwrap_or(100) as u64;
+                    let storage = s.storage.clone();
+                    let plugin_id = s.plugin_id;
+                    let keys = s.rt_handle
+                        .block_on(storage.list_keys(plugin_id, &prefix, limit.min(1000)))
+                        .unwrap_or_default();
+                    Ok(JsValue::from(boa_engine::JsString::from(
+                        serde_json::to_string(&keys).unwrap_or_else(|_| "[]".into()),
+                    )))
+                }),
+            )
+            .expect("register __ferum_storage_list");
+        }
+
         // __ferum_http_get(url, headersJson) → responseJson | null
         {
             let s = state.clone();
@@ -344,6 +502,112 @@ var __ferum_hooks = {};
             )
             .expect("register __ferum_sha256");
         }
+
+        // __ferum_forum_get_user_public(userId) → String (JSON) | null
+        {
+            let s = state.clone();
+            ctx.register_global_callable(
+                "__ferum_forum_get_user_public".into(),
+                1,
+                NativeFunction::from_closure(move |_, args, ctx| {
+                    if !s.granted_api.iter().any(|a| a == "forum.getUserPublic") {
+                        return Err(JsNativeError::error()
+                            .with_message("Capability 'forum.getUserPublic' is not granted for this plugin")
+                            .into());
+                    }
+                    let id_str = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
+                    let Ok(user_id) = id_str.parse::<Uuid>() else {
+                        return Ok(JsValue::null());
+                    };
+                    let user_repo = s.user_repo.clone();
+                    let result = s.rt_handle.block_on(user_repo.find_by_id(user_id));
+                    match result {
+                        Ok(Some(u)) => {
+                            let public = serde_json::json!({
+                                "id": u.id,
+                                "username": u.username,
+                                "display_name": u.display_name,
+                                "avatar_url": u.avatar_url,
+                                "trust_level": format!("{:?}", u.trust_level).to_lowercase(),
+                            });
+                            Ok(JsValue::from(boa_engine::JsString::from(
+                                serde_json::to_string(&public).unwrap_or_else(|_| "null".into()),
+                            )))
+                        }
+                        _ => Ok(JsValue::null()),
+                    }
+                }),
+            )
+            .expect("register __ferum_forum_get_user_public");
+        }
+
+        // __ferum_forum_create_notification(userId, message)
+        {
+            let s = state.clone();
+            ctx.register_global_callable(
+                "__ferum_forum_create_notification".into(),
+                2,
+                NativeFunction::from_closure(move |_, args, ctx| {
+                    if !s.granted_api.iter().any(|a| a == "forum.createNotification") {
+                        return Err(JsNativeError::error()
+                            .with_message("Capability 'forum.createNotification' is not granted for this plugin")
+                            .into());
+                    }
+                    let id_str = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
+                    let message = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
+                    let Ok(user_id) = id_str.parse::<Uuid>() else {
+                        return Ok(JsValue::undefined());
+                    };
+                    // Always kind=System — a plugin can never forge a "mention"/"reply"
+                    // notification impersonating real user activity, only post its own
+                    // clearly-plugin-sourced system message.
+                    let payload = serde_json::json!({
+                        "message": message,
+                        "source_plugin": s.plugin_slug,
+                    });
+                    let notification_repo = s.notification_repo.clone();
+                    let _ = s.rt_handle.block_on(
+                        notification_repo.create(user_id, NotificationKind::System, payload)
+                    );
+                    Ok(JsValue::undefined())
+                }),
+            )
+            .expect("register __ferum_forum_create_notification");
+        }
+
+        // __ferum_db_query(sql, paramsJson) → String (JSON)
+        {
+            let s = state.clone();
+            ctx.register_global_callable(
+                "__ferum_db_query".into(),
+                2,
+                NativeFunction::from_closure(move |_, args, ctx| {
+                    if !s.db_enabled {
+                        return Err(JsNativeError::error()
+                            .with_message("Capability 'db' is not granted for this plugin")
+                            .into());
+                    }
+                    let sql = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
+                    let params_json = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
+                    let params: Vec<serde_json::Value> =
+                        serde_json::from_str(&params_json).unwrap_or_default();
+
+                    let gateway = s.db_gateway.clone();
+                    let slug = s.plugin_slug.clone();
+                    let result = s.rt_handle.block_on(gateway.query(&slug, &sql, params));
+
+                    match result {
+                        Ok(v) => Ok(JsValue::from(boa_engine::JsString::from(
+                            serde_json::to_string(&v).unwrap_or_else(|_| "null".into()),
+                        ))),
+                        Err(e) => Err(JsNativeError::error()
+                            .with_message(format!("{e}"))
+                            .into()),
+                    }
+                }),
+            )
+            .expect("register __ferum_db_query");
+        }
     }
 
     // ─── Hook execution helpers ───────────────────────────────────────────────────
@@ -406,6 +670,57 @@ var __ferum_hooks = {};
             }})()"#
         );
         let _ = ctx.eval(Source::from_bytes(&script));
+    }
+
+    /// Invoke a plugin's registered RPC handler (`__ferum_rpc[action]`).
+    /// Contract: the handler returns `{ ok: true, data: <any> }` or
+    /// `{ ok: false, error: "..." }`. Unlike hooks, RPC does not fail open —
+    /// a missing handler, a thrown exception, or an `ok: false` result all
+    /// surface as a real `Err` to the HTTP caller.
+    fn call_rpc_sync(
+        ctx: &mut Context,
+        action: &str,
+        ctx_json: &str,
+    ) -> Result<serde_json::Value, String> {
+        let script = format!(
+            r#"(function() {{
+                try {{
+                    var handler = (typeof __ferum_rpc === 'object') && __ferum_rpc[{action:?}];
+                    if (typeof handler !== 'function') {{
+                        return JSON.stringify({{ ok: false, error: 'Unknown RPC action: ' + {action:?} }});
+                    }}
+                    var rpcCtx = JSON.parse({ctx_json:?});
+                    var result = handler(rpcCtx);
+                    if (!result || typeof result !== 'object') {{
+                        return JSON.stringify({{ ok: false, error: 'RPC handler returned no result' }});
+                    }}
+                    return JSON.stringify(result);
+                }} catch (e) {{
+                    return JSON.stringify({{ ok: false, error: 'RPC handler threw: ' + String(e) }});
+                }}
+            }})()"#
+        );
+
+        let result = ctx.eval(Source::from_bytes(&script));
+        let raw = match result {
+            Ok(JsValue::String(s)) => s.to_std_string_escaped(),
+            Ok(other) => other.to_string(ctx).map(|s| s.to_std_string_escaped())
+                .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"non-string RPC result\"}".to_string()),
+            Err(e) => return Err(format!("JS eval error: {e:?}")),
+        };
+
+        let parsed: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|e| format!("RPC handler returned invalid JSON: {e}"))?;
+
+        if parsed.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            Ok(parsed.get("data").cloned().unwrap_or(serde_json::Value::Null))
+        } else {
+            Err(parsed
+                .get("error")
+                .and_then(|e| e.as_str())
+                .unwrap_or("RPC handler failed")
+                .to_string())
+        }
     }
 
     fn parse_hook_result_json(json: &str) -> HookDecision {
@@ -488,6 +803,10 @@ var __ferum_hooks = {};
                     let decision = call_hook_sync(&mut ctx, &hook_name, &ctx_json);
                     let _ = reply.send(decision);
                 }
+                ScriptMessage::ExecuteRpc { action, ctx_json, reply } => {
+                    let result = call_rpc_sync(&mut ctx, &action, &ctx_json);
+                    let _ = reply.send(result);
+                }
                 ScriptMessage::DispatchEvent { event_type, payload_json } => {
                     call_event_sync(&mut ctx, &event_type, &payload_json);
                 }
@@ -509,6 +828,7 @@ var __ferum_hooks = {};
     }
 
     impl ScriptPluginRuntime {
+        #[allow(clippy::too_many_arguments)]
         pub fn new(
             slug: String,
             bundle_js: String,
@@ -516,6 +836,12 @@ var __ferum_hooks = {};
             config: serde_json::Value,
             plugin_repo: Arc<dyn PluginRepository>,
             cache: Arc<dyn CacheService>,
+            storage: Arc<dyn PluginStorageRepository>,
+            user_repo: Arc<dyn UserRepository>,
+            notification_repo: Arc<dyn NotificationRepository>,
+            granted_api: Vec<String>,
+            db_gateway: Arc<dyn PluginDbGateway>,
+            db_enabled: bool,
             http_allowlist: Vec<String>,
         ) -> Result<Self, AppError> {
             let rt_handle = tokio::runtime::Handle::current();
@@ -526,6 +852,12 @@ var __ferum_hooks = {};
                 config,
                 plugin_repo,
                 cache,
+                storage,
+                user_repo,
+                notification_repo,
+                granted_api,
+                db_gateway,
+                db_enabled,
                 http_allowlist,
                 rt_handle,
             });
@@ -557,11 +889,22 @@ var __ferum_hooks = {};
             })
         }
 
-        /// Extract HTTP allowlist from manifest.
+        /// Extract HTTP allowlist declared by the plugin's manifest.
         pub fn http_allowlist_from_manifest(manifest: &serde_json::Value) -> Vec<String> {
             manifest
                 .get("capabilities")
                 .and_then(|c| c.get("http_allowlist"))
+                .and_then(|a| a.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default()
+        }
+
+        /// Extract HTTP allowlist the admin actually granted at install time.
+        /// `granted_capabilities` mirrors a manifest `[capabilities]` table directly
+        /// (i.e. `{"hooks": [...], "http_allowlist": [...]}`), not manifest-nested.
+        pub fn http_allowlist_from_capabilities(granted_capabilities: &serde_json::Value) -> Vec<String> {
+            granted_capabilities
+                .get("http_allowlist")
                 .and_then(|a| a.as_array())
                 .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                 .unwrap_or_default()
@@ -590,6 +933,100 @@ var __ferum_hooks = {};
             }
 
             reply_rx.await.unwrap_or(HookDecision::Allow)
+        }
+
+        /// Invoke a registered RPC action. Unlike `execute_hook`, this does NOT
+        /// fail open — timeouts, closed channels, and handler errors all surface
+        /// as `Err` so the HTTP layer can return a real error to the client.
+        pub async fn execute_rpc(&self, action: &str, ctx_json: String) -> Result<serde_json::Value, AppError> {
+            let (reply_tx, reply_rx) = oneshot::channel();
+            let msg = ScriptMessage::ExecuteRpc {
+                action: action.to_string(),
+                ctx_json,
+                reply: reply_tx,
+            };
+
+            let tx = self.tx.clone();
+            let send_ok = tokio::task::spawn_blocking(move || tx.send(msg).is_ok())
+                .await
+                .unwrap_or(false);
+
+            if !send_ok {
+                return Err(AppError::internal("Plugin runtime channel closed"));
+            }
+
+            match reply_rx.await {
+                Ok(Ok(value)) => Ok(value),
+                Ok(Err(msg)) => Err(AppError::UnprocessableEntity(msg)),
+                Err(_) => Err(AppError::internal("Plugin runtime dropped the RPC reply")),
+            }
+        }
+
+        /// Extract RPC action names declared by the plugin's manifest.
+        pub fn rpc_actions_from_manifest(manifest: &serde_json::Value) -> Vec<String> {
+            manifest
+                .get("capabilities")
+                .and_then(|c| c.get("rpc"))
+                .and_then(|a| a.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default()
+        }
+
+        /// Extract RPC action names the admin actually granted at install time.
+        pub fn rpc_actions_from_capabilities(granted_capabilities: &serde_json::Value) -> Vec<String> {
+            granted_capabilities
+                .get("rpc")
+                .and_then(|a| a.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default()
+        }
+
+        /// Extract `Ferum.forum.*` function names declared by the plugin's manifest.
+        pub fn api_names_from_manifest(manifest: &serde_json::Value) -> Vec<String> {
+            manifest
+                .get("capabilities")
+                .and_then(|c| c.get("api"))
+                .and_then(|a| a.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default()
+        }
+
+        /// Extract `Ferum.forum.*` function names the admin actually granted at install time.
+        pub fn api_names_from_capabilities(granted_capabilities: &serde_json::Value) -> Vec<String> {
+            granted_capabilities
+                .get("api")
+                .and_then(|a| a.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default()
+        }
+
+        /// Whether the plugin's manifest requests the `db` capability
+        /// (its own Postgres schema, see plugin_db_repository.rs).
+        pub fn db_requested_by_manifest(manifest: &serde_json::Value) -> bool {
+            manifest
+                .get("capabilities")
+                .and_then(|c| c.get("db"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        }
+
+        /// Whether the admin actually granted the `db` capability at install time.
+        pub fn db_granted_by_capabilities(granted_capabilities: &serde_json::Value) -> bool {
+            granted_capabilities
+                .get("db")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        }
+
+        /// Extract the one-time schema DDL statements from the manifest's `[schema]`
+        /// section. Only ever read at install time — never at query time.
+        pub fn schema_tables_from_manifest(manifest: &serde_json::Value) -> Vec<String> {
+            manifest
+                .get("schema")
+                .and_then(|s| s.get("tables"))
+                .and_then(|a| a.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default()
         }
 
         /// Dispatch an after-event (fire-and-forget from caller's perspective).

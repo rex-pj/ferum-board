@@ -9,7 +9,7 @@ use crate::constants::MAX_BAN_REASON_LEN;
 use crate::dto::ReportWithContext;
 use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
-use crate::ports::CacheService;
+use crate::ports::{CacheService, HookContext, HookDecision, NullPluginRuntime, PluginHookRuntime};
 use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::audit_log::AuditLog;
@@ -32,6 +32,7 @@ pub struct ModerationUseCase {
     pub audit_log_repo: Arc<dyn AuditLogRepository>,
     pub event_bus: Arc<dyn EventPublisher>,
     pub cache: Arc<dyn CacheService>,
+    pub plugin_runtime: Arc<dyn PluginHookRuntime>,
 }
 
 impl ModerationUseCase {
@@ -45,7 +46,22 @@ impl ModerationUseCase {
         event_bus: Arc<dyn EventPublisher>,
         cache: Arc<dyn CacheService>,
     ) -> Self {
-        Self { reports, posts, threads, users, notifications, audit_log_repo, event_bus, cache }
+        Self {
+            reports,
+            posts,
+            threads,
+            users,
+            notifications,
+            audit_log_repo,
+            event_bus,
+            cache,
+            plugin_runtime: Arc::new(NullPluginRuntime),
+        }
+    }
+
+    pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
+        self.plugin_runtime = runtime;
+        self
     }
 
     // ─── Report creation (any authenticated member) ───────────────────────────
@@ -263,6 +279,28 @@ impl ModerationUseCase {
         PermissionChecker::can_ban_temp(actor)?;
 
         self.users.find_by_id(user_id).await?.or_not_found()?;
+
+        let hook_ctx = HookContext {
+            hook_name: "before_user_ban".to_string(),
+            actor_id: Some(actor.id),
+            actor_trust_level: format!("{:?}", actor.trust_level).to_lowercase(),
+            payload: serde_json::json!({
+                "target_user_id": user_id,
+                "reason": reason,
+                "until": until,
+                "permanent": false,
+            }),
+        };
+        match self
+            .plugin_runtime
+            .dispatch_before_hook("before_user_ban", &hook_ctx)
+            .await?
+        {
+            HookDecision::Deny { reason, error_code } => {
+                return Err(AppError::PluginBlocked { reason, error_code });
+            }
+            HookDecision::Allow => {}
+        }
 
         self.users
             .update(

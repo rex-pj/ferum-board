@@ -5,8 +5,8 @@ use sea_orm::DatabaseConnection;
 
 use crate::tera_engine::TeraEngine;
 use ferum_application::ports::{
-    CacheService, NotificationSubscriber, PermissionResolver, PluginHookRuntime, PluginUiRuntime,
-    RateLimiter, TokenService,
+    CacheService, NotificationSubscriber, PermissionResolver, PluginHookRuntime, PluginRpcRuntime,
+    PluginUiRuntime, RateLimiter, TokenService,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
@@ -59,6 +59,8 @@ pub struct AppState {
     pub plugin_hooks: Arc<dyn PluginHookRuntime>,
     /// UI slot registry: used by SSR layer for frontend hydration.
     pub plugin_ui: Arc<dyn PluginUiRuntime>,
+    /// RPC dispatch: used by the generic /api/plugins/:slug/rpc/:action endpoint.
+    pub plugin_rpc: Arc<dyn PluginRpcRuntime>,
     pub site_config: Arc<dyn SiteConfigRepository>,
     /// In-memory authoritative copy of site_config table. Loaded at startup,
     /// updated synchronously on every write — no TTL, no serialization overhead.

@@ -1,0 +1,278 @@
+/*
+ * Ferum Arcade — gaming-inspired custom theme
+ *
+ * HOW CSS LOADING WORKS
+ * ─────────────────────────────────────────────────────────────────────────────
+ * This theme overrides templates/base.html and templates/home.html, so its
+ * custom base.html loads both stylesheets explicitly:
+ *   /themes/default/assets/theme.css      ← fr-* layout classes
+ *   /themes/ferum-arcade/assets/theme.css ← neon palette + fac-* classes
+ *
+ * Pages NOT overridden by this theme (thread view, category list, profile, …)
+ * fall through to the default theme's own base.html, so they render with
+ * default's layout untouched — this theme intentionally only re-skins the
+ * home feed as a demonstration; a production theme would extend coverage to
+ * every page it wants to restyle.
+ *
+ * No web fonts are loaded — the app's CSP is `default-src 'self'`, so the
+ * monospace stack below only uses fonts already installed on the visitor's OS.
+ */
+
+:root {
+  --fac-bg: #0a0a12;
+  --fac-panel: #12121e;
+  --fac-border: #262640;
+  --fac-cyan: #00e5ff;
+  --fac-magenta: #ff2fd0;
+  --fac-cyan-soft: rgba(0, 229, 255, 0.12);
+  --fac-text: #d8e6ff;
+  --fac-text-dim: #7d89b0;
+  --fac-solved: #35ff9c;
+  --fac-pinned: #ffcc00;
+  --fac-font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, Consolas, "Courier New", monospace;
+}
+
+[data-bs-theme="dark"] {
+  --bs-body-bg: var(--fac-bg);
+  --bs-body-bg-rgb: 10, 10, 18;
+  --bs-body-color: var(--fac-text);
+  --bs-secondary-color: var(--fac-text-dim);
+  --bs-border-color: var(--fac-border);
+  --bs-card-bg: var(--fac-panel);
+  --ferum-primary: var(--fac-cyan);
+  --bs-primary: var(--fac-cyan);
+  --bs-link-color: var(--fac-cyan);
+  --bs-link-hover-color: var(--fac-magenta);
+}
+
+h1, h2, h3, h4, h5, h6,
+.navbar-brand,
+.fr-nav-brand {
+  font-family: var(--fac-font-mono);
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+/* ── Scanline overlay ────────────────────────────────────────────────────── */
+.fac-scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+/* ── Navigation / sidebar / cards ────────────────────────────────────────── */
+.fr-nav {
+  background-color: var(--fac-panel) !important;
+  border-bottom: 1px solid var(--fac-border) !important;
+  box-shadow: 0 1px 0 rgba(0, 229, 255, 0.15);
+}
+
+.fr-sidebar-left {
+  background-color: var(--fac-panel);
+  border-right-color: var(--fac-border);
+}
+
+.card {
+  background-color: var(--fac-panel);
+  border-color: var(--fac-border);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--fac-cyan);
+  --bs-btn-border-color: var(--fac-cyan);
+  --bs-btn-color: #06131a;
+  --bs-btn-hover-bg: #33ecff;
+  --bs-btn-hover-border-color: #33ecff;
+  --bs-btn-hover-color: #06131a;
+  --bs-btn-active-bg: var(--fac-magenta);
+  --bs-btn-active-border-color: var(--fac-magenta);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+}
+
+/* ── HUD corner brackets on the main content column ─────────────────────── */
+.fac-hud-frame {
+  position: relative;
+}
+.fac-hud-frame::before,
+.fac-hud-frame::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+}
+.fac-hud-frame::before {
+  top: 0;
+  left: 0;
+  border-top: 2px solid var(--fac-cyan);
+  border-left: 2px solid var(--fac-cyan);
+  box-shadow: -2px -2px 10px rgba(0, 229, 255, 0.45);
+}
+.fac-hud-frame::after {
+  bottom: 0;
+  right: 0;
+  border-bottom: 2px solid var(--fac-magenta);
+  border-right: 2px solid var(--fac-magenta);
+  box-shadow: 2px 2px 10px rgba(255, 47, 208, 0.45);
+}
+
+/* ── fac-* — Ferum Arcade custom thread queue (home.html override) ───────── */
+
+.fac-feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .75rem 1.125rem;
+  margin-bottom: 0;
+  background: var(--fac-panel);
+  border: 1px solid var(--fac-border);
+  border-radius: .25rem .25rem 0 0;
+}
+.fac-feed-title {
+  font-family: var(--fac-font-mono);
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--fac-cyan);
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+.fac-clear-filter {
+  font-family: var(--fac-font-mono);
+  font-size: .75rem;
+  color: var(--fac-text-dim);
+  text-decoration: none;
+}
+.fac-clear-filter:hover { color: var(--fac-magenta); }
+.fac-btn { border-radius: .2rem; font-family: var(--fac-font-mono); }
+
+.fac-list {
+  border: 1px solid var(--fac-border);
+  border-top: none;
+  border-radius: 0 0 .25rem .25rem;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  background: var(--fac-panel);
+}
+
+.fac-row {
+  display: flex;
+  align-items: center;
+  gap: .875rem;
+  padding: .7rem 1.125rem;
+  border-bottom: 1px solid var(--fac-border);
+  transition: background .12s;
+}
+.fac-row:last-child { border-bottom: none; }
+.fac-row:hover { background: var(--fac-cyan-soft); }
+
+.fac-row-led {
+  flex-shrink: 0;
+  width: 1.125rem;
+  text-align: center;
+}
+.fac-led {
+  display: inline-block;
+  width: .55rem;
+  height: .55rem;
+  border-radius: 50%;
+}
+.fac-led-open { background: var(--fac-text-dim); }
+.fac-led-solved { background: var(--fac-solved); box-shadow: 0 0 6px var(--fac-solved); }
+.fac-led-pinned { background: var(--fac-pinned); box-shadow: 0 0 6px var(--fac-pinned); }
+
+.fac-row-body { flex: 1; min-width: 0; }
+
+.fac-row-title-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .3rem;
+  margin-bottom: .2rem;
+}
+
+.fac-row-title {
+  font-family: var(--fac-font-mono);
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--fac-text);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.fac-row-title:hover { color: var(--fac-cyan); text-shadow: 0 0 6px rgba(0, 229, 255, 0.5); }
+
+.fac-cat-chip {
+  flex-shrink: 0;
+  font-family: var(--fac-font-mono);
+  font-size: .65rem;
+  font-weight: 500;
+  padding: .1rem .45rem;
+  border-radius: .2rem;
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--fac-cyan);
+  text-decoration: none;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  white-space: nowrap;
+}
+.fac-cat-chip:hover { background: rgba(0, 229, 255, 0.22); }
+
+.fac-tag-chip {
+  flex-shrink: 0;
+  font-family: var(--fac-font-mono);
+  font-size: .65rem;
+  padding: .1rem .4rem;
+  border-radius: .2rem;
+  background: rgba(255, 47, 208, 0.1);
+  color: var(--fac-magenta);
+  text-decoration: none;
+  border: 1px solid rgba(255, 47, 208, 0.3);
+  white-space: nowrap;
+}
+.fac-tag-chip:hover { background: rgba(255, 47, 208, 0.22); }
+
+.fac-row-meta {
+  font-family: var(--fac-font-mono);
+  font-size: .72rem;
+  color: var(--fac-text-dim);
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.fac-author { color: var(--fac-text-dim); text-decoration: none; font-weight: 500; }
+.fac-author:hover { color: var(--fac-cyan); }
+.fac-sep { opacity: .5; }
+.fac-time { color: var(--fac-text-dim); }
+
+.fac-row-stats {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .2rem;
+  font-family: var(--fac-font-mono);
+  font-size: .72rem;
+  color: var(--fac-cyan);
+  min-width: 3.5rem;
+  text-align: right;
+}
+.fac-row-stats span { white-space: nowrap; }
+
+.fac-empty {
+  color: var(--fac-text-dim);
+  font-family: var(--fac-font-mono);
+}
+
+@media (max-width: 575.98px) {
+  .fac-row-stats { display: none; }
+}

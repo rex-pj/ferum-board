@@ -1,0 +1,175 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use chrono::Utc;
+use uuid::Uuid;
+
+use ferum_application::ports::NullPluginRuntime;
+use ferum_application::usecases::plugin_usecase::PluginUseCase;
+use ferum_domain::models::plugin::{Plugin, PluginHook, PluginStatus, PluginTier};
+use ferum_test_support::fixtures::AuthUserBuilder;
+use ferum_test_support::mocks::{
+    job_queue::NoopJobQueue, plugin_db_repository::MockPluginDbGateway,
+    plugin_repository::MockPluginRepository, stored_file_repository::NoopStoredFileRepository,
+    webhook_repository::MockWebhookRepository,
+};
+
+// A manifest requesting three hooks, but the admin only granted one at install time
+// (mirrors the capability-review flow: granted_capabilities is a subset of what the
+// manifest's [capabilities] table requested).
+fn manifest_requesting_three_hooks() -> serde_json::Value {
+    serde_json::json!({
+        "capabilities": {
+            "hooks": [
+                { "name": "before_post_create", "priority": 10 },
+                { "name": "before_post_edit", "priority": 10 },
+                { "name": "before_thread_create", "priority": 10 },
+            ]
+        }
+    })
+}
+
+fn granted_only_before_post_create() -> serde_json::Value {
+    serde_json::json!({
+        "hooks": [
+            { "name": "before_post_create", "priority": 10 },
+        ]
+    })
+}
+
+fn make_plugin(id: Uuid, manifest: serde_json::Value, granted_capabilities: serde_json::Value) -> Plugin {
+    Plugin {
+        id,
+        slug: "com.example.test-plugin".to_string(),
+        name: "Test Plugin".to_string(),
+        version: "1.0.0".to_string(),
+        tier: PluginTier::Script,
+        status: PluginStatus::Inactive,
+        manifest,
+        config: serde_json::json!({}),
+        granted_capabilities,
+        install_path: "/tmp/plugins/com.example.test-plugin".to_string(),
+        db_schema_name: None,
+        db_schema_version: 0,
+        installed_by: None,
+        installed_at: Utc::now(),
+        updated_at: Utc::now(),
+        activated_at: None,
+        error_message: None,
+        last_seen_at: None,
+        restart_count: 0,
+        circuit_open: false,
+    }
+}
+
+struct Uc {
+    plugins: MockPluginRepository,
+    webhooks: MockWebhookRepository,
+    db_gateway: MockPluginDbGateway,
+}
+
+impl Uc {
+    fn new() -> Self {
+        Self {
+            plugins: MockPluginRepository::new(),
+            webhooks: MockWebhookRepository::new(),
+            db_gateway: MockPluginDbGateway::new(),
+        }
+    }
+
+    fn build(self) -> PluginUseCase {
+        PluginUseCase::new(
+            Arc::new(self.plugins),
+            Arc::new(self.webhooks),
+            Arc::new(NullPluginRuntime),
+            Arc::new(self.db_gateway),
+            Arc::new(NoopStoredFileRepository),
+            Arc::new(NoopJobQueue),
+            PathBuf::from("/tmp/plugins"),
+        )
+    }
+}
+
+#[tokio::test]
+async fn activate_only_registers_hooks_that_were_granted_at_install_time() {
+    let actor = AuthUserBuilder::admin().build();
+    let plugin_id = Uuid::new_v4();
+    let manifest = manifest_requesting_three_hooks();
+    let granted = granted_only_before_post_create();
+
+    let plugin = make_plugin(plugin_id, manifest.clone(), granted.clone());
+    let plugin_after_activate = {
+        let mut p = make_plugin(plugin_id, manifest, granted);
+        p.status = PluginStatus::Active;
+        p
+    };
+
+    let mut b = Uc::new();
+    b.plugins.expect_find_by_slug().returning({
+        let plugin = plugin.clone();
+        move |_| Ok(Some(plugin.clone()))
+    });
+    b.plugins.expect_delete_hooks_for_plugin().returning(|_| Ok(()));
+    b.plugins.expect_delete_ui_slots_for_plugin().returning(|_| Ok(()));
+    b.plugins.expect_update_status().returning(|_, _, _| Ok(()));
+    b.plugins.expect_update_activated_at().returning(|_| Ok(()));
+    b.plugins.expect_append_log().returning(|_| Ok(()));
+    b.plugins.expect_find_by_id().returning(move |_| Ok(Some(plugin_after_activate.clone())));
+
+    // The security-critical assertion: create_hook must only ever be called for the
+    // one hook that was both requested by the manifest AND granted by the admin.
+    // If register_hooks_from_manifest regresses to trusting the manifest alone, this
+    // closure will be invoked with "before_post_edit" or "before_thread_create" too
+    // and the mock will return an error, failing the test.
+    b.plugins.expect_create_hook().returning(|data| {
+        if data.hook_name != "before_post_create" {
+            return Err(ferum_domain::AppError::internal(format!(
+                "ungranted hook '{}' must not be registered",
+                data.hook_name
+            )));
+        }
+        Ok(PluginHook {
+            id: Uuid::new_v4(),
+            plugin_id: data.plugin_id,
+            hook_name: data.hook_name,
+            priority: data.priority,
+            is_active: true,
+            avg_ms: None,
+        })
+    });
+
+    let result = b.build().activate(&actor, "com.example.test-plugin").await;
+    assert!(result.is_ok(), "activate should succeed: {:?}", result);
+}
+
+#[tokio::test]
+async fn activate_registers_no_hooks_when_none_were_granted() {
+    let actor = AuthUserBuilder::admin().build();
+    let plugin_id = Uuid::new_v4();
+    let manifest = manifest_requesting_three_hooks();
+    let granted = serde_json::json!({ "hooks": [] });
+
+    let plugin = make_plugin(plugin_id, manifest.clone(), granted.clone());
+    let plugin_after_activate = {
+        let mut p = make_plugin(plugin_id, manifest, granted);
+        p.status = PluginStatus::Active;
+        p
+    };
+
+    let mut b = Uc::new();
+    b.plugins.expect_find_by_slug().returning({
+        let plugin = plugin.clone();
+        move |_| Ok(Some(plugin.clone()))
+    });
+    b.plugins.expect_delete_hooks_for_plugin().returning(|_| Ok(()));
+    b.plugins.expect_delete_ui_slots_for_plugin().returning(|_| Ok(()));
+    b.plugins.expect_update_status().returning(|_, _, _| Ok(()));
+    b.plugins.expect_update_activated_at().returning(|_| Ok(()));
+    b.plugins.expect_append_log().returning(|_| Ok(()));
+    b.plugins.expect_find_by_id().returning(move |_| Ok(Some(plugin_after_activate.clone())));
+    // No expect_create_hook() at all — if the use case calls it even once, the mock
+    // panics with "MockPluginRepository::create_hook: No matching expectation found".
+
+    let result = b.build().activate(&actor, "com.example.test-plugin").await;
+    assert!(result.is_ok(), "activate should succeed: {:?}", result);
+}

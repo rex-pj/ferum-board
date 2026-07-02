@@ -11,7 +11,8 @@ use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::plugin::{
     ActiveSlotsResponse, CapabilityReviewResponse, ConfigurePluginRequest, DebugHookRequest,
     DebugHookResponse, PluginDetailResponse, PluginListItem, PluginLogQueryParams,
-    PluginLogResponse, SlotEntry, TogglePluginStatusRequest, UninstallPluginRequest,
+    PluginLogResponse, SlotEntry, TogglePluginStatusRequest, UiSlotAdminItem,
+    UninstallPluginRequest, UpdateUiSlotRequest,
 };
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::ports::{HookContext, HookDecision};
@@ -185,6 +186,31 @@ pub async fn configure_plugin(
     let actor = auth_user.require_auth()?;
     state.plugin.configure(actor, &slug, body.config).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn list_ui_slots(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(slug): Path<String>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.require_auth()?;
+    let slots = state.plugin.list_ui_slots(actor, &slug).await?;
+    let items: Vec<UiSlotAdminItem> = slots.into_iter().map(UiSlotAdminItem::from).collect();
+    Ok(Json(DataResponse::new(items)))
+}
+
+pub async fn update_ui_slot(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path((slug, slot_id)): Path<(String, uuid::Uuid)>,
+    Json(body): Json<UpdateUiSlotRequest>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.require_auth()?;
+    let slot = state
+        .plugin
+        .update_ui_slot_placement(actor, &slug, slot_id, body.slot_name, body.load_order)
+        .await?;
+    Ok(Json(DataResponse::new(UiSlotAdminItem::from(slot))))
 }
 
 pub async fn toggle_status(

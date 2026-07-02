@@ -233,6 +233,24 @@ pub trait PluginLifecycle: Send + Sync {
     async fn reload_plugin(&self, plugin_id: Uuid);
 }
 
+/// ISP: the RPC HTTP handler needs to invoke a plugin's registered RPC actions —
+/// independent of hook dispatch, UI, or lifecycle concerns.
+#[async_trait]
+pub trait PluginRpcRuntime: Send + Sync {
+    /// Invoke a named RPC action registered by a Script-tier plugin.
+    /// Unlike `dispatch_before_hook` (fail-open), RPC failures propagate as real
+    /// errors — the caller is an HTTP client waiting on a genuine response, not
+    /// a use case observing a side effect. Implementations must reject any
+    /// action not present in BOTH the plugin's manifest and its granted
+    /// capabilities before ever reaching the plugin's code.
+    async fn dispatch_rpc(
+        &self,
+        plugin_slug: &str,
+        action: &str,
+        ctx: &HookContext,
+    ) -> Result<serde_json::Value, AppError>;
+}
+
 /// No-op implementation used during startup or when plugin system is disabled.
 pub struct NullPluginRuntime;
 
@@ -259,6 +277,18 @@ impl PluginUiRuntime for NullPluginRuntime {
 #[async_trait]
 impl PluginLifecycle for NullPluginRuntime {
     async fn reload_plugin(&self, _plugin_id: Uuid) {}
+}
+
+#[async_trait]
+impl PluginRpcRuntime for NullPluginRuntime {
+    async fn dispatch_rpc(
+        &self,
+        _plugin_slug: &str,
+        _action: &str,
+        _ctx: &HookContext,
+    ) -> Result<serde_json::Value, AppError> {
+        Err(AppError::NotFound)
+    }
 }
 
 // ─── PermissionResolver ───────────────────────────────────────────────────────

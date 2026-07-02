@@ -4,6 +4,12 @@
 {% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
 
 {% block content %}
+
+{# Plugin slot: home_feed_top — homepage-only widgets (e.g. shared chat room) #}
+{% if plugin_slots.home_feed_top %}
+  {% for slot in plugin_slots.home_feed_top %}{{ slot.html | safe }}{% endfor %}
+{% endif %}
+
 <div class="fr-feed mb-3">
 
   {# ── Feed header: title + sort tabs ── #}

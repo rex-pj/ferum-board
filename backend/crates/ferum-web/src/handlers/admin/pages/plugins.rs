@@ -12,6 +12,12 @@ use crate::view_models::page_context::{CurrentUserCtx, PluginDetailCtx, PluginLo
 use ferum_infrastructure::plugins::package_extractor;
 
 #[derive(Serialize)]
+struct HookCapabilityCtx {
+    name: String,
+    priority: i64,
+}
+
+#[derive(Serialize)]
 struct PluginReviewCtx {
     slug: String,
     name: String,
@@ -20,6 +26,13 @@ struct PluginReviewCtx {
     author: String,
     description: String,
     capabilities_json: String,
+    hooks: Vec<HookCapabilityCtx>,
+    http_allowlist: Vec<String>,
+    rpc_actions: Vec<String>,
+    api_functions: Vec<String>,
+    wants_db: bool,
+    wants_media: bool,
+    schema_tables: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -91,10 +104,57 @@ pub async fn upload_plugin(
         &extracted.to_string_lossy(),
     );
 
-    let capabilities_json = manifest
+    let capabilities = manifest
         .raw
         .get("capabilities")
-        .map(|v| serde_json::to_string_pretty(v).unwrap_or_default())
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
+    let capabilities_json = serde_json::to_string_pretty(&capabilities).unwrap_or_default();
+
+    let hooks: Vec<HookCapabilityCtx> = capabilities
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| {
+                    let name = item.get("name")?.as_str()?.to_string();
+                    let priority = item.get("priority").and_then(|p| p.as_i64()).unwrap_or(100);
+                    Some(HookCapabilityCtx { name, priority })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let http_allowlist: Vec<String> = capabilities
+        .get("http_allowlist")
+        .and_then(|a| a.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let rpc_actions: Vec<String> = capabilities
+        .get("rpc")
+        .and_then(|a| a.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let api_functions: Vec<String> = capabilities
+        .get("api")
+        .and_then(|a| a.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let wants_db = capabilities.get("db").and_then(|v| v.as_bool()).unwrap_or(false);
+    let wants_media = capabilities.get("media").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    // Shown verbatim so the admin can actually read the DDL before granting `db` —
+    // a bare "grant SQL schema access" checkbox with no visible statements would
+    // not be a meaningful review.
+    let schema_tables: Vec<String> = manifest
+        .raw
+        .get("schema")
+        .and_then(|s| s.get("tables"))
+        .and_then(|a| a.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
 
     let mut ctx = Context::new();
@@ -106,6 +166,13 @@ pub async fn upload_plugin(
         author: manifest.author.unwrap_or_default(),
         description: manifest.description.unwrap_or_default(),
         capabilities_json,
+        hooks,
+        http_allowlist,
+        rpc_actions,
+        api_functions,
+        wants_db,
+        wants_media,
+        schema_tables,
     });
     let html = state
         .tera

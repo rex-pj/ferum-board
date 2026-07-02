@@ -1,35 +1,26 @@
 <!DOCTYPE html>
 {#
-  Ferum Dark — base.html
+  Ferum Sumi — base.html
   ──────────────────────────────────────────────────────────────────────────────
-  Overrides the default base.html with forced dark mode.
-
-  WHY THIS FILE EXISTS
-  ──────────────────────────────────────────────────────────────────────────────
-  The default base.html hardcodes data-bs-theme="auto" (follows system preference).
-  To force dark mode we must override base.html and use {{ theme_bs_theme }},
-  which is injected by render_with_theme() from the "color_scheme" field in theme.json.
-    theme.json → "color_scheme": "dark"
-    → startup.rs reads it into active_theme_color_scheme_cache
-    → render_with_theme() injects theme_bs_theme = "dark" into every page context
-    → this template renders data-bs-theme="{{ theme_bs_theme }}"
+  Japanese-inspired skin: washi paper background, sumi (ink) type, a single
+  vermillion accent line evoking a torii lintel, and a hanko-style seal mark
+  fixed in the corner of the viewport.
 
   TEMPLATE INHERITANCE
   ──────────────────────────────────────────────────────────────────────────────
   Page templates in the DEFAULT theme extend "default/templates/base.html".
-  This base.html is only used by page templates that THIS theme provides explicitly.
-  Pages not overridden by ferum-dark fall through to the parent chain automatically:
-    render_with_theme() tries "ferum-dark/templates/X", then "default/templates/X".
+  This base.html is only used by page templates that THIS theme provides
+  explicitly (currently: home.html). Pages not overridden by ferum-sumi fall
+  through to the parent chain automatically:
+    render_with_theme() tries "ferum-sumi/templates/X", then "default/templates/X".
 
   PLUGIN UI SLOTS
   ──────────────────────────────────────────────────────────────────────────────
-  render_with_theme() injects these context variables for every page:
-    plugin_slots  — map of slot_name → list of { html } entries
-    plugin_assets — list of JS asset URLs from active Tier 2 plugins
-  Themes that override base.html should render these to support plugin UI.
-  See the content_before / content_after slots below.
+  render_with_theme() injects plugin_slots / plugin_assets for every page.
+  Themes that override base.html must render these to keep plugin UI working —
+  see the content_before / content_after slots below.
 #}
-<html lang="en" data-bs-theme="{{ theme_bs_theme | default(value='dark') }}">
+<html lang="en" data-bs-theme="{{ theme_bs_theme | default(value='light') }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -41,38 +32,16 @@
   <link rel="icon" href="{% if site.favicon_url %}{{ site.favicon_url }}{% else %}/static/favicon.svg{% endif %}">
   <link rel="stylesheet" href="/static/css/bootstrap.min.css">
   <link rel="stylesheet" href="/static/css/fontawesome/all.min.css">
-  {# Load default theme first (fr-* layout classes), then ferum-dark overrides color variables #}
+  {# Load default theme first (fr-* layout classes), then ferum-sumi's ink palette #}
   <link rel="stylesheet" href="/themes/default/assets/theme.css">
-  <link rel="stylesheet" href="/themes/ferum-dark/assets/theme.css">
+  <link rel="stylesheet" href="/themes/ferum-sumi/assets/theme.css">
 
   {% if site.primary_color %}
   <style>
     :root,[data-bs-theme="light"],[data-bs-theme="dark"]{
       --ferum-primary:{{ site.primary_color }};
       --bs-primary:{{ site.primary_color }};
-      {% if site.primary_color_rgb %}--bs-primary-rgb:{{ site.primary_color_rgb }};--bs-link-color-rgb:{{ site.primary_color_rgb }};{% endif %}
-      --bs-link-color:{{ site.primary_color }};
-      --bs-link-hover-color:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
-    }
-    .btn-primary{
-      --bs-btn-bg:{{ site.primary_color }};
-      --bs-btn-border-color:{{ site.primary_color }};
-      --bs-btn-hover-bg:color-mix(in srgb,{{ site.primary_color }} 85%,#000);
-      --bs-btn-hover-border-color:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
-      --bs-btn-active-bg:color-mix(in srgb,{{ site.primary_color }} 80%,#000);
-      --bs-btn-active-border-color:color-mix(in srgb,{{ site.primary_color }} 75%,#000);
-      --bs-btn-disabled-bg:{{ site.primary_color }};
-      --bs-btn-disabled-border-color:{{ site.primary_color }};
-      {% if site.primary_color_rgb %}--bs-btn-focus-shadow-rgb:{{ site.primary_color_rgb }};{% endif %}
-    }
-    .btn-outline-primary{
-      --bs-btn-color:{{ site.primary_color }};
-      --bs-btn-border-color:{{ site.primary_color }};
-      --bs-btn-hover-bg:{{ site.primary_color }};
-      --bs-btn-hover-border-color:{{ site.primary_color }};
-      --bs-btn-active-bg:{{ site.primary_color }};
-      --bs-btn-active-border-color:{{ site.primary_color }};
-      {% if site.primary_color_rgb %}--bs-btn-focus-shadow-rgb:{{ site.primary_color_rgb }};{% endif %}
+      {% if site.primary_color_rgb %}--bs-primary-rgb:{{ site.primary_color_rgb }};{% endif %}
     }
   </style>
   {% endif %}
@@ -84,6 +53,9 @@
   {% endfor %}
 </head>
 <body>
+
+  {# Torii-lintel accent — a single vermillion bar above the nav #}
+  <div class="fsm-lintel" aria-hidden="true"></div>
 
   {% block topbar %}
   {% include "default/templates/partials/nav.html" %}
@@ -116,6 +88,9 @@
     </div>
 
   </div>
+
+  {# Hanko seal — a fixed vermillion stamp bearing 板 (from 掲示板, "bulletin board") #}
+  <div class="fsm-hanko" aria-hidden="true">板</div>
 
   {% block bottom_nav %}
   <nav class="fr-bottom-nav d-lg-none" aria-label="Mobile navigation">

@@ -77,6 +77,9 @@ impl StoredFileRepository for SpyStoredFiles {
     async fn delete_by_key(&self, _: &str) -> Result<(), AppError> {
         Ok(())
     }
+    async fn list_keys_with_prefix(&self, _: &str) -> Result<Vec<String>, AppError> {
+        Ok(vec![])
+    }
 }
 
 struct NullWebhooks;

@@ -295,6 +295,59 @@
     };
   }
 
+  // Rebuild the granted_capabilities hidden field from the checked hook/host
+  // checkboxes in the capability review step. The review partial is injected via
+  // innerHTML, so it cannot carry its own <script> — this must live here instead.
+  window.updatePluginGrant = function () {
+    var container = document.getElementById('plugin-review-container');
+    if (!container) return;
+
+    var originalInput = container.querySelector('#plugin-capabilities-original');
+    var raw = {};
+    try { raw = JSON.parse(originalInput ? originalInput.value : '{}'); } catch (e) { raw = {}; }
+
+    var hookBoxes = container.querySelectorAll('.cap-hook-checkbox');
+    if (hookBoxes.length > 0) {
+      var hooks = [];
+      hookBoxes.forEach(function (cb) {
+        if (cb.checked) {
+          hooks.push({ name: cb.value, priority: parseInt(cb.getAttribute('data-priority'), 10) || 100 });
+        }
+      });
+      raw.hooks = hooks;
+    }
+
+    var httpBoxes = container.querySelectorAll('.cap-http-checkbox');
+    if (httpBoxes.length > 0) {
+      var hosts = [];
+      httpBoxes.forEach(function (cb) { if (cb.checked) hosts.push(cb.value); });
+      raw.http_allowlist = hosts;
+    }
+
+    var rpcBoxes = container.querySelectorAll('.cap-rpc-checkbox');
+    if (rpcBoxes.length > 0) {
+      var rpcActions = [];
+      rpcBoxes.forEach(function (cb) { if (cb.checked) rpcActions.push(cb.value); });
+      raw.rpc = rpcActions;
+    }
+
+    var apiBoxes = container.querySelectorAll('.cap-api-checkbox');
+    if (apiBoxes.length > 0) {
+      var apiFns = [];
+      apiBoxes.forEach(function (cb) { if (cb.checked) apiFns.push(cb.value); });
+      raw.api = apiFns;
+    }
+
+    var dbBox = container.querySelector('#review-cap-db');
+    if (dbBox) raw.db = dbBox.checked;
+
+    var mediaBox = container.querySelector('#review-cap-media');
+    if (mediaBox) raw.media = mediaBox.checked;
+
+    var hiddenInput = container.querySelector('input[name="granted_capabilities"]');
+    if (hiddenInput) hiddenInput.value = JSON.stringify(raw);
+  };
+
   // Expose for both Alpine 2.x (global function lookup) and as a fallback.
   window.pluginUpload = pluginUploadData;
 

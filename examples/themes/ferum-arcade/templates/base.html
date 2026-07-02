@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+{#
+  Ferum Arcade — base.html
+  ──────────────────────────────────────────────────────────────────────────────
+  Gaming-inspired skin: near-black backdrop, neon cyan/magenta accents, HUD-style
+  corner brackets around the main content column, and a scanline overlay.
+
+  TEMPLATE INHERITANCE
+  ──────────────────────────────────────────────────────────────────────────────
+  Page templates in the DEFAULT theme extend "default/templates/base.html".
+  This base.html is only used by page templates that THIS theme provides
+  explicitly (currently: home.html). Pages not overridden by ferum-arcade fall
+  through to the parent chain automatically:
+    render_with_theme() tries "ferum-arcade/templates/X", then "default/templates/X".
+
+  PLUGIN UI SLOTS
+  ──────────────────────────────────────────────────────────────────────────────
+  render_with_theme() injects plugin_slots / plugin_assets for every page.
+  Themes that override base.html must render these to keep plugin UI working —
+  see the content_before / content_after slots below.
+#}
+<html lang="en" data-bs-theme="{{ theme_bs_theme | default(value='dark') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ site.name }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{{ site.tagline }}{% endblock %}">
+
+  <script src="/static/js/ferum-preload.js"></script>
+
+  <link rel="icon" href="{% if site.favicon_url %}{{ site.favicon_url }}{% else %}/static/favicon.svg{% endif %}">
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/fontawesome/all.min.css">
+  {# Load default theme first (fr-* layout classes), then ferum-arcade's neon palette #}
+  <link rel="stylesheet" href="/themes/default/assets/theme.css">
+  <link rel="stylesheet" href="/themes/ferum-arcade/assets/theme.css">
+
+  {% if site.primary_color %}
+  <style>
+    :root,[data-bs-theme="light"],[data-bs-theme="dark"]{
+      --ferum-primary:{{ site.primary_color }};
+      --bs-primary:{{ site.primary_color }};
+      {% if site.primary_color_rgb %}--bs-primary-rgb:{{ site.primary_color_rgb }};{% endif %}
+    }
+  </style>
+  {% endif %}
+
+  {% block head_extra %}{% endblock %}
+
+  {% for asset_url in plugin_assets %}
+  <script src="{{ asset_url }}" defer></script>
+  {% endfor %}
+</head>
+<body>
+
+  {# Scanline overlay — purely decorative, sits above everything but ignores clicks #}
+  <div class="fac-scanlines" aria-hidden="true"></div>
+
+  {% block topbar %}
+  {% include "default/templates/partials/nav.html" %}
+  {% endblock %}
+
+  <div class="fr-layout {% block layout_class %}{% endblock %}">
+
+    <aside class="fr-sidebar-left d-none d-lg-block" id="sidebarLeft">
+      {% include "default/templates/partials/sidebar_left.html" %}
+    </aside>
+
+    <div class="fr-page">
+      <div class="fr-page-inner {% block page_inner_class %}{% endblock %}">
+
+        {# HUD frame — corner brackets rendered via CSS pseudo-elements #}
+        <main class="fr-main-col fac-hud-frame {% block main_class %}{% endblock %}">
+          {% if plugin_slots.content_before %}
+            {% for slot in plugin_slots.content_before %}{{ slot.html | safe }}{% endfor %}
+          {% endif %}
+          {% block content %}{% endblock %}
+          {% if plugin_slots.content_after %}
+            {% for slot in plugin_slots.content_after %}{{ slot.html | safe }}{% endfor %}
+          {% endif %}
+        </main>
+
+        {% block right_sidebar_wrap %}{% endblock %}
+
+      </div>
+
+      {% include "default/templates/partials/footer.html" %}
+    </div>
+
+  </div>
+
+  {% block bottom_nav %}
+  <nav class="fr-bottom-nav d-lg-none" aria-label="Mobile navigation">
+    <a href="/" class="fr-bn-item" aria-label="Home">
+      <i class="fa-solid fa-house"></i><span>Home</span>
+    </a>
+    <a href="/forum" class="fr-bn-item" aria-label="Forum">
+      <i class="fa-solid fa-comments"></i><span>Forum</span>
+    </a>
+    {% if current_user %}
+      <a href="/new-thread" class="fr-bn-item" aria-label="New thread">
+        <span class="fr-bn-cta"><i class="fa-solid fa-plus"></i></span><span>New</span>
+      </a>
+      <a href="/notifications" class="fr-bn-item" aria-label="Notifications">
+        <i class="fa-solid fa-bell"></i><span>Notifs</span>
+      </a>
+      <a href="/u/{{ current_user.username }}" class="fr-bn-item" aria-label="Profile">
+        <i class="fa-solid fa-user"></i><span>Profile</span>
+      </a>
+    {% else %}
+      <a href="/register" class="fr-bn-item" aria-label="Register">
+        <i class="fa-solid fa-user-plus"></i><span>Register</span>
+      </a>
+      <a href="/login" class="fr-bn-item" aria-label="Log in">
+        <i class="fa-solid fa-right-to-bracket"></i><span>Login</span>
+      </a>
+    {% endif %}
+  </nav>
+  {% endblock %}
+
+  <script src="/static/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/ferum-utils.js?v={{ asset_version() }}"></script>
+  <script src="/static/js/ferum-api.js?v={{ asset_version() }}" defer></script>
+  <script src="/static/js/alpine.min.js" defer></script>
+  <script src="/static/js/ferum-widgets.iife.js?v={{ asset_version() }}" defer></script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

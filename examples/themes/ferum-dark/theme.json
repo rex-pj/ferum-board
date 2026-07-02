@@ -1,9 +1,0 @@
-{
-  "slug": "ferum-dark",
-  "name": "Ferum Dark",
-  "author": "Ferum Board",
-  "version": "1.0.0",
-  "description": "Dark theme with compact GitHub-style thread list. Demonstrates CSS + HTML template customization.",
-  "parent": "default",
-  "color_scheme": "dark"
-}

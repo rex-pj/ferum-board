@@ -7,6 +7,7 @@ pub mod dev;
 pub mod follows;
 pub mod health;
 pub mod notifications;
+pub mod plugin_rpc;
 pub mod posts;
 pub mod profile;
 pub mod reactions;

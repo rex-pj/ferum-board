@@ -3,6 +3,7 @@ pub mod bookmarks;
 pub mod daily_stats;
 pub mod plugin_hooks;
 pub mod plugin_logs;
+pub mod plugin_storage;
 pub mod plugin_ui_slots;
 pub mod plugins;
 pub mod categories;

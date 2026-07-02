@@ -35,7 +35,13 @@ pub trait PluginRepository: Send + Sync {
     // ── UI Slot management ────────────────────────────────────────────────────
     /// Returns active UI slots, sorted by load_order ASC, for frontend hydration.
     async fn active_ui_slots(&self) -> Result<Vec<PluginUiSlot>, AppError>;
+    /// Returns all UI slots owned by a plugin (active or not), for the admin
+    /// placement editor.
+    async fn ui_slots_for_plugin(&self, plugin_id: Uuid) -> Result<Vec<PluginUiSlot>, AppError>;
     async fn create_ui_slot(&self, data: NewPluginUiSlot) -> Result<PluginUiSlot, AppError>;
+    /// Admin override: move a slot to a different named position and/or load order,
+    /// without requiring the plugin to be deactivated/reactivated.
+    async fn update_ui_slot(&self, id: Uuid, slot_name: String, load_order: i32) -> Result<PluginUiSlot, AppError>;
     async fn delete_ui_slots_for_plugin(&self, plugin_id: Uuid) -> Result<(), AppError>;
 
     // ── Log management ────────────────────────────────────────────────────────

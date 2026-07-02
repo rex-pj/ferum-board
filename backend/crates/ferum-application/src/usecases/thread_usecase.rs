@@ -158,6 +158,35 @@ impl ThreadUseCase {
         Ok(())
     }
 
+    /// Before-hook: allow plugins to inspect or block thread deletion.
+    /// Shared by both delete entry points (`soft_delete` and `delete_by_slug`).
+    async fn dispatch_before_thread_delete(
+        &self,
+        actor: &AuthUser,
+        thread: &Thread,
+    ) -> Result<(), AppError> {
+        let hook_ctx = HookContext {
+            hook_name: "before_thread_delete".to_string(),
+            actor_id: Some(actor.id),
+            actor_trust_level: format!("{:?}", actor.trust_level).to_lowercase(),
+            payload: serde_json::json!({
+                "thread_id": thread.id,
+                "category_id": thread.category_id,
+                "author_id": thread.author_id,
+            }),
+        };
+        match self
+            .plugin_runtime
+            .dispatch_before_hook("before_thread_delete", &hook_ctx)
+            .await?
+        {
+            HookDecision::Deny { reason, error_code } => {
+                Err(AppError::PluginBlocked { reason, error_code })
+            }
+            HookDecision::Allow => Ok(()),
+        }
+    }
+
     #[tracing::instrument(skip_all, fields(cache_hit = tracing::field::Empty))]
     async fn visible_category_map(
         &self,
@@ -760,6 +789,8 @@ impl ThreadUseCase {
         Self::require_author_or_mod(actor, &thread)?;
         PermissionChecker::require_not_banned(actor)?;
 
+        self.dispatch_before_thread_delete(actor, &thread).await?;
+
         self.threads
             .update(
                 id,
@@ -793,6 +824,8 @@ impl ThreadUseCase {
         }
         Self::require_author_or_mod(actor, &thread)?;
         PermissionChecker::require_not_banned(actor)?;
+
+        self.dispatch_before_thread_delete(actor, &thread).await?;
 
         self.threads
             .update(
@@ -931,6 +964,28 @@ impl ThreadUseCase {
         // double-firing the event and double-rewarding trust score on a client retry.
         if thread.is_solved && thread.best_answer_id == Some(best_answer_id) {
             return Ok(thread);
+        }
+
+        let hook_ctx = HookContext {
+            hook_name: "before_best_answer_mark".to_string(),
+            actor_id: Some(actor.id),
+            actor_trust_level: format!("{:?}", actor.trust_level).to_lowercase(),
+            payload: serde_json::json!({
+                "thread_id": id,
+                "category_id": thread.category_id,
+                "post_id": best_answer_id,
+                "post_author_id": best_post.author_id,
+            }),
+        };
+        match self
+            .plugin_runtime
+            .dispatch_before_hook("before_best_answer_mark", &hook_ctx)
+            .await?
+        {
+            HookDecision::Deny { reason, error_code } => {
+                return Err(AppError::PluginBlocked { reason, error_code });
+            }
+            HookDecision::Allow => {}
         }
 
         let result = self

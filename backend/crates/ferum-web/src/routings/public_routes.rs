@@ -152,6 +152,12 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .layer(axum::Extension(write_rl.clone()));
 
+    let plugin_rpc_routes = Router::new()
+        .route("/{slug}/rpc/{action}", post(api::plugin_rpc::invoke))
+        .route("/{slug}/media", post(api::plugin_rpc::upload_media))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
+        .layer(axum::Extension(write_rl.clone()));
+
     Router::new()
         .merge(search_routes)
         .merge(tag_routes)
@@ -162,4 +168,5 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .nest("/users", user_routes)
         .nest("/notifications", notification_routes)
         .nest("/reports", report_routes)
+        .nest("/plugins", plugin_rpc_routes)
 }

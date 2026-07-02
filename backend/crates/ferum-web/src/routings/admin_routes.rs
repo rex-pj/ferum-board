@@ -84,6 +84,8 @@ pub fn admin_api_routes() -> Router<AppState> {
         .route("/plugins/{slug}/config", patch(admin::api::plugins::configure_plugin))
         .route("/plugins/{slug}/status", patch(admin::api::plugins::toggle_status))
         .route("/plugins/{slug}/logs", get(admin::api::plugins::get_logs))
+        .route("/plugins/{slug}/ui-slots", get(admin::api::plugins::list_ui_slots))
+        .route("/plugins/{slug}/ui-slots/{slot_id}", patch(admin::api::plugins::update_ui_slot))
         .nest("/categories", admin_category_routes)
         .nest("/users", admin_user_routes)
         .nest("/roles", admin_role_routes);

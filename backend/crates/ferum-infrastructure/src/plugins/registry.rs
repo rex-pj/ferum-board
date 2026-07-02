@@ -8,12 +8,16 @@ use uuid::Uuid;
 
 use super::circuit_breaker::CircuitBreaker;
 use ferum_application::ports::{
-    CacheService, HookContext, HookDecision, PluginHookRuntime, PluginLifecycle, PluginUiRuntime,
-    UiSlotEntry,
+    CacheService, HookContext, HookDecision, PluginHookRuntime, PluginLifecycle, PluginRpcRuntime,
+    PluginUiRuntime, UiSlotEntry,
 };
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::{PluginStatus, PluginTier};
+use ferum_domain::repositories::notification_repository::NotificationRepository;
+use ferum_domain::repositories::plugin_db_repository::PluginDbGateway;
 use ferum_domain::repositories::plugin_repository::PluginRepository;
+use ferum_domain::repositories::plugin_storage_repository::PluginStorageRepository;
+use ferum_domain::repositories::user_repository::UserRepository;
 
 #[cfg(feature = "script_plugins")]
 use super::script_runtime::ScriptPluginRuntime;
@@ -40,20 +44,36 @@ pub struct PluginRegistry {
     /// Cache service — passed to Script plugin runtimes for Ferum.cache.* ops
     #[cfg(feature = "script_plugins")]
     cache: Arc<dyn CacheService>,
+    /// Durable storage — passed to Script plugin runtimes for Ferum.storage.* ops
+    #[cfg(feature = "script_plugins")]
+    plugin_storage: Arc<dyn PluginStorageRepository>,
+    /// Passed to Script plugin runtimes for the curated Ferum.forum.* API
+    #[cfg(feature = "script_plugins")]
+    user_repo: Arc<dyn UserRepository>,
+    #[cfg(feature = "script_plugins")]
+    notification_repo: Arc<dyn NotificationRepository>,
+    /// Scoped Postgres access to each plugin's own `plugin_{slug}` schema
+    #[cfg(feature = "script_plugins")]
+    db_gateway: Arc<dyn PluginDbGateway>,
     /// Tier 2 — one JS runtime per active Script plugin
     #[cfg(feature = "script_plugins")]
     script_runtimes: dashmap::DashMap<Uuid, Arc<ScriptPluginRuntime>>,
 }
 
 impl PluginRegistry {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         plugin_repo: Arc<dyn PluginRepository>,
         cache: Arc<dyn CacheService>,
+        plugin_storage: Arc<dyn PluginStorageRepository>,
+        user_repo: Arc<dyn UserRepository>,
+        notification_repo: Arc<dyn NotificationRepository>,
+        db_gateway: Arc<dyn PluginDbGateway>,
         hook_timeout_ms: u64,
         circuit_threshold: u32,
     ) -> Self {
         #[cfg(not(feature = "script_plugins"))]
-        let _ = (cache, hook_timeout_ms);
+        let _ = (cache, plugin_storage, user_repo, notification_repo, db_gateway, hook_timeout_ms);
 
         Self {
             plugin_repo,
@@ -63,6 +83,14 @@ impl PluginRegistry {
             hook_timeout_ms,
             #[cfg(feature = "script_plugins")]
             cache,
+            #[cfg(feature = "script_plugins")]
+            plugin_storage,
+            #[cfg(feature = "script_plugins")]
+            user_repo,
+            #[cfg(feature = "script_plugins")]
+            notification_repo,
+            #[cfg(feature = "script_plugins")]
+            db_gateway,
             #[cfg(feature = "script_plugins")]
             script_runtimes: dashmap::DashMap::new(),
         }
@@ -91,11 +119,11 @@ impl PluginRegistry {
                 });
             }
 
-            // Start Script runtime for active Tier 2 plugins that declare server-side hooks.
-            // Plugins with an empty hooks list are UI-slot-only; their bundle.js is
-            // browser code and must not be evaluated in boa_engine.
+            // Start Script runtime for active Tier 2 plugins that declare server-side
+            // hooks or RPC actions. Plugins with neither are UI-slot-only; their
+            // bundle.js is browser code and must not be evaluated in boa_engine.
             #[cfg(feature = "script_plugins")]
-            if plugin.tier == PluginTier::Script && Self::manifest_has_hooks(&plugin.manifest) {
+            if plugin.tier == PluginTier::Script && Self::manifest_needs_script_runtime(&plugin.manifest) {
                 match self.init_script_runtime(plugin) {
                     Ok(rt) => {
                         self.script_runtimes.insert(plugin.id, Arc::new(rt));
@@ -118,17 +146,21 @@ impl PluginRegistry {
 
     // ─── Script runtime helpers ───────────────────────────────────────────────────
 
-    /// Returns true only when the manifest declares at least one server-side hook.
-    /// Plugins whose `capabilities.hooks` is absent or empty are UI-slot-only and
-    /// must not be executed in boa_engine — their bundle.js is browser-only code.
+    /// Returns true only when the manifest declares at least one server-side hook
+    /// or RPC action — either requires the boa_engine runtime to be running.
+    /// Plugins with neither are UI-slot-only and must not be executed in
+    /// boa_engine — their bundle.js is browser-only code.
     #[cfg(feature = "script_plugins")]
-    fn manifest_has_hooks(manifest: &serde_json::Value) -> bool {
-        manifest
-            .get("capabilities")
-            .and_then(|c| c.get("hooks"))
-            .and_then(|h| h.as_array())
-            .map(|arr| !arr.is_empty())
-            .unwrap_or(false)
+    fn manifest_needs_script_runtime(manifest: &serde_json::Value) -> bool {
+        let has_entries = |field: &str| {
+            manifest
+                .get("capabilities")
+                .and_then(|c| c.get(field))
+                .and_then(|h| h.as_array())
+                .map(|arr| !arr.is_empty())
+                .unwrap_or(false)
+        };
+        has_entries("hooks") || has_entries("rpc")
     }
 
     #[cfg(feature = "script_plugins")]
@@ -138,8 +170,32 @@ impl PluginRegistry {
     ) -> Result<ScriptPluginRuntime, AppError> {
         let bundle_js =
             ScriptPluginRuntime::load_bundle(&plugin.install_path, &plugin.manifest)?;
-        let http_allowlist =
+
+        // A host is only reachable if it was both declared by the manifest AND
+        // granted by the admin at install time — never trust the manifest alone,
+        // since a plugin author could ship a wider allowlist than was reviewed.
+        let manifest_allowlist =
             ScriptPluginRuntime::http_allowlist_from_manifest(&plugin.manifest);
+        let granted_allowlist =
+            ScriptPluginRuntime::http_allowlist_from_capabilities(&plugin.granted_capabilities);
+        let http_allowlist: Vec<String> = manifest_allowlist
+            .into_iter()
+            .filter(|host| granted_allowlist.contains(host))
+            .collect();
+
+        // Same manifest ∩ granted trust model for the curated Ferum.forum.* API.
+        let manifest_api = ScriptPluginRuntime::api_names_from_manifest(&plugin.manifest);
+        let granted_api_set =
+            ScriptPluginRuntime::api_names_from_capabilities(&plugin.granted_capabilities);
+        let granted_api: Vec<String> = manifest_api
+            .into_iter()
+            .filter(|a| granted_api_set.contains(a))
+            .collect();
+
+        // db is an all-or-nothing capability (the schema itself is already the
+        // isolation boundary — there's no finer-grained "which tables" to gate).
+        let db_enabled = ScriptPluginRuntime::db_requested_by_manifest(&plugin.manifest)
+            && ScriptPluginRuntime::db_granted_by_capabilities(&plugin.granted_capabilities);
 
         ScriptPluginRuntime::new(
             plugin.slug.clone(),
@@ -148,6 +204,12 @@ impl PluginRegistry {
             plugin.config.clone(),
             self.plugin_repo.clone(),
             self.cache.clone(),
+            self.plugin_storage.clone(),
+            self.user_repo.clone(),
+            self.notification_repo.clone(),
+            granted_api,
+            self.db_gateway.clone(),
+            db_enabled,
             http_allowlist,
         )
     }
@@ -302,6 +364,65 @@ impl PluginHookRuntime for PluginRegistry {
 
 }
 
+// ─── PluginRpcRuntime implementation ─────────────────────────────────────────
+
+#[async_trait]
+impl PluginRpcRuntime for PluginRegistry {
+    async fn dispatch_rpc(
+        &self,
+        plugin_slug: &str,
+        action: &str,
+        ctx: &HookContext,
+    ) -> Result<serde_json::Value, AppError> {
+        let plugin = self
+            .plugin_repo
+            .find_by_slug(plugin_slug)
+            .await?
+            .ok_or(AppError::NotFound)?;
+
+        if plugin.status != PluginStatus::Active || plugin.tier != PluginTier::Script {
+            return Err(AppError::NotFound);
+        }
+
+        #[cfg(feature = "script_plugins")]
+        {
+            // An action is only invokable if it was both declared by the manifest
+            // AND granted by the admin at install time — same trust model as hooks
+            // and the HTTP allowlist. Checked here, before ever reaching the plugin's
+            // JS thread, so an ungranted action never executes plugin code at all.
+            let manifest_actions = ScriptPluginRuntime::rpc_actions_from_manifest(&plugin.manifest);
+            let granted_actions =
+                ScriptPluginRuntime::rpc_actions_from_capabilities(&plugin.granted_capabilities);
+            if !manifest_actions.iter().any(|a| a == action) || !granted_actions.iter().any(|a| a == action) {
+                return Err(AppError::forbidden("rpc_action_not_granted"));
+            }
+
+            let rt = self
+                .script_runtimes
+                .get(&plugin.id)
+                .map(|r| r.clone())
+                .ok_or_else(|| AppError::internal("Plugin runtime not active"))?;
+
+            let ctx_json = serde_json::to_string(ctx).unwrap_or_default();
+            match tokio::time::timeout(
+                Duration::from_millis(self.hook_timeout_ms),
+                rt.execute_rpc(action, ctx_json),
+            )
+            .await
+            {
+                Ok(result) => result,
+                Err(_timeout) => Err(AppError::internal("Plugin RPC handler timed out")),
+            }
+        }
+
+        #[cfg(not(feature = "script_plugins"))]
+        {
+            let _ = (action, ctx);
+            Err(AppError::NotFound)
+        }
+    }
+}
+
 // ─── PluginUiRuntime implementation ──────────────────────────────────────────
 
 #[async_trait]
@@ -382,7 +503,7 @@ impl PluginLifecycle for PluginRegistry {
 
             if plugin.status == PluginStatus::Active
                 && plugin.tier == PluginTier::Script
-                && Self::manifest_has_hooks(&plugin.manifest)
+                && Self::manifest_needs_script_runtime(&plugin.manifest)
             {
                 match self.init_script_runtime(&plugin) {
                     Ok(rt) => {

@@ -1,15 +1,20 @@
 use std::sync::Arc;
 
+use bytes::Bytes;
 use uuid::Uuid;
 
+use crate::constants::MAX_PLUGIN_MEDIA_BYTES;
 use crate::permission::PermissionChecker;
-use crate::ports::PluginLifecycle;
+use crate::ports::{ForumJob, JobQueue, PluginLifecycle};
 use crate::shared::{AppError, OptionExt};
+use crate::storage_utils::{cas_key, validate_image_content_type};
 use ferum_domain::models::plugin::{
     NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginLog, PluginLogQuery,
     PluginStatus, PluginTier, PluginUiSlot,
 };
+use ferum_domain::repositories::plugin_db_repository::PluginDbGateway;
 use ferum_domain::repositories::plugin_repository::PluginRepository;
+use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::webhook_repository::{NewWebhook, WebhookRepository};
 use ferum_domain::AuthUser;
 
@@ -17,20 +22,30 @@ pub struct PluginUseCase {
     pub plugins: Arc<dyn PluginRepository>,
     pub webhooks: Arc<dyn WebhookRepository>,
     pub plugin_runtime: Arc<dyn PluginLifecycle>,
+    pub db_gateway: Arc<dyn PluginDbGateway>,
+    pub stored_files: Arc<dyn StoredFileRepository>,
+    pub jobs: Arc<dyn JobQueue>,
     plugins_dir: std::path::PathBuf,
 }
 
 impl PluginUseCase {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         plugins: Arc<dyn PluginRepository>,
         webhooks: Arc<dyn WebhookRepository>,
         plugin_runtime: Arc<dyn PluginLifecycle>,
+        db_gateway: Arc<dyn PluginDbGateway>,
+        stored_files: Arc<dyn StoredFileRepository>,
+        jobs: Arc<dyn JobQueue>,
         plugins_dir: std::path::PathBuf,
     ) -> Self {
         Self {
             plugins,
             webhooks,
             plugin_runtime,
+            db_gateway,
+            stored_files,
+            jobs,
             plugins_dir,
         }
     }
@@ -92,6 +107,34 @@ impl PluginUseCase {
                 installed_by: Some(actor.id),
             })
             .await?;
+
+        // Provision the plugin's own Postgres schema once, at install time — never
+        // from a runtime query. Requires the `db` capability to be BOTH requested
+        // by the manifest AND explicitly granted by the admin during capability
+        // review, same trust model as hooks/rpc/api.
+        let schema_tables = manifest_schema_tables(&plugin.manifest);
+        if !schema_tables.is_empty()
+            && manifest_wants_db(&plugin.manifest)
+            && granted_db(&plugin.granted_capabilities)
+        {
+            if let Err(e) = self.db_gateway.provision_schema(&plugin.slug, &schema_tables).await {
+                // Leave the row visible (as Error) rather than silently orphaned —
+                // admin can see why and uninstall to retry.
+                self.plugins
+                    .update_status(plugin.id, PluginStatus::Error, Some(e.to_string()))
+                    .await
+                    .ok();
+                return Err(e);
+            }
+            self.append_log(
+                plugin.id,
+                "info",
+                None,
+                None,
+                &format!("Provisioned plugin schema with {} statement(s).", schema_tables.len()),
+            )
+            .await;
+        }
 
         self.plugins
             .update_status(plugin.id, PluginStatus::Inactive, None)
@@ -262,6 +305,34 @@ impl PluginUseCase {
             .await?;
         self.plugin_runtime.reload_plugin(plugin.id).await;
 
+        // Drop the plugin's own Postgres schema (if it ever had one) — non-fatal,
+        // uninstall should still proceed even if this fails so the plugin doesn't
+        // become permanently stuck.
+        if let Err(e) = self.db_gateway.drop_schema(slug).await {
+            tracing::warn!(plugin = %slug, error = ?e, "Failed to drop plugin schema during uninstall");
+        }
+
+        // Dereference every file this plugin ever uploaded via /api/plugins/:slug/media
+        // (upload_media namespaces CAS keys as "plugin_{slug}/..." — see cas_key call
+        // below). Without this, media uploads would be orphaned forever: nothing else
+        // ever references or GCs them. Trailing "/" keeps the prefix from also
+        // matching a different plugin whose slug happens to start the same way
+        // (e.g. "plugin_com.ferum.chat" vs "plugin_com.ferum.chatbox").
+        match self.stored_files.list_keys_with_prefix(&format!("plugin_{slug}/")).await {
+            Ok(keys) => {
+                for key in keys {
+                    match self.stored_files.decrement_ref(&key).await {
+                        Ok(0) => {
+                            let _ = self.jobs.enqueue(ForumJob::GcStorageKey { key }).await;
+                        }
+                        Ok(_) => {}
+                        Err(e) => tracing::warn!(plugin = %slug, key = %key, error = ?e, "Failed to dereference plugin media during uninstall"),
+                    }
+                }
+            }
+            Err(e) => tracing::warn!(plugin = %slug, error = ?e, "Failed to list plugin media during uninstall"),
+        }
+
         // Remove DB rows (hooks, slots, logs cascade-deleted via FK)
         let install_path = plugin.install_path.clone();
         self.plugins.delete(plugin.id).await?;
@@ -302,10 +373,88 @@ impl PluginUseCase {
         self.plugins.get_logs(plugin.id, query).await
     }
 
+    // ─── Media upload (member — for plugin widgets like a story/gallery UI) ───
+
+    /// Upload an image on behalf of a plugin's own feature (not avatar/cover/etc,
+    /// those go through UserUseCase). Stored via the same CAS backend, under a
+    /// `plugin_{slug}` key namespace so a plugin can never collide with or
+    /// overwrite another plugin's — or core's — stored files. Requires the
+    /// plugin to be Active and to have been granted the `media` capability
+    /// (manifest requests it AND admin approved it at install time).
+    pub async fn upload_media(
+        &self,
+        actor: &AuthUser,
+        slug: &str,
+        data: Bytes,
+        content_type: String,
+    ) -> Result<String, AppError> {
+        PermissionChecker::require_not_banned(actor)?;
+
+        let plugin = self.plugins.find_by_slug(slug).await?.or_not_found()?;
+        if plugin.status != PluginStatus::Active {
+            return Err(AppError::NotFound);
+        }
+        if !manifest_wants_media(&plugin.manifest) || !granted_media(&plugin.granted_capabilities) {
+            return Err(AppError::forbidden("media_capability_not_granted"));
+        }
+
+        if !validate_image_content_type(&content_type) {
+            return Err(AppError::unprocessable(
+                "media must be jpeg, png, webp, or gif",
+            ));
+        }
+        if data.len() > MAX_PLUGIN_MEDIA_BYTES {
+            return Err(AppError::unprocessable(&format!(
+                "media exceeds {} MB limit",
+                MAX_PLUGIN_MEDIA_BYTES / (1024 * 1024)
+            )));
+        }
+
+        let key = cas_key(&format!("plugin_{slug}"), &data, &content_type);
+        self.stored_files
+            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .await?;
+
+        Ok(format!("/files/{key}"))
+    }
+
     // ─── Active UI Slots (public — no auth, for frontend SSR) ─────────────────
 
     pub async fn active_ui_slots(&self) -> Result<Vec<PluginUiSlot>, AppError> {
         self.plugins.active_ui_slots().await
+    }
+
+    // ─── UI Slot placement (admin) ─────────────────────────────────────────────
+
+    pub async fn list_ui_slots(&self, actor: &AuthUser, slug: &str) -> Result<Vec<PluginUiSlot>, AppError> {
+        PermissionChecker::can_manage_plugins(actor)?;
+        let plugin = self.plugins.find_by_slug(slug).await?.or_not_found()?;
+        self.plugins.ui_slots_for_plugin(plugin.id).await
+    }
+
+    /// Move a plugin's UI element to a different named slot / load order —
+    /// takes effect immediately, no deactivate/reactivate needed, since
+    /// active_ui_slots() reads slot_name straight from this row on every render.
+    pub async fn update_ui_slot_placement(
+        &self,
+        actor: &AuthUser,
+        slug: &str,
+        slot_id: Uuid,
+        slot_name: String,
+        load_order: i32,
+    ) -> Result<PluginUiSlot, AppError> {
+        PermissionChecker::can_manage_plugins(actor)?;
+        let plugin = self.plugins.find_by_slug(slug).await?.or_not_found()?;
+
+        let owned = self.plugins.ui_slots_for_plugin(plugin.id).await?;
+        if !owned.iter().any(|s| s.id == slot_id) {
+            return Err(AppError::NotFound);
+        }
+        if slot_name.trim().is_empty() {
+            return Err(AppError::unprocessable("Slot name cannot be empty"));
+        }
+
+        self.plugins.update_ui_slot(slot_id, slot_name, load_order).await
     }
 
     // ─── Internal helpers ─────────────────────────────────────────────────────
@@ -314,8 +463,26 @@ impl PluginUseCase {
         // Delete existing hooks first (idempotent re-activation)
         self.plugins.delete_hooks_for_plugin(plugin.id).await?;
 
+        // A hook only takes effect if it was both requested by the manifest AND
+        // granted by the admin at install time — the manifest alone is not trusted,
+        // since granted_capabilities is what the admin actually reviewed and approved.
+        let granted = granted_hook_names(&plugin.granted_capabilities);
         let hooks = manifest_hooks(&plugin.manifest);
         for (hook_name, priority) in hooks {
+            if !granted.contains(&hook_name) {
+                self.append_log(
+                    plugin.id,
+                    "warn",
+                    Some(&hook_name),
+                    None,
+                    &format!(
+                        "Hook '{}' requested by manifest but not granted at install — skipped.",
+                        hook_name
+                    ),
+                )
+                .await;
+                continue;
+            }
             self.plugins
                 .create_hook(NewPluginHook {
                     plugin_id: plugin.id,
@@ -447,6 +614,66 @@ fn manifest_hooks(manifest: &serde_json::Value) -> Vec<(String, i32)> {
                 })
                 .collect()
         })
+        .unwrap_or_default()
+}
+
+/// Extract the set of hook names the admin actually granted at install time.
+/// `granted_capabilities` mirrors the shape of a manifest's `[capabilities]` table
+/// directly (i.e. `{"hooks": [...], "http_allowlist": [...]}`), not nested under
+/// a further "capabilities" key.
+fn granted_hook_names(granted_capabilities: &serde_json::Value) -> std::collections::HashSet<String> {
+    granted_capabilities
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.get("name")?.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether the manifest's [capabilities] requests the `db` capability.
+fn manifest_wants_db(manifest: &serde_json::Value) -> bool {
+    manifest
+        .get("capabilities")
+        .and_then(|c| c.get("db"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// Whether the admin actually granted the `db` capability at install time.
+fn granted_db(granted_capabilities: &serde_json::Value) -> bool {
+    granted_capabilities
+        .get("db")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// Whether the manifest's [capabilities] requests the `media` capability.
+fn manifest_wants_media(manifest: &serde_json::Value) -> bool {
+    manifest
+        .get("capabilities")
+        .and_then(|c| c.get("media"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// Whether the admin actually granted the `media` capability at install time.
+fn granted_media(granted_capabilities: &serde_json::Value) -> bool {
+    granted_capabilities
+        .get("media")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// Extract one-time schema DDL statements from the manifest's [schema] section.
+fn manifest_schema_tables(manifest: &serde_json::Value) -> Vec<String> {
+    manifest
+        .get("schema")
+        .and_then(|s| s.get("tables"))
+        .and_then(|a| a.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default()
 }
 

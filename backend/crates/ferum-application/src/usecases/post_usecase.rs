@@ -336,6 +336,29 @@ impl PostUseCase {
             .await?
             .or_not_found()?;
         PermissionChecker::can_delete_post(actor, &post, thread.category_id)?;
+
+        let hook_ctx = crate::ports::HookContext {
+            hook_name: "before_post_delete".to_string(),
+            actor_id: Some(actor.id),
+            actor_trust_level: format!("{:?}", actor.trust_level).to_lowercase(),
+            payload: serde_json::json!({
+                "post_id": id,
+                "thread_id": post.thread_id,
+                "category_id": thread.category_id,
+                "author_id": post.author_id,
+            }),
+        };
+        match self
+            .plugin_runtime
+            .dispatch_before_hook("before_post_delete", &hook_ctx)
+            .await?
+        {
+            HookDecision::Deny { reason, error_code } => {
+                return Err(AppError::PluginBlocked { reason, error_code });
+            }
+            HookDecision::Allow => {}
+        }
+
         self.posts.soft_delete(id, actor.id).await?;
 
         self.event_bus

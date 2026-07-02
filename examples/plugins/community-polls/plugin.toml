@@ -1,0 +1,60 @@
+[meta]
+id          = "com.ferum.community-polls"
+name        = "Community Polls"
+version     = "1.0.0"
+tier        = "script"
+min_ferum   = "0.1.0"
+description = "Site-wide poll widget with its own relational schema — demonstrates the db, api, and rpc capabilities together (Ferum.db.query for real SQL, Ferum.forum.createNotification to notify the poll creator on each vote, RPC actions for create/vote/read)."
+author      = "Ferum Team"
+
+# ─── Script entry point ───────────────────────────────────────────────────────
+# Dual-purpose bundle.js: RPC handlers run server-side in boa_engine; the
+# <ferum-slot-sidebar-left-top> custom element runs client-side in the browser.
+# Each half is guarded by a typeof check — see bundle.js header comment.
+
+[script]
+bundle_file = "bundle.js"
+
+# ─── Config schema ────────────────────────────────────────────────────────────
+
+[config_schema]
+type     = "object"
+required = []
+
+[config_schema.properties.max_options]
+type        = "integer"
+title       = "Max options per poll"
+description = "Upper bound on how many answer choices a single poll can have."
+default     = 6
+
+# ─── Capabilities ─────────────────────────────────────────────────────────────
+
+[capabilities]
+hooks = []
+rpc   = ["create_poll", "vote", "get_latest_poll"]
+api   = ["forum.createNotification"]
+db    = true
+
+# ─── Schema (own Postgres schema: plugin_com_ferum_community_polls) ───────────
+# Run once at install time, reviewed by the admin alongside other capabilities.
+# One active poll is enough for a demo widget — `get_latest_poll` always reads
+# the most recently created one; nothing prunes old polls (a real deployment
+# would want a "close poll" RPC action and a way to list past polls).
+
+[schema]
+tables = [
+    "CREATE TABLE polls (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), question TEXT NOT NULL, created_by UUID NOT NULL, creator_username TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+    "CREATE TABLE poll_options (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), poll_id UUID NOT NULL REFERENCES polls(id) ON DELETE CASCADE, label TEXT NOT NULL, votes INT NOT NULL DEFAULT 0)",
+    "CREATE TABLE poll_votes (poll_id UUID NOT NULL REFERENCES polls(id) ON DELETE CASCADE, option_id UUID NOT NULL, user_id UUID NOT NULL, PRIMARY KEY (poll_id, user_id))",
+]
+
+# ─── UI Slot ────────────────────────────────────────────────────────────────
+# Uses the admin-configurable sidebar_left_top slot (see frontend/themes/default/
+# templates/partials/sidebar_left.html) rather than content_after, so it doesn't
+# visually stack with other example widgets (e.g. simple-chatbox) that use
+# content_after by default. Admin can move it via
+# PATCH /api/admin/plugins/:slug/ui-slots/:slot_id if they want it elsewhere.
+
+[ui_slots.sidebar_left_top]
+component = "/plugins/com.ferum.community-polls/assets/bundle.js"
+props = []

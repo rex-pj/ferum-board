@@ -22,4 +22,9 @@ pub trait StoredFileRepository: Send + Sync {
 
     /// Permanently delete the DB row (called by GC after ref_count hits 0).
     async fn delete_by_key(&self, key: &str) -> Result<(), AppError>;
+
+    /// List keys starting with `prefix` — used at plugin uninstall to find every
+    /// file it ever uploaded (keys are namespaced `plugin_{slug}/...` by cas_key)
+    /// so they can be dereferenced instead of orphaned forever.
+    async fn list_keys_with_prefix(&self, prefix: &str) -> Result<Vec<String>, AppError>;
 }

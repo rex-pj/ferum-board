@@ -10,7 +10,15 @@ use ferum_infrastructure::entities::stored_files;
 
 /// GET /plugins/:slug/assets/*path — serve a plugin UI asset.
 ///
-/// Only files under `{plugins_dir}/{slug}/assets/` are accessible.
+/// `/assets/` is a URL-only namespace, not a required on-disk subfolder: a
+/// plugin's `.fpkg` is a flat archive (`plugin.toml` + `bundle.js` at the
+/// package root — see every example under examples/plugins/), and the SAME
+/// bundle.js is what `[script].bundle_file` in the manifest points
+/// boa_engine at via `{install_path}/{bundle_file}` (also flat, no `assets/`
+/// prefix — see ScriptPluginRuntime::load_bundle). This route resolves
+/// against the same flat install root so both consumers agree on where the
+/// file actually lives, and blocks serving plugin.toml so the manifest
+/// itself isn't reachable through the same public path.
 /// Path traversal attempts (`..`) in either segment return 404.
 pub async fn serve_plugin_asset(
     State(state): State<AppState>,
@@ -19,13 +27,13 @@ pub async fn serve_plugin_asset(
     // Reject any traversal attempt in slug or path
     if slug.contains("..") || slug.contains('/') || slug.contains('\\')
         || asset_path.contains("..")
+        || asset_path.eq_ignore_ascii_case("plugin.toml")
     {
         return StatusCode::NOT_FOUND.into_response();
     }
 
     let file_path = PathBuf::from(&state.plugins_dir)
         .join(&slug)
-        .join("assets")
         .join(&asset_path);
 
     match tokio::fs::read(&file_path).await {
@@ -36,7 +44,13 @@ pub async fn serve_plugin_asset(
                 StatusCode::OK,
                 [
                     (header::CONTENT_TYPE, ct.to_string()),
-                    (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
+                    // Unlike CAS-stored files (content-addressed by hash — safe to
+                    // cache forever), a plugin's bundle.js can change any time an
+                    // admin reinstalls/updates the plugin while keeping the same
+                    // URL. No ETag/Last-Modified is served, so a long max-age would
+                    // leave browsers showing a stale bundle for up to an hour with
+                    // no way to detect the change.
+                    (header::CACHE_CONTROL, "no-cache".to_string()),
                 ],
                 data,
             )

@@ -86,4 +86,17 @@ impl StoredFileRepository for PgStoredFileRepository {
             .await?;
         Ok(())
     }
+
+    async fn list_keys_with_prefix(&self, prefix: &str) -> Result<Vec<String>, AppError> {
+        // Escape LIKE metacharacters so a prefix containing "%"/"_" (e.g. an
+        // unusual plugin slug) can't widen the scan beyond its own namespace.
+        let escaped = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        Ok(stored_files::Entity::find()
+            .filter(stored_files::Column::Key.like(format!("{escaped}%")))
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|m| m.key)
+            .collect())
+    }
 }

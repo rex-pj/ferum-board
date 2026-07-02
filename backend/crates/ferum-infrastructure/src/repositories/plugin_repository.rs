@@ -314,6 +314,41 @@ impl PluginRepository for PgPluginRepository {
             .collect())
     }
 
+    async fn ui_slots_for_plugin(&self, plugin_id: Uuid) -> Result<Vec<PluginUiSlot>, AppError> {
+        let plugin_slug = plugins::Entity::find_by_id(plugin_id)
+            .one(&self.db)
+            .await?
+            .map(|p| p.slug)
+            .unwrap_or_default();
+
+        Ok(plugin_ui_slots::Entity::find()
+            .filter(plugin_ui_slots::Column::PluginId.eq(plugin_id))
+            .order_by_asc(plugin_ui_slots::Column::LoadOrder)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|m| slot_from_entity(m, plugin_slug.clone()))
+            .collect())
+    }
+
+    async fn update_ui_slot(&self, id: Uuid, slot_name: String, load_order: i32) -> Result<PluginUiSlot, AppError> {
+        let existing = plugin_ui_slots::Entity::find_by_id(id)
+            .one(&self.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        let plugin_slug = plugins::Entity::find_by_id(existing.plugin_id)
+            .one(&self.db)
+            .await?
+            .map(|p| p.slug)
+            .unwrap_or_default();
+
+        let mut active = existing.into_active_model();
+        active.slot_name = Set(slot_name);
+        active.load_order = Set(load_order);
+        let updated = active.update(&self.db).await?;
+        Ok(slot_from_entity(updated, plugin_slug))
+    }
+
     async fn create_ui_slot(&self, data: NewPluginUiSlot) -> Result<PluginUiSlot, AppError> {
         let plugin_slug = plugins::Entity::find_by_id(data.plugin_id)
             .one(&self.db)

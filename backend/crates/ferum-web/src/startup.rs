@@ -6,7 +6,7 @@ use crate::tera_engine::TeraEngine;
 use ferum_application::event_bus::{EventBus, EventPublisher};
 use ferum_application::ports::{
     CacheService, JobQueue, NotificationBus, PermissionResolver, PluginHookRuntime,
-    PluginLifecycle, PluginUiRuntime, RateLimiter, SearchService, StorageService,
+    PluginLifecycle, PluginRpcRuntime, PluginUiRuntime, RateLimiter, SearchService, StorageService,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
@@ -45,7 +45,8 @@ use ferum_infrastructure::{
     plugins::registry::PluginRegistry,
     repositories::{
         PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository, PgFollowRepository,
-        PgNotificationRepository, PgPermissionRepository, PgPluginRepository, PgPostRepository,
+        PgNotificationRepository, PgPermissionRepository, PgPluginDbGateway, PgPluginRepository,
+        PgPluginStorageRepository, PgPostRepository,
         PgReactionRepository, PgReportRepository, PgRoleRepository, PgSiteConfigRepository,
         PgStatsRepository, PgStoredFileRepository, PgTagRepository, PgThreadRepository,
         PgUserRepository,
@@ -256,9 +257,15 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     // ─── Plugin system (before event_bus so plugin_runtime can be injected) ──
     let plugin_repo = Arc::new(PgPluginRepository::new(pg_write.clone()));
+    let plugin_storage_repo = Arc::new(PgPluginStorageRepository::new(pg_write.clone()));
+    let plugin_db_gateway = Arc::new(PgPluginDbGateway::new(pg_write.clone()));
     let plugin_registry = Arc::new(PluginRegistry::new(
         plugin_repo.clone(),
         cache.clone(),
+        plugin_storage_repo,
+        user_repo.clone(),
+        notification_repo.clone(),
+        plugin_db_gateway.clone(),
         config.plugin_hook_timeout_ms,
         config.plugin_circuit_threshold,
     ));
@@ -268,6 +275,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // ISP: cast once to each focused trait so each consumer receives only the interface it needs.
     let plugin_hooks: Arc<dyn PluginHookRuntime> = plugin_registry.clone();
     let plugin_ui: Arc<dyn PluginUiRuntime> = plugin_registry.clone();
+    let plugin_rpc: Arc<dyn PluginRpcRuntime> = plugin_registry.clone();
     let plugin_lifecycle: Arc<dyn PluginLifecycle> = plugin_registry;
 
     let event_bus: Arc<dyn EventPublisher> = Arc::new(
@@ -330,14 +338,17 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         .with_plugin_runtime(plugin_hooks.clone()),
     );
 
-    let admin = Arc::new(AdminUseCase::new(
-        category_repo.clone(),
-        role_repo.clone(),
-        user_role_repo.clone(),
-        user_repo.clone(),
-        Arc::new(PgAuditLogRepository::new(pg_write.clone())),
-        cache.clone(),
-    ));
+    let admin = Arc::new(
+        AdminUseCase::new(
+            category_repo.clone(),
+            role_repo.clone(),
+            user_role_repo.clone(),
+            user_repo.clone(),
+            Arc::new(PgAuditLogRepository::new(pg_write.clone())),
+            cache.clone(),
+        )
+        .with_plugin_runtime(plugin_hooks.clone()),
+    );
 
     let role = Arc::new(RoleUseCase::new(
         role_repo.clone(),
@@ -389,26 +400,32 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         .with_plugin_runtime(plugin_hooks.clone()),
     );
 
-    let reaction = Arc::new(ReactionUseCase::new(
-        reaction_repo.clone(),
-        post_repo.clone(),
-        thread_repo.clone(),
-        user_repo.clone(),
-        event_bus.clone(),
-    ));
+    let reaction = Arc::new(
+        ReactionUseCase::new(
+            reaction_repo.clone(),
+            post_repo.clone(),
+            thread_repo.clone(),
+            user_repo.clone(),
+            event_bus.clone(),
+        )
+        .with_plugin_runtime(plugin_hooks.clone()),
+    );
 
     let notification = Arc::new(NotificationUseCase::new(notification_repo.clone()));
 
-    let moderation = Arc::new(ModerationUseCase::new(
-        report_repo,
-        post_repo.clone(),
-        thread_repo.clone(),
-        user_repo.clone(),
-        notification_repo,
-        Arc::new(PgAuditLogRepository::new(pg_write.clone())),
-        event_bus.clone(),
-        cache.clone(),
-    ));
+    let moderation = Arc::new(
+        ModerationUseCase::new(
+            report_repo,
+            post_repo.clone(),
+            thread_repo.clone(),
+            user_repo.clone(),
+            notification_repo,
+            Arc::new(PgAuditLogRepository::new(pg_write.clone())),
+            event_bus.clone(),
+            cache.clone(),
+        )
+        .with_plugin_runtime(plugin_hooks.clone()),
+    );
 
     let search = Arc::new(SearchUseCase::new(search_svc));
 
@@ -436,6 +453,9 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         plugin_repo,
         webhook_repo.clone(),
         plugin_lifecycle,
+        plugin_db_gateway,
+        stored_file_repo.clone(),
+        job_queue.clone(),
         std::path::PathBuf::from(&config.plugins_dir),
     ));
 
@@ -542,6 +562,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         plugin,
         plugin_hooks,
         plugin_ui,
+        plugin_rpc,
         site_config,
         site_config_cache,
         active_theme_cache,

@@ -1,35 +1,31 @@
 {#
-  Ferum Dark — home.html
+  Ferum Arcade — home.html
   ──────────────────────────────────────────────────────────────────────────────
   Demonstrates HTML template customization on top of the default theme.
 
   DIFFERENCES from default/templates/home.html:
   - Full-width layout: right_sidebar_wrap block is empty (no right panel)
-  - Compact thread list: custom HTML rows instead of thread_card partial
-    Each row: [status icon] [title + category + tags] [author · time] [stats]
-  - No excerpt text — title + meta only (GitHub Issues style)
-  - New Thread button is inline in the list header, not in a sidebar panel
-  - Uses fdk-* CSS classes defined in assets/theme.css
+  - Thread rows rendered as a HUD "queue" list with neon status LEDs and a
+    monospace title face (fac-* CSS classes)
+  - Reply/view counters styled like arcade score readouts
 #}
-{% extends "ferum-dark/templates/base.html" %}
+{% extends "ferum-arcade/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
 {% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
 
 {% block content %}
-<div class="fdk-feed-header">
-  <span class="fdk-feed-title">
+<div class="fac-feed-header">
+  <span class="fac-feed-title">
     {% if active_tag %}
-      <i class="fa-solid fa-tag fa-sm me-1 opacity-60"></i>#{{ active_tag }}
-      <a href="/" class="fdk-clear-filter ms-2">
-        <i class="fa-solid fa-xmark fa-xs"></i> clear
-      </a>
+      <i class="fa-solid fa-tag fa-sm me-1"></i>#{{ active_tag }}
+      <a href="/" class="fac-clear-filter ms-2">[ clear ]</a>
     {% else %}
-      Latest Discussions
+      &gt; ACTIVE_THREADS
     {% endif %}
   </span>
   {% if current_user %}
-    <a href="/new-thread" class="btn btn-primary btn-sm">
+    <a href="/new-thread" class="btn btn-primary btn-sm fac-btn">
       <i class="fa-solid fa-plus me-1"></i>New Thread
     </a>
   {% else %}
@@ -40,40 +36,40 @@
 </div>
 
 {% if threads %}
-<div class="fdk-list">
+<div class="fac-list">
   {% for thread in threads %}
-  <div class="fdk-row">
+  <div class="fac-row">
 
-    <div class="fdk-row-status" aria-hidden="true">
+    <div class="fac-row-led" aria-hidden="true">
       {% if thread.is_solved %}
-        <i class="fa-solid fa-circle-check text-success" title="Solved"></i>
+        <span class="fac-led fac-led-solved" title="Solved"></span>
       {% elif thread.is_pinned %}
-        <i class="fa-solid fa-thumbtack" style="color:var(--bs-warning)" title="Pinned"></i>
+        <span class="fac-led fac-led-pinned" title="Pinned"></span>
       {% elif thread.is_locked %}
         <i class="fa-solid fa-lock text-body-secondary" title="Locked"></i>
       {% else %}
-        <i class="fa-regular fa-comment-dots text-body-tertiary"></i>
+        <span class="fac-led fac-led-open" title="Open"></span>
       {% endif %}
     </div>
 
-    <div class="fdk-row-body">
-      <div class="fdk-row-title-line">
-        <a href="/forum/t/{{ thread.slug }}" class="fdk-row-title">{{ thread.title }}</a>
-        <a href="/forum/{{ thread.category_slug }}" class="fdk-cat-chip">{{ thread.category_name }}</a>
+    <div class="fac-row-body">
+      <div class="fac-row-title-line">
+        <a href="/forum/t/{{ thread.slug }}" class="fac-row-title">{{ thread.title }}</a>
+        <a href="/forum/{{ thread.category_slug }}" class="fac-cat-chip">{{ thread.category_name }}</a>
         {% for tag in thread.tags %}
-          <a href="/?tag={{ tag.slug }}" class="fdk-tag-chip">#{{ tag.name }}</a>
+          <a href="/?tag={{ tag.slug }}" class="fac-tag-chip">#{{ tag.name }}</a>
         {% endfor %}
       </div>
-      <div class="fdk-row-meta">
-        <a href="/u/{{ thread.author_username }}" class="fdk-author">{{ thread.author_display_name }}</a>
-        <span class="fdk-sep" aria-hidden="true">·</span>
-        <time class="fdk-time" data-rel datetime="{{ thread.created_at }}">
+      <div class="fac-row-meta">
+        <a href="/u/{{ thread.author_username }}" class="fac-author">{{ thread.author_display_name }}</a>
+        <span class="fac-sep" aria-hidden="true">//</span>
+        <time class="fac-time" data-rel datetime="{{ thread.created_at }}">
           {{ thread.created_at | date(format="%b %d, %Y") }}
         </time>
       </div>
     </div>
 
-    <div class="fdk-row-stats" aria-label="{{ thread.reply_count }} replies, {{ thread.view_count }} views">
+    <div class="fac-row-stats" aria-label="{{ thread.reply_count }} replies, {{ thread.view_count }} views">
       <span title="{{ thread.reply_count }} replies">
         <i class="fa-regular fa-comment fa-xs" aria-hidden="true"></i>
         {{ thread.reply_count }}
@@ -92,13 +88,13 @@
 
 {% else %}
 
-<div class="text-center py-5 text-secondary">
+<div class="text-center py-5 fac-empty">
   <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block opacity-40" aria-hidden="true"></i>
   {% if active_tag %}
-    <p class="mb-0">No threads for tag <strong class="text-body">#{{ active_tag }}</strong>.</p>
+    <p class="mb-0">No threads for tag <strong>#{{ active_tag }}</strong>.</p>
     <a href="/" class="btn btn-sm btn-outline-secondary mt-3">Clear filter</a>
   {% else %}
-    <p class="mb-0">No discussions yet.</p>
+    <p class="mb-0">&gt; NO_DATA</p>
     {% if current_user %}
       <a href="/new-thread" class="btn btn-sm btn-primary mt-3">Start the first thread</a>
     {% endif %}

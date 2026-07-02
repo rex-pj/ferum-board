@@ -30,6 +30,7 @@ pub const DEFAULT_THEME_SLUG: &str = "default";
 pub const MAX_AVATAR_BYTES: usize = 5 * 1024 * 1024; // 5 MB
 pub const MAX_THUMBNAIL_BYTES: usize = 10 * 1024 * 1024; // 10 MB
 pub const MAX_COVER_BYTES: usize = 8 * 1024 * 1024; // 8 MB
+pub const MAX_PLUGIN_MEDIA_BYTES: usize = 8 * 1024 * 1024; // 8 MB
 pub const MAX_FAVICON_BYTES: usize = 512 * 1024; // 512 KB
 pub const MAX_LOGO_BYTES: usize = 2 * 1024 * 1024; // 2 MB
 

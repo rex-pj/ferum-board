@@ -1,0 +1,111 @@
+{#
+  Ferum Sumi — home.html
+  ──────────────────────────────────────────────────────────────────────────────
+  Demonstrates HTML template customization on top of the default theme.
+
+  DIFFERENCES from default/templates/home.html:
+  - Full-width layout: right_sidebar_wrap block is empty (no right panel)
+  - Thread rows rendered as vertical scroll cards with a thin ink rule between
+    them, a vermillion status dot, and a serif title face (fsm-* CSS classes)
+  - Feed header carries a small Japanese subtitle ("新着の話題" = "new topics")
+#}
+{% extends "ferum-sumi/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
+
+{% block content %}
+<div class="fsm-feed-header">
+  <div>
+    <span class="fsm-feed-title">
+      {% if active_tag %}
+        #{{ active_tag }}
+        <a href="/" class="fsm-clear-filter ms-2">clear</a>
+      {% else %}
+        Latest Discussions
+      {% endif %}
+    </span>
+    <span class="fsm-feed-subtitle">新着の話題</span>
+  </div>
+  {% if current_user %}
+    <a href="/new-thread" class="btn btn-primary btn-sm fsm-btn">
+      <i class="fa-solid fa-plus me-1"></i>New Thread
+    </a>
+  {% else %}
+    <a href="/login" class="btn btn-outline-secondary btn-sm">
+      Log in to post
+    </a>
+  {% endif %}
+</div>
+
+{% if threads %}
+<div class="fsm-list">
+  {% for thread in threads %}
+  <div class="fsm-row">
+
+    <div class="fsm-row-dot" aria-hidden="true">
+      {% if thread.is_solved %}
+        <i class="fa-solid fa-circle-check" style="color:var(--fsm-solved)"></i>
+      {% elif thread.is_pinned %}
+        <i class="fa-solid fa-thumbtack" style="color:var(--fsm-vermillion)"></i>
+      {% elif thread.is_locked %}
+        <i class="fa-solid fa-lock text-body-secondary"></i>
+      {% else %}
+        <span class="fsm-dot" aria-hidden="true"></span>
+      {% endif %}
+    </div>
+
+    <div class="fsm-row-body">
+      <div class="fsm-row-title-line">
+        <a href="/forum/t/{{ thread.slug }}" class="fsm-row-title">{{ thread.title }}</a>
+        <a href="/forum/{{ thread.category_slug }}" class="fsm-cat-chip">{{ thread.category_name }}</a>
+        {% for tag in thread.tags %}
+          <a href="/?tag={{ tag.slug }}" class="fsm-tag-chip">#{{ tag.name }}</a>
+        {% endfor %}
+      </div>
+      <div class="fsm-row-meta">
+        <a href="/u/{{ thread.author_username }}" class="fsm-author">{{ thread.author_display_name }}</a>
+        <span class="fsm-sep" aria-hidden="true">・</span>
+        <time class="fsm-time" data-rel datetime="{{ thread.created_at }}">
+          {{ thread.created_at | date(format="%b %d, %Y") }}
+        </time>
+      </div>
+    </div>
+
+    <div class="fsm-row-stats" aria-label="{{ thread.reply_count }} replies, {{ thread.view_count }} views">
+      <span title="{{ thread.reply_count }} replies">
+        <i class="fa-regular fa-comment fa-xs" aria-hidden="true"></i>
+        {{ thread.reply_count }}
+      </span>
+      <span title="{{ thread.view_count }} views">
+        <i class="fa-regular fa-eye fa-xs" aria-hidden="true"></i>
+        {{ thread.view_count }}
+      </span>
+    </div>
+
+  </div>
+  {% endfor %}
+</div>
+
+{% include "default/templates/partials/pagination.html" %}
+
+{% else %}
+
+<div class="text-center py-5 fsm-empty">
+  <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block opacity-40" aria-hidden="true"></i>
+  {% if active_tag %}
+    <p class="mb-0">No threads for tag <strong>#{{ active_tag }}</strong>.</p>
+    <a href="/" class="btn btn-sm btn-outline-secondary mt-3">Clear filter</a>
+  {% else %}
+    <p class="mb-0">No discussions yet.</p>
+    {% if current_user %}
+      <a href="/new-thread" class="btn btn-sm btn-primary mt-3">Start the first thread</a>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{# Full-width: no right sidebar panel #}
+{% block right_sidebar_wrap %}{% endblock %}

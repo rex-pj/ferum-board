@@ -34,9 +34,100 @@
   </tbody>
 </table>
 
+{% if plugin.hooks and plugin.hooks | length > 0 %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">Server-side hooks requested</label>
+  <p class="text-muted small mb-1">Uncheck any hook you do not want to grant. Denied hooks are never registered — the plugin will not run for them.</p>
+  <div class="border rounded p-2">
+    {% for h in plugin.hooks %}
+    <div class="form-check">
+      <input class="form-check-input cap-hook-checkbox" type="checkbox" value="{{ h.name }}" data-priority="{{ h.priority }}" id="review-hook-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <label class="form-check-label font-monospace small" for="review-hook-{{ loop.index }}">{{ h.name }} <span class="text-muted">(priority {{ h.priority }})</span></label>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if plugin.http_allowlist and plugin.http_allowlist | length > 0 %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">Outbound HTTP hosts requested</label>
+  <p class="text-muted small mb-1">Uncheck any host you do not want the plugin to reach. Denied hosts are blocked even if the plugin's code tries to call them.</p>
+  <div class="border rounded p-2">
+    {% for host in plugin.http_allowlist %}
+    <div class="form-check">
+      <input class="form-check-input cap-http-checkbox" type="checkbox" value="{{ host }}" id="review-http-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <label class="form-check-label font-monospace small" for="review-http-{{ loop.index }}">{{ host }}</label>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if plugin.rpc_actions and plugin.rpc_actions | length > 0 %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">RPC actions requested</label>
+  <p class="text-muted small mb-1">Uncheck any action you do not want callable from the browser. Denied actions return 403 at <code>/api/plugins/{{ plugin.slug }}/rpc/&lt;action&gt;</code> without ever reaching the plugin's code.</p>
+  <div class="border rounded p-2">
+    {% for action in plugin.rpc_actions %}
+    <div class="form-check">
+      <input class="form-check-input cap-rpc-checkbox" type="checkbox" value="{{ action }}" id="review-rpc-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <label class="form-check-label font-monospace small" for="review-rpc-{{ loop.index }}">{{ action }}</label>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if plugin.api_functions and plugin.api_functions | length > 0 %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">Curated API functions requested</label>
+  <p class="text-muted small mb-1">Uncheck any <code>Ferum.forum.*</code> function the plugin should not be able to call — e.g. <code>createNotification</code> lets it message users; <code>getUserPublic</code> only reads public profile fields.</p>
+  <div class="border rounded p-2">
+    {% for fn in plugin.api_functions %}
+    <div class="form-check">
+      <input class="form-check-input cap-api-checkbox" type="checkbox" value="{{ fn }}" id="review-api-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <label class="form-check-label font-monospace small" for="review-api-{{ loop.index }}">{{ fn }}</label>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if plugin.wants_db %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">Own SQL schema (high trust)</label>
+  <p class="text-muted small mb-1">
+    Grants a dedicated Postgres schema (<code>plugin_{{ plugin.slug | replace(from=".", to="_") | replace(from="-", to="_") }}</code>) the plugin can run real SQL against via <code>Ferum.db.query()</code>.
+    Isolated by schema boundary and a forced search_path, <strong>not</strong> a dedicated least-privilege database role —
+    review the DDL below carefully before granting.
+  </p>
+  {% if plugin.schema_tables and plugin.schema_tables | length > 0 %}
+  <pre class="bg-body-secondary rounded p-2 small mb-2" style="max-height:160px;overflow:auto">{% for stmt in plugin.schema_tables %}{{ stmt }}
+
+{% endfor %}</pre>
+  {% endif %}
+  <div class="form-check">
+    <input class="form-check-input" type="checkbox" id="review-cap-db" checked onchange="window.updatePluginGrant()">
+    <label class="form-check-label" for="review-cap-db">Grant <code>db</code> — allow this plugin to run SQL in its own schema</label>
+  </div>
+</div>
+{% endif %}
+
+{% if plugin.wants_media %}
+<div class="mb-3">
+  <label class="form-label fw-semibold">Media upload</label>
+  <p class="text-muted small mb-1">Allows members to upload images through this plugin (<code>POST /api/plugins/{{ plugin.slug }}/media</code>), stored under the plugin's own namespace.</p>
+  <div class="form-check">
+    <input class="form-check-input" type="checkbox" id="review-cap-media" checked onchange="window.updatePluginGrant()">
+    <label class="form-check-label" for="review-cap-media">Grant <code>media</code> — allow image uploads via this plugin</label>
+  </div>
+</div>
+{% endif %}
+
 {% if plugin.capabilities_json and plugin.capabilities_json != "{}" %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">Capabilities requested</label>
+  <label class="form-label fw-semibold">Full capabilities requested (raw)</label>
   <pre class="bg-body-secondary rounded p-2 small mb-0" style="max-height:120px;overflow:auto">{{ plugin.capabilities_json }}</pre>
 </div>
 {% endif %}
@@ -45,9 +136,12 @@
   {# Re-upload the file since we don't persist it between steps.
      The file input is hidden and populated from the first upload via JS. #}
   <input type="file" name="file" id="installFileInput" class="d-none" accept=".fpkg,.zip">
+  {# Immutable snapshot of the requested capabilities — used by updatePluginGrant()
+     to rebuild the actual grant below as checkboxes are toggled. #}
+  <input type="hidden" id="plugin-capabilities-original" value="{{ plugin.capabilities_json }}">
   <input type="hidden" name="granted_capabilities" value="{{ plugin.capabilities_json }}">
   <p class="text-muted small">
-    By clicking <strong>Confirm Install</strong> you approve the capabilities listed above.
+    By clicking <strong>Confirm Install</strong> you approve the capabilities checked above.
     The plugin will be installed and available for activation.
   </p>
 </form>

@@ -54,7 +54,7 @@ pub fn extract(
         .map_err(|e| AppError::internal(format!("Failed to create plugin dir: {}", e)))?;
 
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|e| {
+        let file = archive.by_index(i).map_err(|e| {
             AppError::internal(format!("Failed to read archive entry {}: {}", i, e))
         })?;
 
@@ -83,16 +83,6 @@ pub fn extract(
             ));
         }
 
-        total_extracted += file.size();
-        if total_extracted > MAX_EXTRACTED_SIZE {
-            // Clean up partial extraction
-            let _ = std::fs::remove_dir_all(&plugin_dir);
-            return Err(AppError::unprocessable(&format!(
-                "Extracted size exceeds maximum ({}MB)",
-                MAX_EXTRACTED_SIZE / 1024 / 1024
-            )));
-        }
-
         if file.is_dir() {
             std::fs::create_dir_all(&target_path)
                 .map_err(|e| AppError::internal(format!("Failed to create dir: {}", e)))?;
@@ -101,9 +91,27 @@ pub fn extract(
                 std::fs::create_dir_all(parent)
                     .map_err(|e| AppError::internal(format!("Failed to create parent dir: {}", e)))?;
             }
+
+            // Bound the actual decompressed read by the remaining size budget instead of
+            // trusting the entry's declared uncompressed_size — that field is attacker
+            // controlled and a crafted entry can understate it while a real DEFLATE
+            // stream decompresses to far more (zip bomb), so read_to_end() alone would
+            // be unbounded. Reading one byte past the budget lets us detect and reject
+            // an oversized entry without ever materializing it in full.
+            let remaining = MAX_EXTRACTED_SIZE.saturating_sub(total_extracted);
             let mut content = Vec::new();
-            file.read_to_end(&mut content)
+            file.take(remaining + 1)
+                .read_to_end(&mut content)
                 .map_err(|e| AppError::internal(format!("Failed to read file: {}", e)))?;
+            if content.len() as u64 > remaining {
+                let _ = std::fs::remove_dir_all(&plugin_dir);
+                return Err(AppError::unprocessable(&format!(
+                    "Extracted size exceeds maximum ({}MB)",
+                    MAX_EXTRACTED_SIZE / 1024 / 1024
+                )));
+            }
+            total_extracted += content.len() as u64;
+
             std::fs::write(&target_path, &content)
                 .map_err(|e| AppError::internal(format!("Failed to write file: {}", e)))?;
         }
