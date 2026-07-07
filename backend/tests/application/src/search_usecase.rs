@@ -3,10 +3,18 @@ use std::sync::Arc;
 use ferum_application::ports::{SearchHit, SearchResults};
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_test_support::fixtures::ids;
+use ferum_test_support::mocks::category_repository::MockCategoryRepository;
 use ferum_test_support::mocks::search_service::{MockSearchService, NoopSearchService};
+use ferum_test_support::mocks::thread_repository::MockThreadRepository;
 
 fn build_uc(search: impl ferum_application::ports::SearchService + 'static) -> SearchUseCase {
-    SearchUseCase::new(Arc::new(search))
+    // Hydration repos are unused by the plain `search()` path under test —
+    // mocks with no expectations panic if touched, which is what we want.
+    SearchUseCase::new(
+        Arc::new(search),
+        Arc::new(MockThreadRepository::new()),
+        Arc::new(MockCategoryRepository::new()),
+    )
 }
 
 // ─── empty query guard ────────────────────────────────────────────────────────

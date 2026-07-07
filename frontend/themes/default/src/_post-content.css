@@ -70,6 +70,27 @@
 
 /* Best answer highlight */
 .post-best-answer { border-left: 3px solid #10b981 !important; }
+.fr-post-best-answer {
+  border-left: 4px solid #10b981 !important;
+  background: color-mix(in srgb, #10b981 5%, var(--bs-body-bg)) !important;
+}
+/* NOTE: .fr-best-answer-header's *effective* color/background/border-bottom-color
+   are actually set by the !important duplicate in _utilities.css (later import
+   wins ties among !important rules) — this block only contributes font-weight,
+   which nothing else overrides. Pre-existing duplication in the shipped CSS,
+   reproduced here verbatim rather than silently resolved. */
+.fr-best-answer-header {
+  background: color-mix(in srgb, #10b981 10%, var(--bs-body-bg));
+  color: #059669;
+  font-weight: 600;
+  border-bottom-color: color-mix(in srgb, #10b981 20%, var(--bs-border-color));
+}
+[data-bs-theme="dark"] .fr-post-best-answer {
+  background: color-mix(in srgb, #10b981 8%, var(--bs-body-bg)) !important;
+}
+[data-bs-theme="dark"] .fr-best-answer-header {
+  color: #34d399;
+}
 
 /* Deep-link highlight */
 .card:target {

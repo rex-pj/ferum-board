@@ -9,6 +9,7 @@ default = ["script_plugins"]
 
 [dependencies]
 ferum-web = { path = "../../crates/ferum-web" }
+ferum-domain = { path = "../../crates/ferum-domain" }
 
 axum = { version = "0.8", features = ["macros"] }
 tower = { version = "0.5", features = ["util"] }

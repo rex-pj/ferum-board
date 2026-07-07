@@ -93,8 +93,11 @@
       <a href="/new-thread" class="fr-bn-item" aria-label="New thread">
         <span class="fr-bn-cta"><i class="fa-solid fa-plus"></i></span><span>New</span>
       </a>
-      <a href="/notifications" class="fr-bn-item" aria-label="Notifications">
+      <a href="/notifications" class="fr-bn-item" aria-label="Notifications{% if current_user.unread_count > 0 %}, {{ current_user.unread_count }} unread{% endif %}">
         <i class="fa-solid fa-bell"></i><span>Inbox</span>
+        {% if current_user.unread_count > 0 %}
+          <span class="fr-bn-badge">{% if current_user.unread_count > 99 %}99+{% else %}{{ current_user.unread_count }}{% endif %}</span>
+        {% endif %}
       </a>
       <a href="/u/{{ current_user.username }}" class="fr-bn-item" aria-label="Profile">
         <i class="fa-solid fa-user"></i><span>Profile</span>

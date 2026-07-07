@@ -286,6 +286,22 @@ pub async fn thread_detail(
     let active = active_theme(&state).await;
 
     let author_username = thread.author_username.clone().unwrap_or_default();
+
+    // Server-computed capability flags — templates must never re-derive these
+    // from usernames or role names (mirrors the pin/lock/move pattern).
+    // See thread_permissions.rs for the pure, unit-tested logic.
+    use super::thread_permissions::{
+        post_can_delete, post_can_edit, thread_can_delete, thread_can_edit,
+        thread_can_mark_best_answer,
+    };
+    let has_in_cat = |key: &str| {
+        auth_user
+            .as_ref()
+            .is_some_and(|u| u.has_perm_in(key, thread.category_id))
+    };
+    let is_locked = matches!(thread.status, ThreadStatus::Locked);
+    use ferum_domain::models::role::perm;
+
     let thread_ctx = ThreadDetailCtx {
         id: thread.id.to_string(),
         slug: thread.slug.clone(),
@@ -305,17 +321,14 @@ pub async fn thread_detail(
         view_count: thread.view_count,
         is_pinned: thread.is_pinned,
         is_solved: thread.is_solved,
-        is_locked: matches!(thread.status, ThreadStatus::Locked),
+        is_locked,
         created_at: thread.created_at.to_rfc3339(),
-        can_pin: auth_user.as_ref().is_some_and(|u| {
-            u.has_perm_in(ferum_domain::models::role::perm::THREAD_PIN, thread.category_id)
-        }),
-        can_lock: auth_user.as_ref().is_some_and(|u| {
-            u.has_perm_in(ferum_domain::models::role::perm::THREAD_LOCK, thread.category_id)
-        }),
-        can_move: auth_user.as_ref().is_some_and(|u| {
-            u.has_perm_in(ferum_domain::models::role::perm::THREAD_MOVE, thread.category_id)
-        }),
+        can_pin: has_in_cat(perm::THREAD_PIN),
+        can_lock: has_in_cat(perm::THREAD_LOCK),
+        can_move: has_in_cat(perm::THREAD_MOVE),
+        can_edit: thread_can_edit(auth_user.as_ref(), thread.author_id, thread.category_id, is_locked),
+        can_delete: thread_can_delete(auth_user.as_ref(), thread.author_id, thread.category_id),
+        can_mark_best_answer: thread_can_mark_best_answer(auth_user.as_ref(), thread.author_id, thread.category_id),
         tags: thread
             .tags
             .iter()
@@ -329,6 +342,7 @@ pub async fn thread_detail(
             .iter()
             .map(|p| {
                 let post_author = p.author_username.clone().unwrap_or_default();
+                let is_own = auth_user.as_ref().is_some_and(|u| u.id == p.author_id);
                 PostCtx {
                     id: p.id.to_string(),
                     author_username: post_author.clone(),
@@ -356,6 +370,9 @@ pub async fn thread_detail(
                             funny: for_kind(ReactionKind::Funny),
                         }
                     },
+                    is_own,
+                    can_edit: post_can_edit(auth_user.as_ref(), p.author_id, thread.category_id),
+                    can_delete: post_can_delete(auth_user.as_ref(), p.author_id, thread.category_id),
                 }
             })
             .collect(),

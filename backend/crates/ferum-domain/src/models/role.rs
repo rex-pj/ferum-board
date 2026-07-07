@@ -46,10 +46,6 @@ impl UserRoleAssignment {
     pub fn is_expired(&self) -> bool {
         self.expires_at.map(|t| t <= Utc::now()).unwrap_or(false)
     }
-
-    pub fn is_global(&self) -> bool {
-        self.category_id.is_none()
-    }
 }
 
 // ── Permission key constants ──────────────────────────────────────────────────

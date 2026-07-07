@@ -39,10 +39,6 @@ impl PluginStatus {
             PluginStatus::Uninstalling => "uninstalling",
         }
     }
-
-    pub fn is_runnable(&self) -> bool {
-        matches!(self, PluginStatus::Active)
-    }
 }
 
 #[derive(Clone, Debug)]

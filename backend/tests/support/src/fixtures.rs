@@ -52,11 +52,6 @@ impl AuthUserBuilder {
         self
     }
 
-    pub fn with_username(mut self, username: &str) -> Self {
-        self.inner.username = username.to_string();
-        self
-    }
-
     pub fn with_perm(mut self, perm: &str) -> Self {
         self.inner.permissions.insert(perm.to_string());
         self

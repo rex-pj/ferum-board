@@ -26,14 +26,6 @@ impl ThemeUseCase {
         self.themes.get_active().await
     }
 
-    pub async fn get_active_slug(&self) -> String {
-        self.themes
-            .get_active()
-            .await
-            .map(|t| t.slug)
-            .unwrap_or_else(|_| DEFAULT_THEME_SLUG.to_string())
-    }
-
     pub async fn register(&self, actor: &AuthUser, cmd: RegisterThemeCmd) -> Result<Theme, AppError> {
         PermissionChecker::can_manage_config(actor)?;
         self.themes

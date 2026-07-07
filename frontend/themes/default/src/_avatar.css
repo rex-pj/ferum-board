@@ -18,6 +18,11 @@
 .fr-avatar--40 { width: 40px; height: 40px; font-size: 16px;    border-radius: 50%; }
 .fr-avatar--80 { width: 80px; height: 80px; font-size: 28px;    border-radius: 50%; }
 .fr-avatar--96 { width: 96px; height: 96px; font-size: 2.25rem; border-radius: 50%; border: 4px solid var(--bs-body-bg); }
+/* ── Extra avatar sizes ───────────────────────────────────────── */
+.fr-avatar--22 { width: 22px; height: 22px; font-size:  9px; border-radius: 50%; }
+.fr-avatar--28 { width: 28px; height: 28px; font-size: 11px; border-radius: 50%; }
+.fr-avatar--36 { width: 36px; height: 36px; font-size: 14px; border-radius: 50%; }
+.fr-avatar--38 { width: 38px; height: 38px; font-size: 15px; border-radius: 50%; }
 
 /* ── Trust badge ──────────────────────────────────────────────── */
 .fr-trust-badge {

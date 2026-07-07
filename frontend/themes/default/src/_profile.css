@@ -1,7 +1,11 @@
 /* ── Profile page ─────────────────────────────────────────────── */
 .fr-profile-cover {
   height: 180px;
-  background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), 0.3) 0%, rgba(var(--bs-primary-rgb), 0.08) 100%);
+  background: linear-gradient(140deg,
+    hsl(243, 75%, 35%) 0%,
+    hsl(220, 65%, 42%) 45%,
+    hsl(190, 70%, 45%) 100%
+  );
   border-radius: var(--bs-border-radius) var(--bs-border-radius) 0 0;
   overflow: hidden;
   position: relative;
@@ -10,7 +14,7 @@
 
 .fr-profile-avatar-wrap {
   display: inline-block;
-  margin-top: -48px;
+  margin-top: -52px;
   position: relative;
   z-index: 1;
 }
@@ -21,21 +25,113 @@
   border: 4px solid var(--bs-body-bg);
   background: var(--bs-secondary-bg);
   object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 .fr-profile-avatar-placeholder {
   width: 96px;
   height: 96px;
   border-radius: 50%;
   border: 4px solid var(--bs-body-bg);
-  background: var(--ferum-primary);
+  background: linear-gradient(135deg, var(--ferum-primary) 0%, var(--ferum-primary-dark) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2.25rem;
   font-weight: 700;
   color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
 /* ── Profile stat labels ──────────────────────────────────────── */
-.fr-stat-value { color: var(--ferum-primary); }
 .fr-stat-label { color: var(--bs-tertiary-color); font-size: 0.875rem; }
+
+/* ── Profile tab bar ──────────────────────────────────────────── */
+.fr-profile-tab-bar {
+  display: flex;
+  background: var(--bs-card-bg, var(--bs-body-bg));
+  border-top: 1px solid var(--bs-border-color);
+}
+.fr-profile-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  /* Strip all browser button styling */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--bs-border-color);
+  color: var(--bs-secondary-color);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+  min-height: var(--fr-tap-target);
+  padding: 0.75rem 0.5rem;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1;
+}
+.fr-profile-tab:last-child { border-right: none; }
+/* Inset focus ring — the parent card is overflow:hidden, an outset ring would clip */
+.fr-profile-tab:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: -2px;
+}
+.fr-profile-tab:hover {
+  background-color: rgba(var(--bs-primary-rgb), 0.04);
+  color: var(--bs-body-color);
+}
+.fr-profile-tab:active {
+  background-color: rgba(var(--bs-primary-rgb), 0.08);
+}
+.fr-profile-tab--active {
+  color: var(--ferum-primary) !important;
+  background-color: rgba(var(--bs-primary-rgb), 0.06) !important;
+  box-shadow: inset 0 -3px 0 var(--ferum-primary) !important;
+}
+.fr-profile-tab-count {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--bs-body-color);
+}
+.fr-profile-tab--active .fr-profile-tab-count {
+  color: var(--ferum-primary);
+}
+.fr-profile-tab-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bs-tertiary-color);
+  line-height: 1;
+}
+.fr-profile-tab--active .fr-profile-tab-label {
+  color: var(--ferum-primary);
+  opacity: 0.85;
+}
+
+/* ── Profile action buttons (Follow / Edit profile) ───────────── */
+.fr-profile-action-btn {
+  min-height: 36px;
+  padding-inline: 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ── Account page cover preview ──────────────────────────────── */
+.fr-cover-preview {
+  height: 100px;
+  border: 1px solid var(--bs-border-color);
+}
+.fr-cover-preview-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fr-cover-placeholder {
+  width: 100%; height: 100%;
+  background: linear-gradient(135deg, hsl(210,55%,38%) 0%, hsl(190,65%,52%) 100%);
+  padding: .5rem 1rem; text-align: center;
+}
+[data-bs-theme="dark"] .fr-cover-placeholder { filter: brightness(.55) saturate(1.3); }

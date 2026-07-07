@@ -20,15 +20,6 @@ pub enum ReactionKind {
 }
 
 impl ReactionKind {
-    pub fn trust_score_weight(&self) -> i32 {
-        match self {
-            ReactionKind::Like => 1,
-            ReactionKind::Helpful => 3,
-            ReactionKind::Insightful => 2,
-            ReactionKind::Funny => 0,
-        }
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             ReactionKind::Like => "like",

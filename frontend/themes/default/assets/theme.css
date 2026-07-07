@@ -1,4 +1,6 @@
 
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 /* ================================================================
    Ferum Board — Default Theme  (source entry)
    Build:  npm run build  (in themes/default/)
@@ -14,10 +16,11 @@
   --bs-primary:          var(--ferum-primary);
   --bs-primary-rgb:      99, 102, 241;
 
-  /* Text hierarchy */
+  /* Text hierarchy — secondary/tertiary must stay ≥ 4.5:1 (WCAG AA, NF-UX-04)
+     on --bs-body-bg AND on --bs-secondary-bg (chips, search box, placeholders). */
   --bs-body-color:       #111827;
-  --bs-secondary-color:  #6b7280;
-  --bs-tertiary-color:   #9ca3af;
+  --bs-secondary-color:  #4b5563;  /* 7.6:1 on #fff */
+  --bs-tertiary-color:   #687080;  /* 5.0:1 on #fff, 4.6:1 on #f3f4f6 */
   --bs-emphasis-color:   #030712;
   --bs-link-color:       var(--ferum-primary);
   --bs-link-hover-color: var(--ferum-primary-dark);
@@ -60,9 +63,10 @@
   --bs-primary:          var(--ferum-primary);
   --bs-primary-rgb:      129, 140, 248;
 
+  /* Text hierarchy — same AA constraint as light mode, against #0f1117/#1a1d27. */
   --bs-body-color:       #e2e8f0;
-  --bs-secondary-color:  #94a3b8;
-  --bs-tertiary-color:   #64748b;
+  --bs-secondary-color:  #94a3b8;  /* 7.4:1 on #0f1117 */
+  --bs-tertiary-color:   #7b8aa0;  /* 5.4:1 on #0f1117, 4.8:1 on #1a1d27 */
   --bs-emphasis-color:   #f8fafc;
   --bs-link-color:       var(--ferum-primary);
   --bs-link-hover-color: var(--ferum-primary-dark);
@@ -277,13 +281,6 @@ body {
   box-shadow: var(--bs-box-shadow-sm);
   padding: 0 1rem;
 }
-.navbar-brand {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ferum-primary) !important;
-  letter-spacing: -0.02em;
-  padding: 0;
-}
 .navbar .nav-link {
   color: var(--bs-secondary-color);
   font-weight: 500;
@@ -326,9 +323,363 @@ body {
 }
 .fr-icon-btn:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
 .fr-icon-btn:focus-visible { outline: 2px solid var(--ferum-primary); outline-offset: 2px; }
-/* ── Search input width + brand name color ────────────────────── */
-.fr-search-input { width: 180px; }
-.fr-brand-name   { color: var(--ferum-primary); }
+/* ── Brand block ──────────────────────────────────────────────── */
+.fr-topbar-brand {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.fr-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--ferum-primary);
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+.fr-brand-img {
+  height: 32px;
+  width: auto;
+  border-radius: 6px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.fr-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.fr-brand-name {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ferum-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+.fr-brand-slogan {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--bs-secondary-color);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+/* ── 3-column app layout ──────────────────────────────────────── */
+:root {
+  --fr-sidebar-width: 220px;
+}
+.fr-layout {
+  display: flex;
+  min-height: calc(100dvh - var(--fr-topbar-height));
+  max-width: 1440px;
+  margin-inline: auto;
+}
+.fr-sidebar-left {
+  width: var(--fr-sidebar-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  position: sticky;
+  top: var(--fr-topbar-height);
+  height: calc(100dvh - var(--fr-topbar-height));
+  overflow-y: auto;
+  padding: 0.5rem 0.5rem 2rem;
+  scrollbar-width: thin;
+}
+.fr-sidebar-left::-webkit-scrollbar { width: 4px; }
+.fr-sidebar-left::-webkit-scrollbar-thumb { background: var(--bs-border-color); border-radius: 2px; }
+.fr-page {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fr-page-inner {
+  flex: 1;
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.fr-main-col {
+  flex: 1;
+  min-width: 0;
+}
+/* Reading pages (thread): cap the main column for a comfortable line length,
+   then center the [main + rail] group so the leftover space falls into
+   balanced outer margins instead of a gap between the two columns. The inner
+   gutter stays tight (2rem) so the rail reads as attached to the post. */
+.fr-page-inner--reading               { justify-content: center; gap: 2rem; }
+.fr-page-inner--reading .fr-main-col  { max-width: 800px; }
+.fr-right-col {
+  width: 280px;
+  flex-shrink: 0;
+  display: none;            /* shown from small-laptop width up (query below) */
+}
+/* Bring the right rail in earlier (1100px) so its content no longer vanishes
+   for the whole small-laptop range. Main stays ≥ ~560px at this width. */
+@media (min-width: 1100px) {
+  .fr-right-col { display: block; }
+}
+@media (max-width: 1199.98px) {
+  .fr-right-col { width: 240px; }
+}
+@media (max-width: 991.98px) {
+  .fr-sidebar-left { display: none !important; }
+  .fr-page-inner { padding: 1rem; }
+}
+/* ── Mobile sidebar drawer ────────────────────────────────────── */
+/* Re-enable the sidebar panel that the media query hides above   */
+#mobileSidebar .fr-sidebar-left {
+  display: flex !important;
+  flex-direction: column;
+  position: relative;   /* override sticky — parent is already fixed */
+  top: 0;
+  height: 100%;
+  transform: translateX(-100%);
+  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+#mobileSidebar.is-open .fr-sidebar-left {
+  transform: translateX(0);
+}
+/* Backdrop fade */
+#mobileSidebar .fr-drawer-backdrop {
+  opacity: 0;
+  transition: opacity 0.26s ease;
+}
+#mobileSidebar.is-open .fr-drawer-backdrop {
+  opacity: 1;
+}
+/* ── Sidebar nav links (left sidebar) ────────────────────────── */
+.fr-nav-link--child {
+  padding-left: 1.5rem;
+}
+/* ── Icon column — fixed-width icon in a flex row (panel / list items) */
+.fr-icon-col {
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.fr-nav-link-badge {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 5px;
+  min-width: 16px;
+}
+/* ── Compact top bar (new design) ────────────────────────────── */
+/* .fr-brand-mark/-img/-text/-name/-slogan already live in _navbar.css —
+   this section only adds the new topbar shell + search + actions. */
+.fr-topbar {
+  height: var(--fr-topbar-height);
+  background: var(--bs-body-bg);
+  border-bottom: 1px solid var(--bs-border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+  box-shadow: var(--bs-box-shadow-sm);
+}
+.fr-topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 0 1rem;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+/* .fr-topbar-brand already lives in _navbar.css */
+.fr-topbar-search {
+  flex: 1;
+  min-width: 0; /* allow shrinking below content size on narrow viewports */
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  background: var(--bs-secondary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  padding: 0 0.75rem;
+  gap: 0.5rem;
+  height: 36px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fr-topbar-search:focus-within {
+  border-color: var(--ferum-primary);
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
+  background: var(--bs-body-bg);
+}
+.fr-topbar-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.875rem;
+  color: var(--bs-body-color);
+  flex: 1;
+  min-width: 0;
+}
+.fr-topbar-search input::placeholder { color: var(--bs-tertiary-color); }
+.fr-topbar-search-icon { color: var(--bs-tertiary-color); font-size: 0.8125rem; flex-shrink: 0; }
+.fr-topbar-search-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.fr-topbar-search-btn:hover .fr-topbar-search-icon { color: var(--bs-body-color); }
+.fr-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.fr-topbar-menu-btn {
+  width: var(--fr-tap-target);
+  height: var(--fr-tap-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--bs-secondary-color);
+  cursor: pointer;
+  border-radius: var(--bs-border-radius);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.fr-topbar-menu-btn:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
+/* ── User avatar button in topbar ────────────────────────────── */
+.fr-avatar-btn {
+  width: var(--fr-tap-target);
+  height: var(--fr-tap-target);
+  border-radius: var(--bs-border-radius);
+  border: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.1s;
+  flex-shrink: 0;
+}
+.fr-avatar-btn:hover { background: var(--bs-secondary-bg); }
+.fr-avatar-btn img,
+.fr-avatar-btn .fr-avatar-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--bs-border-color);
+  object-fit: cover;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+  display: block;
+}
+.fr-avatar-btn:hover img,
+.fr-avatar-btn:hover .fr-avatar-img { border-color: var(--ferum-primary); }
+.fr-avatar-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--bs-border-color);
+  background: var(--ferum-primary, var(--bs-primary));
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+}
+.fr-avatar-btn:hover .fr-avatar-initials { border-color: var(--ferum-primary); }
+/* ── Right sidebar panel row links ───────────────────────────── */
+.fr-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.875rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  transition: background 0.1s, color 0.1s;
+  min-height: 36px;
+}
+a.fr-panel-row:hover {
+  background: var(--fr-nav-hover-bg);
+  color: var(--bs-body-color);
+  text-decoration: none;
+}
+/* ── Right sidebar panel cards ────────────────────────────────── */
+.fr-panel {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+.fr-panel-section {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--bs-tertiary-color);
+  padding: 0.75rem 0.875rem 0.375rem;
+}
+.fr-panel-body {
+  padding: 0.625rem 0.875rem 0.75rem;
+}
+/* Key-value stat row at the bottom of a panel (border-top separator) */
+.fr-panel-stat {
+  padding: 0.5rem 0.875rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+  border-top: 1px solid var(--bs-border-color);
+}
+.fr-panel-stat .fw-semibold { color: var(--bs-body-color); }
+/* Legacy inline stat rows (inside panel body) */
+.fr-panel-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+  padding: 0.1875rem 0;
+}
+.fr-panel-stat-val { font-weight: 600; color: var(--bs-body-color); }
 /* ── Thread feed ──────────────────────────────────────────────── */
 .fr-feed {
   border: 1px solid var(--bs-border-color);
@@ -336,18 +687,6 @@ body {
   overflow: hidden;
   background: var(--bs-body-bg);
 }
-.fr-cat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6875rem 1rem;
-  background: var(--bs-tertiary-bg);
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.1s;
-}
-.fr-cat-header:hover { background: var(--bs-secondary-bg); }
 .fr-thread-row {
   display: flex;
   align-items: flex-start;
@@ -361,6 +700,13 @@ body {
 }
 .fr-thread-row:last-child { border-bottom: none; }
 .fr-thread-row:hover { background: var(--bs-tertiary-bg); text-decoration: none; color: inherit; }
+.fr-thread-row--pinned {
+  border-left: 3px solid var(--ferum-primary);
+  background: color-mix(in srgb, var(--ferum-primary) 5%, var(--bs-body-bg));
+}
+.fr-thread-row--pinned:hover {
+  background: color-mix(in srgb, var(--ferum-primary) 8%, var(--bs-tertiary-bg));
+}
 .fr-thread-thumb {
   width: 80px;
   height: 50px;
@@ -472,6 +818,95 @@ body {
   color: var(--bs-tertiary-color);
   font-weight: 500;
 }
+/* ── Collapsible category header (forum index / home feed) ────── */
+.fr-cat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6875rem 1rem;
+  background: var(--bs-tertiary-bg);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+.fr-cat-header:hover { background: var(--bs-secondary-bg); }
+/* Keyboard-operable collapse header — inset ring, .fr-feed clips outset */
+.fr-cat-header:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: -2px;
+}
+/* Sort / filter tab bar */
+.fr-sort-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--bs-border-color);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.fr-sort-tabs::-webkit-scrollbar { display: none; }
+.fr-sort-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+}
+.fr-sort-tab:hover { color: var(--bs-body-color); text-decoration: none; }
+.fr-sort-tab--active {
+  color: var(--ferum-primary);
+  border-bottom-color: var(--ferum-primary);
+  font-weight: 600;
+}
+/* ── Thread hero banner (thumbnail as cover, thread detail page) ── */
+.fr-thread-hero {
+  position: relative;
+  border-radius: var(--bs-border-radius-lg);
+  overflow: hidden;
+  background: var(--bs-secondary-bg);
+}
+.fr-thread-hero-img {
+  display: block;
+  width: 100%;
+  height: 240px;
+  object-fit: cover;
+}
+@media (max-width: 575.98px) {
+  .fr-thread-hero-img { height: 180px; }
+}
+.fr-thread-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.82) 0%,
+    rgba(0, 0, 0, 0.50) 45%,
+    rgba(0, 0, 0, 0.10) 100%
+  );
+  display: flex;
+  align-items: flex-end;
+}
+.fr-thread-hero-body {
+  padding: 1.25rem 1.5rem;
+  width: 100%;
+}
+/* ── OP (original post) card accent ───────────────────────────── */
+.fr-post-op {
+  border-left: 3px solid var(--ferum-primary) !important;
+}
 /* ── Post content ─────────────────────────────────────────────── */
 .post-content {
   line-height: 1.75;
@@ -544,6 +979,11 @@ body {
   border-left: 4px solid #10b981 !important;
   background: color-mix(in srgb, #10b981 5%, var(--bs-body-bg)) !important;
 }
+/* NOTE: .fr-best-answer-header's *effective* color/background/border-bottom-color
+   are actually set by the !important duplicate in _utilities.css (later import
+   wins ties among !important rules) — this block only contributes font-weight,
+   which nothing else overrides. Pre-existing duplication in the shipped CSS,
+   reproduced here verbatim rather than silently resolved. */
 .fr-best-answer-header {
   background: color-mix(in srgb, #10b981 10%, var(--bs-body-bg));
   color: #059669;
@@ -555,49 +995,6 @@ body {
 }
 [data-bs-theme="dark"] .fr-best-answer-header {
   color: #34d399;
-}
-/* Sort / filter tab bar */
-.fr-sort-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--bs-border-color);
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.fr-sort-tabs::-webkit-scrollbar { display: none; }
-.fr-sort-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--bs-secondary-color);
-  text-decoration: none;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-  background: none;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-  cursor: pointer;
-}
-.fr-sort-tab:hover { color: var(--bs-body-color); text-decoration: none; }
-.fr-sort-tab--active {
-  color: var(--ferum-primary);
-  border-bottom-color: var(--ferum-primary);
-  font-weight: 600;
-}
-/* Pinned thread row accent */
-.fr-thread-row--pinned {
-  border-left: 3px solid var(--ferum-primary);
-  background: color-mix(in srgb, var(--ferum-primary) 5%, var(--bs-body-bg));
-}
-.fr-thread-row--pinned:hover {
-  background: color-mix(in srgb, var(--ferum-primary) 8%, var(--bs-tertiary-bg));
 }
 /* Deep-link highlight */
 .card:target {
@@ -719,11 +1116,12 @@ body {
   .fr-bottom-nav { display: none !important; }
 }
 /* ── Auth pages ───────────────────────────────────────────────── */
+/* .fr-auth-page replaces the old .fr-auth-bg + .fr-auth-container pairing —
+   it is both the full-viewport background AND the centering wrapper. */
 .fr-layout--auth                  { min-height: 100dvh !important; }
 .fr-layout--auth .fr-sidebar-left { display: none !important; }
 .fr-layout--auth .fr-page-inner   { padding: 0; gap: 0; }
 .fr-layout--auth .fr-footer       { display: none !important; }
-
 .fr-auth-page {
   min-height: 100dvh;
   display: flex;
@@ -736,7 +1134,13 @@ body {
     radial-gradient(ellipse at 25% 100%, rgba(var(--bs-primary-rgb), 0.05) 0%, transparent 50%),
     var(--bs-body-bg);
 }
-/* Brand above the card — vertical stack: mark → name → slogan */
+.fr-auth-card {
+  width: 100%;
+  max-width: 420px;
+  border-color: rgba(var(--bs-primary-rgb), 0.15) !important;
+  box-shadow: var(--bs-box-shadow-lg) !important;
+}
+/* ── Brand above the card — vertical stack: mark → name → slogan ─ */
 .fr-auth-brand {
   display: flex;
   flex-direction: column;
@@ -782,12 +1186,6 @@ body {
   color: var(--bs-secondary-color);
   line-height: 1.4;
   max-width: 280px;
-}
-.fr-auth-card {
-  width: 100%;
-  max-width: 420px;
-  border-color: rgba(var(--bs-primary-rgb), 0.15) !important;
-  box-shadow: var(--bs-box-shadow-lg) !important;
 }
 /* Password show/hide toggle */
 .fr-password-wrapper { position: relative; }
@@ -849,12 +1247,6 @@ body {
   padding: 0.75rem 0.75rem 0.25rem;
 }
 /* ── Home sidebar categories panel ───────────────────────────── */
-.fr-categories-panel {
-  background: var(--bs-tertiary-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius);
-  overflow: hidden;
-}
 .fr-panel-header {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -864,26 +1256,67 @@ body {
   padding: 0.625rem 0.875rem;
   border-bottom: 1px solid var(--bs-border-color);
 }
-.fr-category-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4375rem 0.875rem;
-  text-decoration: none;
+/* ── Right sidebar panels: section separator instead of card boxes ──
+   Base .fr-layout / .fr-page-inner--reading / .fr-right-col rules live
+   in _layout.css. These are refinements layered on top. */
+.fr-right-col .fr-panel {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--bs-border-color);
+  border-radius: 0;
+  margin-bottom: 0;
+  padding-top: 0.875rem;
+  padding-bottom: 0.875rem;
+}
+.fr-right-col .fr-panel:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+/* Stat rows: more breathing room than the 3px global default */
+.fr-right-col .fr-panel-stat-row { padding: 0.3125rem 0; }
+/* Section labels: left accent stripe as rhythm marker + brand signal */
+.fr-right-col .fr-panel-header,
+.fr-right-col .fr-panel-section {
+  border-bottom: none;
+  border-left: 2px solid var(--ferum-primary);
+  padding-left: 0.75rem;          /* 0.75rem + 2px ≈ aligned with panel body */
+  padding-bottom: 0.375rem;
   color: var(--bs-secondary-color);
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-bottom: 1px solid var(--bs-border-color);
-  transition: background 0.1s, color 0.1s;
+  font-weight: 700;
 }
-.fr-category-row:last-child { border-bottom: none; }
-.fr-category-row:hover      { background: var(--fr-nav-hover-bg); color: var(--bs-body-color); text-decoration: none; }
-.fr-category-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
+/* Stat values: slightly larger than label to create label → value hierarchy */
+.fr-right-col .fr-panel-stat-val {
+  font-weight: 700;
+  font-size: 0.9375rem;
 }
+/* Same treatment for fr-panel-stat numbers (thread/reply counts) */
+.fr-right-col .fr-panel-stat .fw-semibold {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+/* Nav icons in sidebar rows: primary color at 65% instead of generic gray at 50% */
+.fr-right-col .fr-icon-col {
+  color: var(--ferum-primary);
+  opacity: 0.65;
+}
+.fr-right-col a.fr-panel-row:hover .fr-icon-col {
+  opacity: 1;
+}
+/* Stat-row icons (in home community/thread stats): same treatment */
+.fr-right-col .fr-panel-stat i,
+.fr-right-col .fr-panel-stat-row > span:first-child i {
+  color: var(--ferum-primary);
+  opacity: 0.6;
+}
+/* Preserve explicit semantic colors (text-success, text-warning, text-danger, text-info) */
+.fr-right-col .fr-panel-stat i.text-success,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-success { color: var(--bs-success) !important; opacity: 1; }
+.fr-right-col .fr-panel-stat i.text-warning,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-warning { color: var(--bs-warning) !important; opacity: 1; }
+.fr-right-col .fr-panel-stat i.text-danger,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-danger  { color: var(--bs-danger)  !important; opacity: 1; }
+.fr-right-col .fr-panel-stat i.text-info,
+.fr-right-col .fr-panel-stat-row > span:first-child i.text-info    { color: var(--bs-info)    !important; opacity: 1; }
 /* ── Profile page ─────────────────────────────────────────────── */
 .fr-profile-cover {
   height: 180px;
@@ -927,7 +1360,6 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 /* ── Profile stat labels ──────────────────────────────────────── */
-.fr-stat-value { color: var(--ferum-primary); }
 .fr-stat-label { color: var(--bs-tertiary-color); font-size: 0.875rem; }
 /* ── Profile tab bar ──────────────────────────────────────────── */
 .fr-profile-tab-bar {
@@ -952,8 +1384,6 @@ body {
   color: var(--bs-secondary-color);
   cursor: pointer;
   transition: color 0.15s, background-color 0.15s;
-  outline: none !important;
-  box-shadow: none !important;
   min-height: var(--fr-tap-target);
   padding: 0.75rem 0.5rem;
   font-family: inherit;
@@ -961,6 +1391,11 @@ body {
   line-height: 1;
 }
 .fr-profile-tab:last-child { border-right: none; }
+/* Inset focus ring — the parent card is overflow:hidden, an outset ring would clip */
+.fr-profile-tab:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: -2px;
+}
 .fr-profile-tab:hover {
   background-color: rgba(var(--bs-primary-rgb), 0.04);
   color: var(--bs-body-color);
@@ -1014,466 +1449,8 @@ body {
   padding: .5rem 1rem; text-align: center;
 }
 [data-bs-theme="dark"] .fr-cover-placeholder { filter: brightness(.55) saturate(1.3); }
-/* ── 3-column app layout ──────────────────────────────────────── */
-:root {
-  --fr-sidebar-width: 220px;
-}
-.fr-layout {
-  display: flex;
-  min-height: calc(100dvh - var(--fr-topbar-height));
-  max-width: 1440px;
-  margin-inline: auto;
-}
-.fr-sidebar-left {
-  width: var(--fr-sidebar-width);
-  flex-shrink: 0;
-  border-right: 1px solid var(--bs-border-color);
-  background: var(--bs-body-bg);
-  position: sticky;
-  top: var(--fr-topbar-height);
-  height: calc(100dvh - var(--fr-topbar-height));
-  overflow-y: auto;
-  padding: 0.5rem 0.5rem 2rem;
-  scrollbar-width: thin;
-}
-.fr-sidebar-left::-webkit-scrollbar { width: 4px; }
-.fr-sidebar-left::-webkit-scrollbar-thumb { background: var(--bs-border-color); border-radius: 2px; }
-.fr-page {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.fr-page-inner {
-  flex: 1;
-  display: flex;
-  gap: 1.5rem;
-  padding: 1.25rem 1.5rem;
-  margin: 0;
-  width: 100%;
-  box-sizing: border-box;
-}
-.fr-main-col {
-  flex: 1;
-  min-width: 0;
-}
-/* Reading pages (thread): cap the main column for a comfortable line length,
-   then center the [main + rail] group so the leftover space falls into
-   balanced outer margins instead of a gap between the two columns. The inner
-   gutter stays tight (2rem) so the rail reads as attached to the post. */
-.fr-page-inner--reading               { justify-content: center; gap: 2rem; }
-.fr-page-inner--reading .fr-main-col  { max-width: 800px; }
-.fr-right-col {
-  width: 280px;
-  flex-shrink: 0;
-  display: none;            /* shown from small-laptop width up (query below) */
-}
-/* Bring the right rail in earlier (1100px) so its content no longer vanishes
-   for the whole small-laptop range. Main stays ≥ ~560px at this width. */
-@media (min-width: 1100px) {
-  .fr-right-col { display: block; }
-}
-@media (max-width: 1199.98px) {
-  .fr-right-col { width: 240px; }
-}
-@media (max-width: 991.98px) {
-  .fr-sidebar-left { display: none !important; }
-  .fr-page-inner { padding: 1rem; }
-}
-/* ── Right sidebar panels: section separator instead of card boxes ── */
-.fr-right-col .fr-panel {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--bs-border-color);
-  border-radius: 0;
-  margin-bottom: 0;
-  padding-top: 0.875rem;
-  padding-bottom: 0.875rem;
-}
-.fr-right-col .fr-panel:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-/* Stat rows: more breathing room than the 3px global default */
-.fr-right-col .fr-panel-stat-row { padding: 0.3125rem 0; }
-/* Section labels: left accent stripe as rhythm marker + brand signal */
-.fr-right-col .fr-panel-header,
-.fr-right-col .fr-panel-section {
-  border-bottom: none;
-  border-left: 2px solid var(--ferum-primary);
-  padding-left: 0.75rem;
-  padding-bottom: 0.375rem;
-  color: var(--bs-secondary-color);
-  font-weight: 700;
-}
-/* Stat values: slightly larger than label to create label → value hierarchy */
-.fr-right-col .fr-panel-stat-val {
-  font-weight: 700;
-  font-size: 0.9375rem;
-}
-/* Same treatment for fr-panel-stat numbers (thread/reply counts) */
-.fr-right-col .fr-panel-stat .fw-semibold {
-  font-weight: 700;
-  font-size: 0.9375rem;
-}
-/* Nav icons in sidebar rows: primary color at 65% instead of generic gray at 50% */
-.fr-right-col .fr-icon-col {
-  color: var(--ferum-primary);
-  opacity: 0.65;
-}
-.fr-right-col a.fr-panel-row:hover .fr-icon-col {
-  opacity: 1;
-}
-/* Stat-row icons (in home community/thread stats): same treatment */
-.fr-right-col .fr-panel-stat i,
-.fr-right-col .fr-panel-stat-row > span:first-child i {
-  color: var(--ferum-primary);
-  opacity: 0.6;
-}
-/* Preserve explicit semantic colors (text-success, text-warning, text-danger, text-info) */
-.fr-right-col .fr-panel-stat i.text-success,
-.fr-right-col .fr-panel-stat-row > span:first-child i.text-success { color: var(--bs-success) !important; opacity: 1; }
-.fr-right-col .fr-panel-stat i.text-warning,
-.fr-right-col .fr-panel-stat-row > span:first-child i.text-warning { color: var(--bs-warning) !important; opacity: 1; }
-.fr-right-col .fr-panel-stat i.text-danger,
-.fr-right-col .fr-panel-stat-row > span:first-child i.text-danger  { color: var(--bs-danger)  !important; opacity: 1; }
-.fr-right-col .fr-panel-stat i.text-info,
-.fr-right-col .fr-panel-stat-row > span:first-child i.text-info    { color: var(--bs-info)    !important; opacity: 1; }
-/* ── Mobile sidebar drawer ────────────────────────────────────── */
-/* Re-enable the sidebar panel that the media query hides above   */
-#mobileSidebar .fr-sidebar-left {
-  display: flex !important;
-  flex-direction: column;
-  position: relative;   /* override sticky — parent is already fixed */
-  top: 0;
-  height: 100%;
-  transform: translateX(-100%);
-  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
-}
-#mobileSidebar.is-open .fr-sidebar-left {
-  transform: translateX(0);
-}
-/* Backdrop fade */
-#mobileSidebar .fr-drawer-backdrop {
-  opacity: 0;
-  transition: opacity 0.26s ease;
-}
-#mobileSidebar.is-open .fr-drawer-backdrop {
-  opacity: 1;
-}
-/* ── Sidebar nav links (left sidebar) ────────────────────────── */
-.fr-nav-link--child {
-  padding-left: 1.5rem;
-}
-/* ── Icon column — fixed-width icon in a flex row (panel / list items) */
-.fr-icon-col {
-  width: 1rem;
-  text-align: center;
-  flex-shrink: 0;
-}
-/* ── Collapse chevron — category expander in forum index ─────── */
-.fr-collapse-icon {
-  font-size: 0.75rem;
-  transition: transform 0.2s;
-}
-.fr-collapse-icon--closed { transform: rotate(-90deg); }
-.fr-nav-link-badge {
-  font-size: 0.5625rem;
-  font-weight: 700;
-  line-height: 1;
-  padding: 3px 5px;
-  min-width: 16px;
-}
-/* ── Compact top bar (new design) ────────────────────────────── */
-.fr-topbar {
-  height: var(--fr-topbar-height);
-  background: var(--bs-body-bg);
-  border-bottom: 1px solid var(--bs-border-color);
-  position: sticky;
-  top: 0;
-  z-index: 1030;
-  box-shadow: var(--bs-box-shadow-sm);
-}
-.fr-topbar-inner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  height: 100%;
-  padding: 0 1rem;
-  max-width: 1440px;
-  margin-inline: auto;
-}
-.fr-topbar-brand {
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  flex-shrink: 0;
-  min-width: 0;
-}
-/* Monogram badge — shown when no logo image is set */
-.fr-brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 7px;
-  background: var(--ferum-primary);
-  color: #fff;
-  font-size: 0.9375rem;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  letter-spacing: -0.01em;
-  line-height: 1;
-}
-/* Logo image */
-.fr-brand-img {
-  height: 32px;
-  width: auto;
-  border-radius: 6px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-/* Name + slogan stacked vertically */
-.fr-brand-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-.fr-brand-name {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--ferum-primary);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
-}
-.fr-brand-slogan {
-  font-size: 0.6875rem;
-  font-weight: 400;
-  color: var(--bs-secondary-color);
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
-}
-.fr-topbar-search {
-  flex: 1;
-  min-width: 0; /* allow shrinking below content size on narrow viewports */
-  max-width: 480px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  background: var(--bs-secondary-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius);
-  padding: 0 0.75rem;
-  gap: 0.5rem;
-  height: 36px;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.fr-topbar-search:focus-within {
-  border-color: var(--ferum-primary);
-  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
-  background: var(--bs-body-bg);
-}
-.fr-topbar-search input {
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 0.875rem;
-  color: var(--bs-body-color);
-  flex: 1;
-  min-width: 0;
-}
-.fr-topbar-search input::placeholder { color: var(--bs-tertiary-color); }
-.fr-topbar-search-icon { color: var(--bs-tertiary-color); font-size: 0.8125rem; flex-shrink: 0; }
-.fr-topbar-search-btn {
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  line-height: 1;
-}
-.fr-topbar-search-btn:hover .fr-topbar-search-icon { color: var(--bs-body-color); }
-.fr-topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-.fr-topbar-menu-btn {
-  width: var(--fr-tap-target);
-  height: var(--fr-tap-target);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--bs-secondary-color);
-  cursor: pointer;
-  border-radius: var(--bs-border-radius);
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-.fr-topbar-menu-btn:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
-/* ── Notification button in topbar ───────────────────────────── */
-.fr-notif-btn-wrap {
-  position: relative;
-  display: inline-flex;
-}
-.fr-notif-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background: #ef4444;
-  color: #fff;
-  font-size: 0.5625rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  pointer-events: none;
-}
-/* ── User avatar button in topbar ────────────────────────────── */
-.fr-avatar-btn {
-  width: var(--fr-tap-target);
-  height: var(--fr-tap-target);
-  border-radius: var(--bs-border-radius);
-  border: none;
-  padding: 0;
-  overflow: visible;
-  background: transparent;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.875rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.1s;
-  flex-shrink: 0;
-}
-.fr-avatar-btn:hover { background: var(--bs-secondary-bg); }
-.fr-avatar-btn img,
-.fr-avatar-btn .fr-avatar-img {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 2px solid var(--bs-border-color);
-  object-fit: cover;
-  transition: border-color 0.15s;
-  flex-shrink: 0;
-  display: block;
-}
-.fr-avatar-btn:hover img,
-.fr-avatar-btn:hover .fr-avatar-img { border-color: var(--ferum-primary); }
-.fr-avatar-initials {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 2px solid var(--bs-border-color);
-  background: var(--ferum-primary, var(--bs-primary));
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1;
-  transition: border-color 0.15s;
-  flex-shrink: 0;
-}
-.fr-avatar-btn:hover .fr-avatar-initials { border-color: var(--ferum-primary); }
-/* ── Right sidebar panel row links ───────────────────────────── */
-.fr-panel-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.875rem;
-  font-size: 0.875rem;
-  color: var(--bs-secondary-color);
-  text-decoration: none;
-  transition: background 0.1s, color 0.1s;
-  min-height: 36px;
-}
-a.fr-panel-row:hover {
-  background: var(--fr-nav-hover-bg);
-  color: var(--bs-body-color);
-  text-decoration: none;
-}
-/* ── Right sidebar panel cards ────────────────────────────────── */
-.fr-panel {
-  background: var(--bs-tertiary-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius);
-  overflow: hidden;
-  margin-bottom: 0.75rem;
-}
-.fr-panel-section {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--bs-tertiary-color);
-  padding: 0.75rem 0.875rem 0.375rem;
-}
-.fr-panel-body {
-  padding: 0.625rem 0.875rem 0.75rem;
-}
-/* Key-value stat row at the bottom of a panel (border-top separator) */
-.fr-panel-stat {
-  padding: 0.5rem 0.875rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.8125rem;
-  color: var(--bs-secondary-color);
-  border-top: 1px solid var(--bs-border-color);
-}
-.fr-panel-stat .fw-semibold { color: var(--bs-body-color); }
-/* Legacy inline stat rows (inside panel body) */
-.fr-panel-stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.8125rem;
-  color: var(--bs-secondary-color);
-  padding: 0.1875rem 0;
-}
-.fr-panel-stat-val { font-weight: 600; color: var(--bs-body-color); }
-/* ── Admin layout (legacy sidebar — kept for backwards-compat) ── */
-.fr-admin-sidebar {
-  width: 220px;
-  min-height: calc(100dvh - var(--fr-topbar-height));
-  border-right: 1px solid var(--bs-border-color);
-  background: var(--bs-tertiary-bg);
-  position: sticky;
-  top: var(--fr-topbar-height);
-  overflow-y: auto;
-  flex-shrink: 0;
-  padding: 0.5rem 0.375rem;
-}
-
 /* ── Alpine: hide x-cloak elements until Alpine initialises ── */
 [x-cloak] { display: none !important; }
-
 /* ── Filter/search rows — all sibling controls match input height ── */
 .adm-filter-row {
   display: flex;
@@ -1481,16 +1458,13 @@ a.fr-panel-row:hover {
   flex-wrap: wrap;
   gap: .5rem;
 }
-
 /* ── Admin shell ──────────────────────────────────────────────── */
 html, body { height: 100%; margin: 0; }
-
 .adm-shell {
   --adm-header-h: 64px;
   display: flex;
   min-height: 100vh;
 }
-
 /* ── Sidebar ──────────────────────────────────────────────────── */
 .adm-sidebar {
   width: 220px;
@@ -1548,7 +1522,6 @@ html, body { height: 100%; margin: 0; }
   font-size: .7rem;
   color: var(--bs-secondary-color);
 }
-
 /* ── Sidebar nav ────────────────────────────────────────────── */
 .adm-nav {
   flex: 1;
@@ -1597,7 +1570,6 @@ html, body { height: 100%; margin: 0; }
   padding: .625rem .75rem .875rem;
   border-top: 1px solid var(--bs-border-color);
 }
-
 /* ── Main body ──────────────────────────────────────────────── */
 .adm-body {
   flex: 1;
@@ -1631,10 +1603,8 @@ html, body { height: 100%; margin: 0; }
   color: var(--bs-tertiary-color);
   flex-shrink: 0;
 }
-
 /* ── Utilities ──────────────────────────────────────────────── */
 .hover-bg:hover { background: var(--bs-secondary-bg); }
-
 /* ── Table: thead typographic style ────────────────────────── */
 .adm-content thead.table-active {
   --bs-table-active-bg: transparent;
@@ -1656,7 +1626,6 @@ html, body { height: 100%; margin: 0; }
   padding-top: .5625rem;
   padding-bottom: .5625rem;
 }
-
 /* ── Theme card preview area ────────────────────────────────── */
 .adm-theme-preview {
   height: 140px;
@@ -1664,7 +1633,6 @@ html, body { height: 100%; margin: 0; }
   border-bottom: 1px solid var(--bs-border-color);
 }
 .adm-theme-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
 /* ── Dashboard stat icon ────────────────────────────────────── */
 .adm-stat-icon {
   width: 40px;
@@ -1676,11 +1644,9 @@ html, body { height: 100%; margin: 0; }
   flex-shrink: 0;
   font-size: 1.1rem;
 }
-
 /* ── Dashboard stat card link ───────────────────────────────── */
 .adm-stat-link { transition: box-shadow .15s; }
 .adm-stat-link:hover { box-shadow: 0 0 0 2px var(--bs-primary); }
-
 /* ── Dashboard today table ──────────────────────────────────── */
 .adm-today-table td:first-child {
   padding-left: 1rem;
@@ -1691,16 +1657,11 @@ html, body { height: 100%; margin: 0; }
   word-break: break-word;
 }
 .adm-today-table td:last-child { padding-right: 1rem; white-space: nowrap; }
-
-/* ── Quick-action icon width lock ──────────────────────────── */
-.adm-action-icon { width: 1rem; text-align: center; }
-
 /* ── Settings section sub-label ────────────────────────────── */
 .adm-section-label {
   font-size: .7rem;
   letter-spacing: .06em;
 }
-
 /* ── Audit log ──────────────────────────────────────────────── */
 .audit-group {
   border-left: 2px solid var(--audit-group-color, var(--bs-border-color));
@@ -1738,7 +1699,6 @@ html, body { height: 100%; margin: 0; }
 .audit-ref-hint { font-size: .75rem; }
 .audit-log-popover { --bs-popover-max-width: 500px; }
 .audit-log-popover .popover-body { padding: 1rem; min-width: 440px; }
-
 /* ── Mobile sidebar toggle ──────────────────────────────────── */
 @media (max-width: 991.98px) {
   .adm-sidebar { display: none; }
@@ -1749,7 +1709,6 @@ html, body { height: 100%; margin: 0; }
     box-shadow: 0 0 24px rgba(0,0,0,.2);
   }
 }
-
 /* ── Touch target — WCAG 2.1 AA min 44px on touch devices ──── */
 @media (pointer: coarse) {
   .table .btn-sm,
@@ -1761,41 +1720,15 @@ html, body { height: 100%; margin: 0; }
     justify-content: center;
   }
 }
-/* ── Forum index category cards ───────────────────────────────── */
-.fr-category-card {
-  display: block;
-  text-decoration: none;
-  color: var(--bs-body-color);
-  background: var(--bs-tertiary-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius);
-  padding: 0.75rem 1rem;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
-}
-.fr-category-card:hover {
-  background: var(--bs-body-bg);
-  border-color: var(--ferum-primary);
-  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.08);
-  text-decoration: none;
-  color: var(--bs-body-color);
-}
-.fr-category-card-name {
-  font-weight: 600;
-  font-size: 0.9375rem;
-}
-.fr-category-card-desc {
-  font-size: 0.8125rem;
-  color: var(--bs-secondary-color);
-  margin-top: 0.125rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
 /* ── Subcategory pill link ─────────────────────────────────── */
 .fr-subcat-pill { color: var(--bs-secondary-color); }
 .fr-subcat-pill:hover { color: var(--bs-body-color); }
+/* ── Collapse chevron — category expander in forum index ─────── */
+.fr-collapse-icon {
+  font-size: 0.75rem;
+  transition: transform 0.2s;
+}
+.fr-collapse-icon--closed { transform: rotate(-90deg); }
 /* ── Avatar sizes ─────────────────────────────────────────────── */
 .fr-avatar {
   object-fit: cover;
@@ -1816,6 +1749,11 @@ html, body { height: 100%; margin: 0; }
 .fr-avatar--40 { width: 40px; height: 40px; font-size: 16px;    border-radius: 50%; }
 .fr-avatar--80 { width: 80px; height: 80px; font-size: 28px;    border-radius: 50%; }
 .fr-avatar--96 { width: 96px; height: 96px; font-size: 2.25rem; border-radius: 50%; border: 4px solid var(--bs-body-bg); }
+/* ── Extra avatar sizes ───────────────────────────────────────── */
+.fr-avatar--22 { width: 22px; height: 22px; font-size:  9px; border-radius: 50%; }
+.fr-avatar--28 { width: 28px; height: 28px; font-size: 11px; border-radius: 50%; }
+.fr-avatar--36 { width: 36px; height: 36px; font-size: 14px; border-radius: 50%; }
+.fr-avatar--38 { width: 38px; height: 38px; font-size: 15px; border-radius: 50%; }
 /* ── Trust badge ──────────────────────────────────────────────── */
 .fr-trust-badge {
   background: rgba(var(--bs-primary-rgb), 0.1);
@@ -1824,7 +1762,6 @@ html, body { height: 100%; margin: 0; }
   font-weight: 600;
 }
 /* ── Page layout helpers ──────────────────────────────────────── */
-.fr-page-narrow  { max-width: 720px; margin-inline: auto; }
 .fr-page-reading { max-width: 860px; margin-inline: auto; }
 /* ── Footer ───────────────────────────────────────────────────── */
 .fr-footer {
@@ -1872,21 +1809,6 @@ html, body { height: 100%; margin: 0; }
   position: relative;
   z-index: 2;
 }
-.line-clamp-2 {
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-/* ── Thread page post number ──────────────────────────────────── */
-.fr-post-number {
-  font-size: 0.75rem;
-  color: var(--bs-tertiary-color);
-  font-weight: 500;
-  text-decoration: none;
-}
-.fr-post-number:hover { color: var(--ferum-primary); text-decoration: none; }
-/* .fr-thread-row--pinned is defined above near the thread feed section */
 /* ── Multi-line panel list item (e.g. Popular sidebar) ────────── */
 .fr-panel-item {
   display: flex;
@@ -1968,42 +1890,6 @@ html, body { height: 100%; margin: 0; }
   min-width: 80px;
   flex: 1;
 }
-/* ── Thread hero banner (thumbnail as cover) ──────────────────── */
-.fr-thread-hero {
-  position: relative;
-  border-radius: var(--bs-border-radius-lg);
-  overflow: hidden;
-  background: var(--bs-secondary-bg);
-}
-.fr-thread-hero-img {
-  display: block;
-  width: 100%;
-  height: 240px;
-  object-fit: cover;
-}
-@media (max-width: 575.98px) {
-  .fr-thread-hero-img { height: 180px; }
-}
-.fr-thread-hero-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.82) 0%,
-    rgba(0, 0, 0, 0.50) 45%,
-    rgba(0, 0, 0, 0.10) 100%
-  );
-  display: flex;
-  align-items: flex-end;
-}
-.fr-thread-hero-body {
-  padding: 1.25rem 1.5rem;
-  width: 100%;
-}
-/* ── OP (original post) card accent ───────────────────────────── */
-.fr-post-op {
-  border-left: 3px solid var(--ferum-primary) !important;
-}
 /* ── Post # permalink ─────────────────────────────────────────── */
 .fr-post-num {
   font-size: 0.75rem;
@@ -2012,7 +1898,13 @@ html, body { height: 100%; margin: 0; }
   text-decoration: none;
 }
 .fr-post-num:hover { color: var(--ferum-primary); text-decoration: none; }
-/* ── Icon-only button (post ellipsis menu) ────────────────────── */
+/* ── Icon-only button (post ellipsis menu) ─────────────────────────
+   NOTE: this is a second, later-imported .fr-icon-btn definition. Same
+   specificity as _navbar.css's 44px tap-target version, so per-property
+   cascade applies: width/height/border-radius/color here win (28px),
+   while font-size/flex-shrink/:focus-visible from the navbar block survive
+   untouched. Pre-existing duplication in the shipped CSS — reproduced
+   verbatim rather than silently merged into one rule. */
 .fr-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -2054,12 +1946,7 @@ ferum-bookmark-btn.w-100 .bookmark-btn { width: 100%; }
 @media (min-width: 992px) {
   .fr-fab { display: none !important; }
 }
-/* ── Extra avatar sizes ───────────────────────────────────────── */
-.fr-avatar--22 { width: 22px; height: 22px; font-size:  9px; border-radius: 50%; }
-.fr-avatar--28 { width: 28px; height: 28px; font-size: 11px; border-radius: 50%; }
-.fr-avatar--36 { width: 36px; height: 36px; font-size: 14px; border-radius: 50%; }
-.fr-avatar--38 { width: 38px; height: 38px; font-size: 15px; border-radius: 50%; }
-/* ── Smooth theme transitions on key elements only */
+/* Smooth theme transitions on key elements only */
 body,
 .navbar,
 .card,
@@ -2071,7 +1958,6 @@ body,
 .fr-notif-feed,
 .fr-notif-row,
 .fr-footer,
-.fr-categories-panel,
 .fr-bottom-nav {
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }

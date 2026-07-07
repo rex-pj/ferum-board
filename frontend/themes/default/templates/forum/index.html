@@ -18,7 +18,10 @@
     <div class="fr-feed mb-4" x-data="{ open: true }">
       {# ── Category header ── #}
       <div class="fr-cat-header" :class="open ? 'border-bottom' : ''"
-           @click="open = !open" role="button" :aria-expanded="open.toString()">
+           @click="open = !open"
+           @keydown.enter.prevent="open = !open"
+           @keydown.space.prevent="open = !open"
+           role="button" tabindex="0" :aria-expanded="open.toString()">
         <div class="d-flex align-items-center gap-2 flex-grow-1 overflow-hidden">
           <i class="fa-solid fa-chevron-down text-muted flex-shrink-0 fr-collapse-icon"
              :class="open ? '' : 'fr-collapse-icon--closed'"

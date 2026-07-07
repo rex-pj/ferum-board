@@ -60,35 +60,42 @@ pub async fn search(
         }
     };
 
-    let search_results = if query.is_empty() {
-        None
+    // Three distinct outcomes the template must be able to tell apart:
+    // no query yet, a query with zero matches, and a query the search
+    // backend failed to answer. Collapsing the last two into "no results"
+    // tells the user their content doesn't exist when the engine is down.
+    let mut search_error = false;
+    let (hits, total) = if query.is_empty() {
+        (vec![], 0)
     } else {
         match state
             .search
-            .search(query.clone(), category_ids, page, per_page)
+            .search_hydrated(query.clone(), category_ids, page, per_page)
             .await
         {
-            Ok(r) => Some(r),
+            Ok((hydrated, total)) => (
+                hydrated
+                    .iter()
+                    .map(|h| SearchHitCtx {
+                        thread_slug: h.thread_slug.clone(),
+                        thread_title: h.title.clone(),
+                        excerpt: h.excerpt.clone(),
+                        category_slug: h.category_slug.clone(),
+                        category_name: h.category_name.clone(),
+                        author_username: h.author_username.clone(),
+                        author_display_name: h.author_display_name.clone(),
+                        created_at: h.created_at.map(|d| d.to_rfc3339()),
+                        reply_count: h.reply_count,
+                    })
+                    .collect::<Vec<_>>(),
+                total,
+            ),
             Err(e) => {
                 tracing::error!(error = %e, q = %query, "search_page_failed");
-                None
+                search_error = true;
+                (vec![], 0)
             }
         }
-    };
-
-    let (hits, total) = match &search_results {
-        Some(r) => (
-            r.hits
-                .iter()
-                .map(|h| SearchHitCtx {
-                    thread_slug: h.thread_slug.clone(),
-                    thread_title: h.title.clone(),
-                    excerpt: h.excerpt.clone(),
-                })
-                .collect::<Vec<_>>(),
-            r.total,
-        ),
-        None => (vec![], 0),
     };
 
     let all_categories: Vec<CategoryCtx> = raw_categories
@@ -123,6 +130,7 @@ pub async fn search(
     ctx.insert("active_theme", &active);
     ctx.insert("query", &query);
     ctx.insert("results", &hits);
+    ctx.insert("search_error", &search_error);
     ctx.insert("pagination", &PaginationCtx::new(page, per_page, total, search_extra_params));
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("search_categories", &all_categories);

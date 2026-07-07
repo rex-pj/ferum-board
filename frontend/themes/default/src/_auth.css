@@ -1,21 +1,28 @@
 /* ── Auth pages ───────────────────────────────────────────────── */
-.fr-auth-bg {
+/* .fr-auth-page replaces the old .fr-auth-bg + .fr-auth-container pairing —
+   it is both the full-viewport background AND the centering wrapper. */
+.fr-layout--auth                  { min-height: 100dvh !important; }
+.fr-layout--auth .fr-sidebar-left { display: none !important; }
+.fr-layout--auth .fr-page-inner   { padding: 0; gap: 0; }
+.fr-layout--auth .fr-footer       { display: none !important; }
+
+.fr-auth-page {
   min-height: 100dvh;
-  background:
-    radial-gradient(ellipse at 60% 0%, rgba(var(--bs-primary-rgb), 0.08) 0%, transparent 60%),
-    var(--bs-body-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 2rem 1rem;
+  background:
+    radial-gradient(ellipse at 65% 0%,   rgba(var(--bs-primary-rgb), 0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 25% 100%, rgba(var(--bs-primary-rgb), 0.05) 0%, transparent 50%),
+    var(--bs-body-bg);
 }
 .fr-auth-card {
-  border-color: rgba(var(--bs-primary-rgb), 0.15) !important;
-  box-shadow: var(--bs-box-shadow-lg) !important;
-}
-
-/* ── Auth container (centering wrapper) ───────────────────────── */
-.fr-auth-container {
   width: 100%;
   max-width: 420px;
-  margin-inline: auto;
+  border-color: rgba(var(--bs-primary-rgb), 0.15) !important;
+  box-shadow: var(--bs-box-shadow-lg) !important;
 }
 
 /* ── Brand above the card — vertical stack: mark → name → slogan ─ */
@@ -64,4 +71,40 @@
   color: var(--bs-secondary-color);
   line-height: 1.4;
   max-width: 280px;
+}
+
+/* Password show/hide toggle */
+.fr-password-wrapper { position: relative; }
+.fr-password-wrapper .form-control { padding-right: 2.5rem; }
+.fr-password-toggle {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--bs-secondary-color);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.875rem;
+}
+.fr-password-toggle:hover { color: var(--bs-body-color); }
+
+/* "or" divider */
+.fr-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--bs-tertiary-color);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.fr-auth-divider::before,
+.fr-auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--bs-border-color);
 }

@@ -73,6 +73,9 @@ pub struct AdminThreadFilter {
 pub trait ThreadRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Thread>, AppError>;
     async fn find_by_slug(&self, slug: &str) -> Result<Option<Thread>, AppError>;
+    /// Batch fetch by ids, author-enriched. Order is not guaranteed — callers
+    /// re-order as needed. Ids that don't resolve are simply absent.
+    async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<Thread>, AppError>;
     /// When `cached_total` is `Some`, the COUNT query is skipped and the supplied
     /// value is returned as the total — used by the use-case layer to avoid an exact
     /// COUNT(*) on every paginated guest request.

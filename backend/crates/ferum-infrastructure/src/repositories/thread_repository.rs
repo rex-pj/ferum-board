@@ -215,6 +215,25 @@ impl ThreadRepository for PgThreadRepository {
         Ok(result)
     }
 
+    async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<Thread>, AppError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let placeholders = (1..=ids.len())
+            .map(|i| format!("${i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("{ENRICHED_SELECT} WHERE t.id IN ({placeholders})");
+        let values = ids.iter().map(|id| sea_orm::Value::from(*id));
+        let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, values);
+        Ok(ThreadRow::find_by_statement(stmt)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(row_to_domain)
+            .collect())
+    }
+
     async fn list_by_category(
         &self,
         category_id: Uuid,

@@ -65,11 +65,32 @@
             {% if result.excerpt %}
               <p class="fr-thread-excerpt mb-0">{{ result.excerpt | safe }}</p>
             {% endif %}
+            {# Same meta idiom as thread_card.html so results read like the rest of the site #}
+            <div class="fr-thread-meta">
+              {% if result.author_username %}
+                <a href="/u/{{ result.author_username }}" class="fr-link-elevated">{{ result.author_display_name }}</a>
+              {% endif %}
+              {% if result.category_slug %}
+                {% if result.author_username %}<span aria-hidden="true">·</span>{% endif %}
+                <a href="/forum/{{ result.category_slug }}" class="fr-category-pill fr-link-elevated">{{ result.category_name }}</a>
+              {% endif %}
+              {% if result.created_at %}
+                <span aria-hidden="true">·</span>
+                <time class="fr-notif-time" data-rel datetime="{{ result.created_at }}">{{ result.created_at | date(format="%b %d, %Y") }}</time>
+              {% endif %}
+              <span aria-hidden="true">·</span>
+              <span class="fr-notif-time"><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>{{ result.reply_count }}</span>
+            </div>
           </div>
         </div>
       {% endfor %}
     </div>
     {% include "default/templates/partials/pagination.html" %}
+  {% elif search_error %}
+    <div class="text-center py-5" style="color:var(--bs-secondary-color)">
+      <i class="fa-solid fa-triangle-exclamation fa-3x mb-3 d-block text-warning opacity-50" aria-hidden="true"></i>
+      Search is temporarily unavailable. Please try again in a moment.
+    </div>
   {% else %}
     <div class="text-center py-5" style="color:var(--bs-secondary-color)">
       <i class="fa-solid fa-magnifying-glass fa-3x mb-3 d-block opacity-25" aria-hidden="true"></i>

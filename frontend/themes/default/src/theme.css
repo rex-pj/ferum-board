@@ -11,6 +11,7 @@
 @import "_base.css";
 @import "_bootstrap-overrides.css";
 @import "_navbar.css";
+@import "_layout.css";
 @import "_thread-feed.css";
 @import "_post-content.css";
 @import "_notifications.css";

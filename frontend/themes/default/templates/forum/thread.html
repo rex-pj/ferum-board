@@ -95,18 +95,18 @@
           <i class="fa-solid fa-reply me-1"></i>Reply
         </a>
       {% endif %}
-      {% if current_user and (current_user.username == thread.author_username or current_user.is_admin) %}
+      {% if thread.can_edit %}
         <a href="/edit-thread/{{ thread.slug }}" class="btn btn-outline-secondary btn-sm">
           <i class="fa-solid fa-pen me-1"></i>Edit
         </a>
       {% endif %}
-      {% if current_user and current_user.username == thread.author_username and not current_user.is_moderator %}
+      {% if thread.can_delete %}
         <button type="button" class="btn btn-outline-danger btn-sm"
                 data-action="delete-thread" data-thread-slug="{{ thread.slug }}" data-category-slug="{{ thread.category_slug }}">
           <i class="fa-solid fa-trash me-1"></i>Delete
         </button>
       {% endif %}
-      {% if current_user and (current_user.is_moderator or thread.can_pin or thread.can_lock or thread.can_move) %}
+      {% if thread.can_pin or thread.can_lock or thread.can_move %}
         <div class="dropdown">
           <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-label="Moderator actions">
             <i class="fa-solid fa-shield-halved"></i>
@@ -144,15 +144,6 @@
                   <i class="fa-solid fa-arrow-right-arrow-left me-2"></i>Move thread
                 </button>
               </li>
-            {% endif %}
-            {% if current_user.is_moderator %}
-            <li><hr class="dropdown-divider"></li>
-            <li>
-              <button type="button" class="dropdown-item text-danger"
-                      data-action="delete-thread" data-thread-slug="{{ thread.slug }}" data-category-slug="{{ thread.category_slug }}">
-                <i class="fa-solid fa-trash me-2"></i>Delete thread
-              </button>
-            </li>
             {% endif %}
           </ul>
         </div>
@@ -210,25 +201,21 @@
                 <i class="fa-solid fa-ellipsis"></i>
               </button>
               <ul class="dropdown-menu dropdown-menu-end">
-                {% if current_user.username == post.author_username %}
+                {% if post.can_edit %}
                   <li>
                     <button type="button" class="dropdown-item" data-action="edit-post" data-post-id="{{ post.id }}">
                       <i class="fa-solid fa-pen me-2"></i>Edit
                     </button>
                   </li>
+                {% endif %}
+                {% if post.can_delete %}
                   <li>
                     <button type="button" class="dropdown-item text-danger" data-action="delete-post" data-post-id="{{ post.id }}">
                       <i class="fa-solid fa-trash me-2"></i>Delete
                     </button>
                   </li>
-                {% elif current_user.is_moderator %}
-                  <li>
-                    <button type="button" class="dropdown-item text-danger" data-action="delete-post" data-post-id="{{ post.id }}">
-                      <i class="fa-solid fa-trash me-2"></i>Delete post
-                    </button>
-                  </li>
                 {% endif %}
-                {% if current_user.username != post.author_username %}
+                {% if not post.is_own %}
                   <li>
                     <button type="button" class="dropdown-item text-warning"
                             data-bs-toggle="modal" data-bs-target="#reportModal"
@@ -237,16 +224,14 @@
                     </button>
                   </li>
                 {% endif %}
-                {% if not post.is_best_answer and not thread.is_solved %}
-                  {% if current_user.username == thread.author_username or current_user.is_admin %}
-                    <li><hr class="dropdown-divider"></li>
-                    <li>
-                      <button type="button" class="dropdown-item text-success"
-                              data-action="best-answer" data-thread-id="{{ thread.id }}" data-post-id="{{ post.id }}">
-                        <i class="fa-solid fa-check-circle me-2"></i>Mark best answer
-                      </button>
-                    </li>
-                  {% endif %}
+                {% if not post.is_best_answer and not thread.is_solved and thread.can_mark_best_answer %}
+                  <li><hr class="dropdown-divider"></li>
+                  <li>
+                    <button type="button" class="dropdown-item text-success"
+                            data-action="best-answer" data-thread-id="{{ thread.id }}" data-post-id="{{ post.id }}">
+                      <i class="fa-solid fa-check-circle me-2"></i>Mark best answer
+                    </button>
+                  </li>
                 {% endif %}
               </ul>
             </div>
@@ -380,7 +365,7 @@
 </div>
 
 {# ── Move Thread Modal ────────────────────────────────────────────────── #}
-{% if current_user and current_user.is_moderator and move_categories %}
+{% if thread.can_move and move_categories %}
 <div class="modal fade" id="moveThreadModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

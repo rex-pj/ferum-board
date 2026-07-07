@@ -161,6 +161,12 @@ pub struct PostCtx {
     pub edited_at: Option<String>,
     pub is_best_answer: bool,
     pub reactions: ReactionSummaryCtx,
+    /// Viewer is the post author.
+    pub is_own: bool,
+    /// Mirrors PermissionChecker::can_edit_post (edit window enforced server-side).
+    pub can_edit: bool,
+    /// Mirrors PermissionChecker::can_delete_post.
+    pub can_delete: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -210,6 +216,12 @@ pub struct ThreadDetailCtx {
     pub can_pin: bool,
     pub can_lock: bool,
     pub can_move: bool,
+    /// Mirrors ThreadUseCase::update_title (edit window enforced server-side).
+    pub can_edit: bool,
+    /// Mirrors ThreadUseCase::require_author_or_mod.
+    pub can_delete: bool,
+    /// Mirrors ThreadUseCase::mark_solved: author or thread.lock in category.
+    pub can_mark_best_answer: bool,
 }
 
 /// Serializable Role for admin templates.
@@ -277,6 +289,13 @@ pub struct SearchHitCtx {
     pub thread_slug: String,
     pub thread_title: String,
     pub excerpt: Option<String>,
+    pub category_slug: Option<String>,
+    pub category_name: Option<String>,
+    pub author_username: Option<String>,
+    pub author_display_name: Option<String>,
+    /// RFC 3339; None when the thread no longer resolves.
+    pub created_at: Option<String>,
+    pub reply_count: i32,
 }
 
 /// Notification item for the notifications inbox page.

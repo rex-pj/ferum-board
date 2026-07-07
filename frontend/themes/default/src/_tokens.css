@@ -8,10 +8,11 @@
   --bs-primary:          var(--ferum-primary);
   --bs-primary-rgb:      99, 102, 241;
 
-  /* Text hierarchy */
+  /* Text hierarchy — secondary/tertiary must stay ≥ 4.5:1 (WCAG AA, NF-UX-04)
+     on --bs-body-bg AND on --bs-secondary-bg (chips, search box, placeholders). */
   --bs-body-color:       #111827;
-  --bs-secondary-color:  #6b7280;
-  --bs-tertiary-color:   #9ca3af;
+  --bs-secondary-color:  #4b5563;  /* 7.6:1 on #fff */
+  --bs-tertiary-color:   #687080;  /* 5.0:1 on #fff, 4.6:1 on #f3f4f6 */
   --bs-emphasis-color:   #030712;
   --bs-link-color:       var(--ferum-primary);
   --bs-link-hover-color: var(--ferum-primary-dark);
@@ -55,9 +56,10 @@
   --bs-primary:          var(--ferum-primary);
   --bs-primary-rgb:      129, 140, 248;
 
+  /* Text hierarchy — same AA constraint as light mode, against #0f1117/#1a1d27. */
   --bs-body-color:       #e2e8f0;
-  --bs-secondary-color:  #94a3b8;
-  --bs-tertiary-color:   #64748b;
+  --bs-secondary-color:  #94a3b8;  /* 7.4:1 on #0f1117 */
+  --bs-tertiary-color:   #7b8aa0;  /* 5.4:1 on #0f1117, 4.8:1 on #1a1d27 */
   --bs-emphasis-color:   #f8fafc;
   --bs-link-color:       var(--ferum-primary);
   --bs-link-hover-color: var(--ferum-primary-dark);

@@ -5,6 +5,7 @@ pub mod forum;
 pub mod profile;
 pub mod search;
 pub mod setup;
+pub mod thread_permissions;
 
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};

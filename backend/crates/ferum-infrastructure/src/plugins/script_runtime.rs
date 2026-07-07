@@ -1018,17 +1018,6 @@ var __ferum_rpc = {};
                 .unwrap_or(false)
         }
 
-        /// Extract the one-time schema DDL statements from the manifest's `[schema]`
-        /// section. Only ever read at install time — never at query time.
-        pub fn schema_tables_from_manifest(manifest: &serde_json::Value) -> Vec<String> {
-            manifest
-                .get("schema")
-                .and_then(|s| s.get("tables"))
-                .and_then(|a| a.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                .unwrap_or_default()
-        }
-
         /// Dispatch an after-event (fire-and-forget from caller's perspective).
         pub async fn dispatch_event(&self, event_type: &str, payload_json: String) {
             if self.tx.try_send(ScriptMessage::DispatchEvent {

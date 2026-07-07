@@ -427,7 +427,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         .with_plugin_runtime(plugin_hooks.clone()),
     );
 
-    let search = Arc::new(SearchUseCase::new(search_svc));
+    let search = Arc::new(SearchUseCase::new(
+        search_svc,
+        thread_repo.clone(),
+        category_repo.clone(),
+    ));
 
     let stats_repo = Arc::new(PgStatsRepository::new(pg_write.clone()));
     let admin_stats = Arc::new(AdminStatsUseCase::new(stats_repo).with_cache(cache.clone()));

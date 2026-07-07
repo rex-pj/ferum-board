@@ -15,6 +15,7 @@ mockall::mock! {
     impl ThreadRepository for ThreadRepository {
         async fn find_by_id(&self, id: Uuid) -> Result<Option<Thread>, AppError>;
         async fn find_by_slug(&self, slug: &str) -> Result<Option<Thread>, AppError>;
+        async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<Thread>, AppError>;
         async fn list_by_category(&self, category_id: Uuid, filter: &ThreadFilter, page: u64, per_page: u64, cached_total: Option<u64>) -> Result<(Vec<Thread>, u64), AppError>;
         async fn list_feed(&self, category_ids: &[Uuid], filter: &ThreadFilter, page: u64, per_page: u64, cached_total: Option<u64>) -> Result<(Vec<Thread>, u64), AppError>;
         async fn list_by_author(&self, author_id: Uuid, category_ids: &[Uuid], page: u64, per_page: u64) -> Result<(Vec<Thread>, u64), AppError>;

@@ -5,3 +5,4 @@ mod forum;
 mod profile;
 mod search;
 mod setup;
+mod thread_permissions;
