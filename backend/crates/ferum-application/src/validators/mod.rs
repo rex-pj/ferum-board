@@ -60,6 +60,16 @@ pub fn validate_image_magic(data: &[u8]) -> bool {
     false
 }
 
+/// Same as `validate_image_magic` but also accepts the `.ico` magic bytes —
+/// used for favicon uploads, which allow ICO in addition to the raster
+/// formats `validate_image_magic` already covers.
+pub fn validate_favicon_magic(data: &[u8]) -> bool {
+    if data.len() >= 4 && data[0..4] == [0x00, 0x00, 0x01, 0x00] {
+        return true;
+    }
+    validate_image_magic(data)
+}
+
 pub fn validate_display_name(s: &str) -> bool {
     let len = s.chars().count();
     len >= 1 && len <= 60

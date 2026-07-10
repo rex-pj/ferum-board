@@ -50,11 +50,15 @@
            class="collapse {% if has_filters %}show{% endif %} border-top"
            style="background:var(--bs-tertiary-bg)">
         <div class="adm-filter-row px-3 py-2">
-          <ferum-remote-select name="actor_id" endpoint="/api/mod/lookups/users"
-                               value="{{ actor_id_filter }}" label="{{ actor_label }}"
-                               placeholder="Any actor"></ferum-remote-select>
+          {# Moderators only ever see their own entries, so an actor filter would
+             be a no-op control. Admins keep it. #}
+          {% if can_filter_by_actor %}
+            <ferum-remote-select name="actor_id" endpoint="/api/mod/lookups/users"
+                                 value="{{ actor_id_filter }}" label="{{ actor_label }}"
+                                 placeholder="Any actor"></ferum-remote-select>
 
-          <div class="vr opacity-25 align-self-stretch"></div>
+            <div class="vr opacity-25 align-self-stretch"></div>
+          {% endif %}
 
           <select name="target_type" class="form-select form-select-sm" style="width:auto">
             <option value="">All targets</option>

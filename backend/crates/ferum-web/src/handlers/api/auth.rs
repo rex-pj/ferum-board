@@ -8,7 +8,7 @@ use crate::app_state::AppState;
 use crate::middleware::AuthUser;
 use crate::view_models::auth::{
     ForgotPasswordRequest, LoginRequest, LoginResponse, RegisterRequest,
-    ResetPasswordRequest, UserResponse,
+    ResendVerificationRequest, ResetPasswordRequest, UserResponse,
 };
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::shared::AppError;
@@ -125,6 +125,21 @@ pub async fn verify_email(
     state.auth.verify_email(&token).await?;
     Ok(Json(
         serde_json::json!({ "message": "Email verified successfully" }),
+    ))
+}
+
+pub async fn resend_verification(
+    State(state): State<AppState>,
+    Json(body): Json<ResendVerificationRequest>,
+) -> HandlerResult<impl IntoResponse> {
+    body.validate()
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+    state.auth.resend_verification_email(&body.email).await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+            "message": "If that email exists and isn't verified yet, a new verification link has been sent."
+        })),
     ))
 }
 

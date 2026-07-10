@@ -1,10 +1,32 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::AppError;
 
+/// Rolling-window upload usage for one account, backing the per-user quota.
+pub struct UploadUsage {
+    pub file_count: u64,
+    pub total_bytes: i64,
+}
+
 #[async_trait]
 pub trait StoredFileRepository: Send + Sync {
+    /// Files this user uploaded at or after `since`. Counts every CAS namespace
+    /// (avatar, cover, thumbnail, attachment) so the quota is a single storage
+    /// budget per account rather than a per-feature allowance that can be
+    /// summed to bypass it.
+    ///
+    /// Note this attributes a file to whoever *first* uploaded those exact
+    /// bytes: a CAS key that already exists is only ref-counted, not re-inserted,
+    /// so a second uploader of identical content consumes no new storage and is
+    /// correctly not charged for it.
+    async fn usage_since(
+        &self,
+        uploaded_by_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<UploadUsage, AppError>;
+
     /// Atomically insert a new file row (ref_count=1) or, if the key already
     /// exists, increment its ref_count — all in a single SQL statement.
     async fn upsert_and_ref(
@@ -15,6 +37,28 @@ pub trait StoredFileRepository: Send + Sync {
         size: i64,
         uploaded_by_id: Option<Uuid>,
     ) -> Result<(), AppError>;
+
+    /// Insert a *staged* row with `ref_count = 0` — content that exists in
+    /// storage but is not yet referenced by any post. If the key already exists
+    /// its ref_count is left untouched (identical bytes may already be
+    /// referenced by someone else's post; re-uploading must not inflate that).
+    ///
+    /// Staged rows are not publicly servable — see the `/files/:key` gate.
+    /// They become public only once `increment_ref` is called for them by a
+    /// post that actually embeds the URL.
+    async fn upsert_staged(
+        &self,
+        key: &str,
+        content_type: &str,
+        data: &[u8],
+        size: i64,
+        uploaded_by_id: Option<Uuid>,
+    ) -> Result<(), AppError>;
+
+    /// Atomically increment ref_count for an existing key. A key that does not
+    /// exist is a no-op, not an error: post content may reference an arbitrary
+    /// `/files/...` URL that was never uploaded here.
+    async fn increment_ref(&self, key: &str) -> Result<(), AppError>;
 
     /// Atomically decrement ref_count (floor 0), return new count.
     /// Returns 0 if the key does not exist.

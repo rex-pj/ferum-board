@@ -358,7 +358,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     let category = Arc::new(
         CategoryUseCase::new(category_repo.clone(), thread_repo.clone(), tag_repo.clone(), user_repo.clone())
-            .with_site_config(site_config.clone()),
+            .with_site_config(site_config.clone())
+            .with_cache(cache.clone()),
     );
 
     let thread = Arc::new(
@@ -397,7 +398,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             site_config.clone(),
             event_bus.clone(),
         )
-        .with_plugin_runtime(plugin_hooks.clone()),
+        .with_plugin_runtime(plugin_hooks.clone())
+        .with_stored_files(stored_file_repo.clone()),
     );
 
     let reaction = Arc::new(
@@ -437,12 +439,15 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let admin_stats = Arc::new(AdminStatsUseCase::new(stats_repo).with_cache(cache.clone()));
 
     let hasher2 = Arc::new(BcryptPasswordHasher);
-    let user = Arc::new(UserUseCase::new(
-        user_repo.clone(),
-        hasher2,
-        stored_file_repo.clone(),
-        job_queue.clone(),
-    ));
+    let user = Arc::new(
+        UserUseCase::new(
+            user_repo.clone(),
+            hasher2,
+            stored_file_repo.clone(),
+            job_queue.clone(),
+        )
+        .with_cache(cache.clone()),
+    );
 
     let bookmark = Arc::new(BookmarkUseCase::new(bookmark_repo, thread_repo.clone()));
     let follow_repo = Arc::new(PgFollowRepository::new(pg_write.clone()));
@@ -452,7 +457,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         event_bus.clone(),
     ));
     let tag = Arc::new(TagUseCase::new(tag_repo.clone()));
-    let webhook = Arc::new(WebhookUseCase::new(webhook_repo.clone()));
+    let webhook = Arc::new(WebhookUseCase::new(
+        webhook_repo.clone(),
+        Arc::new(ferum_infrastructure::webhook_delivery::ReqwestWebhookDeliveryService),
+        Arc::new(ferum_infrastructure::network_utils::TokioHostResolver),
+    ));
     let plugin = Arc::new(PluginUseCase::new(
         plugin_repo,
         webhook_repo.clone(),
@@ -488,20 +497,43 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let initial_color_scheme = read_theme_color_scheme(&config.themes_dir, &initial_active_slug);
     let active_theme_color_scheme_cache = Arc::new(tokio::sync::RwLock::new(initial_color_scheme));
 
-    let tera = TeraEngine::new(
-        std::path::PathBuf::from(&config.themes_dir),
-        std::path::PathBuf::from(&config.admin_templates_dir),
-        std::path::PathBuf::from(&config.static_dir),
-    )
-    .unwrap_or_else(|e| {
-        tracing::warn!("TeraEngine init failed ({}), templates unavailable", e);
-        TeraEngine::new(
-            std::path::PathBuf::from("./frontend/themes"),
-            std::path::PathBuf::from("./frontend/templates"),
-            std::path::PathBuf::from("./frontend/static"),
-        )
-        .expect("TeraEngine fallback init failed")
-    });
+    // Two distinct failures used to be conflated here. A *misconfigured path* is
+    // recoverable — retry the repo-relative default. A *broken template* is not:
+    // retrying it just parses the same bad file again, and if the fallback path
+    // happens not to exist, `build_tera` finds zero templates, returns Ok, and the
+    // app boots serving 500s from every page. So resolve the directories first,
+    // then let a parse error abort startup.
+    let (themes_dir, admin_templates_dir, static_dir) = {
+        let configured = (
+            std::path::PathBuf::from(&config.themes_dir),
+            std::path::PathBuf::from(&config.admin_templates_dir),
+            std::path::PathBuf::from(&config.static_dir),
+        );
+        if configured.0.is_dir() && configured.1.is_dir() {
+            configured
+        } else {
+            tracing::warn!(
+                themes_dir = %configured.0.display(),
+                admin_templates_dir = %configured.1.display(),
+                "configured template directories not found, falling back to ./frontend/*"
+            );
+            (
+                std::path::PathBuf::from("./frontend/themes"),
+                std::path::PathBuf::from("./frontend/templates"),
+                std::path::PathBuf::from("./frontend/static"),
+            )
+        }
+    };
+    anyhow::ensure!(
+        themes_dir.is_dir() && admin_templates_dir.is_dir(),
+        "template directories not found: themes={}, templates={} (set THEMES_DIR / ADMIN_TEMPLATES_DIR)",
+        themes_dir.display(),
+        admin_templates_dir.display(),
+    );
+    // Propagates on a broken first-party template — refusing to boot beats booting
+    // into a forum whose admin panel 500s. User themes still fail open inside.
+    let tera = TeraEngine::new(themes_dir, admin_templates_dir, static_dir)
+        .map_err(|e| anyhow::anyhow!("template load failed: {e}"))?;
 
     // ─── Background: flush daily stats mỗi 5 phút ──────────────────────────────
     // One-time backfill: populate daily_stats for all past dates from source tables.
@@ -585,6 +617,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         themes_dir: config.themes_dir.clone(),
         static_dir: config.static_dir.clone(),
         cookies_secure,
+        app_url: config.app_url.trim_end_matches('/').to_string(),
         trusted_proxy_count: config.trusted_proxy_count,
         plugins_dir: config.plugins_dir.clone(),
         setup_complete: Arc::new(std::sync::atomic::AtomicBool::new(false)),

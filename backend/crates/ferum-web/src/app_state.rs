@@ -83,6 +83,9 @@ pub struct AppState {
     pub broadcaster: Arc<dyn NotificationSubscriber>,
     /// True when APP_URL starts with https:// — adds the Secure flag to auth cookies.
     pub cookies_secure: bool,
+    /// Absolute site origin (e.g. `https://forum.example.com`, no trailing slash).
+    /// Used wherever an absolute URL is required — currently only sitemap.xml.
+    pub app_url: String,
     /// Number of trusted reverse proxies. When > 0, X-Forwarded-For is consulted for
     /// rate-limit key derivation. When 0, the raw TCP peer address is always used.
     pub trusted_proxy_count: u32,

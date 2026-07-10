@@ -51,6 +51,20 @@
       var next = effectiveDark ? 'light' : 'dark';
       try { localStorage.setItem('ferum-theme', next); } catch {}
       applyTheme(next);
+
+      // Logged-in users get this synced to their account (see base.html's
+      // data-prefs-ssr) so it follows them to other devices/browsers, not
+      // just this one. Fire-and-forget: the visual toggle above is instant
+      // either way, this just makes the change durable.
+      if (document.documentElement.hasAttribute('data-prefs-ssr') && win.FerumApi) {
+        win.FerumApi.users.getPreferences()
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) {
+            var prefs = (d && d.data) || {};
+            return win.FerumApi.users.updatePreferences(Object.assign({}, prefs, { theme: next }));
+          })
+          .catch(function () {});
+      }
     });
   }
 

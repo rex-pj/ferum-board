@@ -34,8 +34,6 @@ mod inner {
     use ferum_domain::repositories::plugin_storage_repository::PluginStorageRepository;
     use ferum_domain::repositories::user_repository::UserRepository;
 
-    use crate::network_utils::assert_no_private_ip;
-
     // ─── Message protocol ─────────────────────────────────────────────────────────
 
     pub enum ScriptMessage {
@@ -429,8 +427,7 @@ var __ferum_rpc = {};
                     }
 
                     let result: Result<serde_json::Value, String> = s.rt_handle.block_on(async move {
-                        assert_no_private_ip(&url).await.map_err(|e| e)?;
-                        let client = reqwest::Client::new();
+                        let client = crate::network_utils::build_pinned_client(&url).await?;
                         let mut req = client.get(&url).timeout(Duration::from_secs(10));
                         for (k, v) in &headers { req = req.header(k, v); }
                         req.send().await.map_err(|e| e.to_string())?
@@ -469,8 +466,7 @@ var __ferum_rpc = {};
                     }
 
                     let result: Result<serde_json::Value, String> = s.rt_handle.block_on(async move {
-                        assert_no_private_ip(&url).await.map_err(|e| e)?;
-                        let client = reqwest::Client::new();
+                        let client = crate::network_utils::build_pinned_client(&url).await?;
                         let mut req = client.post(&url).json(&body).timeout(Duration::from_secs(10));
                         for (k, v) in &headers { req = req.header(k, v); }
                         req.send().await.map_err(|e| e.to_string())?

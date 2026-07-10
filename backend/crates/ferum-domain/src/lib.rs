@@ -1,6 +1,7 @@
 pub mod error;
 pub mod events;
 pub mod models;
+pub mod net;
 pub mod repositories;
 
 mod auth_user;

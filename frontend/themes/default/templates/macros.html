@@ -44,12 +44,18 @@
 {# ── thread_status_badges ─────────────────────────────────────────
    Bootstrap badge variant — used in thread detail page header.
 #}
-{% macro thread_status_badges(is_pinned=false, is_solved=false, is_locked=false) %}
+{% macro thread_status_badges(is_pinned=false, is_solved=false, is_locked=false, best_answer_href="") %}
 {% if is_pinned %}
   <span class="badge bg-primary me-1"><i class="fa-solid fa-thumbtack me-1"></i>Pinned</span>
 {% endif %}
 {% if is_solved %}
-  <span class="badge bg-success me-1"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+  {% if best_answer_href %}
+    <a href="{{ best_answer_href }}" class="badge bg-success me-1 text-decoration-none" title="Jump to best answer">
+      <i class="fa-solid fa-circle-check me-1"></i>Solved
+    </a>
+  {% else %}
+    <span class="badge bg-success me-1"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+  {% endif %}
 {% endif %}
 {% if is_locked %}
   <span class="badge bg-secondary me-1"><i class="fa-solid fa-lock me-1"></i>Locked</span>

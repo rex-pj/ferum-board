@@ -74,6 +74,7 @@ pub fn admin_api_routes() -> Router<AppState> {
             "/webhooks/{id}",
             patch(admin::api::webhooks::update_webhook).delete(admin::api::webhooks::delete_webhook),
         )
+        .route("/webhooks/{id}/test", post(admin::api::webhooks::test_webhook))
         .route("/plugins", get(admin::api::plugins::list_plugins))
         .route("/plugins/upload", post(admin::api::plugins::upload_plugin))
         .route("/plugins/install", post(admin::api::plugins::install_plugin))

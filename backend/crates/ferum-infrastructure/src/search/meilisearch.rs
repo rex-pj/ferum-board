@@ -6,6 +6,18 @@ use uuid::Uuid;
 use ferum_application::ports::{SearchHit, SearchQuery, SearchResults, SearchService};
 use ferum_application::shared::AppError;
 
+/// The `content` field indexed in Meilisearch is raw thread/post text, not
+/// pre-sanitized HTML (unlike the Postgres FTS path, which sanitizes
+/// `ts_headline` output before returning it). Search excerpts are rendered
+/// with Tera's `| safe` filter, so any tags left in here become stored XSS —
+/// strip everything down to plain text before it leaves this service.
+fn sanitize_excerpt(text: String) -> String {
+    ammonia::Builder::new()
+        .tags(std::collections::HashSet::new())
+        .clean(&text)
+        .to_string()
+}
+
 pub struct MeilisearchService {
     client: Client,
     index: String,
@@ -75,7 +87,9 @@ impl SearchService for MeilisearchService {
                     thread_id,
                     thread_slug: doc.slug,
                     title: doc.title,
-                    excerpt: doc.content.map(|c| c.chars().take(200).collect()),
+                    excerpt: doc
+                        .content
+                        .map(|c| sanitize_excerpt(c.chars().take(200).collect())),
                 })
             })
             .collect();

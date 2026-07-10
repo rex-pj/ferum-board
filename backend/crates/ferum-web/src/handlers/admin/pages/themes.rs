@@ -153,15 +153,33 @@ pub async fn upload_theme(
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|e| PageError::Internal(anyhow::anyhow!("Invalid zip: {}", e)))?;
 
+    // Bound total decompressed size regardless of the entries' declared
+    // uncompressed_size (attacker-controlled) — a small, highly-compressed
+    // upload could otherwise decompress far past the 10 MB raw-upload cap
+    // and exhaust disk space. Mirrors the limit already enforced for plugin
+    // .fpkg extraction in package_extractor.rs.
+    const MAX_EXTRACTED_SIZE: u64 = 50 * 1024 * 1024; // 50 MB
+    let mut total_extracted: u64 = 0;
+
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|e| {
+        let file = archive.by_index(i).map_err(|e| {
             PageError::Internal(anyhow::anyhow!("Zip read error: {}", e))
         })?;
 
-        let outpath = match file.enclosed_name() {
-            Some(path) => theme_dir.join(path),
+        let raw_path = match file.enclosed_name() {
+            Some(path) => path,
             None => continue,
         };
+        let outpath = theme_dir.join(&raw_path);
+
+        // Double-check the resolved path is still inside theme_dir, matching
+        // the guard used for plugin package extraction.
+        if !outpath.starts_with(&theme_dir) {
+            let _ = std::fs::remove_dir_all(&theme_dir);
+            return Err(PageError::Internal(anyhow::anyhow!(
+                "Archive entry escapes theme directory"
+            )));
+        }
 
         if file.is_dir() {
             std::fs::create_dir_all(&outpath).ok();
@@ -169,8 +187,17 @@ pub async fn upload_theme(
             if let Some(parent) = outpath.parent() {
                 std::fs::create_dir_all(parent).ok();
             }
+            let remaining = MAX_EXTRACTED_SIZE.saturating_sub(total_extracted);
             let mut content = Vec::new();
-            file.read_to_end(&mut content).ok();
+            file.take(remaining + 1).read_to_end(&mut content).ok();
+            if content.len() as u64 > remaining {
+                let _ = std::fs::remove_dir_all(&theme_dir);
+                return Err(PageError::Internal(anyhow::anyhow!(
+                    "Theme zip decompresses beyond the {}MB limit",
+                    MAX_EXTRACTED_SIZE / 1024 / 1024
+                )));
+            }
+            total_extracted += content.len() as u64;
             std::fs::write(&outpath, content).ok();
         }
     }

@@ -4,7 +4,7 @@
   // ── Account tab state (Alpine factory) ───────────────────────────────
   // Supports deep-linking via URL hash: /account#security, /account#preferences
   window.accountTabState = function (dnLen, bioLen) {
-    var VALID_TABS = ['profile', 'security', 'preferences'];
+    var VALID_TABS = ['profile', 'security', 'preferences', 'reports'];
     var hashTab = window.location.hash.slice(1);
     return {
       active: VALID_TABS.includes(hashTab) ? hashTab : 'profile',
@@ -272,6 +272,24 @@
   });
 
   // ── Watched / Muted categories (Alpine factory) ───────────────────
+  // ── My Reports tab (Alpine factory) ──────────────────────────────────
+  window.myReportsState = function () {
+    return {
+      reports: [],
+      loading: true,
+      loaded: false,
+      async load() {
+        if (this.loaded) return;
+        this.loaded = true;
+        try {
+          var res = await FerumApi.reports.mine();
+          if (res.ok) this.reports = (await res.json()).data || [];
+        } catch (_) {}
+        this.loading = false;
+      },
+    };
+  };
+
   window.watchedMuted = function () {
     return {
       watched: [],

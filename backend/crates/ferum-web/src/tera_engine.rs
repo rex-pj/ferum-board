@@ -28,81 +28,120 @@ impl TeraEngine {
         })
     }
 
+    /// Loads every template into one `Tera`, with two different failure policies:
+    ///
+    /// * **First-party templates fail closed.** `frontend/templates/` (admin, mod,
+    ///   setup) and the built-in `default` theme ship with the binary. If one of
+    ///   them will not parse the app refuses to start, because the alternative is
+    ///   a 500 on whichever page happens to use it — silently, at first render.
+    ///
+    /// * **User-installed themes fail open.** An admin can upload an arbitrary
+    ///   `.zip`; a typo in it must not take the forum down. A broken theme is
+    ///   logged and skipped wholesale, and `render_with_theme`'s inheritance chain
+    ///   falls back to `default`.
+    ///
+    /// Each third-party theme is trial-loaded into a clone and only committed if
+    /// it parses. Tera's `add_raw_templates` is a batch that aborts on the first
+    /// bad template, so loading every theme together would let one bad upload stop
+    /// later themes — including `default` — from registering at all.
     fn build_tera(
         themes_dir: &PathBuf,
         admin_templates_dir: &PathBuf,
         static_dir: &PathBuf,
     ) -> Result<Tera> {
-        // Load theme templates as raw strings and pass them as a single batch.
-        // Tera::new() with a glob produces OS-separator template names (backslashes on Windows)
-        // which don't match the forward-slash names used by handlers. Reading content ourselves
-        // also lets us surface per-file I/O errors without aborting the whole load.
-        let theme_files = collect_html_templates(themes_dir);
-        let mut raw_templates: Vec<(String, String)> = Vec::with_capacity(theme_files.len());
-        for (path, name_opt) in &theme_files {
-            let Some(name) = name_opt else { continue };
-            match std::fs::read_to_string(path) {
-                Ok(content) => raw_templates.push((name.clone(), content)),
-                Err(e) => tracing::warn!("Failed to read theme template {:?}: {}", path, e),
-            }
-        }
-
+        // Read content ourselves rather than using Tera::new()'s glob: on Windows a
+        // glob yields names like "admin\dashboard.html", but handlers address
+        // templates with forward slashes.
         let mut tera = Tera::default();
-        if raw_templates.is_empty() {
-            tracing::warn!("No theme templates found at: {}", themes_dir.display());
+
+        // ── First-party: built-in `default` theme ────────────────────────────
+        let (default_theme, user_themes) = partition_theme_files(themes_dir);
+        if default_theme.is_empty() {
+            tracing::warn!("No default-theme templates found at: {}", themes_dir.display());
         } else {
-            let pairs: Vec<(&str, &str)> = raw_templates
-                .iter()
-                .map(|(n, c)| (n.as_str(), c.as_str()))
-                .collect();
-            match tera.add_raw_templates(pairs) {
-                Ok(()) => {
-                    tracing::info!("Theme templates loaded: {} files", raw_templates.len());
-                }
-                Err(e) => {
-                    tracing::error!("Tera theme templates failed to load: {}", e);
-                    // Templates parsed before the error are still in tera.templates;
-                    // log registered names so we can spot what is missing.
-                    let registered: Vec<&str> = raw_templates
-                        .iter()
-                        .filter(|(n, _)| tera.get_template(n).is_ok())
-                        .map(|(n, _)| n.as_str())
-                        .collect();
-                    tracing::error!("Templates registered despite error: {:?}", registered);
-                }
-            }
+            let raw = read_all(&default_theme);
+            let pairs: Vec<(&str, &str)> = raw.iter().map(|(n, c)| (n.as_str(), c.as_str())).collect();
+            tera.add_raw_templates(pairs).map_err(|e| {
+                anyhow::anyhow!("built-in `default` theme failed to parse: {}", error_chain(&e))
+            })?;
+            tracing::info!("Default theme templates loaded: {} files", raw.len());
         }
 
-        // Load admin templates with explicit forward-slash names.
-        // We walk the directory manually instead of using Tera::new() + extend() to guarantee
-        // correct template names on all platforms — on Windows, glob paths use backslashes which
-        // would produce names like "admin\dashboard.html" instead of "admin/dashboard.html".
+        // ── First-party: admin / mod / setup templates ───────────────────────
         let admin_files = collect_html_templates(admin_templates_dir);
         if admin_files.is_empty() {
             tracing::warn!("No admin templates found at: {}", admin_templates_dir.display());
         } else {
+            let mut failures: Vec<String> = Vec::new();
             let mut loaded = 0usize;
-            let mut failed = 0usize;
             for (path, name_opt) in &admin_files {
                 let Some(name) = name_opt else { continue };
-                if let Err(e) = tera.add_template_files(vec![(path.clone(), Some(name.clone()))]) {
-                    let mut chain = format!("{}", e);
-                    let mut src: &dyn std::error::Error = &e;
-                    while let Some(cause) = src.source() {
-                        chain.push_str(&format!(" -> {}", cause));
-                        src = cause;
-                    }
-                    tracing::error!("Failed to load admin template '{}': {}", name, chain);
-                    failed += 1;
-                } else {
-                    loaded += 1;
+                match tera.add_template_files(vec![(path.clone(), Some(name.clone()))]) {
+                    Ok(()) => loaded += 1,
+                    Err(e) => failures.push(format!("{}: {}", name, error_chain(&e))),
                 }
             }
-            if failed > 0 {
-                tracing::warn!("Admin templates: {} loaded, {} FAILED (see ERROR lines above)", loaded, failed);
-            } else {
-                tracing::info!("Admin templates loaded: {} files", loaded);
+            if !failures.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "{} admin/mod template(s) failed to parse:\n  - {}",
+                    failures.len(),
+                    failures.join("\n  - ")
+                ));
             }
+            tracing::info!("Admin templates loaded: {} files", loaded);
+        }
+
+        // ── Third-party: user-installed themes, one isolated batch each ──────
+        //
+        // A theme may `{% extends %}` another theme, not just `default`, and slug
+        // order says nothing about that dependency. So retry in passes: a theme
+        // that failed only because its parent was not loaded yet succeeds on a
+        // later pass. When a whole pass loads nothing, the survivors are genuinely
+        // broken (bad syntax, or a parent that does not exist).
+        let mut pending: Vec<(String, ThemeFiles)> = user_themes;
+        while !pending.is_empty() {
+            let mut deferred: Vec<(String, ThemeFiles)> = Vec::new();
+            let mut progressed = false;
+
+            for (slug, files) in pending {
+                let raw = read_all(&files);
+                let pairs: Vec<(&str, &str)> =
+                    raw.iter().map(|(n, c)| (n.as_str(), c.as_str())).collect();
+
+                let mut candidate = tera.clone();
+                match candidate.add_raw_templates(pairs) {
+                    Ok(()) => {
+                        // Commit only on success — a partially-registered broken
+                        // theme never reaches the live Tera instance.
+                        tera = candidate;
+                        progressed = true;
+                        tracing::info!("Theme '{}' loaded: {} files", slug, raw.len());
+                    }
+                    Err(e) => {
+                        // Might just be an unloaded parent; retry next pass. The
+                        // error is only worth reporting once no pass can progress.
+                        tracing::debug!("Theme '{}' deferred: {}", slug, error_chain(&e));
+                        deferred.push((slug, files));
+                    }
+                }
+            }
+
+            if !progressed {
+                for (slug, files) in &deferred {
+                    let raw = read_all(files);
+                    let pairs: Vec<(&str, &str)> =
+                        raw.iter().map(|(n, c)| (n.as_str(), c.as_str())).collect();
+                    let err = tera
+                        .clone()
+                        .add_raw_templates(pairs)
+                        .err()
+                        .map(|e| error_chain(&e))
+                        .unwrap_or_else(|| "unknown error".into());
+                    tracing::error!("Theme '{}' skipped, it failed to load: {}", slug, err);
+                }
+                break;
+            }
+            pending = deferred;
         }
 
         // Register the `asset_version()` global so templates can cache-bust static
@@ -216,6 +255,59 @@ fn compute_asset_version(static_dir: &PathBuf) -> String {
         .unwrap_or_else(|| "dev".to_string())
 }
 
+/// Flatten a `std::error::Error` chain into one line — Tera nests the actual
+/// parse message (line/column, unexpected token) inside `source()`, so logging
+/// only the top-level error tells you a template failed but never why.
+fn error_chain(e: &dyn std::error::Error) -> String {
+    let mut chain = e.to_string();
+    let mut src = e.source();
+    while let Some(cause) = src {
+        chain.push_str(&format!(" -> {}", cause));
+        src = cause.source();
+    }
+    chain
+}
+
+/// Read each `(path, name)` pair into `(name, content)`. Unreadable files are
+/// logged and skipped: an I/O error on one file should not be reported as a
+/// parse failure of the whole theme.
+fn read_all(files: &[(PathBuf, Option<String>)]) -> Vec<(String, String)> {
+    let mut out = Vec::with_capacity(files.len());
+    for (path, name_opt) in files {
+        let Some(name) = name_opt else { continue };
+        match std::fs::read_to_string(path) {
+            Ok(content) => out.push((name.clone(), content)),
+            Err(e) => tracing::warn!("Failed to read template {:?}: {}", path, e),
+        }
+    }
+    out
+}
+
+/// Split `themes_dir` into the built-in `default` theme's files and the files of
+/// each user-installed theme, keyed by slug. Template names are theme-relative
+/// (`"{slug}/templates/{page}"`), which is exactly what `render_with_theme`
+/// builds its candidate list from, so the slug is the name's first path segment.
+type ThemeFiles = Vec<(PathBuf, Option<String>)>;
+fn partition_theme_files(themes_dir: &PathBuf) -> (ThemeFiles, Vec<(String, ThemeFiles)>) {
+    use std::collections::BTreeMap;
+
+    let mut default_theme: ThemeFiles = Vec::new();
+    // BTreeMap keeps load order deterministic across runs and platforms.
+    let mut by_slug: BTreeMap<String, ThemeFiles> = BTreeMap::new();
+
+    for (path, name_opt) in collect_html_templates(themes_dir) {
+        let Some(name) = name_opt.clone() else { continue };
+        let slug = name.split('/').next().unwrap_or_default().to_string();
+        if slug == "default" {
+            default_theme.push((path, name_opt));
+        } else {
+            by_slug.entry(slug).or_default().push((path, name_opt));
+        }
+    }
+
+    (default_theme, by_slug.into_iter().collect())
+}
+
 /// Walk `dir` recursively and return `(path, Some(name))` pairs for all `.html` files.
 /// Names always use forward slashes regardless of OS path separator.
 fn collect_html_templates(dir: &PathBuf) -> Vec<(PathBuf, Option<String>)> {
@@ -251,23 +343,162 @@ fn walk_html_dir(base: &PathBuf, current: &PathBuf, out: &mut Vec<(PathBuf, Opti
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_theme_templates_load() {
-        let themes_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../themes");
-        let files = collect_html_templates(&themes_dir);
-        assert!(!files.is_empty(), "No templates found — check path ../../../themes");
+    /// Scratch tree: `<tmp>/<label>-<nonce>/{themes,templates,static}`.
+    struct Scratch(PathBuf);
 
-        let mut raw: Vec<(String, String)> = Vec::new();
-        for (path, name_opt) in &files {
-            let Some(name) = name_opt else { continue };
-            let content = std::fs::read_to_string(path).expect("read file");
-            raw.push((name.clone(), content));
+    impl Scratch {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static N: AtomicUsize = AtomicUsize::new(0);
+            let nonce = format!(
+                "{}-{}-{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed),
+                label
+            );
+            let root = std::env::temp_dir().join(format!("ferum-tera-{nonce}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join("themes")).unwrap();
+            std::fs::create_dir_all(root.join("templates")).unwrap();
+            std::fs::create_dir_all(root.join("static")).unwrap();
+            Self(root)
         }
-        let pairs: Vec<(&str, &str)> = raw.iter().map(|(n, c)| (n.as_str(), c.as_str())).collect();
-        let mut tera = tera::Tera::default();
-        if let Err(e) = tera.add_raw_templates(pairs) {
-            panic!("Theme template batch load failed: {}", e);
+
+        fn write(&self, rel: &str, body: &str) {
+            let p = self.0.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, body).unwrap();
         }
+
+        fn build(&self) -> Result<Tera> {
+            TeraEngine::build_tera(
+                &self.0.join("themes"),
+                &self.0.join("templates"),
+                &self.0.join("static"),
+            )
+        }
+
+        /// Minimal well-formed `default` theme; every test needs one.
+        fn with_default_theme(self) -> Self {
+            self.write("themes/default/templates/base.html", "<html>{% block content %}{% endblock %}</html>");
+            self.write("themes/default/templates/home.html", "{% extends \"default/templates/base.html\" %}");
+            self
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn healthy_tree_loads_everything() {
+        let s = Scratch::new("healthy").with_default_theme();
+        s.write("templates/admin/base.html", "<html>{% block b %}{% endblock %}</html>");
+
+        let tera = s.build().expect("a healthy tree must build");
+        assert!(tera.get_template("default/templates/home.html").is_ok());
+        assert!(tera.get_template("admin/base.html").is_ok());
+    }
+
+    /// First-party admin/mod templates fail CLOSED: the app must refuse to boot
+    /// rather than serve a 500 from a page nobody noticed was broken.
+    #[test]
+    fn broken_admin_template_is_a_hard_error() {
+        let s = Scratch::new("bad-admin").with_default_theme();
+        s.write("templates/admin/broken.html", "{% if x %}never closed");
+
+        let err = s.build().expect_err("a broken admin template must abort the build");
+        let msg = err.to_string();
+        assert!(msg.contains("admin/broken.html"), "error must name the file, got: {msg}");
+    }
+
+    /// The built-in `default` theme is first-party too, and nothing can fall back
+    /// to it, so it fails CLOSED as well.
+    #[test]
+    fn broken_default_theme_is_a_hard_error() {
+        let s = Scratch::new("bad-default");
+        s.write("themes/default/templates/base.html", "{% for a in b %}unterminated");
+
+        let err = s.build().expect_err("a broken default theme must abort the build");
+        assert!(
+            err.to_string().contains("default"),
+            "error must mention the default theme, got: {err}"
+        );
+    }
+
+    /// A user-uploaded theme fails OPEN: it is skipped, the app still boots, and
+    /// crucially the healthy themes around it stay registered.
+    #[test]
+    fn broken_user_theme_is_skipped_without_taking_down_the_site() {
+        let s = Scratch::new("bad-user-theme").with_default_theme();
+        s.write("templates/admin/base.html", "<html></html>");
+        s.write("themes/aaa-broken/templates/base.html", "{% if nope %}unterminated");
+        s.write("themes/zzz-good/templates/base.html", "<html>good</html>");
+
+        let tera = s.build().expect("a broken user theme must not abort the build");
+
+        assert!(
+            tera.get_template("aaa-broken/templates/base.html").is_err(),
+            "the broken theme must not be registered, not even partially"
+        );
+        // `aaa-broken` sorts before `zzz-good`: with a single shared batch the bad
+        // theme used to abort the load and take this one down with it.
+        assert!(
+            tera.get_template("zzz-good/templates/base.html").is_ok(),
+            "a healthy theme must survive a broken sibling"
+        );
+        assert!(
+            tera.get_template("default/templates/home.html").is_ok(),
+            "the default theme must survive a broken user theme"
+        );
+    }
+
+    /// Themes may extend other themes; slug order says nothing about that, so the
+    /// loader retries until it stops making progress.
+    #[test]
+    fn child_theme_loads_even_when_it_sorts_before_its_parent() {
+        let s = Scratch::new("child-first").with_default_theme();
+        // "aaa-child" is visited before "zzz-parent" it extends.
+        s.write("themes/zzz-parent/templates/base.html", "<html>{% block c %}{% endblock %}</html>");
+        s.write(
+            "themes/aaa-child/templates/base.html",
+            "{% extends \"zzz-parent/templates/base.html\" %}{% block c %}hi{% endblock %}",
+        );
+
+        let tera = s.build().expect("build must succeed");
+        assert!(tera.get_template("zzz-parent/templates/base.html").is_ok());
+        assert!(
+            tera.get_template("aaa-child/templates/base.html").is_ok(),
+            "child theme must load on a later pass once its parent is present"
+        );
+    }
+
+    /// A theme extending a parent that does not exist can never load; the retry
+    /// loop must terminate and skip it rather than spin.
+    #[test]
+    fn theme_with_missing_parent_is_skipped_and_loop_terminates() {
+        let s = Scratch::new("missing-parent").with_default_theme();
+        s.write(
+            "themes/orphan/templates/base.html",
+            "{% extends \"ghost/templates/base.html\" %}",
+        );
+
+        let tera = s.build().expect("build must succeed");
+        assert!(tera.get_template("orphan/templates/base.html").is_err());
+        assert!(tera.get_template("default/templates/home.html").is_ok());
+    }
+
+    /// The real repo tree must build. Guards the paths in the `frontend/` layout.
+    #[test]
+    fn repository_templates_build() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../frontend");
+        TeraEngine::build_tera(
+            &root.join("themes"),
+            &root.join("templates"),
+            &root.join("static"),
+        )
+        .expect("the checked-in templates must parse");
     }
 }

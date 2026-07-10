@@ -56,6 +56,20 @@ pub async fn update_webhook(
     Ok(Json(DataResponse::new(WebhookResponse::from(webhook))))
 }
 
+pub async fn test_webhook(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.require_auth()?;
+    let result = state.webhook.test_delivery(actor, id).await?;
+    Ok(Json(DataResponse::new(serde_json::json!({
+        "success": result.success,
+        "status_code": result.status_code,
+        "error": result.error,
+    }))))
+}
+
 pub async fn delete_webhook(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,

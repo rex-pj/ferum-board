@@ -44,6 +44,7 @@ pub async fn site_ctx(state: &AppState) -> SiteCtx {
         favicon_url: non_empty("favicon_url"),
         primary_color,
         primary_color_rgb,
+        url: state.app_url.clone(),
     }
 }
 

@@ -163,6 +163,39 @@ pub trait EmailService: Send + Sync {
     async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError>;
 }
 
+// ─── WebhookDeliveryService ───────────────────────────────────────────────────
+
+pub struct WebhookTestResult {
+    pub success: bool,
+    pub status_code: Option<u16>,
+    /// Set on transport-level failure (DNS/connect/timeout) or on an SSRF-guard
+    /// rejection — status_code is None in that case since no response arrived.
+    pub error: Option<String>,
+}
+
+#[async_trait]
+pub trait WebhookDeliveryService: Send + Sync {
+    /// Sends a single synchronous test POST (event type "test") to `url`, using
+    /// the same SSRF-safe DNS-pinning and HMAC signing as real event delivery,
+    /// but without touching the webhook's failure_count/last_triggered_at —
+    /// a deliberate test isn't a real delivery attempt for health-tracking purposes.
+    async fn send_test(&self, url: &str, secret: Option<&str>) -> Result<WebhookTestResult, AppError>;
+}
+
+// ─── HostResolver ─────────────────────────────────────────────────────────────
+
+#[async_trait]
+pub trait HostResolver: Send + Sync {
+    /// Resolves `host` (a bare hostname or an IP literal) to its addresses.
+    ///
+    /// Exists so the application layer can reject a webhook URL whose *hostname*
+    /// points at a private address — something an IP-literal check cannot see.
+    /// This is admin-facing validation, not the security boundary: the boundary
+    /// is `build_pinned_client`, which re-resolves and pins at dispatch time.
+    /// DNS can change between the two, so this check can only ever be advisory.
+    async fn resolve(&self, host: &str) -> Result<Vec<std::net::IpAddr>, AppError>;
+}
+
 // ─── BulkSeedService ──────────────────────────────────────────────────────────
 
 #[async_trait]

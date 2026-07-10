@@ -43,6 +43,15 @@ impl PermissionChecker {
 
     // ─── Post creation ────────────────────────────────────────────────────────
 
+    /// Bool-returning mirror of `can_create_post`, for gating UI affordances
+    /// (e.g. the "New Thread" button) without needing an `AppError` to discard.
+    pub fn user_can_create_post(user: Option<&AuthUser>, category: &Category) -> bool {
+        match user {
+            Some(u) => Self::can_create_post(u, category).is_ok(),
+            None => false,
+        }
+    }
+
     pub fn can_create_post(user: &AuthUser, category: &Category) -> Result<(), AppError> {
         Self::require_not_banned(user)?;
 

@@ -5,6 +5,7 @@ pub mod forum;
 pub mod profile;
 pub mod search;
 pub mod setup;
+pub mod sitemap;
 pub mod thread_permissions;
 
 use axum::http::StatusCode;
@@ -68,8 +69,17 @@ pub(super) async fn user_ctx(
     auth_user: Option<&AuthUser>,
 ) -> Option<CurrentUserCtx> {
     let u = auth_user?;
-    let unread = state.notification.unread_count(u).await.unwrap_or(0);
-    Some(CurrentUserCtx::from_auth(u, unread))
+    let (unread, prefs) = tokio::join!(
+        state.notification.unread_count(u),
+        state.user.get_preferences_by_id(u.id),
+    );
+    let mut ctx = CurrentUserCtx::from_auth(u, unread.unwrap_or(0));
+    if let Ok(p) = prefs {
+        ctx.theme = p.theme;
+        ctx.font_size = p.font_size;
+        ctx.layout = p.layout;
+    }
+    Some(ctx)
 }
 
 #[tracing::instrument(skip_all)]

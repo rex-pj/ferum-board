@@ -13,9 +13,12 @@ use ferum_application::shared::AppError;
 use ferum_application::storage_utils::{
     cas_key, validate_favicon_content_type, validate_image_content_type,
 };
+use ferum_application::validators::{validate_favicon_magic, validate_image_magic};
 
-/// Keys visible via the config API. SMTP credentials and internal rate-limit tunings
-/// are intentionally omitted — they come from env vars or are not for UI display.
+/// Keys readable/writable via the config API (used by both `get_config` and
+/// `update_config`, so the two can never drift out of sync). SMTP credentials
+/// are intentionally omitted — the mail transport is built once at startup
+/// from env vars and does not hot-reload from site_config; see CLAUDE.md.
 const CONFIG_READABLE_KEYS: &[&str] = &[
     "site_name",
     "site_tagline",
@@ -29,6 +32,12 @@ const CONFIG_READABLE_KEYS: &[&str] = &[
     "public_write_rate_limit_per_min",
     "account_lockout_attempts",
     "account_lockout_duration_minutes",
+    "post_approval_enabled",
+    "post_approval_min_trust",
+    "post_edit_window_hours",
+    "forum_index_threads_per_category",
+    "max_posts_per_page",
+    "max_threads_per_page",
 ];
 
 pub async fn get_config(
@@ -54,24 +63,9 @@ pub async fn update_config(
     let actor = auth_user.require_auth()?;
     PermissionChecker::can_manage_config(actor)?;
 
-    let allowed_keys = [
-        "site_name",
-        "site_tagline",
-        "site_slogan",
-        "logo_url",
-        "favicon_url",
-        "primary_color",
-        "registration_open",
-        "keyword_blacklist",
-        "auth_rate_limit_per_min",
-        "public_write_rate_limit_per_min",
-        "account_lockout_attempts",
-        "account_lockout_duration_minutes",
-    ];
-
     let filtered: HashMap<String, String> = body
         .into_iter()
-        .filter(|(k, _)| allowed_keys.contains(&k.as_str()))
+        .filter(|(k, _)| CONFIG_READABLE_KEYS.contains(&k.as_str()))
         .collect();
 
     state.site_config.set_many(&filtered).await?;
@@ -109,7 +103,7 @@ pub async fn upload_favicon(
                 .await
                 .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
 
-            if !validate_favicon_content_type(&ct) {
+            if !validate_favicon_content_type(&ct) || !validate_favicon_magic(&data) {
                 return Err(
                     AppError::unprocessable("favicon must be ico, png, gif, or jpeg (SVG not allowed)").into(),
                 );
@@ -206,7 +200,7 @@ pub async fn upload_logo(
                 .await
                 .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
 
-            if !validate_image_content_type(&ct) {
+            if !validate_image_content_type(&ct) || !validate_image_magic(&data) {
                 return Err(AppError::unprocessable("logo must be JPEG, PNG, WebP, or GIF").into());
             }
             if data.len() > MAX_LOGO_BYTES {

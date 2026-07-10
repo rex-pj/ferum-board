@@ -54,6 +54,24 @@ impl AuthUser {
             || self.category_permissions.values().any(|p| p.contains(key))
     }
 
+    /// Returns `None` if the user holds `key` globally (no filtering needed — they
+    /// may see/act on every category), or `Some(ids)` listing exactly the categories
+    /// where they hold `key` via a category-scoped role. Used to scope list queries
+    /// (e.g. the report queue) so a category-scoped moderator cannot see or act on
+    /// content outside their assigned categories.
+    pub fn permitted_category_ids(&self, key: &str) -> Option<Vec<Uuid>> {
+        if self.has_perm(key) {
+            return None;
+        }
+        Some(
+            self.category_permissions
+                .iter()
+                .filter(|(_, perms)| perms.contains(key))
+                .map(|(cat_id, _)| *cat_id)
+                .collect(),
+        )
+    }
+
     pub fn meets_trust(&self, required: TrustLevel) -> bool {
         self.trust_level >= required
     }

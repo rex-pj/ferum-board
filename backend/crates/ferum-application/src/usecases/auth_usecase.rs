@@ -80,6 +80,17 @@ impl AuthUseCase {
 
     #[tracing::instrument(skip_all)]
     pub async fn register(&self, cmd: RegisterCmd) -> Result<User, AppError> {
+        if let Some(site_config) = &self.site_config {
+            let registration_open = site_config
+                .get("registration_open")
+                .await?
+                .map(|v| v == "true")
+                .unwrap_or(true);
+            if !registration_open {
+                return Err(AppError::forbidden("registration_closed"));
+            }
+        }
+
         if !crate::validators::validate_username(&cmd.username) {
             return Err(AppError::unprocessable(
                 "Username must be 3–30 chars, alphanumeric/underscore/hyphen",
@@ -175,6 +186,28 @@ impl AuthUseCase {
         Ok(())
     }
 
+    /// Re-sends the verification email. Always returns `Ok(())` regardless of
+    /// whether the address exists or is already verified — same enumeration-safe
+    /// shape as `forgot_password` — so a caller can't probe which emails are
+    /// registered. Rate limiting against spamming a real inbox happens at the
+    /// HTTP layer (auth rate limit), not here.
+    #[tracing::instrument(skip_all)]
+    pub async fn resend_verification_email(&self, email: &str) -> Result<(), AppError> {
+        if let Some(user) = self.users.find_by_email(&email.to_lowercase()).await? {
+            if !user.is_email_verified {
+                let token = self.tokens.mint_email_token(user.id, "email_verification")?;
+                self.jobs
+                    .enqueue(ForumJob::SendEmailVerification {
+                        user_id: user.id,
+                        email: user.email,
+                        token,
+                    })
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
     // ─── Login ────────────────────────────────────────────────────────────────
 
     #[tracing::instrument(skip_all)]
@@ -186,6 +219,7 @@ impl AuthUseCase {
                 .hasher
                 .verify(&cmd.password, "$2b$12$invalidhashpaddinginvalidhashpa")
                 .await;
+            tracing::warn!(email = %cmd.email.to_lowercase(), "login failed: unknown email");
             return Err(AppError::Unauthorized);
         }
         let mut user = user_opt.unwrap();
@@ -195,6 +229,7 @@ impl AuthUseCase {
                 .hasher
                 .verify(&cmd.password, "$2b$12$invalidhashpaddinginvalidhashpa")
                 .await;
+            tracing::warn!(user_id = %user.id, "login blocked: account locked");
             return Err(AppError::forbidden("account_locked"));
         }
 
@@ -203,6 +238,7 @@ impl AuthUseCase {
 
         if user.password_hash.is_none() || !valid {
             let count = self.users.increment_failed_login(user.id).await?;
+            tracing::warn!(user_id = %user.id, failed_attempts = count, "login failed: invalid password");
             let lockout_attempts = match &self.site_config {
                 Some(sc) => get_config_i32(sc.as_ref(), "account_lockout_attempts", DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS).await,
                 None => DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS,
@@ -215,6 +251,7 @@ impl AuthUseCase {
                 let until = Utc::now()
                     + chrono::Duration::minutes(lockout_minutes as i64);
                 self.users.lock_until(user.id, until).await?;
+                tracing::warn!(user_id = %user.id, failed_attempts = count, locked_until = %until, "account locked due to repeated failed logins");
                 return Err(AppError::forbidden("account_locked"));
             }
             return Err(AppError::Unauthorized);

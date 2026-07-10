@@ -12,6 +12,18 @@
 
   <h1 class="h4 fw-bold mb-3">Account Settings</h1>
 
+  {% if account_status and account_status.is_banned %}
+  <div class="alert alert-danger d-flex gap-2 mb-4" role="alert">
+    <i class="fa-solid fa-ban flex-shrink-0 mt-1"></i>
+    <div>
+      <strong>Your account is suspended{% if account_status.banned_until %} until {{ account_status.banned_until | date(format="%b %d, %Y") }}{% endif %}.</strong>
+      {% if account_status.ban_reason %}
+        <div class="mt-1">Reason: {{ account_status.ban_reason }}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <ul class="nav nav-tabs mb-4">
     <li class="nav-item">
       <button type="button" class="nav-link" :class="active==='profile'?'active':''" @click="setTab('profile')">
@@ -26,6 +38,11 @@
     <li class="nav-item">
       <button type="button" class="nav-link" :class="active==='preferences'?'active':''" @click="setTab('preferences')">
         <i class="fa-solid fa-sliders fa-sm me-1"></i>Preferences
+      </button>
+    </li>
+    <li class="nav-item">
+      <button type="button" class="nav-link" :class="active==='reports'?'active':''" @click="setTab('reports')">
+        <i class="fa-solid fa-flag fa-sm me-1"></i>My Reports
       </button>
     </li>
   </ul>
@@ -322,6 +339,39 @@
     </div>
   </div>
 
+  {# ── Reports tab ── #}
+  <div x-show="active==='reports'" x-data="myReportsState()" x-init="load()">
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h6 fw-semibold mb-3">Reports You've Filed</h2>
+        <p class="small text-muted mb-3" x-show="!loading && reports.length===0">
+          You haven't reported anything yet.
+        </p>
+        <div class="small text-muted" x-show="loading">Loading…</div>
+        <div class="list-group list-group-flush" x-show="!loading && reports.length>0">
+          <template x-for="r in reports" :key="r.id">
+            <div class="list-group-item px-0">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div class="min-w-0">
+                  <div class="small text-muted" x-text="new Date(r.created_at).toLocaleDateString()"></div>
+                  <div class="text-truncate" x-text="r.reason"></div>
+                  <div class="small text-muted mt-1" x-show="r.moderator_notes">
+                    <i class="fa-solid fa-comment-dots fa-xs me-1"></i><span x-text="r.moderator_notes"></span>
+                  </div>
+                </div>
+                <span class="badge flex-shrink-0"
+                      :class="{'bg-warning-subtle text-warning-emphasis': r.status==='pending',
+                               'bg-success-subtle text-success-emphasis': r.status==='resolved',
+                               'bg-secondary-subtle text-secondary-emphasis': r.status==='dismissed'}"
+                      x-text="r.status"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
@@ -345,6 +395,14 @@
       <div class="fr-panel-stat-row">
         <span><i class="fa-solid fa-star fa-xs text-warning me-1" aria-hidden="true"></i>Trust score</span>
         <span class="fr-panel-stat-val">{{ profile.trust_score }}<span class="fw-normal text-muted" style="font-size:.75em"> / 100</span></span>
+      </div>
+      {% endif %}
+      {% if account_status and account_status.warn_count > 0 %}
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-triangle-exclamation fa-xs text-warning me-1" aria-hidden="true"></i>Warnings</span>
+        <a href="/notifications" class="fr-panel-stat-val text-decoration-none" title="See warning details in your notifications">
+          {{ account_status.warn_count }}
+        </a>
       </div>
       {% endif %}
       <div class="fr-panel-stat-row">

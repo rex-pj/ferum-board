@@ -56,6 +56,20 @@ pub async fn home(
     let total_categories = nav_categories.len()
         + nav_categories.iter().map(|c| c.children.len()).sum::<usize>();
 
+    // ThreadUseCase::list_feed silently personalizes this feed to the viewer's
+    // watched categories (minus muted) when any are set — surfaced here purely
+    // for template transparency ("why does my feed look different?"), not to
+    // drive the filtering itself.
+    let watched_count = match auth_user.as_ref() {
+        Some(u) => state
+            .user_repo
+            .get_watched_categories(u.id)
+            .await
+            .map(|v| v.len())
+            .unwrap_or(0),
+        None => 0,
+    };
+
     let mut extra_parts: Vec<String> = Vec::new();
     if let Some(tag) = &q.tag {
         extra_parts.push(format!("&tag={tag}"));
@@ -76,6 +90,7 @@ pub async fn home(
     ctx.insert("total_categories", &total_categories);
     ctx.insert("active_tag", &q.tag);
     ctx.insert("active_sort", &sort_str);
+    ctx.insert("watched_count", &watched_count);
 
     render_with_theme(&state, &active, "home.html", &ctx).await
 }
@@ -101,6 +116,7 @@ pub async fn forum_index(
                 thread_count: item.thread_count,
                 view_policy: view_policy_str(&item.category.view_policy),
                 post_policy: post_policy_str(&item.category.post_policy),
+                can_post: false,
             };
             let children: Vec<CategoryCtx> = item
                 .subcategories
@@ -115,6 +131,7 @@ pub async fn forum_index(
                     thread_count: s.thread_count,
                     view_policy: view_policy_str(&s.category.view_policy),
                     post_policy: post_policy_str(&s.category.post_policy),
+                    can_post: false,
                 })
                 .collect();
             let recent_threads = map_threads(&item.recent_threads);
@@ -187,6 +204,7 @@ pub async fn category(
             thread_count: 0,
             view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
+            can_post: false,
         })
         .collect();
 
@@ -204,6 +222,7 @@ pub async fn category(
             thread_count: 0,
             view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
+            can_post: false,
         })
         .collect();
 
@@ -217,6 +236,7 @@ pub async fn category(
         thread_count: total,
         view_policy: view_policy_str(&category.view_policy),
         post_policy: post_policy_str(&category.post_policy),
+        can_post: PermissionChecker::user_can_create_post(auth_user.as_ref(), &category),
     };
 
     let extra_params = if sort_str != "latest" {
@@ -236,6 +256,7 @@ pub async fn category(
             thread_count: 0,
             view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
+            can_post: false,
         })
     });
 
@@ -313,6 +334,7 @@ pub async fn thread_detail(
             .unwrap_or_else(|| author_username.clone()),
         author_avatar_url: thread.author_avatar_url.clone(),
         thumbnail_url: thread.thumbnail_url.clone(),
+        excerpt: thread.excerpt.clone(),
         category_id: category.id.to_string(),
         category_slug: category.slug.clone(),
         category_name: category.name.clone(),
@@ -322,6 +344,7 @@ pub async fn thread_detail(
         is_pinned: thread.is_pinned,
         is_solved: thread.is_solved,
         is_locked,
+        best_answer_id: thread.best_answer_id.map(|id| id.to_string()),
         created_at: thread.created_at.to_rfc3339(),
         can_pin: has_in_cat(perm::THREAD_PIN),
         can_lock: has_in_cat(perm::THREAD_LOCK),
@@ -341,8 +364,10 @@ pub async fn thread_detail(
         posts: posts
             .iter()
             .map(|p| {
-                let post_author = p.author_username.clone().unwrap_or_default();
                 let is_own = auth_user.as_ref().is_some_and(|u| u.id == p.author_id);
+                let is_deleted = p.is_deleted;
+                let is_pending = p.status.is_pending();
+                let post_author = p.author_username.clone().unwrap_or_default();
                 PostCtx {
                     id: p.id.to_string(),
                     author_username: post_author.clone(),
@@ -352,8 +377,9 @@ pub async fn thread_detail(
                         .unwrap_or_else(|| post_author.clone()),
                     author_avatar_url: p.author_avatar_url.clone(),
                     author_trust_level: p.author_role.clone().unwrap_or_default(),
-                    content_md: p.content_md.clone(),
-                    content_html: p.content_html.clone(),
+                    // Deleted content is never sent to the client, regardless of viewer.
+                    content_md: if is_deleted { String::new() } else { p.content_md.clone() },
+                    content_html: if is_deleted { String::new() } else { p.content_html.clone() },
                     created_at: p.created_at.to_rfc3339(),
                     edited_at: p.edited_at.map(|d| d.to_rfc3339()),
                     is_best_answer: Some(p.id) == thread.best_answer_id,
@@ -370,9 +396,11 @@ pub async fn thread_detail(
                             funny: for_kind(ReactionKind::Funny),
                         }
                     },
+                    is_deleted,
+                    is_pending,
                     is_own,
-                    can_edit: post_can_edit(auth_user.as_ref(), p.author_id, thread.category_id),
-                    can_delete: post_can_delete(auth_user.as_ref(), p.author_id, thread.category_id),
+                    can_edit: !is_deleted && post_can_edit(auth_user.as_ref(), p.author_id, thread.category_id),
+                    can_delete: !is_deleted && post_can_delete(auth_user.as_ref(), p.author_id, thread.category_id),
                 }
             })
             .collect(),
@@ -399,12 +427,14 @@ pub async fn thread_detail(
             thread_count: 0,
             view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
+            can_post: false,
         })
         .collect();
 
-    let can_post = auth_user.as_ref().map_or(false, |u| {
-        PermissionChecker::can_create_post(u, &category).is_ok()
-    });
+    let can_post = PermissionChecker::user_can_create_post(auth_user.as_ref(), &category);
+    let can_upload_attachment = auth_user
+        .as_ref()
+        .is_some_and(|u| PermissionChecker::can_upload(u).is_ok());
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
@@ -416,6 +446,25 @@ pub async fn thread_detail(
     ctx.insert("move_categories", &move_categories);
     ctx.insert("active_category_slug", &category.slug);
     ctx.insert("can_post", &can_post);
+    ctx.insert("can_upload_attachment", &can_upload_attachment);
 
     render_with_theme(&state, &active, "forum/thread.html", &ctx).await
+}
+
+/// GET /go/post/{id} — resolves a post to the thread page + pagination offset
+/// it actually renders on, so notification links and the best-answer badge
+/// don't always dump the visitor on page 1 to hunt for the post themselves.
+#[tracing::instrument(skip(state, auth_user), fields(post_id = %post_id))]
+pub async fn goto_post(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(post_id): Path<uuid::Uuid>,
+) -> Result<impl IntoResponse, PageError> {
+    let (slug, page) = state.post.locate_post(auth_user.as_ref(), post_id).await?;
+    let target = if page > 1 {
+        format!("/forum/t/{slug}?page={page}#post-{post_id}")
+    } else {
+        format!("/forum/t/{slug}#post-{post_id}")
+    };
+    Ok(axum::response::Redirect::to(&target))
 }

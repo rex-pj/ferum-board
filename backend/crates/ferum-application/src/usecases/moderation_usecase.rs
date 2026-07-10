@@ -94,6 +94,18 @@ impl ModerationUseCase {
         self.reports.create(actor.id, cmd.post_id, cmd.thread_id, cmd.reason).await
     }
 
+    /// Reports the caller filed themselves — lets a reporter track resolution
+    /// status without needing `moderation.view_reports`.
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
+    pub async fn list_my_reports(
+        &self,
+        actor: &AuthUser,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Report>, u64), AppError> {
+        self.reports.list_by_reporter(actor.id, page, per_page.min(50)).await
+    }
+
     // ─── Report queue (moderator) ─────────────────────────────────────────────
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
@@ -105,8 +117,16 @@ impl ModerationUseCase {
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
         PermissionChecker::can_view_reports(actor, None)?;
+        let cat_ids = actor.permitted_category_ids(ferum_domain::models::role::perm::MOD_VIEW_REPORTS);
         self.reports
-            .list_all(Some(ReportStatus::Pending), target_type, None, page, per_page.min(50))
+            .list_all(
+                Some(ReportStatus::Pending),
+                target_type,
+                None,
+                cat_ids.as_deref(),
+                page,
+                per_page.min(50),
+            )
             .await
     }
 
@@ -115,7 +135,7 @@ impl ModerationUseCase {
         actor: &AuthUser,
     ) -> Result<ReportStatusCounts, AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.reports.count_by_status().await
+        self.reports.count_by_status(None).await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
@@ -129,7 +149,7 @@ impl ModerationUseCase {
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.reports.list_all(status, target_type, q, page, per_page.min(50)).await
+        self.reports.list_all(status, target_type, q, None, page, per_page.min(50)).await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
@@ -144,7 +164,7 @@ impl ModerationUseCase {
     ) -> Result<(Vec<ReportWithContext>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
         let (reports, total) =
-            self.reports.list_all(status, target_type, q, page, per_page.min(50)).await?;
+            self.reports.list_all(status, target_type, q, None, page, per_page.min(50)).await?;
 
         let reporter_ids: Vec<Uuid> = reports
             .iter()
@@ -186,6 +206,22 @@ impl ModerationUseCase {
         Ok((enriched, total))
     }
 
+    /// Resolves the category a report's target (post or thread) belongs to.
+    /// Returns `None` if the target was deleted/unreachable — callers must not
+    /// fall back to a category-scoped permission check in that case, since there
+    /// is no category left to verify scope against.
+    async fn report_category_id(&self, report: &Report) -> Result<Option<Uuid>, AppError> {
+        if let Some(thread_id) = report.thread_id {
+            return Ok(self.threads.find_by_id(thread_id).await?.map(|t| t.category_id));
+        }
+        if let Some(post_id) = report.post_id {
+            if let Some(post) = self.posts.find_by_id(post_id).await? {
+                return Ok(self.threads.find_by_id(post.thread_id).await?.map(|t| t.category_id));
+            }
+        }
+        Ok(None)
+    }
+
     #[tracing::instrument(skip(self, actor, moderator_notes), fields(user_id = %actor.id, report_id = %report_id))]
     pub async fn resolve_report(
         &self,
@@ -194,9 +230,27 @@ impl ModerationUseCase {
         status: ReportStatus,
         moderator_notes: Option<String>,
     ) -> Result<(), AppError> {
+        // Upfront gate: actor must hold MOD_RESOLVE somewhere (global or any
+        // category) before we even reveal whether report_id exists.
         PermissionChecker::can_resolve_report(actor, None)?;
 
         let report = self.reports.find_by_id(report_id).await?.or_not_found()?;
+
+        // Now authorize against the report's ACTUAL category, not just "any
+        // category this moderator happens to have MOD_RESOLVE in" — otherwise a
+        // moderator scoped to category A could resolve/dismiss reports filed in
+        // category B.
+        match self.report_category_id(&report).await? {
+            Some(category_id) => PermissionChecker::can_resolve_report(actor, Some(category_id))?,
+            None => {
+                // Target deleted/unreachable — no category to scope against, so
+                // only a globally-permitted moderator/admin may act.
+                if !actor.has_perm(ferum_domain::models::role::perm::MOD_RESOLVE) {
+                    return Err(AppError::forbidden("permission_denied"));
+                }
+            }
+        }
+
         if report.status != ferum_domain::models::report::ReportStatus::Pending {
             return Err(AppError::unprocessable("Report has already been resolved"));
         }
@@ -351,7 +405,10 @@ impl ModerationUseCase {
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
         PermissionChecker::can_view_reports(actor, None)?;
-        self.reports.list_all(status, target_type, q, page, per_page.min(50)).await
+        let cat_ids = actor.permitted_category_ids(ferum_domain::models::role::perm::MOD_VIEW_REPORTS);
+        self.reports
+            .list_all(status, target_type, q, cat_ids.as_deref(), page, per_page.min(50))
+            .await
     }
 
     /// Enriched version of `list_reports` — same `can_view_reports` permission so moderators
@@ -367,8 +424,11 @@ impl ModerationUseCase {
         per_page: u64,
     ) -> Result<(Vec<ReportWithContext>, u64), AppError> {
         PermissionChecker::can_view_reports(actor, None)?;
-        let (reports, total) =
-            self.reports.list_all(status, target_type, q, page, per_page.min(50)).await?;
+        let cat_ids = actor.permitted_category_ids(ferum_domain::models::role::perm::MOD_VIEW_REPORTS);
+        let (reports, total) = self
+            .reports
+            .list_all(status, target_type, q, cat_ids.as_deref(), page, per_page.min(50))
+            .await?;
 
         let reporter_ids: Vec<Uuid> = reports
             .iter()
@@ -415,7 +475,8 @@ impl ModerationUseCase {
         actor: &AuthUser,
     ) -> Result<ReportStatusCounts, AppError> {
         PermissionChecker::can_view_reports(actor, None)?;
-        self.reports.count_by_status().await
+        let cat_ids = actor.permitted_category_ids(ferum_domain::models::role::perm::MOD_VIEW_REPORTS);
+        self.reports.count_by_status(cat_ids.as_deref()).await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
@@ -431,8 +492,23 @@ impl ModerationUseCase {
         per_page: u64,
     ) -> Result<(Vec<AuditLog>, u64), AppError> {
         PermissionChecker::can_view_reports(actor, None)?;
+
+        // Audit entries record `target_type`/`target_id` (user, report, thread…),
+        // and several actions — a permanent ban, a config change — belong to no
+        // category at all, so there is no category to scope a moderator against.
+        // Rather than leak every admin and peer-moderator action to anyone holding
+        // `moderation.view_reports` in a single category, a non-admin only ever
+        // sees entries they themselves authored. The caller-supplied `actor_id`
+        // filter is overridden, not merely defaulted — otherwise passing another
+        // user's id would walk straight around the restriction.
+        let effective_actor_id = if actor.has_perm(ferum_domain::models::role::perm::ADMIN_USERS) {
+            actor_id
+        } else {
+            Some(actor.id)
+        };
+
         self.audit_log_repo
-            .list(actor_id, target_type, action_contains, created_from, created_to, page, per_page.min(50))
+            .list(effective_actor_id, target_type, action_contains, created_from, created_to, page, per_page.min(50))
             .await
     }
 

@@ -175,6 +175,7 @@
     return {
       loading: true, webhooks: [], saving: false, webhookError: '',
       form: { url: '', secret: '', events: [] },
+      editingId: null, editForm: { url: '', secret: '', events: [] }, editError: '',
       allEvents: ['post.created','post.deleted','thread.created','thread.deleted','thread.locked','thread.moved','reaction.added','reaction.removed','best_answer.marked','mention.added','user.banned','user.warned','user.followed'],
       init: function () {
         var self = this;
@@ -222,6 +223,46 @@
           if (r.ok) { self.form = { url: '', secret: '', events: [] }; self.load(); }
           else return r.json().then(function (d) { self.webhookError = (d.error && d.error.message) || 'Failed to add webhook.'; });
         }).catch(function () { self.webhookError = 'Network error.'; })
+          .finally(function () { self.saving = false; });
+      },
+      testWebhook: function (wh) {
+        var self = this;
+        wh.testing = true;
+        wh.testResult = null;
+        FerumApi.admin.testWebhook(wh.id).then(function (r) { return r.json(); })
+          .then(function (d) {
+            var result = (d && d.data) || {};
+            wh.testResult = {
+              success: !!result.success,
+              message: result.success
+                ? 'Test delivered — HTTP ' + result.status_code
+                : 'Test failed: ' + (result.error || ('HTTP ' + result.status_code)),
+            };
+          })
+          .catch(function () { wh.testResult = { success: false, message: 'Network error.' }; })
+          .finally(function () { wh.testing = false; self.webhooks = self.webhooks.slice(); });
+      },
+      startEdit: function (wh) {
+        this.editingId = wh.id;
+        this.editError = '';
+        this.editForm = { url: wh.url, secret: '', events: wh.events.slice() };
+      },
+      cancelEdit: function () {
+        this.editingId = null;
+      },
+      saveEdit: function () {
+        var self = this;
+        self.editError = '';
+        if (!self.editForm.url) { self.editError = 'URL is required.'; return; }
+        if (!/^https?:\/\//.test(self.editForm.url)) { self.editError = 'URL must start with http:// or https://'; return; }
+        if (!self.editForm.events.length) { self.editError = 'Select at least one event.'; return; }
+        self.saving = true;
+        var body = { url: self.editForm.url, events: self.editForm.events.slice() };
+        if (self.editForm.secret) body.secret = self.editForm.secret;
+        FerumApi.admin.updateWebhook(self.editingId, body).then(function (r) {
+          if (r.ok) { self.editingId = null; self.load(); }
+          else return r.json().then(function (d) { self.editError = (d.error && d.error.message) || 'Failed to save changes.'; });
+        }).catch(function () { self.editError = 'Network error.'; })
           .finally(function () { self.saving = false; });
       },
     };

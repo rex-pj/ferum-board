@@ -165,7 +165,18 @@ pub async fn login_post(
             )
                 .into_response()
         }
-        Err(_) => Redirect::to("/login?error=invalid").into_response(),
+        Err(e) => {
+            // Distinguish "wrong password" from cases where the password was
+            // actually correct but something else blocks login — the no-JS
+            // fallback previously collapsed all of these into the same
+            // "Invalid email or password" message, which is simply false for
+            // a locked/unverified/banned account.
+            let code = match &e {
+                ferum_application::shared::AppError::Forbidden(c) => c.as_str(),
+                _ => "invalid",
+            };
+            Redirect::to(&format!("/login?error={code}")).into_response()
+        }
     }
 }
 

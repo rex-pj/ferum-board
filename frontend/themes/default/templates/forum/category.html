@@ -37,9 +37,16 @@
 
     <div class="d-flex gap-2 flex-wrap align-items-center flex-shrink-0">
       {% if current_user %}
+        {% if category.can_post %}
         <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-plus me-1"></i>New Thread
         </a>
+        {% else %}
+        <button type="button" class="btn btn-primary btn-sm" disabled
+                title="{% if category.post_policy == 'closed' %}This category is closed to new posts.{% elif category.post_policy == 'trusted' %}You need a higher trust level to post here.{% elif category.post_policy == 'staff_only' %}Only staff can post here.{% else %}You don't have permission to post here.{% endif %}">
+          <i class="fa-solid fa-plus me-1"></i>New Thread
+        </button>
+        {% endif %}
         <div x-data="categoryWatchState('{{ category.id }}')" class="d-flex gap-1">
           <button @click="toggleWatch()"
                   :class="watched ? 'btn-primary' : 'btn-outline-secondary'"
@@ -101,7 +108,7 @@
       {% else %}
         No threads in this category yet.
       {% endif %}
-      {% if current_user %}
+      {% if current_user and category.can_post %}
         <div class="mt-2">
           <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm">
             Start the first thread
@@ -145,8 +152,8 @@
     </div>
   </div>
 
-  {# New Thread CTA — persistent in sidebar for logged-in users #}
-  {% if current_user %}
+  {# New Thread CTA — persistent in sidebar for logged-in users allowed to post here #}
+  {% if current_user and category.can_post %}
   <div class="fr-panel">
     <div class="fr-panel-body">
       <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm w-100">

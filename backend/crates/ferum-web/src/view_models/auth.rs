@@ -37,6 +37,12 @@ pub struct ForgotPasswordRequest {
 }
 
 #[derive(Debug, Deserialize, Validate)]
+pub struct ResendVerificationRequest {
+    #[validate(email)]
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
 pub struct ResetPasswordRequest {
     #[validate(
         length(min = 8, message = "Password must be at least 8 characters"),

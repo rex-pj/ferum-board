@@ -4,10 +4,45 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::reports;
+use crate::entities::{posts, reports, threads};
 use ferum_application::shared::AppError;
 use ferum_domain::models::report::{Report, ReportStatus};
 use ferum_domain::repositories::report_repository::{ReportRepository, ReportStatusCounts};
+
+/// Restricts `query` to reports whose target (directly via `thread_id`, or
+/// indirectly via `post_id` -> the post's thread) belongs to one of `category_ids`.
+/// Built as two `IN (subquery)` conditions OR'd together since `reports` has no
+/// direct FK to `categories` — it links through either `threads` or `posts`.
+fn scope_to_categories(
+    query: sea_orm::Select<reports::Entity>,
+    category_ids: &[Uuid],
+) -> sea_orm::Select<reports::Entity> {
+    let thread_ids_in_categories = sea_orm::sea_query::Query::select()
+        .column(threads::Column::Id)
+        .from(threads::Entity)
+        .and_where(threads::Column::CategoryId.is_in(category_ids.to_vec()))
+        .to_owned();
+
+    let post_ids_in_categories = sea_orm::sea_query::Query::select()
+        .column(posts::Column::Id)
+        .from(posts::Entity)
+        .and_where(
+            posts::Column::ThreadId.in_subquery(
+                sea_orm::sea_query::Query::select()
+                    .column(threads::Column::Id)
+                    .from(threads::Entity)
+                    .and_where(threads::Column::CategoryId.is_in(category_ids.to_vec()))
+                    .to_owned(),
+            ),
+        )
+        .to_owned();
+
+    query.filter(
+        Condition::any()
+            .add(reports::Column::ThreadId.in_subquery(thread_ids_in_categories))
+            .add(reports::Column::PostId.in_subquery(post_ids_in_categories)),
+    )
+}
 
 pub struct PgReportRepository {
     db: DatabaseConnection,
@@ -48,17 +83,21 @@ impl ReportRepository for PgReportRepository {
             .map(entity_to_domain))
     }
 
-    async fn count_by_status(&self) -> Result<ReportStatusCounts, AppError> {
+    async fn count_by_status<'a>(
+        &self,
+        category_ids: Option<&'a [Uuid]>,
+    ) -> Result<ReportStatusCounts, AppError> {
+        let base = |status: reports::ReportStatus| {
+            let mut q = reports::Entity::find().filter(reports::Column::Status.eq(status));
+            if let Some(cats) = category_ids {
+                q = scope_to_categories(q, cats);
+            }
+            q
+        };
         let (pending, resolved, dismissed) = tokio::try_join!(
-            reports::Entity::find()
-                .filter(reports::Column::Status.eq(reports::ReportStatus::Pending))
-                .count(&self.db),
-            reports::Entity::find()
-                .filter(reports::Column::Status.eq(reports::ReportStatus::Resolved))
-                .count(&self.db),
-            reports::Entity::find()
-                .filter(reports::Column::Status.eq(reports::ReportStatus::Dismissed))
-                .count(&self.db),
+            base(reports::ReportStatus::Pending).count(&self.db),
+            base(reports::ReportStatus::Resolved).count(&self.db),
+            base(reports::ReportStatus::Dismissed).count(&self.db),
         )?;
         Ok(ReportStatusCounts { pending, resolved, dismissed })
     }
@@ -68,11 +107,16 @@ impl ReportRepository for PgReportRepository {
         status: Option<ReportStatus>,
         target_type: Option<&'a str>,
         q: Option<&'a str>,
+        category_ids: Option<&'a [Uuid]>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
         let offset = page.saturating_sub(1) * per_page;
         let mut query = reports::Entity::find();
+
+        if let Some(cats) = category_ids {
+            query = scope_to_categories(query, cats);
+        }
 
         if let Some(s) = status {
             let entity_status = match s {
@@ -101,6 +145,26 @@ impl ReportRepository for PgReportRepository {
             query.clone().count(&self.db),
             query
                 .order_by_asc(reports::Column::CreatedAt)
+                .limit(per_page)
+                .offset(offset)
+                .all(&self.db),
+        )?;
+        Ok((rows.into_iter().map(entity_to_domain).collect(), total))
+    }
+
+    async fn list_by_reporter(
+        &self,
+        reporter_id: Uuid,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<Report>, u64), AppError> {
+        let offset = page.saturating_sub(1) * per_page;
+        let query = reports::Entity::find().filter(reports::Column::ReporterId.eq(reporter_id));
+
+        let (total, rows) = tokio::try_join!(
+            query.clone().count(&self.db),
+            query
+                .order_by_desc(reports::Column::CreatedAt)
                 .limit(per_page)
                 .offset(offset)
                 .all(&self.db),

@@ -23,13 +23,19 @@ pub async fn log(
     let page = q.page.unwrap_or(1).max(1);
     let per_page = 30u64;
 
+    // `list_audit_log` pins a non-admin's view to their own entries, so an actor
+    // filter is meaningless for them — every row already has them as the actor.
+    // Drop the parameter here too, or the page would render a filter chip and
+    // paginate with an `actor_id` the use case is going to ignore anyway.
+    let can_filter_by_actor = auth_user.has_perm(ferum_domain::models::role::perm::ADMIN_USERS);
+
     let action_query  = q.q.clone().unwrap_or_default();
-    let actor_filter  = q.actor_id.clone().unwrap_or_default();
+    let actor_filter  = if can_filter_by_actor { q.actor_id.clone().unwrap_or_default() } else { String::new() };
     let target_filter = q.target_type.clone().unwrap_or_default();
     let date_from_str = q.date_from.clone().unwrap_or_default();
     let date_to_str   = q.date_to.clone().unwrap_or_default();
 
-    let actor_uuid    = parse_opt_uuid(q.actor_id.as_deref());
+    let actor_uuid    = if can_filter_by_actor { parse_opt_uuid(q.actor_id.as_deref()) } else { None };
     let target_param  = if target_filter.is_empty() { None } else { Some(target_filter.as_str()) };
     let action_param  = if action_query.is_empty()  { None } else { Some(action_query.as_str()) };
 
@@ -164,6 +170,7 @@ pub async fn log(
     ctx.insert("entries", &entries);
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("search_query", &action_query);
+    ctx.insert("can_filter_by_actor", &can_filter_by_actor);
     ctx.insert("actor_id_filter", &actor_filter);
     ctx.insert("actor_label", &actor_label);
     ctx.insert("target_type_filter", &target_filter);

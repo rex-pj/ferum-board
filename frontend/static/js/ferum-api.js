@@ -64,6 +64,9 @@
       forgotPassword: function (email) {
         return post('/api/auth/password-resets', { email: email });
       },
+      resendVerification: function (email) {
+        return post('/api/auth/verify-email/resend', { email: email });
+      },
       resetPassword: function (token, password) {
         return patch('/api/auth/password-resets/' + token, { new_password: password });
       },
@@ -154,6 +157,12 @@
       },
     },
 
+    reports: {
+      mine: function (page) {
+        return get('/api/reports/mine?page=' + (page || 1));
+      },
+    },
+
     notifications: {
       markRead: function (id) {
         return patch('/api/notifications/' + id + '/read');
@@ -199,6 +208,12 @@
       },
       toggleWebhook: function (id, isActive) {
         return patch('/api/admin/webhooks/' + id, { is_active: isActive });
+      },
+      updateWebhook: function (id, data) {
+        return patch('/api/admin/webhooks/' + id, data);
+      },
+      testWebhook: function (id) {
+        return post('/api/admin/webhooks/' + id + '/test', {});
       },
       deleteWebhook: function (id) {
         return del('/api/admin/webhooks/' + id);
@@ -259,6 +274,24 @@
     categories: {
       list: function () {
         return get('/api/categories');
+      },
+    },
+
+    // ── Plugin-facing helpers ────────────────────────────────────────────
+    // Available to any plugin UI-slot script once ferum-api.js has loaded
+    // (it's always injected before plugin bundles — see base.html). Callers
+    // still get a raw fetch() Response back, same as every other FerumApi
+    // method, so existing .ok / .json() handling works unmodified.
+    plugins: {
+      // POST /api/plugins/:slug/rpc/:action — the generic inbound entry point
+      // for a Script-tier plugin's own mini-API (e.g. chatbox send/get message).
+      rpc: function (slug, action, payload) {
+        return post('/api/plugins/' + encodeURIComponent(slug) + '/rpc/' + encodeURIComponent(action), payload || {});
+      },
+      // POST /api/plugins/:slug/media — multipart upload into the plugin's own
+      // CAS namespace; requires granted_capabilities.media on the plugin.
+      uploadMedia: function (slug, formData) {
+        return postForm('/api/plugins/' + encodeURIComponent(slug) + '/media', formData);
       },
     },
 

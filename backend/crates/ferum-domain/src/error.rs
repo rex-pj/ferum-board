@@ -81,8 +81,8 @@ impl IntoResponse for AppError {
             _ => {}
         }
         let message = match &self {
-            AppError::Forbidden(c) => format!("Access denied: {}", c),
-            AppError::Conflict(c) => format!("Conflict: {}", c),
+            AppError::Forbidden(c) => human_message(c),
+            AppError::Conflict(c) => human_message(c),
             AppError::UnprocessableEntity(m) => m.clone(),
             AppError::TooManyRequests(retry) => {
                 format!("Too many requests. Please try again in {} seconds.", retry)
@@ -101,6 +101,54 @@ impl IntoResponse for AppError {
         }
         res
     }
+}
+
+/// Maps a machine error code (used by `Forbidden`/`Conflict`) to a sentence a
+/// user can act on. Falls back to a space-separated rendering of the code for
+/// anything not yet catalogued here, so new codes never crash — they just
+/// read a bit raw until added below.
+fn human_message(code: &str) -> String {
+    let message = match code {
+        "trust_level_insufficient" => {
+            "Your account needs a higher trust level to do this. Keep participating to level up."
+        }
+        "category_closed" => "This category is closed to new posts.",
+        "permission_denied" => "You don't have permission to do that.",
+        "not_author" => "You can only do that with your own content.",
+        "edit_window_expired" => "The 24-hour edit window for this has passed.",
+        "thread_locked" => "This thread is locked.",
+        "account_suspended" => "Your account has been suspended.",
+        "account_locked" => "Your account is temporarily locked due to failed login attempts. Try again later.",
+        "email_not_verified" => "Please verify your email address before continuing.",
+        "no_password_set" => "This account has no password set yet.",
+        "incorrect_current_password" => "Your current password is incorrect.",
+        "tag_create_permission_required" => "You don't have permission to create new tags.",
+        "invalid_or_expired_token" => "This link is invalid or has expired.",
+        "token_already_used" => "This link has already been used.",
+        "cannot_modify_system_role_permissions" => "Built-in role permissions can't be modified.",
+        "cannot_grant_permissions_you_lack" => "You can't grant a permission you don't have yourself.",
+        "cannot_remove_last_admin" => "You can't remove the last administrator.",
+        "cannot_delete_system_role" => "Built-in roles can't be deleted.",
+        "cannot_react_to_own_post" => "You can't react to your own post.",
+        "registration_closed" => "Registration is currently closed.",
+        "upload_quota_exceeded" => {
+            "You've reached your daily upload limit. Try again tomorrow."
+        }
+        "media_capability_not_granted" => "This plugin isn't allowed to upload media.",
+        "rpc_action_not_granted" => "This plugin action isn't available.",
+        "sql_not_allowed" => "This database operation isn't allowed.",
+        "role_already_assigned" => "That role is already assigned to this user.",
+        "reaction_exists" => "You've already reacted with this.",
+        "registration_conflict" => "An account with this email or username already exists.",
+        "slug_taken" => "That name is already in use.",
+        "category_has_subcategories" => "This category still has subcategories and can't be deleted.",
+        "category_has_threads" => "This category still has threads and can't be deleted.",
+        "email_taken" => "This email is already registered.",
+        "username_taken" => "This username is already taken.",
+        "plugin_already_installed" => "This plugin is already installed.",
+        other => return other.replace('_', " "),
+    };
+    message.to_string()
 }
 
 // ─── Option convenience ───────────────────────────────────────────────────────

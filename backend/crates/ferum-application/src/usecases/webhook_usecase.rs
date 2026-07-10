@@ -3,6 +3,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::permission::PermissionChecker;
+use crate::ports::{HostResolver, WebhookDeliveryService, WebhookTestResult};
 use crate::shared::{AppError, OptionExt};
 use ferum_domain::models::webhook::Webhook;
 use ferum_domain::repositories::webhook_repository::{
@@ -12,11 +13,56 @@ use ferum_domain::AuthUser;
 
 pub struct WebhookUseCase {
     pub webhooks: Arc<dyn WebhookRepository>,
+    pub delivery: Arc<dyn WebhookDeliveryService>,
+    pub resolver: Arc<dyn HostResolver>,
 }
 
 impl WebhookUseCase {
-    pub fn new(webhooks: Arc<dyn WebhookRepository>) -> Self {
-        Self { webhooks }
+    pub fn new(
+        webhooks: Arc<dyn WebhookRepository>,
+        delivery: Arc<dyn WebhookDeliveryService>,
+        resolver: Arc<dyn HostResolver>,
+    ) -> Self {
+        Self { webhooks, delivery, resolver }
+    }
+
+    /// Rejects a URL whose hostname *resolves* to a private address. Runs only
+    /// on the admin-facing create/update path, where the point is to tell the
+    /// admin their URL is unusable rather than to let them save a row that will
+    /// be silently refused at dispatch. Delivery is still guarded independently
+    /// by `build_pinned_client`, so a DNS record flipped after this check is
+    /// caught there — this cannot and does not try to be the security boundary.
+    ///
+    /// A resolution failure is *not* fatal: a host that is merely unreachable
+    /// right now (or resolves only from the network the app deploys into) is a
+    /// legitimate webhook target, and failing closed here would make webhooks
+    /// unconfigurable in those environments.
+    async fn assert_hostname_not_private(&self, url: &str) -> Result<(), AppError> {
+        let Some(host) = url
+            .parse::<http::Uri>()
+            .ok()
+            .and_then(|u| u.host().map(|h| ferum_domain::net::normalize_host(h).to_string()))
+        else {
+            return Ok(()); // already rejected by validate_webhook_url
+        };
+        // IP literals were settled synchronously; there is nothing to resolve.
+        if host.parse::<std::net::IpAddr>().is_ok() {
+            return Ok(());
+        }
+        match self.resolver.resolve(&host).await {
+            Ok(addrs) => {
+                if let Some(bad) = addrs.into_iter().find(|ip| ferum_domain::net::is_private_ip(*ip)) {
+                    return Err(AppError::unprocessable(&format!(
+                        "Webhook host {host} resolves to {bad}, a private or reserved address"
+                    )));
+                }
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!(%host, error = %e, "webhook host DNS check skipped: resolution failed");
+                Ok(())
+            }
+        }
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
@@ -35,6 +81,7 @@ impl WebhookUseCase {
     ) -> Result<Webhook, AppError> {
         PermissionChecker::can_manage_webhooks(actor)?;
         validate_webhook_url(&url)?;
+        self.assert_hostname_not_private(&url).await?;
         if events.is_empty() {
             return Err(AppError::unprocessable(
                 "At least one event type is required",
@@ -64,6 +111,7 @@ impl WebhookUseCase {
         PermissionChecker::can_manage_webhooks(actor)?;
         if let Some(ref u) = url {
             validate_webhook_url(u)?;
+            self.assert_hostname_not_private(u).await?;
         }
         self.webhooks
             .find_by_id(id)
@@ -82,6 +130,16 @@ impl WebhookUseCase {
             .await
     }
 
+    /// Sends a one-off test POST to the webhook's URL — for the admin "Test"
+    /// button, so they can confirm the endpoint is reachable and correctly
+    /// verifies the signature before relying on it for real events.
+    #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, webhook_id = %id))]
+    pub async fn test_delivery(&self, actor: &AuthUser, id: Uuid) -> Result<WebhookTestResult, AppError> {
+        PermissionChecker::can_manage_webhooks(actor)?;
+        let webhook = self.webhooks.find_by_id(id).await?.or_not_found()?;
+        self.delivery.send_test(&webhook.url, webhook.secret.as_deref()).await
+    }
+
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, webhook_id = %id))]
     pub async fn delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         PermissionChecker::can_manage_webhooks(actor)?;
@@ -93,10 +151,15 @@ impl WebhookUseCase {
     }
 }
 
-/// Validate a webhook URL: must be http/https and must not target private or
-/// loopback addresses (SSRF prevention). Also used by plugin-manifest-declared
-/// webhooks — any code path that inserts a row into the webhooks table must
-/// call this first.
+/// Syntactic validation of a webhook URL: must be http/https, must have a host,
+/// and must not be an IP *literal* in a private/loopback/link-local range. Also
+/// used by plugin-manifest-declared webhooks — any code path that inserts a row
+/// into the webhooks table must call this first.
+///
+/// Deliberately synchronous, so it cannot see that `evil.example.com` resolves
+/// to 127.0.0.1. `WebhookUseCase::assert_hostname_not_private` adds that DNS
+/// check on the admin path; the actual SSRF boundary is the DNS pinning in
+/// `build_pinned_client` at dispatch time.
 pub(crate) fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppError> {
     use crate::shared::AppError;
 
@@ -120,7 +183,7 @@ pub(crate) fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppEr
         .host()
         .ok_or_else(|| AppError::unprocessable("Webhook URL must have a host"))?;
 
-    if is_private_host(host) {
+    if ferum_domain::net::is_private_host_literal(host) {
         return Err(AppError::unprocessable(
             "Webhook URL must not target private, loopback, or link-local addresses",
         ));
@@ -129,35 +192,54 @@ pub(crate) fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppEr
     Ok(())
 }
 
-fn is_private_host(host: &str) -> bool {
-    // Reject loopback / localhost
-    if host == "localhost" || host == "::1" {
-        return true;
+#[cfg(test)]
+mod validate_webhook_url_tests {
+    use super::validate_webhook_url;
+
+    #[test]
+    fn rejects_ipv4_private_and_loopback_literals() {
+        for u in [
+            "http://127.0.0.1/hook",
+            "http://10.0.0.5/hook",
+            "http://192.168.1.1/hook",
+            "http://169.254.169.254/latest/meta-data",
+            "http://localhost:8080/hook",
+        ] {
+            assert!(validate_webhook_url(u).is_err(), "{u} must be rejected");
+        }
     }
-    // Parse as IPv4
-    if let Ok(addr) = host.parse::<std::net::Ipv4Addr>() {
-        return addr.is_loopback()
-            || addr.is_private()
-            || addr.is_link_local()
-            || addr.is_broadcast()
-            || addr.is_unspecified()
-            // 169.254.0.0/16 (cloud metadata) — already covered by is_link_local
-            || matches!(addr.octets(), [100, 64..=127, _, _]); // CGNAT
+
+    /// `http::Uri::host()` keeps the brackets on IPv6 literals, so a check that
+    /// compares the raw host against "::1" never fires. Regression guard.
+    #[test]
+    fn rejects_bracketed_ipv6_private_and_loopback_literals() {
+        for u in [
+            "http://[::1]/hook",
+            "http://[::1]:9000/hook",
+            "http://[fd00::1]/hook",
+            "http://[fe80::1]/hook",
+            "http://[::ffff:127.0.0.1]/hook",
+        ] {
+            assert!(validate_webhook_url(u).is_err(), "{u} must be rejected");
+        }
     }
-    // Parse as IPv6
-    if let Ok(addr) = host.parse::<std::net::Ipv6Addr>() {
-        let segments = addr.segments();
-        // Loopback (::1), unspecified (::)
-        let basic = addr.is_loopback() || addr.is_unspecified();
-        // Unique Local Addresses: fc00::/7 (first segment high byte 0xfc or 0xfd)
-        let is_ula = (segments[0] & 0xfe00) == 0xfc00;
-        // Link-Local: fe80::/10
-        let is_link_local = (segments[0] & 0xffc0) == 0xfe80;
-        // IPv4-mapped private addresses (::ffff:192.168.x.x etc.)
-        let is_v4_mapped_private = addr.to_ipv4_mapped().map_or(false, |v4| {
-            v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified()
-        });
-        return basic || is_ula || is_link_local || is_v4_mapped_private;
+
+    #[test]
+    fn rejects_non_http_schemes_and_empty() {
+        assert!(validate_webhook_url("").is_err());
+        assert!(validate_webhook_url("ftp://example.com/x").is_err());
+        assert!(validate_webhook_url("file:///etc/passwd").is_err());
     }
-    false
+
+    #[test]
+    fn accepts_public_hosts() {
+        for u in [
+            "https://hooks.slack.com/services/abc",
+            "http://example.com:8080/hook",
+            "https://8.8.8.8/hook",
+            "https://[2606:4700::1111]/hook",
+        ] {
+            assert!(validate_webhook_url(u).is_ok(), "{u} must be accepted");
+        }
+    }
 }

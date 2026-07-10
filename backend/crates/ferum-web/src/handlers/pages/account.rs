@@ -6,7 +6,7 @@ use crate::app_state::AppState;
 use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{
-    NotificationCtx, PaginationCtx, TagCtx, ThreadCtx, UserProfileCtx,
+    AccountStatusCtx, NotificationCtx, PaginationCtx, TagCtx, ThreadCtx, UserProfileCtx,
 };
 use ferum_domain::models::ThreadStatus;
 
@@ -40,32 +40,35 @@ pub async fn account(
         }
     };
 
-    let profile = state
-        .user_repo
-        .find_by_id(auth_user.id)
-        .await
-        .ok()
-        .flatten()
-        .map(|u| UserProfileCtx {
-            id: u.id.to_string(),
-            username: u.username.clone(),
-            display_name: u.display_name.clone().unwrap_or_else(|| u.username.clone()),
-            avatar_url: u.avatar_url.clone(),
-            cover_url: u.cover_url.clone(),
-            bio: u.bio.clone(),
-            website: u.website.clone(),
-            trust_level: format!("{:?}", u.trust_level).to_lowercase(),
-            trust_score: Some(u.trust_score),
-            primary_role_slug,
-            primary_role_name,
-            primary_role_color,
-            post_count: u.post_count,
-            follower_count: 0,
-            following_count: 0,
-            created_at: u.created_at.to_rfc3339(),
-            threads: vec![],
-            thread_pagination: None,
-        });
+    let user_row = state.user_repo.find_by_id(auth_user.id).await.ok().flatten();
+
+    let profile = user_row.as_ref().map(|u| UserProfileCtx {
+        id: u.id.to_string(),
+        username: u.username.clone(),
+        display_name: u.display_name.clone().unwrap_or_else(|| u.username.clone()),
+        avatar_url: u.avatar_url.clone(),
+        cover_url: u.cover_url.clone(),
+        bio: u.bio.clone(),
+        website: u.website.clone(),
+        trust_level: format!("{:?}", u.trust_level).to_lowercase(),
+        trust_score: Some(u.trust_score),
+        primary_role_slug,
+        primary_role_name,
+        primary_role_color,
+        post_count: u.post_count,
+        follower_count: 0,
+        following_count: 0,
+        created_at: u.created_at.to_rfc3339(),
+        threads: vec![],
+        thread_pagination: None,
+    });
+
+    let account_status = user_row.as_ref().map(|u| AccountStatusCtx {
+        is_banned: u.is_banned,
+        ban_reason: u.ban_reason.clone(),
+        banned_until: u.banned_until.map(|t| t.to_rfc3339()),
+        warn_count: u.warn_count,
+    });
 
     let current_user = user_ctx(&state, Some(&auth_user)).await;
     let active = active_theme(&state).await;
@@ -76,6 +79,7 @@ pub async fn account(
     ctx.insert("active_theme", &active);
     ctx.insert("preferences", &prefs);
     ctx.insert("profile", &profile);
+    ctx.insert("account_status", &account_status);
     ctx.insert("nav_categories", &nav_categories);
 
     render_with_theme(&state, &active, "app/account.html", &ctx)

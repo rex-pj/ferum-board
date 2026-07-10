@@ -36,10 +36,20 @@
         {% endif %}
         {% if error == "verify_failed" %}
         <div class="alert alert-danger" role="alert" id="login-server-error">That verification link is invalid or has expired.</div>
+        {% elif error == "account_locked" %}
+        <div class="alert alert-danger" role="alert" id="login-server-error">Your account is temporarily locked due to failed login attempts. Try again later.</div>
+        {% elif error == "email_not_verified" %}
+        <div class="alert alert-danger" role="alert" id="login-server-error">Please verify your email address before continuing.</div>
+        {% elif error == "account_suspended" %}
+        <div class="alert alert-danger" role="alert" id="login-server-error">Your account has been suspended.</div>
         {% elif error %}
         <div class="alert alert-danger" role="alert" id="login-server-error">Invalid email or password.</div>
         {% endif %}
         {{ m::feedback_alert(id="login-error") }}
+        <button type="button" id="resend-verification-btn" class="btn btn-link btn-sm px-0 mb-2 d-none">
+          Resend verification email
+        </button>
+        {{ m::feedback_alert(id="resend-feedback") }}
 
         {{ m::btn_submit(text="Sign in", btn_id="submit-btn", spinner_id="btn-spinner") }}
       </form>

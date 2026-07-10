@@ -5,7 +5,7 @@ use axum::Router;
 
 use crate::app_state::AppState;
 use crate::handlers::{api, pages};
-use crate::handlers::moderation::api::reports::create_report;
+use crate::handlers::moderation::api::reports::{create_report, list_my_reports};
 use crate::middleware::rate_limit::{rate_limit_middleware, RateLimitConfig};
 
 pub fn public_page_routes() -> Router<AppState> {
@@ -14,6 +14,9 @@ pub fn public_page_routes() -> Router<AppState> {
         .route("/forum", get(pages::forum::forum_index))
         .route("/forum/{slug}", get(pages::forum::category))
         .route("/forum/t/{slug}", get(pages::forum::thread_detail))
+        .route("/go/post/{id}", get(pages::forum::goto_post))
+        .route("/sitemap.xml", get(pages::sitemap::sitemap_xml))
+        .route("/robots.txt", get(pages::sitemap::robots_txt))
         .route("/u/{username}", get(pages::profile::user_profile))
         .route("/search", get(pages::search::search))
         .route("/setup", get(pages::setup::setup))
@@ -37,6 +40,7 @@ pub fn auth_routes(state: AppState) -> Router<AppState> {
         .route("/sessions/refresh", post(api::auth::refresh))
         .route("/registrations", post(api::auth::register))
         .route("/verify-email/{token}", get(api::auth::verify_email))
+        .route("/verify-email/resend", post(api::auth::resend_verification))
         .route("/password-resets", post(api::auth::forgot_password))
         .route("/password-resets/{token}", patch(api::auth::reset_password))
         .layer(axum::middleware::from_fn_with_state(
@@ -87,6 +91,7 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .layer(axum::Extension(write_rl.clone()));
 
     let post_routes = Router::new()
+        .route("/attachments", post(api::posts::upload_attachment))
         .route(
             "/{id}",
             patch(api::posts::update_post).delete(api::posts::delete_post),
@@ -134,6 +139,7 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
 
     let report_routes = Router::new()
         .route("/", post(create_report))
+        .route("/mine", get(list_my_reports))
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .layer(axum::Extension(write_rl.clone()));
 

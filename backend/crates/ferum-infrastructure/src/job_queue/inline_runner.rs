@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::network_utils::build_pinned_client;
 use ferum_application::ports::{EmailService, ForumJob, JobQueue, StorageService};
 use ferum_application::shared::AppError;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
@@ -102,34 +103,10 @@ async fn dispatch_webhook(
     payload: serde_json::Value,
     webhooks: &Arc<dyn WebhookRepository>,
 ) -> Result<(), AppError> {
-    // Resolve + validate the IP at dispatch time (an attacker can flip the DNS record
-    // to a private IP between webhook creation and dispatch), then pin the actual
-    // request to the exact address(es) just validated. Letting reqwest re-resolve the
-    // hostname itself would reopen the DNS-rebinding window this check exists to close.
-    let host = match url::Url::parse(&url).ok().and_then(|u| u.host_str().map(str::to_string)) {
-        Some(h) => h,
-        None => {
-            tracing::warn!("webhook {} blocked at dispatch: unparseable URL", url);
-            webhooks.record_failure(webhook_id).await.ok();
-            return Ok(());
-        }
-    };
-    let addrs = match crate::network_utils::resolve_and_validate(&url).await {
-        Ok(addrs) => addrs,
+    let pinned_client = match build_pinned_client(&url).await {
+        Ok(c) => c,
         Err(reason) => {
             tracing::warn!("webhook {} blocked at dispatch: {}", url, reason);
-            webhooks.record_failure(webhook_id).await.ok();
-            return Ok(());
-        }
-    };
-    let pinned_client = match reqwest::Client::builder()
-        .resolve_to_addrs(&host, &addrs)
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!("webhook {} failed to build pinned client: {}", url, e);
             webhooks.record_failure(webhook_id).await.ok();
             return Ok(());
         }

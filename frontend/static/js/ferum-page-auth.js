@@ -5,6 +5,30 @@
   var loginForm = document.getElementById('login-form');
   if (loginForm) {
     Ferum.initPasswordToggle('password');
+
+    var resendBtn = document.getElementById('resend-verification-btn');
+    var resendFeedback = document.getElementById('resend-feedback');
+    if (resendBtn) {
+      resendBtn.addEventListener('click', async function () {
+        var email = document.getElementById('email').value;
+        resendBtn.disabled = true;
+        try {
+          await FerumApi.auth.resendVerification(email);
+          if (resendFeedback) {
+            resendFeedback.textContent = 'If that address needs verifying, a new link is on its way.';
+            resendFeedback.classList.remove('d-none', 'alert-danger');
+            resendFeedback.classList.add('alert-success');
+          }
+        } catch (_) {
+          if (resendFeedback) {
+            resendFeedback.textContent = 'Network error. Please try again.';
+            resendFeedback.classList.remove('d-none');
+          }
+          resendBtn.disabled = false;
+        }
+      });
+    }
+
     loginForm.addEventListener('submit', async function (e) {
       e.preventDefault();
       var btn = document.getElementById('submit-btn');
@@ -14,6 +38,8 @@
       // fallback) so a fresh client-side attempt doesn't stack two messages.
       var serverErrorEl = document.getElementById('login-server-error');
       if (serverErrorEl) serverErrorEl.classList.add('d-none');
+      if (resendBtn) resendBtn.classList.add('d-none');
+      if (resendFeedback) resendFeedback.classList.add('d-none');
 
       btn.disabled = true;
       spinner.classList.remove('d-none');
@@ -38,6 +64,10 @@
           var body = await res.json().catch(function () { return {}; });
           errorEl.textContent = (body.error && body.error.message) || 'Invalid email or password.';
           errorEl.classList.remove('d-none');
+          if (resendBtn && body.error && body.error.code === 'email_not_verified') {
+            resendBtn.classList.remove('d-none');
+            resendBtn.disabled = false;
+          }
           btn.disabled = false;
           spinner.classList.add('d-none');
         }

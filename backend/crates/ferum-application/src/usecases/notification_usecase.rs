@@ -32,16 +32,19 @@ impl NotificationUseCase {
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn unread_count(&self, actor: &AuthUser) -> Result<u64, AppError> {
+        PermissionChecker::require_not_banned(actor)?;
         self.notifications.unread_count(actor.id).await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, notification_id = %id))]
     pub async fn mark_read(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
+        PermissionChecker::require_not_banned(actor)?;
         self.notifications.mark_read(id, actor.id).await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn mark_all_read(&self, actor: &AuthUser) -> Result<(), AppError> {
+        PermissionChecker::require_not_banned(actor)?;
         self.notifications.mark_all_read(actor.id).await
     }
 }

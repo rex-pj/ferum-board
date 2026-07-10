@@ -43,6 +43,26 @@ pub async fn create_report(
     ))
 }
 
+/// GET /api/reports/mine — reports the caller filed themselves, so they can
+/// track resolution status without needing moderator access.
+pub async fn list_my_reports(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Query(q): Query<ReportListQuery>,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.require_auth()?;
+    let page = q.page.unwrap_or(1).max(1);
+    let per_page = q.per_page.unwrap_or(20).min(100);
+
+    let (reports, total) = state.moderation.list_my_reports(actor, page, per_page).await?;
+    Ok(Json(PagedResponse::new(
+        reports.into_iter().map(ReportResponse::from).collect(),
+        total,
+        page,
+        per_page,
+    )))
+}
+
 pub async fn list_reports(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,

@@ -62,6 +62,24 @@ fn entity_to_domain(m: posts::Model) -> Post {
     }
 }
 
+/// Published posts are always visible; a Pending post is visible only to its
+/// own author (so they can see their own post awaiting review). Soft-deleted
+/// posts are never filtered here — the caller renders them as tombstones so
+/// reply chains keep their context. Shared by `list_by_thread` and
+/// `position_in_thread` so the two can never define "visible" differently.
+fn visibility_condition(viewer_id: Option<Uuid>) -> Condition {
+    let mut condition =
+        Condition::any().add(posts::Column::Status.eq(posts::PostStatus::Published));
+    if let Some(viewer) = viewer_id {
+        condition = condition.add(
+            Condition::all()
+                .add(posts::Column::Status.eq(posts::PostStatus::Pending))
+                .add(posts::Column::AuthorId.eq(viewer)),
+        );
+    }
+    condition
+}
+
 #[async_trait]
 impl PostRepository for PgPostRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Post>, AppError> {
@@ -74,15 +92,16 @@ impl PostRepository for PgPostRepository {
     async fn list_by_thread(
         &self,
         thread_id: Uuid,
+        viewer_id: Option<Uuid>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
         let t0 = std::time::Instant::now();
         let offset = (page.saturating_sub(1)) * per_page;
+
         let query = posts::Entity::find()
             .filter(posts::Column::ThreadId.eq(thread_id))
-            .filter(posts::Column::IsDeleted.eq(false))
-            .filter(posts::Column::Status.eq(posts::PostStatus::Published))
+            .filter(visibility_condition(viewer_id))
             .order_by_asc(posts::Column::CreatedAt);
 
         let (total, rows) = tokio::try_join!(
@@ -148,6 +167,17 @@ impl PostRepository for PgPostRepository {
         Ok(())
     }
 
+    async fn content_md_by_thread(&self, thread_id: Uuid) -> Result<Vec<String>, AppError> {
+        Ok(posts::Entity::find()
+            .select_only()
+            .column(posts::Column::ContentMd)
+            .filter(posts::Column::ThreadId.eq(thread_id))
+            .filter(posts::Column::IsDeleted.eq(false))
+            .into_tuple::<String>()
+            .all(&self.db)
+            .await?)
+    }
+
     async fn set_status(&self, id: Uuid, status: PostStatus) -> Result<(), AppError> {
         let model = posts::Entity::find_by_id(id)
             .one(&self.db)
@@ -203,9 +233,10 @@ impl PostRepository for PgPostRepository {
         Ok((posts, total))
     }
 
-    async fn list_pending(
+    async fn list_pending<'a>(
         &self,
         category_id: Option<Uuid>,
+        allowed_category_ids: Option<&'a [Uuid]>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
@@ -218,10 +249,17 @@ impl PostRepository for PgPostRepository {
             .filter(posts::Column::IsDeleted.eq(false))
             .order_by_asc(posts::Column::CreatedAt);
 
+        // Both filters live on `threads`, so join once if either is present —
+        // joining per-filter would duplicate the join and the result rows.
+        if category_id.is_some() || allowed_category_ids.is_some() {
+            query = query.join(JoinType::InnerJoin, posts::Relation::Thread.def());
+        }
         if let Some(cat_id) = category_id {
-            query = query
-                .join(JoinType::InnerJoin, posts::Relation::Thread.def())
-                .filter(threads::Column::CategoryId.eq(cat_id));
+            query = query.filter(threads::Column::CategoryId.eq(cat_id));
+        }
+        if let Some(allowed) = allowed_category_ids {
+            // An empty allowlist must match nothing (`IN ()` → `1 = 2`), not everything.
+            query = query.filter(threads::Column::CategoryId.is_in(allowed.to_vec()));
         }
 
         let (total, rows) = tokio::try_join!(
@@ -229,5 +267,46 @@ impl PostRepository for PgPostRepository {
             query.limit(per_page).offset(offset).all(&self.db),
         )?;
         Ok((rows.into_iter().map(entity_to_domain).collect(), total))
+    }
+
+    async fn position_in_thread(
+        &self,
+        thread_id: Uuid,
+        post_id: Uuid,
+        viewer_id: Option<Uuid>,
+    ) -> Result<Option<u64>, AppError> {
+        let Some(target) = posts::Entity::find_by_id(post_id).one(&self.db).await? else {
+            return Ok(None);
+        };
+        if target.thread_id != thread_id {
+            return Ok(None);
+        }
+
+        // Confirm the target itself is visible to this viewer under the same
+        // rule list_by_thread uses, otherwise "position" is meaningless.
+        let is_visible = target.status == posts::PostStatus::Published
+            || (target.status == posts::PostStatus::Pending && viewer_id == Some(target.author_id));
+        if !is_visible {
+            return Ok(None);
+        }
+
+        // Count visible posts strictly before the target in list_by_thread's
+        // ordering (CreatedAt asc, tie-broken by Id so it matches a stable sort).
+        let before_condition = Condition::any()
+            .add(posts::Column::CreatedAt.lt(target.created_at))
+            .add(
+                Condition::all()
+                    .add(posts::Column::CreatedAt.eq(target.created_at))
+                    .add(posts::Column::Id.lt(target.id)),
+            );
+
+        let count = posts::Entity::find()
+            .filter(posts::Column::ThreadId.eq(thread_id))
+            .filter(visibility_condition(viewer_id))
+            .filter(before_condition)
+            .count(&self.db)
+            .await?;
+
+        Ok(Some(count))
     }
 }

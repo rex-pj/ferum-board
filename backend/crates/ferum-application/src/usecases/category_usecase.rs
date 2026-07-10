@@ -4,7 +4,9 @@ use std::sync::Arc;
 use crate::constants::DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY;
 use crate::dto::{ForumIndexItem, SubcategoryCount};
 use crate::permission::PermissionChecker;
+use crate::ports::CacheService;
 use crate::shared::{AppError, OptionExt};
+use crate::usecases::user_usecase::preferences_cache_key;
 use ferum_domain::models::category::Category;
 use ferum_domain::models::thread::Thread;
 use ferum_domain::repositories::category_repository::CategoryRepository;
@@ -23,6 +25,8 @@ pub struct CategoryUseCase {
     pub tags: Arc<dyn TagRepository>,
     pub site_config: Option<Arc<dyn SiteConfigRepository>>,
     users: Arc<dyn UserRepository>,
+    /// Invalidated on watch/mute — mutates the same preferences row UserUseCase caches.
+    cache: Option<Arc<dyn CacheService>>,
 }
 
 impl CategoryUseCase {
@@ -38,12 +42,24 @@ impl CategoryUseCase {
             tags,
             site_config: None,
             users,
+            cache: None,
         }
     }
 
     pub fn with_site_config(mut self, site_config: Arc<dyn SiteConfigRepository>) -> Self {
         self.site_config = Some(site_config);
         self
+    }
+
+    pub fn with_cache(mut self, cache: Arc<dyn CacheService>) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
+    async fn invalidate_preferences_cache(&self, user_id: Uuid) {
+        if let Some(cache) = &self.cache {
+            let _ = cache.del(&preferences_cache_key(user_id)).await;
+        }
     }
 
     /// Public listing — filters by view_policy relative to the calling user.
@@ -216,22 +232,30 @@ impl CategoryUseCase {
 
     pub async fn watch_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
         self.require_visible(actor, category_id).await?;
-        self.users.watch_category(actor.id, category_id).await
+        self.users.watch_category(actor.id, category_id).await?;
+        self.invalidate_preferences_cache(actor.id).await;
+        Ok(())
     }
 
     pub async fn unwatch_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
         self.require_visible(actor, category_id).await?;
-        self.users.unwatch_category(actor.id, category_id).await
+        self.users.unwatch_category(actor.id, category_id).await?;
+        self.invalidate_preferences_cache(actor.id).await;
+        Ok(())
     }
 
     pub async fn mute_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
         self.require_visible(actor, category_id).await?;
-        self.users.mute_category(actor.id, category_id).await
+        self.users.mute_category(actor.id, category_id).await?;
+        self.invalidate_preferences_cache(actor.id).await;
+        Ok(())
     }
 
     pub async fn unmute_category(&self, actor: &AuthUser, category_id: Uuid) -> Result<(), AppError> {
         self.require_visible(actor, category_id).await?;
-        self.users.unmute_category(actor.id, category_id).await
+        self.users.unmute_category(actor.id, category_id).await?;
+        self.invalidate_preferences_cache(actor.id).await;
+        Ok(())
     }
 
     pub async fn get_watch_status(

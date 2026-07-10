@@ -15,11 +15,15 @@
     "post-id": postId = "",
     reactions = "{}",
     "user-id": userId = "",
+    "is-own": isOwnAttr = "",
   } = $props<{
     "post-id"?: string;
     reactions?: string;
     "user-id"?: string;
+    "is-own"?: string;
   }>();
+
+  const isOwn = isOwnAttr === "true";
 
   type ReactionMap = Record<string, { count: number; reacted: boolean }>;
 
@@ -54,7 +58,12 @@
 
   async function toggle(kind: string) {
     if (!userId) {
-      window.location.href = "/login";
+      const next = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+      window.location.href = "/login?next=" + next;
+      return;
+    }
+    if (isOwn) {
+      showError("You can't react to your own post.");
       return;
     }
     const item = state[kind];
@@ -80,7 +89,8 @@
     <button
       class="reaction-btn {state[kind].reacted ? 'reacted' : ''}"
       onclick={() => toggle(kind)}
-      title={kind}
+      title={isOwn ? "You can't react to your own post" : kind}
+      disabled={isOwn}
       aria-pressed={state[kind].reacted}
       aria-label="{kind}{state[kind].count > 0 ? ` (${state[kind].count})` : ''}"
     >
@@ -126,6 +136,15 @@
     background: rgba(99, 102, 241, 0.1);
     color: var(--ferum-primary, #6366f1);
     font-weight: 600;
+  }
+  .reaction-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .reaction-btn:disabled:hover {
+    border-color: var(--bs-border-color, #dee2e6);
+    background: transparent;
+    color: var(--bs-secondary-color, #6c757d);
   }
   .count {
     font-size: 0.75rem;

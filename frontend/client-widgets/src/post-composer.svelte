@@ -1,25 +1,31 @@
 <svelte:options customElement={{ tag: "ferum-post-composer", shadow: "none" }} />
 
 <script lang="ts">
-  import { previewMarkdown } from './lib/posts';
+  import { previewMarkdown, uploadAttachment } from './lib/posts';
 
   let {
     'thread-id': threadId = '',
     'parent-id': parentId = '',
     'initial-content': initialContent = '',
     mode = 'reply',
+    'can-upload': canUploadAttr = '',
   } = $props<{
     'thread-id'?: string;
     'parent-id'?: string;
     'initial-content'?: string;
     mode?: string;
+    'can-upload'?: string;
   }>();
+
+  const canUpload = canUploadAttr === 'true';
 
   let content = $state(initialContent);
   let preview = $state('');
   let tab = $state<'write' | 'preview'>('write');
   let error = $state('');
   let textarea: HTMLTextAreaElement | null = $state(null);
+  let fileInput: HTMLInputElement | null = $state(null);
+  let uploading = $state(false);
 
   export function getContent() {
     return content;
@@ -108,6 +114,33 @@
     }, 0);
   }
 
+  function triggerAttach() {
+    fileInput?.click();
+  }
+
+  async function onFileSelected(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+
+    uploading = true;
+    error = '';
+    const result = await uploadAttachment(file);
+    uploading = false;
+
+    if (!result.ok || !result.url) {
+      error = result.error || 'Failed to upload image.';
+      return;
+    }
+
+    const insertPos = textarea ? textarea.selectionStart : content.length;
+    const markdown = `![${file.name}](${result.url})`;
+    const nl = insertPos > 0 && content[insertPos - 1] !== '\n' ? '\n' : '';
+    content = content.slice(0, insertPos) + nl + markdown + '\n' + content.slice(insertPos);
+    setTimeout(() => { textarea?.focus(); }, 0);
+  }
+
   const tools: Array<{ icon: string; title: string; action: () => void } | 'sep'> = [
     { icon: 'fa-solid fa-bold',          title: 'Bold (Ctrl+B)',  action: () => wrap('**', '**', 'bold text') },
     { icon: 'fa-solid fa-italic',        title: 'Italic (Ctrl+I)', action: () => wrap('_', '_', 'italic text') },
@@ -157,6 +190,24 @@
             >{#if tool.icon.startsWith('fa-')}<i class={tool.icon} aria-hidden="true"></i>{:else}{tool.icon}{/if}</button>
           {/if}
         {/each}
+        {#if canUpload}
+          <span class="sep" role="separator"></span>
+          <button
+            type="button"
+            class="tool-btn"
+            title="Attach image"
+            onclick={triggerAttach}
+            disabled={uploading}
+            tabindex="-1"
+          ><i class={uploading ? 'fa-solid fa-spinner fa-spin' : 'fa-regular fa-image'} aria-hidden="true"></i></button>
+          <input
+            bind:this={fileInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            class="visually-hidden-input"
+            onchange={onFileSelected}
+          >
+        {/if}
       </div>
     {/if}
   </div>
@@ -271,6 +322,17 @@
   }
   .tool-btn:active {
     background: var(--bs-border-color, #dee2e6);
+  }
+
+  .visually-hidden-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
   }
 
   .sep {

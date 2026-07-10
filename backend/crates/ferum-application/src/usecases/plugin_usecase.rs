@@ -8,6 +8,7 @@ use crate::permission::PermissionChecker;
 use crate::ports::{ForumJob, JobQueue, PluginLifecycle};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
+use crate::validators::validate_image_magic;
 use ferum_domain::models::plugin::{
     NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginLog, PluginLogQuery,
     PluginStatus, PluginTier, PluginUiSlot,
@@ -398,7 +399,7 @@ impl PluginUseCase {
             return Err(AppError::forbidden("media_capability_not_granted"));
         }
 
-        if !validate_image_content_type(&content_type) {
+        if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
             return Err(AppError::unprocessable(
                 "media must be jpeg, png, webp, or gif",
             ));

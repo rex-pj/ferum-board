@@ -2,21 +2,40 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 
+use std::time::Duration;
+
 use crate::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
 use crate::permission::PermissionChecker;
-use crate::ports::{ForumJob, JobQueue, PasswordHasher};
+use crate::ports::{CacheService, ForumJob, JobQueue, PasswordHasher};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
+use crate::validators::validate_image_magic;
 use ferum_domain::models::user::{User, UserPreferences};
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::user_repository::{UpdateUser, UserRepository};
 use ferum_domain::AuthUser;
+
+/// How long a cached preferences read may be stale after a write on another
+/// request/instance. Kept short, not because correctness demands it (every
+/// write already invalidates its own key) but to bound staleness from any
+/// cache backend inconsistency.
+const PREFERENCES_CACHE_TTL: Duration = Duration::from_secs(300);
+
+/// Shared with CategoryUseCase's watch/mute methods, which mutate the same
+/// underlying preferences row through a different repository call.
+pub(crate) fn preferences_cache_key(user_id: uuid::Uuid) -> String {
+    format!("user:prefs:{user_id}")
+}
 
 pub struct UserUseCase {
     pub users: Arc<dyn UserRepository>,
     pub hasher: Arc<dyn PasswordHasher>,
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub jobs: Arc<dyn JobQueue>,
+    /// Optional — when unset, get_preferences just always hits the DB.
+    /// Exists so every page render (via user_ctx()) can cheaply read the
+    /// viewer's theme/font/layout preferences without a 3-way JOIN per request.
+    pub cache: Option<Arc<dyn CacheService>>,
 }
 
 impl UserUseCase {
@@ -31,7 +50,13 @@ impl UserUseCase {
             hasher,
             stored_files,
             jobs,
+            cache: None,
         }
+    }
+
+    pub fn with_cache(mut self, cache: Arc<dyn CacheService>) -> Self {
+        self.cache = Some(cache);
+        self
     }
 
     #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id))]
@@ -110,7 +135,29 @@ impl UserUseCase {
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn get_preferences(&self, actor: &AuthUser) -> Result<UserPreferences, AppError> {
-        self.users.get_preferences(actor.id).await
+        self.get_preferences_by_id(actor.id).await
+    }
+
+    /// Cached read, keyed by user_id directly — used by `user_ctx()` on every
+    /// page render (there's no `AuthUser` handy there beyond the id) as well
+    /// as by `get_preferences` above.
+    pub async fn get_preferences_by_id(&self, user_id: uuid::Uuid) -> Result<UserPreferences, AppError> {
+        let Some(cache) = &self.cache else {
+            return self.users.get_preferences(user_id).await;
+        };
+
+        let key = preferences_cache_key(user_id);
+        if let Some(cached) = cache.get(&key).await {
+            if let Ok(prefs) = serde_json::from_str::<UserPreferences>(&cached) {
+                return Ok(prefs);
+            }
+        }
+
+        let prefs = self.users.get_preferences(user_id).await?;
+        if let Ok(json) = serde_json::to_string(&prefs) {
+            let _ = cache.set(&key, &json, PREFERENCES_CACHE_TTL).await;
+        }
+        Ok(prefs)
     }
 
     #[tracing::instrument(skip(self, actor, prefs), fields(user_id = %actor.id))]
@@ -121,7 +168,11 @@ impl UserUseCase {
     ) -> Result<(), AppError> {
         let mut p = prefs;
         p.user_id = actor.id;
-        self.users.upsert_preferences(p).await
+        self.users.upsert_preferences(p).await?;
+        if let Some(cache) = &self.cache {
+            let _ = cache.del(&preferences_cache_key(actor.id)).await;
+        }
+        Ok(())
     }
 
     // ─── Avatar — CAS upload flow ─────────────────────────────────────────────
@@ -135,7 +186,7 @@ impl UserUseCase {
     ) -> Result<String, AppError> {
         PermissionChecker::can_upload_profile_image(actor)?;
 
-        if !validate_image_content_type(&content_type) {
+        if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
             return Err(AppError::unprocessable(
                 "avatar must be jpeg, png, webp, or gif",
             ));
@@ -188,7 +239,7 @@ impl UserUseCase {
     ) -> Result<String, AppError> {
         PermissionChecker::can_upload_profile_image(actor)?;
 
-        if !validate_image_content_type(&content_type) {
+        if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
             return Err(AppError::unprocessable(
                 "cover must be jpeg, png, webp, or gif",
             ));

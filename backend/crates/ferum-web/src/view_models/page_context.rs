@@ -21,6 +21,10 @@ pub struct SiteCtx {
     pub primary_color: Option<String>,
     /// "R, G, B" string for Bootstrap's --bs-primary-rgb variable.
     pub primary_color_rgb: Option<String>,
+    /// Absolute site origin, no trailing slash — lets templates build absolute
+    /// URLs (required for og:image/twitter:image; relative URLs there are
+    /// silently ignored by most social crawlers).
+    pub url: String,
 }
 
 /// Current authenticated user context for templates.
@@ -33,12 +37,21 @@ pub struct CurrentUserCtx {
     pub is_admin: bool,
     pub is_moderator: bool,
     pub unread_count: u64,
+    /// "light" | "dark" | "auto". Set from the DB-backed preference by
+    /// `user_ctx()` so base.html can render the right `data-bs-theme` in the
+    /// initial HTML — not left to client-side localStorage alone, which only
+    /// carries over within the same browser/device.
+    pub theme: String,
+    pub font_size: String,
+    pub layout: String,
 }
 
 impl CurrentUserCtx {
     pub fn from_auth(u: &AuthUser, unread_count: u64) -> Self {
         let is_admin = u.has_perm("admin.users");
-        let is_moderator = u.has_perm("moderation.view_reports") || is_admin;
+        // Mirrors handlers::moderation::require_moderator exactly, so a moderator
+        // scoped to just one category (not global) still sees the Mod nav link.
+        let is_moderator = u.has_perm_any_category("moderation.view_reports") || is_admin;
         Self {
             id: u.id.to_string(),
             username: u.username.clone(),
@@ -50,6 +63,9 @@ impl CurrentUserCtx {
             is_admin,
             is_moderator,
             unread_count,
+            theme: "auto".to_string(),
+            font_size: "medium".to_string(),
+            layout: "comfortable".to_string(),
         }
     }
 }
@@ -137,6 +153,11 @@ pub struct CategoryCtx {
     pub thread_count: u64,
     pub view_policy: String,
     pub post_policy: String,
+    /// Mirrors PermissionChecker::can_create_post for the current viewer.
+    /// Only meaningful where the template offers a "create thread here" action;
+    /// listing-only contexts (search filter, mod queue filter, move-category
+    /// picker) always set this to `false` since it's unused there.
+    pub can_post: bool,
 }
 
 /// Forum index group: a parent category and its subcategories.
@@ -161,6 +182,12 @@ pub struct PostCtx {
     pub edited_at: Option<String>,
     pub is_best_answer: bool,
     pub reactions: ReactionSummaryCtx,
+    /// Soft-deleted — content_md/content_html are blanked server-side; template
+    /// renders a "[deleted]" tombstone instead.
+    pub is_deleted: bool,
+    /// Awaiting moderator approval. Repository only returns another user's
+    /// Pending posts to that user, so this is always the viewer's own post.
+    pub is_pending: bool,
     /// Viewer is the post author.
     pub is_own: bool,
     /// Mirrors PermissionChecker::can_edit_post (edit window enforced server-side).
@@ -200,6 +227,9 @@ pub struct ThreadDetailCtx {
     pub author_display_name: String,
     pub author_avatar_url: Option<String>,
     pub thumbnail_url: Option<String>,
+    /// First ~160 chars of the opening post — used for the Open Graph/Twitter
+    /// Card description, not rendered anywhere in the page body itself.
+    pub excerpt: Option<String>,
     pub category_id: String,
     pub category_slug: String,
     pub category_name: String,
@@ -209,6 +239,9 @@ pub struct ThreadDetailCtx {
     pub is_pinned: bool,
     pub is_solved: bool,
     pub is_locked: bool,
+    /// Drives the "Solved" badge's jump-to-post link — None even when
+    /// is_solved is true if the best answer was later deleted.
+    pub best_answer_id: Option<String>,
     pub created_at: String,
     pub tags: Vec<TagCtx>,
     pub posts: Vec<PostCtx>,
@@ -378,6 +411,18 @@ pub struct UserProfileCtx {
     pub created_at: String,
     pub threads: Vec<ThreadCtx>,
     pub thread_pagination: Option<PaginationCtx>,
+}
+
+/// Account-page-only ban/warn status. Deliberately separate from `UserProfileCtx`
+/// (which is also rendered on the public `/u/:username` page) so a ban reason
+/// is never leaked to other visitors — only the account owner sees this.
+#[derive(Serialize, Clone)]
+pub struct AccountStatusCtx {
+    pub is_banned: bool,
+    pub ban_reason: Option<String>,
+    /// None with is_banned=true means a permanent ban.
+    pub banned_until: Option<String>,
+    pub warn_count: i32,
 }
 
 /// Admin reports list row — enriched with reporter username and thread context.

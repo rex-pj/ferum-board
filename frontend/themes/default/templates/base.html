@@ -1,10 +1,28 @@
+{% set user_theme = current_user.theme | default(value="auto") %}
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="{{ theme_bs_theme | default(value='auto') }}">
+<html lang="en"
+      {% if current_user %}data-prefs-ssr="1"{% endif %}
+      data-bs-theme="{% if user_theme == 'auto' %}{{ theme_bs_theme | default(value='auto') }}{% else %}{{ user_theme }}{% endif %}"
+      {% if current_user and current_user.font_size and current_user.font_size != "medium" %}data-font-size="{{ current_user.font_size }}"{% endif %}
+      {% if current_user and current_user.layout and current_user.layout != "comfortable" %}data-layout="{{ current_user.layout }}"{% endif %}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ site.name }}{% endblock %}</title>
   <meta name="description" content="{% block description %}{{ site.tagline }}{% endblock %}">
+
+  {# Default Open Graph / Twitter Card — pages with richer context (e.g. a
+     thread's title/excerpt/thumbnail) override this block entirely. #}
+  {% block meta_social %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ site.name }}">
+  <meta property="og:title" content="{{ site.name }}">
+  <meta property="og:description" content="{{ site.tagline }}">
+  {% if site.logo_url %}<meta property="og:image" content="{{ site.logo_url }}">{% endif %}
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ site.name }}">
+  <meta name="twitter:description" content="{{ site.tagline }}">
+  {% endblock %}
 
   {# Apply user preferences from localStorage before CSS renders — prevents flash #}
   <script src="/static/js/ferum-preload.js"></script>
@@ -32,6 +50,16 @@
   {% endif %}
 
   {% block head_extra %}{% endblock %}
+
+  {# FerumApi must be defined before any plugin bundle runs — a slot custom
+     element can call FerumApi.plugins.rpc() from connectedCallback(), which
+     fires synchronously during the plugin script's own execution (as soon as
+     customElements.define() runs against an element already in the slot
+     markup), i.e. before the browser would otherwise reach a deferred
+     <script> placed later in the document. Loaded blocking (no defer) here
+     in <head> specifically so it's guaranteed to run first; it only assigns
+     `window.FerumApi` and touches no DOM, so running before <body> exists is safe. #}
+  <script src="/static/js/ferum-api.js?v={{ asset_version() }}"></script>
 
   {# Plugin Web Component bundles — loaded before body so custom elements register
      before the browser parses slot elements in the page body. #}
@@ -117,7 +145,6 @@
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/ferum-utils.js?v={{ asset_version() }}"></script>
   <script src="/static/js/ferum-progress.js?v={{ asset_version() }}"></script>
-  <script src="/static/js/ferum-api.js?v={{ asset_version() }}" defer></script>
   {% block scripts %}{% endblock %}
   <script src="/static/js/alpine.min.js" defer></script>
   <script src="/static/js/ferum-widgets.iife.js?v={{ asset_version() }}" defer></script>

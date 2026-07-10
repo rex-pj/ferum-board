@@ -29,6 +29,7 @@
                    placeholder="Write a clear, specific title">
           </div>
 
+          {% if can_upload_thumbnail %}
           {# Thumbnail upload — staged locally, uploaded after thread is created #}
           <div class="mb-3" x-data="newThreadThumbnail()">
             <label class="form-label">Thumbnail <span class="text-muted small fw-normal">(optional)</span></label>
@@ -83,10 +84,19 @@
                    @change="onFileChange($event)">
             <div x-show="thumbError" x-text="thumbError" class="text-danger small mt-1"></div>
           </div>
+          {% else %}
+          <div class="mb-3">
+            <label class="form-label">Thumbnail <span class="text-muted small fw-normal">(optional)</span></label>
+            <div class="small text-muted border rounded p-2">
+              <i class="fa-solid fa-lock me-1" aria-hidden="true"></i>
+              Reach Member trust level (or get verified) to attach a thumbnail image.
+            </div>
+          </div>
+          {% endif %}
 
           <div class="mb-3">
             <label class="form-label">Content <span class="text-danger">*</span></label>
-            <ferum-post-composer id="composer" thread-id="" mode="new"></ferum-post-composer>
+            <ferum-post-composer id="composer" thread-id="" mode="new" can-upload="{{ can_upload_thumbnail }}"></ferum-post-composer>
             <noscript>
               <textarea class="form-control" id="content" name="content"
                         rows="12" minlength="10" required

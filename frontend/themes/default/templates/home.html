@@ -24,6 +24,12 @@
       </div>
     {% else %}
       <span class="fw-semibold">Latest Discussions</span>
+      {% if watched_count and watched_count > 0 %}
+        <a href="/account#preferences" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none ms-2"
+           style="pointer-events:auto" title="Manage watched categories">
+          <i class="fa-solid fa-eye fa-xs me-1"></i>Personalized to {{ watched_count }} watched categor{% if watched_count == 1 %}y{% else %}ies{% endif %}
+        </a>
+      {% endif %}
     {% endif %}
     {% if current_user %}
       <a href="/new-thread" class="btn btn-primary btn-sm" style="pointer-events:auto">

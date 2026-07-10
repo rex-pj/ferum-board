@@ -93,6 +93,7 @@ pub async fn queue(
             thread_count: 0,
             view_policy: format!("{:?}", c.view_policy).to_lowercase(),
             post_policy: format!("{:?}", c.post_policy).to_lowercase(),
+            can_post: false,
         })
         .collect();
 

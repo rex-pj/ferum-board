@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
-use axum::extract::{Path, State};
+use axum::extract::{Extension, Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use sea_orm::EntityTrait;
 
 use crate::app_state::AppState;
+use crate::middleware::AuthUser;
 use ferum_infrastructure::entities::stored_files;
 
 /// GET /plugins/:slug/assets/*path — serve a plugin UI asset.
@@ -74,28 +75,75 @@ fn content_type_for_path(path: &PathBuf) -> &'static str {
     }
 }
 
+/// CAS namespace for images embedded in post content. Files here are uploaded
+/// before the post that references them exists, so they start life *staged*
+/// (`ref_count == 0`) and are not public until some post embeds them.
+const ATTACHMENT_PREFIX: &str = "post-attachments/";
+
 /// GET /files/:key — serve a file stored in the database.
 /// This endpoint is only reached when DatabaseStorageService is active (no S3).
+///
+/// Staged post attachments are visible only to whoever uploaded them, so the
+/// composer can preview an image before the post is submitted, while an image
+/// that is never posted (or whose post was rejected/deleted) is not reachable
+/// by anyone else — it cannot be used as anonymous file hosting, and it cannot
+/// outlive moderation.
+///
+/// NOTE: this gate lives in the DB-storage path. Under `S3StorageService`,
+/// blobs are served straight from S3/CDN and never reach this handler, so
+/// staging is not enforced there.
 pub async fn serve(
     State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
     Path(key): Path<String>,
 ) -> Response {
     let result = stored_files::Entity::find_by_id(&key).one(&state.db).await;
 
     match result {
-        Ok(Some(file)) => (
-            StatusCode::OK,
-            [
-                (header::CONTENT_TYPE, file.content_type.clone()),
-                (
-                    header::CACHE_CONTROL,
-                    "public, max-age=31536000, immutable".to_string(),
-                ),
-                (header::CONTENT_DISPOSITION, "attachment".to_string()),
-            ],
-            file.data,
-        )
-            .into_response(),
+        Ok(Some(file)) => {
+            let is_staged_attachment =
+                file.key.starts_with(ATTACHMENT_PREFIX) && file.ref_count <= 0;
+
+            if is_staged_attachment {
+                // `uploaded_by_id` is nullable (ON DELETE SET NULL); a staged row
+                // with no owner is reachable by nobody.
+                let is_uploader = match (auth_user.as_ref(), file.uploaded_by_id) {
+                    (Some(u), Some(owner)) => u.id == owner,
+                    _ => false,
+                };
+                if !is_uploader {
+                    return StatusCode::NOT_FOUND.into_response();
+                }
+
+                // Must not land in a shared cache: this response is authorized
+                // per-viewer, unlike every published (ref_count > 0) file, whose
+                // content-addressed key makes it safe to cache forever.
+                return (
+                    StatusCode::OK,
+                    [
+                        (header::CONTENT_TYPE, file.content_type.clone()),
+                        (header::CACHE_CONTROL, "private, no-store".to_string()),
+                        (header::CONTENT_DISPOSITION, "attachment".to_string()),
+                    ],
+                    file.data,
+                )
+                    .into_response();
+            }
+
+            (
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, file.content_type.clone()),
+                    (
+                        header::CACHE_CONTROL,
+                        "public, max-age=31536000, immutable".to_string(),
+                    ),
+                    (header::CONTENT_DISPOSITION, "attachment".to_string()),
+                ],
+                file.data,
+            )
+                .into_response()
+        }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }

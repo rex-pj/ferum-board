@@ -598,9 +598,28 @@
                         <span x-text="wh.failure_count"></span>
                       </span>
                     </template>
+                    <div class="small text-muted mt-1">
+                      <template x-if="wh.last_triggered_at">
+                        <span x-text="'Last fired ' + new Date(wh.last_triggered_at).toLocaleString()"></span>
+                      </template>
+                      <template x-if="!wh.last_triggered_at">
+                        <span>Never fired yet</span>
+                      </template>
+                    </div>
+                    <div class="small mt-1" x-show="wh.testResult" x-cloak
+                         :class="wh.testResult && wh.testResult.success ? 'text-success' : 'text-danger'"
+                         x-text="wh.testResult && wh.testResult.message"></div>
                   </td>
                   <td class="text-end">
                     <div class="d-flex gap-1 justify-content-end">
+                      <button class="btn btn-sm btn-outline-secondary" title="Send a test delivery"
+                              :disabled="wh.testing" @click="testWebhook(wh)">
+                        <i class="fa-solid" :class="wh.testing ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-secondary" title="Edit"
+                              @click="startEdit(wh)">
+                        <i class="fa-solid fa-pen"></i>
+                      </button>
                       <button class="btn btn-sm btn-outline-secondary"
                               :title="wh.is_active ? 'Disable' : 'Enable'"
                               @click="toggleWebhook(wh)">
@@ -676,6 +695,57 @@
         <div x-show="webhookError" x-cloak
              class="alert alert-danger mt-3 mb-0 py-2 small"
              x-text="webhookError"></div>
+      </div>
+    </div>
+
+    {# Edit Webhook modal #}
+    <div class="modal" tabindex="-1" :class="editingId ? 'd-block' : ''" x-show="editingId" x-cloak
+         style="background:rgba(0,0,0,0.5)">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Edit Webhook</h5>
+            <button type="button" class="btn-close" @click="cancelEdit()"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-md-7">
+                <label class="form-label">URL <span class="text-danger">*</span></label>
+                <input type="url" class="form-control" x-model="editForm.url" maxlength="500">
+              </div>
+              <div class="col-md-5">
+                <label class="form-label">
+                  Secret <span class="text-muted fw-normal small">(leave blank to keep current)</span>
+                </label>
+                <input type="text" class="form-control font-monospace" x-model="editForm.secret"
+                       placeholder="Unchanged" maxlength="255">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Events <span class="text-danger">*</span></label>
+                <div class="row g-2">
+                  <template x-for="ev in allEvents" :key="ev">
+                    <div class="col-md-4 col-sm-6">
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox"
+                               :id="'ev-edit-' + ev" :value="ev" x-model="editForm.events">
+                        <label class="form-check-label font-monospace small"
+                               :for="'ev-edit-' + ev" x-text="ev"></label>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <div x-show="editError" x-cloak class="alert alert-danger mt-3 mb-0 py-2 small" x-text="editError"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="cancelEdit()">Cancel</button>
+            <button class="btn btn-primary" :disabled="!editForm.url || editForm.events.length === 0 || saving"
+                    @click="saveEdit()">
+              <i class="fa-solid fa-spinner fa-spin me-1" x-show="saving" x-cloak></i>Save Changes
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 

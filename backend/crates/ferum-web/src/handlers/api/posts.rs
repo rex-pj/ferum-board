@@ -1,4 +1,4 @@
-use axum::extract::{Extension, Path, Query, State};
+use axum::extract::{Extension, Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -110,4 +110,44 @@ pub async fn preview_markdown(
     let html = ferum_application::validators::markdown::render_and_sanitize(&body.content)
         .unwrap_or_default();
     Ok(Json(PreviewMarkdownResponse { html }))
+}
+
+/// POST /api/posts/attachments — F-CTT-03: upload an image to embed in post
+/// content via Markdown. Returns { url }; the composer inserts it at the
+/// cursor as `![](url)` rather than the server tracking it against a post.
+pub async fn upload_attachment(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    mut multipart: Multipart,
+) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.require_auth()?;
+
+    let mut file_bytes: Option<bytes::Bytes> = None;
+    let mut content_type = "application/octet-stream".to_string();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
+    {
+        if field.name() == Some("file") {
+            content_type = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            file_bytes = Some(
+                field
+                    .bytes()
+                    .await
+                    .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?,
+            );
+            break;
+        }
+    }
+
+    let data = file_bytes
+        .ok_or_else(|| AppError::UnprocessableEntity("Missing file field".to_string()))?;
+    let url = state.post.upload_attachment(actor, data, content_type).await?;
+
+    Ok(Json(DataResponse::new(serde_json::json!({ "url": url }))))
 }

@@ -13,7 +13,7 @@ async fn count_by_status_on_empty_returns_zeros() {
     // GROUP BY + CASE must not error on empty table
     let db = TestDb::new("rpt_count_empty").await;
     let repo = PgReportRepository::new(db.conn.clone());
-    let counts = repo.count_by_status().await.expect("count_by_status");
+    let counts = repo.count_by_status(None).await.expect("count_by_status");
     assert_eq!(counts.pending, 0);
     assert_eq!(counts.resolved, 0);
     assert_eq!(counts.dismissed, 0);
@@ -69,7 +69,7 @@ async fn count_by_status_counts_pending_reports() {
     repo.create(reporter.id, Some(post.id), None, "spam".to_string()).await.expect("create");
     repo.create(reporter.id, None, Some(thread.id), "off".to_string()).await.expect("create 2");
 
-    let counts = repo.count_by_status().await.expect("count_by_status");
+    let counts = repo.count_by_status(None).await.expect("count_by_status");
     assert_eq!(counts.pending, 2);
     db.teardown().await;
 }
@@ -112,9 +112,82 @@ async fn list_all_with_status_filter() {
     repo.create(reporter.id, Some(post_b.id), None, "sp".to_string()).await.expect("r2");
     repo.update_status(r1.id, ReportStatus::Dismissed, mod_user.id, None).await.expect("dismiss r1");
 
-    let (pending, total) = repo.list_all(Some(ReportStatus::Pending), None, None, 1, 20)
+    let (pending, total) = repo.list_all(Some(ReportStatus::Pending), None, None, None, 1, 20)
         .await.expect("list pending");
     assert_eq!(total, 1);
     assert_eq!(pending[0].status, ReportStatus::Pending);
+    db.teardown().await;
+}
+
+/// A category-scoped moderator must not see reports filed against content in a
+/// category they are not assigned to — covers both the post-report path (which
+/// links to a category via posts -> threads) and the thread-report path.
+#[tokio::test]
+async fn list_all_scoped_to_categories_excludes_other_categories() {
+    let db = TestDb::new("rpt_list_scoped").await;
+    let user = insert_user(&db.conn, 1).await;
+    let reporter = insert_user(&db.conn, 2).await;
+
+    let cat_a = insert_category(&db.conn, 1).await;
+    let cat_b = insert_category(&db.conn, 2).await;
+    let thread_a = insert_thread(&db.conn, 1, cat_a.id, user.id).await;
+    let thread_b = insert_thread(&db.conn, 2, cat_b.id, user.id).await;
+    let post_a = insert_post(&db.conn, thread_a.id, user.id).await;
+    let post_b = insert_post(&db.conn, thread_b.id, user.id).await;
+
+    let repo = PgReportRepository::new(db.conn.clone());
+    // One post-report and one thread-report in each category.
+    let post_rpt_a = repo.create(reporter.id, Some(post_a.id), None, "a".into()).await.expect("pa");
+    let thr_rpt_a = repo.create(reporter.id, None, Some(thread_a.id), "a".into()).await.expect("ta");
+    repo.create(reporter.id, Some(post_b.id), None, "b".into()).await.expect("pb");
+    repo.create(reporter.id, None, Some(thread_b.id), "b".into()).await.expect("tb");
+
+    // Unscoped (admin) sees all four.
+    let (_, total_all) = repo.list_all(None, None, None, None, 1, 20).await.expect("all");
+    assert_eq!(total_all, 4);
+
+    // Scoped to category A sees only A's two reports.
+    let (rows, total) = repo
+        .list_all(None, None, None, Some(&[cat_a.id]), 1, 20)
+        .await
+        .expect("scoped");
+    assert_eq!(total, 2, "moderator scoped to cat A must see exactly A's reports");
+    let ids: Vec<_> = rows.iter().map(|r| r.id).collect();
+    assert!(ids.contains(&post_rpt_a.id), "post report in A must be visible");
+    assert!(ids.contains(&thr_rpt_a.id), "thread report in A must be visible");
+
+    // An empty scope (moderator assigned to no categories) must see nothing,
+    // not everything — the `IN ()` degenerate case must fail closed.
+    let (rows, total) = repo.list_all(None, None, None, Some(&[]), 1, 20).await.expect("empty");
+    assert_eq!(total, 0);
+    assert!(rows.is_empty());
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn count_by_status_scoped_to_categories() {
+    let db = TestDb::new("rpt_count_scoped").await;
+    let user = insert_user(&db.conn, 1).await;
+    let reporter = insert_user(&db.conn, 2).await;
+
+    let cat_a = insert_category(&db.conn, 1).await;
+    let cat_b = insert_category(&db.conn, 2).await;
+    let thread_a = insert_thread(&db.conn, 1, cat_a.id, user.id).await;
+    let thread_b = insert_thread(&db.conn, 2, cat_b.id, user.id).await;
+    let post_b = insert_post(&db.conn, thread_b.id, user.id).await;
+
+    let repo = PgReportRepository::new(db.conn.clone());
+    repo.create(reporter.id, None, Some(thread_a.id), "a".into()).await.expect("ta");
+    repo.create(reporter.id, Some(post_b.id), None, "b".into()).await.expect("pb");
+
+    assert_eq!(repo.count_by_status(None).await.expect("all").pending, 2);
+    assert_eq!(
+        repo.count_by_status(Some(&[cat_a.id])).await.expect("scoped").pending,
+        1,
+        "pending count must exclude reports from unassigned categories"
+    );
+    assert_eq!(repo.count_by_status(Some(&[])).await.expect("empty").pending, 0);
+
     db.teardown().await;
 }

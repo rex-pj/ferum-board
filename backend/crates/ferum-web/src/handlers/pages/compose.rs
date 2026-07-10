@@ -7,6 +7,7 @@ use crate::app_state::AppState;
 use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CategoryCtx, TagCtx};
+use ferum_application::permission::PermissionChecker;
 
 use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
 
@@ -26,8 +27,11 @@ pub async fn new_thread(
     };
 
     let categories = state.category.list_visible(Some(&auth_user)).await?;
+    // Only offer categories the user is actually allowed to post in — otherwise
+    // picking a closed/staff_only/trust-gated category just leads to a submit-time 403.
     let categories_ctx: Vec<CategoryCtx> = categories
         .iter()
+        .filter(|c| PermissionChecker::user_can_create_post(Some(&auth_user), c))
         .map(|c| CategoryCtx {
             id: c.id.to_string(),
             parent_id: c.parent_id.map(|id| id.to_string()),
@@ -38,8 +42,11 @@ pub async fn new_thread(
             thread_count: 0,
             view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
+            can_post: true,
         })
         .collect();
+
+    let can_upload_thumbnail = PermissionChecker::can_upload(&auth_user).is_ok();
 
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
@@ -50,6 +57,7 @@ pub async fn new_thread(
     ctx.insert("categories", &categories_ctx);
     ctx.insert("preselected_category", &q.category_id.unwrap_or_default());
     ctx.insert("nav_categories", &nav_categories);
+    ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
 
     render_with_theme(&state, &active, "app/new_thread.html", &ctx)
         .await
@@ -97,6 +105,7 @@ pub async fn edit_thread(
             thread_count: 0,
             view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
+            can_post: false,
         })
         .collect();
 
@@ -109,6 +118,8 @@ pub async fn edit_thread(
             color: tag.color.clone(),
         })
         .collect();
+
+    let can_upload_thumbnail = PermissionChecker::can_upload(&auth_user).is_ok();
 
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
@@ -125,6 +136,7 @@ pub async fn edit_thread(
     ctx.insert("thread_tags", &thread_tags);
     ctx.insert("categories", &categories_ctx);
     ctx.insert("nav_categories", &nav_categories);
+    ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
 
     render_with_theme(&state, &active, "app/edit_thread.html", &ctx)
         .await

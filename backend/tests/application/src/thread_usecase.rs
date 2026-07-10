@@ -3,6 +3,7 @@ use std::sync::Arc;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_domain::AppError;
 use ferum_domain::models::thread::ThreadStatus;
+use ferum_domain::repositories::stored_file_repository::{StoredFileRepository, UploadUsage};
 use ferum_test_support::fixtures::{ids, make_category, make_post, make_thread, AuthUserBuilder};
 use ferum_test_support::mocks::{
     cache_service::NoopCacheService,
@@ -18,6 +19,37 @@ use ferum_test_support::mocks::{
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
+/// Records which CAS keys were dereferenced, so a test can assert that deleting
+/// a thread actually releases the attachments its posts held.
+#[derive(Default)]
+struct SpyStoredFiles {
+    dereferenced: std::sync::Mutex<Vec<String>>,
+}
+
+impl SpyStoredFiles {
+    fn dereferenced_sorted(&self) -> Vec<String> {
+        let mut v = self.dereferenced.lock().unwrap().clone();
+        v.sort();
+        v
+    }
+}
+
+#[async_trait::async_trait]
+impl StoredFileRepository for SpyStoredFiles {
+    async fn usage_since(&self, _: uuid::Uuid, _: chrono::DateTime<chrono::Utc>) -> Result<UploadUsage, AppError> {
+        Ok(UploadUsage { file_count: 0, total_bytes: 0 })
+    }
+    async fn upsert_and_ref(&self, _: &str, _: &str, _: &[u8], _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
+    async fn upsert_staged(&self, _: &str, _: &str, _: &[u8], _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
+    async fn increment_ref(&self, _: &str) -> Result<(), AppError> { Ok(()) }
+    async fn decrement_ref(&self, key: &str) -> Result<i32, AppError> {
+        self.dereferenced.lock().unwrap().push(key.to_string());
+        Ok(0)
+    }
+    async fn delete_by_key(&self, _: &str) -> Result<(), AppError> { Ok(()) }
+    async fn list_keys_with_prefix(&self, _: &str) -> Result<Vec<String>, AppError> { Ok(vec![]) }
+}
+
 struct Uc {
     threads: MockThreadRepository,
     categories: MockCategoryRepository,
@@ -25,6 +57,7 @@ struct Uc {
     tags: MockTagRepository,
     users: MockUserRepository,
     events: MockEventPublisher,
+    stored_files: Arc<dyn StoredFileRepository>,
 }
 
 impl Uc {
@@ -36,6 +69,7 @@ impl Uc {
             tags: MockTagRepository::new(),
             users: MockUserRepository::new(),
             events: MockEventPublisher::new(),
+            stored_files: Arc::new(NoopStoredFileRepository),
         }
     }
 
@@ -45,7 +79,7 @@ impl Uc {
             Arc::new(self.categories),
             Arc::new(self.posts),
             Arc::new(NoopJobQueue),
-            Arc::new(NoopStoredFileRepository),
+            self.stored_files,
             Arc::new(self.events),
             Arc::new(NoopCacheService),
             Arc::new(self.tags),
@@ -276,10 +310,46 @@ async fn delete_by_slug_by_author_succeeds() {
     let mut b = Uc::new();
     b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
     b.threads.expect_update().return_once(move |_, _| Ok(make_thread(ids::thread_a(), ids::category_a(), ids::user_a())));
+    b.posts.expect_content_md_by_thread().return_once(|_| Ok(vec![]));
     b.events.expect_publish().return_once(|_| ());
 
     let result = b.build().delete_by_slug(&actor, "test-thread").await;
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn delete_by_slug_releases_attachment_refs_of_every_live_post() {
+    const A: &str = "post-attachments/0123456789abcdef0123456789abcdef.png";
+    const B: &str = "post-attachments/fedcba9876543210fedcba9876543210.webp";
+
+    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
+
+    let spy = Arc::new(SpyStoredFiles::default());
+    let mut b = Uc::new();
+    b.stored_files = spy.clone();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+    b.threads.expect_update().return_once(move |_, _| Ok(make_thread(ids::thread_a(), ids::category_a(), ids::user_a())));
+    b.events.expect_publish().return_once(|_| ());
+    b.posts.expect_content_md_by_thread().return_once(move |_| {
+        Ok(vec![
+            // Embeds A twice: one post holds exactly one reference to it.
+            format!("![x](/files/{A}) again ![x](/files/{A})"),
+            // A second post independently embeds A — that is a second reference.
+            format!("![x](/files/{A}) and ![y](/files/{B})"),
+            "no attachments here".to_string(),
+        ])
+    });
+
+    let result = b.build().delete_by_slug(&actor, "test-thread").await;
+    assert!(result.is_ok());
+
+    // A was referenced once per post (2 posts) => released twice. B once.
+    assert_eq!(
+        spy.dereferenced_sorted(),
+        vec![A.to_string(), A.to_string(), B.to_string()],
+        "each post must give back exactly the references it took"
+    );
 }
 
 #[tokio::test]
@@ -294,6 +364,7 @@ async fn delete_by_slug_by_moderator_with_cat_perm_succeeds() {
     let mut b = Uc::new();
     b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
     b.threads.expect_update().return_once(move |_, _| Ok(make_thread(ids::thread_a(), cat_id, ids::user_b())));
+    b.posts.expect_content_md_by_thread().return_once(|_| Ok(vec![]));
     b.events.expect_publish().return_once(|_| ());
 
     let result = b.build().delete_by_slug(&actor, "test-thread").await;

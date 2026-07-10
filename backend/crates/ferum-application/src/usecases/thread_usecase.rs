@@ -13,6 +13,7 @@ use crate::permission::PermissionChecker;
 use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginHookRuntime};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
+use crate::validators::validate_image_magic;
 use crate::validators::{generate_thread_slug, validate_thread_title};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::role::perm;
@@ -839,6 +840,8 @@ impl ThreadUseCase {
             )
             .await?;
 
+        self.release_attachment_refs(thread.id).await;
+
         self.event_bus
             .publish(ForumEvent::ThreadDeleted {
                 thread_id: thread.id,
@@ -847,6 +850,37 @@ impl ThreadUseCase {
             .await;
 
         Ok(())
+    }
+
+    /// Un-publishes every post attachment the thread's posts still reference.
+    ///
+    /// Deleting a thread only flips the thread's own status; its post rows are
+    /// left intact, so without this their images would stay publicly servable
+    /// after the thread containing them is gone.
+    ///
+    /// Reachable only once per thread — `delete_by_slug` rejects an already
+    /// deleted thread — so these decrements cannot be applied twice. As in
+    /// `PostUseCase`, a count reaching zero un-publishes the blob but never
+    /// deletes it, and bookkeeping failures are logged rather than failing the
+    /// delete the user actually asked for.
+    async fn release_attachment_refs(&self, thread_id: Uuid) {
+        let contents = match self.posts.content_md_by_thread(thread_id).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(%thread_id, "could not load posts to release attachments: {e:?}");
+                return;
+            }
+        };
+
+        // Per post, not deduplicated across posts: two posts embedding the same
+        // image took two references, so both have to be given back.
+        for content in &contents {
+            for key in crate::usecases::post_usecase::extract_attachment_keys(content) {
+                if let Err(e) = self.stored_files.decrement_ref(&key).await {
+                    tracing::warn!(attachment_key = %key, "attachment decrement_ref failed: {e:?}");
+                }
+            }
+        }
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %id, pin = pin))]
@@ -1034,7 +1068,7 @@ impl ThreadUseCase {
     ) -> Result<String, AppError> {
         PermissionChecker::can_upload(actor)?;
 
-        if !validate_image_content_type(&content_type) {
+        if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
             return Err(AppError::unprocessable(
                 "thumbnail must be jpeg, png, webp, or gif",
             ));

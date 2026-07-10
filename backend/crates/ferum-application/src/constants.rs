@@ -33,6 +33,16 @@ pub const MAX_COVER_BYTES: usize = 8 * 1024 * 1024; // 8 MB
 pub const MAX_PLUGIN_MEDIA_BYTES: usize = 8 * 1024 * 1024; // 8 MB
 pub const MAX_FAVICON_BYTES: usize = 512 * 1024; // 512 KB
 pub const MAX_LOGO_BYTES: usize = 2 * 1024 * 1024; // 2 MB
+pub const MAX_POST_ATTACHMENT_BYTES: usize = 8 * 1024 * 1024; // 8 MB
+
+// ── Per-account rolling upload quota ─────────────────────────────────────────
+// The generic write rate limiter keys on IP, not account, so it does not bound
+// what one account can store (nor stop one abuser rotating IPs). These cap the
+// storage a single account can consume in a 24h window across every CAS
+// namespace, making "upload forever, share the /files/ URL" unprofitable.
+pub const UPLOAD_QUOTA_WINDOW_HOURS: i64 = 24;
+pub const MAX_UPLOADS_PER_WINDOW: u64 = 50;
+pub const MAX_UPLOAD_BYTES_PER_WINDOW: i64 = 100 * 1024 * 1024; // 100 MB
 
 pub const MAX_POST_CONTENT_BYTES: usize = 100 * 1024; // 100 KB
 pub const MAX_BAN_REASON_LEN: usize = 1_000;

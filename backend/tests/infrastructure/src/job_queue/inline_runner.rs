@@ -61,6 +61,16 @@ struct SpyStoredFiles {
 }
 #[async_trait]
 impl StoredFileRepository for SpyStoredFiles {
+    async fn usage_since(
+        &self,
+        _: uuid::Uuid,
+        _: chrono::DateTime<chrono::Utc>,
+    ) -> Result<ferum_domain::repositories::stored_file_repository::UploadUsage, AppError> {
+        Ok(ferum_domain::repositories::stored_file_repository::UploadUsage {
+            file_count: 0,
+            total_bytes: 0,
+        })
+    }
     async fn upsert_and_ref(
         &self,
         _: &str,
@@ -69,6 +79,19 @@ impl StoredFileRepository for SpyStoredFiles {
         _: i64,
         _: Option<uuid::Uuid>,
     ) -> Result<(), AppError> {
+        Ok(())
+    }
+    async fn upsert_staged(
+        &self,
+        _: &str,
+        _: &str,
+        _: &[u8],
+        _: i64,
+        _: Option<uuid::Uuid>,
+    ) -> Result<(), AppError> {
+        Ok(())
+    }
+    async fn increment_ref(&self, _: &str) -> Result<(), AppError> {
         Ok(())
     }
     async fn decrement_ref(&self, _: &str) -> Result<i32, AppError> {

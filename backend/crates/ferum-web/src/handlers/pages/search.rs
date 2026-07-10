@@ -110,6 +110,7 @@ pub async fn search(
             thread_count: 0,
             view_policy: view_policy_str(&c.view_policy),
             post_policy: post_policy_str(&c.post_policy),
+            can_post: false,
         })
         .collect();
 

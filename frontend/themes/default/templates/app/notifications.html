@@ -63,12 +63,23 @@
 
       {# ── Thread-linked: reply / mention / reaction / best_answer ── #}
       {% else %}
-        {# Title line: link if we have slug+title, plain label otherwise #}
-        {% if n.payload.thread_slug and n.payload.thread_title %}
-          <a href="/forum/t/{{ n.payload.thread_slug }}"
-             class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.thread_title }}</a>
+        {# Prefer a direct link to the post itself (correct page + anchor);
+           /go/post/{id} 302-redirects there without us needing to know the
+           post's page number at render time. Falls back to the thread root
+           if the event predates post_id being included in the payload. #}
+        {% set notif_href = "" %}
+        {% if n.payload.post_id %}
+          {% set notif_href = "/go/post/" ~ n.payload.post_id %}
         {% elif n.payload.thread_slug %}
-          <a href="/forum/t/{{ n.payload.thread_slug }}"
+          {% set notif_href = "/forum/t/" ~ n.payload.thread_slug %}
+        {% endif %}
+
+        {# Title line: link if we have somewhere to send them, plain label otherwise #}
+        {% if notif_href and n.payload.thread_title %}
+          <a href="{{ notif_href }}"
+             class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.thread_title }}</a>
+        {% elif notif_href %}
+          <a href="{{ notif_href }}"
              class="fw-semibold text-body text-decoration-none stretched-link">View thread</a>
         {% else %}
           <div class="fw-semibold text-body">

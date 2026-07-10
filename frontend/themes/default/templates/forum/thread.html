@@ -4,6 +4,23 @@
 {% block title %}{{ thread.title }} — {{ site.name }}{% endblock %}
 {% block description %}{{ thread.title }} by {{ thread.author_display_name }}{% endblock %}
 
+{% block meta_social %}
+<link rel="canonical" href="{{ site.url }}/forum/t/{{ thread.slug }}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="{{ site.name }}">
+<meta property="og:url" content="{{ site.url }}/forum/t/{{ thread.slug }}">
+<meta property="og:title" content="{{ thread.title }}">
+<meta property="og:description" content="{% if thread.excerpt %}{{ thread.excerpt }}{% else %}{{ thread.title }} by {{ thread.author_display_name }}{% endif %}">
+{% if thread.thumbnail_url %}
+<meta property="og:image" content="{{ site.url }}{{ thread.thumbnail_url }}">
+<meta name="twitter:card" content="summary_large_image">
+{% else %}
+<meta name="twitter:card" content="summary">
+{% endif %}
+<meta name="twitter:title" content="{{ thread.title }}">
+<meta name="twitter:description" content="{% if thread.excerpt %}{{ thread.excerpt }}{% else %}{{ thread.title }} by {{ thread.author_display_name }}{% endif %}">
+{% endblock %}
+
 {# Cap the reading column for comfortable line length (see theme.css) #}
 {% block page_inner_class %}fr-page-inner--reading{% endblock %}
 
@@ -30,6 +47,11 @@
   </ol>
 </nav>
 
+{% set best_answer_href = "" %}
+{% if thread.best_answer_id %}
+  {% set best_answer_href = "/go/post/" ~ thread.best_answer_id %}
+{% endif %}
+
 {# ── Thread hero ─────────────────────────────────────────────────────── #}
 {% if thread.thumbnail_url %}
 <div class="fr-thread-hero mb-3">
@@ -37,7 +59,7 @@
   <div class="fr-thread-hero-overlay">
     <div class="fr-thread-hero-body">
       <div class="d-flex flex-wrap gap-1 mb-2">
-        {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked) }}
+        {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked, best_answer_href=best_answer_href) }}
       </div>
       <h1 class="h3 fw-bold text-white mb-1 lh-sm">{{ thread.title }}</h1>
       <div class="d-flex align-items-center gap-2 mt-1">
@@ -154,6 +176,15 @@
 {# ── Posts ───────────────────────────────────────────────────────────── #}
 {% for post in thread.posts %}
   {% set post_number = (pagination.page - 1) * pagination.per_page + loop.index %}
+  {% if post.is_deleted %}
+  <div class="card mb-3 text-muted" id="post-{{ post.id }}">
+    <div class="card-body py-3 d-flex align-items-center gap-2">
+      <i class="fa-solid fa-trash-can opacity-50"></i>
+      <span class="fst-italic">This post has been deleted.</span>
+      <a href="#post-{{ post.id }}" class="small text-muted text-decoration-none ms-auto fr-post-num">#{{ post_number }}</a>
+    </div>
+  </div>
+  {% else %}
   <div class="card mb-3 {% if post.is_best_answer %}fr-post-best-answer{% endif %} {% if loop.first and pagination.page == 1 %}fr-post-op{% endif %}"
        id="post-{{ post.id }}">
 
@@ -161,6 +192,11 @@
     {% if post.is_best_answer %}
       <div class="card-header small py-1 fr-best-answer-header">
         <i class="fa-solid fa-circle-check me-1"></i>Best Answer
+      </div>
+    {% endif %}
+    {% if post.is_pending %}
+      <div class="card-header small py-1 text-warning-emphasis bg-warning-subtle">
+        <i class="fa-solid fa-clock me-1"></i>Awaiting moderator approval — only visible to you and staff
       </div>
     {% endif %}
 
@@ -248,7 +284,8 @@
           id="post-edit-composer-{{ post.id }}"
           mode="edit"
           thread-id="{{ thread.id }}"
-          initial-content="{{ post.content_md | escape }}">
+          initial-content="{{ post.content_md | escape }}"
+          can-upload="{{ can_upload_attachment }}">
         </ferum-post-composer>
         <div class="d-flex gap-2 mt-2">
           <button type="button" class="btn btn-primary btn-sm" data-action="save-edit" data-post-id="{{ post.id }}">Save</button>
@@ -261,11 +298,13 @@
         <ferum-reaction-bar
           post-id="{{ post.id }}"
           reactions='{{ post.reactions | json_encode }}'
-          user-id="{{ current_user.id | default(value="") }}">
+          user-id="{{ current_user.id | default(value="") }}"
+          is-own="{{ post.is_own }}">
         </ferum-reaction-bar>
       </div>
     </div>
   </div>
+  {% endif %}
 {% endfor %}
 
 {# ── Pagination — above reply box so it reads as "end of page X" ── #}
@@ -285,7 +324,8 @@
       {{ m::avatar(url=current_user.avatar_url, name=current_user.display_name, size=32) }}
       <span class="fw-semibold">Leave a reply</span>
     </div>
-    <ferum-post-composer id="reply-composer" thread-id="{{ thread.id }}" mode="reply"></ferum-post-composer>
+    <ferum-post-composer id="reply-composer" thread-id="{{ thread.id }}" mode="reply"
+      can-upload="{{ can_upload_attachment }}"></ferum-post-composer>
     <div id="reply-feedback" class="d-none mt-2"></div>
     <div class="d-flex gap-2 mt-3">
       <button type="button" class="btn btn-primary px-4" id="reply-submit-btn" data-action="submit-reply">
@@ -446,7 +486,13 @@
               <span class="badge bg-primary"><i class="fa-solid fa-thumbtack me-1"></i>Pinned</span>
             {% endif %}
             {% if thread.is_solved %}
-              <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+              {% if best_answer_href %}
+                <a href="{{ best_answer_href }}" class="badge bg-success text-decoration-none" title="Jump to best answer">
+                  <i class="fa-solid fa-circle-check me-1"></i>Solved
+                </a>
+              {% else %}
+                <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+              {% endif %}
             {% endif %}
             {% if thread.is_locked %}
               <span class="badge bg-warning text-dark"><i class="fa-solid fa-lock me-1"></i>Locked</span>
