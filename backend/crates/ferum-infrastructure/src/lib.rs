@@ -9,6 +9,7 @@ pub mod entities;
 pub mod job_queue;
 pub mod jwt_token_service;
 pub mod notification;
+pub mod observability;
 pub mod rate_limit;
 pub mod repositories;
 pub mod search;

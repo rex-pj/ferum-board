@@ -5,7 +5,7 @@ use ferum_application::ports::{AccessTokenClaims, TokenService};
 use ferum_infrastructure::jwt_token_service::JwtTokenService;
 
 fn svc() -> JwtTokenService {
-    JwtTokenService::new("test-secret-key-for-unit-tests-32bytes!")
+    JwtTokenService::new("test-secret-key-for-unit-tests-32bytes!", 3600, 604_800)
 }
 
 fn make_claims(user_id: Uuid) -> AccessTokenClaims {
@@ -37,7 +37,7 @@ fn access_token_roundtrip_preserves_claims() {
 fn access_token_wrong_secret_rejected() {
     let svc = svc();
     let token = svc.mint_access_token(&make_claims(Uuid::new_v4())).unwrap();
-    let other = JwtTokenService::new("completely-different-secret-key!!");
+    let other = JwtTokenService::new("completely-different-secret-key!!", 3600, 604_800);
     assert!(other.verify_access_token(&token).is_err());
 }
 
@@ -73,7 +73,7 @@ fn refresh_token_roundtrip_preserves_user_id() {
 fn refresh_token_wrong_secret_rejected() {
     let svc = svc();
     let token = svc.mint_refresh_token(Uuid::new_v4()).unwrap();
-    let other = JwtTokenService::new("completely-different-secret-key!!");
+    let other = JwtTokenService::new("completely-different-secret-key!!", 3600, 604_800);
     assert!(other.verify_refresh_token(&token).is_err());
 }
 

@@ -66,10 +66,12 @@ impl StoredFileRepository for SpyStoredFiles {
         _: uuid::Uuid,
         _: chrono::DateTime<chrono::Utc>,
     ) -> Result<ferum_domain::repositories::stored_file_repository::UploadUsage, AppError> {
-        Ok(ferum_domain::repositories::stored_file_repository::UploadUsage {
-            file_count: 0,
-            total_bytes: 0,
-        })
+        Ok(
+            ferum_domain::repositories::stored_file_repository::UploadUsage {
+                file_count: 0,
+                total_bytes: 0,
+            },
+        )
     }
     async fn upsert_and_ref(
         &self,
@@ -143,7 +145,7 @@ fn make_executor(
 ) -> JobExecutor {
     JobExecutor::new(
         Arc::new(NullEmail),
-        "http://localhost:8080".to_string(),
+        "http://localhost:5173".to_string(),
         Arc::new(storage),
         Arc::new(stored_files),
         Arc::new(NullWebhooks),
@@ -184,20 +186,35 @@ fn hmac_sha256_only_hex_chars() {
 #[tokio::test]
 async fn gc_skips_delete_when_ref_count_positive() {
     // decrement returns 1 → another reference exists → no delete must happen
-    let executor = make_executor(NullStorage, SpyStoredFiles { decrement_returns: 1 });
+    let executor = make_executor(
+        NullStorage,
+        SpyStoredFiles {
+            decrement_returns: 1,
+        },
+    );
     assert!(executor.run_gc_storage_key("sha256-abc123").await.is_ok());
 }
 
 #[tokio::test]
 async fn gc_deletes_when_no_refs_remain() {
     // decrement returns 0 → last reference gone → delete from storage + DB
-    let executor = make_executor(NullStorage, SpyStoredFiles { decrement_returns: 0 });
+    let executor = make_executor(
+        NullStorage,
+        SpyStoredFiles {
+            decrement_returns: 0,
+        },
+    );
     assert!(executor.run_gc_storage_key("sha256-orphan").await.is_ok());
 }
 
 #[tokio::test]
 async fn gc_continues_when_storage_delete_errors() {
     // Storage failure is logged and swallowed — DB row deletion must still be attempted
-    let executor = make_executor(ErrorStorage, SpyStoredFiles { decrement_returns: 0 });
+    let executor = make_executor(
+        ErrorStorage,
+        SpyStoredFiles {
+            decrement_returns: 0,
+        },
+    );
     assert!(executor.run_gc_storage_key("sha256-orphan").await.is_ok());
 }

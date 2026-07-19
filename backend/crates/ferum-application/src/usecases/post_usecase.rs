@@ -7,8 +7,9 @@ use uuid::Uuid;
 use chrono::{Duration as ChronoDuration, Utc};
 
 use crate::constants::{
-    DEFAULT_MAX_POSTS_PER_PAGE, MAX_POST_ATTACHMENT_BYTES, MAX_POST_CONTENT_BYTES,
-    MAX_UPLOADS_PER_WINDOW, MAX_UPLOAD_BYTES_PER_WINDOW, UPLOAD_QUOTA_WINDOW_HOURS,
+    DEFAULT_MAX_POSTS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS, MAX_POST_ATTACHMENT_BYTES,
+    MAX_POST_CONTENT_BYTES, MAX_UPLOADS_PER_WINDOW, MAX_UPLOAD_BYTES_PER_WINDOW,
+    UPLOAD_QUOTA_WINDOW_HOURS,
 };
 use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
@@ -23,7 +24,9 @@ use ferum_domain::models::user::TrustLevel;
 use ferum_domain::repositories::category_repository::CategoryRepository;
 use ferum_domain::repositories::post_repository::{NewPost, PostRepository};
 use ferum_domain::repositories::reaction_repository::ReactionRepository;
-use ferum_domain::repositories::site_config_repository::{get_config_u64, SiteConfigRepository};
+use ferum_domain::repositories::site_config_repository::{
+    get_config_i64, get_config_u64, SiteConfigRepository,
+};
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::thread_repository::ThreadRepository;
 use ferum_domain::repositories::user_repository::UserRepository;
@@ -462,7 +465,13 @@ impl PostUseCase {
             .find_by_id(post.thread_id)
             .await?
             .or_not_found()?;
-        PermissionChecker::can_edit_post(actor, &post, thread.category_id)?;
+        let edit_window_hours = get_config_i64(
+            self.site_config.as_ref(),
+            "post_edit_window_hours",
+            DEFAULT_POST_EDIT_WINDOW_HOURS,
+        )
+        .await;
+        PermissionChecker::can_edit_post(actor, &post, thread.category_id, edit_window_hours)?;
 
         let hook_ctx = crate::ports::HookContext {
             hook_name: "before_post_edit".to_string(),

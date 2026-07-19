@@ -9,7 +9,7 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::post::{Post, PostStatus};
 use ferum_domain::repositories::post_repository::{NewPost, PostRepository};
 
-const SLOW_QUERY_MS: u128 = 500;
+use crate::observability::slow_query_threshold_ms;
 
 pub struct PgPostRepository {
     db: DatabaseConnection,
@@ -109,7 +109,7 @@ impl PostRepository for PgPostRepository {
             query.limit(per_page).offset(offset).all(&self.db),
         )?;
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), %thread_id, page, "slow_query: list_by_thread");
         }
         Ok((rows.into_iter().map(entity_to_domain).collect(), total))

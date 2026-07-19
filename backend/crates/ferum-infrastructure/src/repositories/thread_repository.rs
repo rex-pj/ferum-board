@@ -12,9 +12,7 @@ use ferum_domain::repositories::thread_repository::{
     AdminThreadFilter, NewThread, ThreadFilter, ThreadRepository, ThreadSort, UpdateThread,
 };
 
-/// Warn when any hot query exceeds this threshold. Matches the default value of
-/// Config::slow_query_ms so both the env var and this constant stay in sync.
-const SLOW_QUERY_MS: u128 = 500;
+use crate::observability::slow_query_threshold_ms;
 
 pub struct PgThreadRepository {
     db: DatabaseConnection,
@@ -209,7 +207,7 @@ impl ThreadRepository for PgThreadRepository {
         let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, [slug.into()]);
         let result = ThreadRow::find_by_statement(stmt).one(&self.db).await?.map(row_to_domain);
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), slug = %slug, "slow_query: find_by_slug");
         }
         Ok(result)
@@ -295,7 +293,7 @@ impl ThreadRepository for PgThreadRepository {
             }
         };
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), %category_id, page, "slow_query: list_by_category");
         }
         Ok((rows.into_iter().map(row_to_domain).collect(), total))
@@ -372,7 +370,7 @@ impl ThreadRepository for PgThreadRepository {
             }
         };
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), page, "slow_query: list_feed");
         }
         Ok((rows.into_iter().map(row_to_domain).collect(), total))
@@ -420,7 +418,7 @@ impl ThreadRepository for PgThreadRepository {
             ThreadRow::find_by_statement(stmt).all(&self.db),
         )?;
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), %author_id, page, "slow_query: list_by_author");
         }
         Ok((rows.into_iter().map(row_to_domain).collect(), total))
@@ -503,7 +501,7 @@ impl ThreadRepository for PgThreadRepository {
         let stmt = Statement::from_sql_and_values(DbBackend::Postgres, &sql, values);
         let rows = ThreadRow::find_by_statement(stmt).all(&self.db).await?;
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), tag_slug, page, "slow_query: list_by_tag");
         }
         Ok((rows.into_iter().map(row_to_domain).collect(), total as u64))
@@ -580,7 +578,7 @@ impl ThreadRepository for PgThreadRepository {
         let now = Utc::now().fixed_offset();
         let today = Utc::now().date_naive();
 
-        // Bước 1: INSERT mới (viewer lần đầu tiên).
+        // Step 1: fresh INSERT (first-time viewer).
         let insert_stmt = thread_view_dedup::Entity::insert(thread_view_dedup::ActiveModel {
             thread_id: Set(thread_id),
             viewer_key: Set(viewer_key.to_owned()),
@@ -603,10 +601,10 @@ impl ThreadRepository for PgThreadRepository {
         let inserted = self.db.execute(insert_stmt).await?;
 
         if inserted.rows_affected() > 0 {
-            return Ok(true); // viewer hoàn toàn mới
+            return Ok(true); // brand-new viewer
         }
 
-        // Bước 2: viewer đã tồn tại — chỉ tính view nếu ngày hôm nay chưa được ghi.
+        // Step 2: viewer already exists — only count the view if today isn't recorded yet.
         let updated = thread_view_dedup::Entity::update_many()
             .col_expr(thread_view_dedup::Column::LastViewedDate, Expr::value(today))
             .col_expr(thread_view_dedup::Column::LastViewedAt, Expr::value(now))

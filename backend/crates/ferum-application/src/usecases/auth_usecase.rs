@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::constants::{
     DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS, DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES,
-    PASSWORD_RESET_TOKEN_TTL_SECS, REFRESH_TOKEN_TTL_SECS,
+    PASSWORD_RESET_TOKEN_TTL_SECS,
 };
 use crate::ports::{
     CacheService, ForumJob, HookContext, HookDecision, JobQueue,
@@ -286,7 +286,7 @@ impl AuthUseCase {
             user.trust_level = new_level;
         }
 
-        let claims = build_access_token_claims(&user);
+        let claims = build_access_token_claims(&user, self.tokens.access_token_ttl_secs());
         let access_token = self.tokens.mint_access_token(&claims)?;
         let refresh_token = self.tokens.mint_refresh_token(user.id)?;
 
@@ -294,7 +294,7 @@ impl AuthUseCase {
             .set(
                 &refresh_token_key(user.id, &refresh_token),
                 "1",
-                Duration::from_secs(REFRESH_TOKEN_TTL_SECS),
+                Duration::from_secs(self.tokens.refresh_token_ttl_secs()),
             )
             .await?;
 
@@ -330,7 +330,7 @@ impl AuthUseCase {
             });
         }
 
-        let claims = build_access_token_claims(&user);
+        let claims = build_access_token_claims(&user, self.tokens.access_token_ttl_secs());
         let access_token = self.tokens.mint_access_token(&claims)?;
 
         Ok(RefreshResult { access_token })

@@ -3,20 +3,24 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use ferum_application::constants::{PASSWORD_RESET_TOKEN_TTL_SECS, REFRESH_TOKEN_TTL_SECS};
+use ferum_application::constants::PASSWORD_RESET_TOKEN_TTL_SECS;
 use ferum_application::ports::{AccessTokenClaims, TokenService};
 use ferum_application::shared::AppError;
 
 pub struct JwtTokenService {
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,
+    access_ttl_secs: u64,
+    refresh_ttl_secs: u64,
 }
 
 impl JwtTokenService {
-    pub fn new(secret: &str) -> Self {
+    pub fn new(secret: &str, access_ttl_secs: u64, refresh_ttl_secs: u64) -> Self {
         Self {
             encoding_key: EncodingKey::from_secret(secret.as_bytes()),
             decoding_key: DecodingKey::from_secret(secret.as_bytes()),
+            access_ttl_secs,
+            refresh_ttl_secs,
         }
     }
 }
@@ -54,7 +58,7 @@ impl TokenService for JwtTokenService {
         let claims = RefreshClaims {
             sub: user_id.to_string(),
             purpose: "refresh".to_string(),
-            exp: (Utc::now() + Duration::seconds(REFRESH_TOKEN_TTL_SECS as i64)).timestamp(),
+            exp: (Utc::now() + Duration::seconds(self.refresh_ttl_secs as i64)).timestamp(),
         };
         encode(&Header::default(), &claims, &self.encoding_key)
             .map_err(|e| AppError::internal(format!("refresh token error: {}", e)))
@@ -97,5 +101,13 @@ impl TokenService for JwtTokenService {
 
         Uuid::parse_str(&data.claims.sub)
             .map_err(|_| AppError::forbidden("invalid_or_expired_token"))
+    }
+
+    fn access_token_ttl_secs(&self) -> u64 {
+        self.access_ttl_secs
+    }
+
+    fn refresh_token_ttl_secs(&self) -> u64 {
+        self.refresh_ttl_secs
     }
 }

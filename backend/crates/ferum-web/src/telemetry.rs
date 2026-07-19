@@ -12,6 +12,7 @@
 ///
 /// # Example
 /// ```rust
+/// use ferum_web::telemetry::Latency;
 /// let _lat = Latency::start("site_ctx");
 /// // ... synchronous work ...
 /// // elapsed is logged when `_lat` goes out of scope

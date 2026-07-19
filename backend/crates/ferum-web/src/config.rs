@@ -4,8 +4,26 @@ use serde::Deserialize;
 pub struct Config {
     pub database_url: String,
     pub database_read_url: Option<String>,
+    /// Max connections per PostgreSQL pool (applied to both write and read pools).
+    #[serde(default = "default_db_max_connections")]
+    pub db_max_connections: u32,
+    #[serde(default = "default_db_min_connections")]
+    pub db_min_connections: u32,
     pub app_url: String,
+    /// Interface the HTTP server binds to.
+    #[serde(default = "default_bind_addr")]
+    pub bind_addr: String,
+    /// Port the HTTP server listens on.
+    #[serde(default = "default_port")]
+    pub port: u16,
     pub jwt_secret: String,
+    /// Access-token (JWT) lifetime in seconds. Drives both the claim `exp`
+    /// and the auth cookie Max-Age.
+    #[serde(default = "default_jwt_expiry_seconds")]
+    pub jwt_expiry_seconds: u64,
+    /// Refresh-token lifetime in days.
+    #[serde(default = "default_refresh_token_expiry_days")]
+    pub refresh_token_expiry_days: u64,
     pub from_email: String,
 
     pub smtp_host: Option<String>,
@@ -19,15 +37,21 @@ pub struct Config {
     pub s3_bucket: Option<String>,
     pub s3_access_key: Option<String>,
     pub s3_secret_key: Option<String>,
+    /// AWS region for real S3; ignored by MinIO/R2 but still required by the SDK.
+    #[serde(default = "default_s3_region")]
+    pub s3_region: String,
     pub cdn_base_url: Option<String>,
     pub meilisearch_url: Option<String>,
     pub meilisearch_key: Option<String>,
+    /// Meilisearch index name — override when multiple environments share one instance.
+    #[serde(default = "default_meilisearch_index")]
+    pub meilisearch_index: String,
 
     #[serde(default = "default_true")]
     pub rate_limit_enabled: bool,
-    /// Bật dedup view count qua cache (set_nx 24h/user/thread).
-    /// Chỉ có tác dụng với user đã đăng nhập; guest không được tính khi bật.
-    /// Nên bật khi đã cấu hình REDIS_URL. Mặc định: false.
+    /// Enable view-count dedup (each viewer counts once per thread per day).
+    /// Only affects logged-in users; guests are not counted when enabled.
+    /// Best enabled when REDIS_URL is configured. Default: false.
     #[serde(default = "default_false")]
     pub dedup_view_counts: bool,
     #[serde(default = "default_cors")]
@@ -95,8 +119,14 @@ impl std::fmt::Debug for Config {
                 "database_read_url",
                 &self.database_read_url.as_ref().map(|_| "[redacted]"),
             )
+            .field("db_max_connections", &self.db_max_connections)
+            .field("db_min_connections", &self.db_min_connections)
             .field("app_url", &self.app_url)
+            .field("bind_addr", &self.bind_addr)
+            .field("port", &self.port)
             .field("jwt_secret", &"[redacted]")
+            .field("jwt_expiry_seconds", &self.jwt_expiry_seconds)
+            .field("refresh_token_expiry_days", &self.refresh_token_expiry_days)
             .field("from_email", &self.from_email)
             .field("smtp_host", &self.smtp_host)
             .field("smtp_port", &self.smtp_port)
@@ -113,8 +143,10 @@ impl std::fmt::Debug for Config {
                 "s3_secret_key",
                 &self.s3_secret_key.as_ref().map(|_| "[redacted]"),
             )
+            .field("s3_region", &self.s3_region)
             .field("cdn_base_url", &self.cdn_base_url)
             .field("meilisearch_url", &self.meilisearch_url)
+            .field("meilisearch_index", &self.meilisearch_index)
             .field(
                 "meilisearch_key",
                 &self.meilisearch_key.as_ref().map(|_| "[redacted]"),
@@ -145,6 +177,30 @@ impl std::fmt::Debug for Config {
 
 fn default_smtp_port() -> u16 {
     587
+}
+fn default_s3_region() -> String {
+    "us-east-1".to_string()
+}
+fn default_meilisearch_index() -> String {
+    "threads".to_string()
+}
+fn default_db_max_connections() -> u32 {
+    20
+}
+fn default_db_min_connections() -> u32 {
+    2
+}
+fn default_bind_addr() -> String {
+    "0.0.0.0".to_string()
+}
+fn default_port() -> u16 {
+    5173
+}
+fn default_jwt_expiry_seconds() -> u64 {
+    ferum_application::constants::DEFAULT_JWT_EXPIRY_SECS
+}
+fn default_refresh_token_expiry_days() -> u64 {
+    ferum_application::constants::DEFAULT_REFRESH_TOKEN_EXPIRY_DAYS
 }
 fn default_true() -> bool {
     true

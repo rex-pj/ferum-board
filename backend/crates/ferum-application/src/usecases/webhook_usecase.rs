@@ -23,7 +23,11 @@ impl WebhookUseCase {
         delivery: Arc<dyn WebhookDeliveryService>,
         resolver: Arc<dyn HostResolver>,
     ) -> Self {
-        Self { webhooks, delivery, resolver }
+        Self {
+            webhooks,
+            delivery,
+            resolver,
+        }
     }
 
     /// Rejects a URL whose hostname *resolves* to a private address. Runs only
@@ -38,11 +42,10 @@ impl WebhookUseCase {
     /// legitimate webhook target, and failing closed here would make webhooks
     /// unconfigurable in those environments.
     async fn assert_hostname_not_private(&self, url: &str) -> Result<(), AppError> {
-        let Some(host) = url
-            .parse::<http::Uri>()
-            .ok()
-            .and_then(|u| u.host().map(|h| ferum_domain::net::normalize_host(h).to_string()))
-        else {
+        let Some(host) = url.parse::<http::Uri>().ok().and_then(|u| {
+            u.host()
+                .map(|h| ferum_domain::net::normalize_host(h).to_string())
+        }) else {
             return Ok(()); // already rejected by validate_webhook_url
         };
         // IP literals were settled synchronously; there is nothing to resolve.
@@ -51,7 +54,10 @@ impl WebhookUseCase {
         }
         match self.resolver.resolve(&host).await {
             Ok(addrs) => {
-                if let Some(bad) = addrs.into_iter().find(|ip| ferum_domain::net::is_private_ip(*ip)) {
+                if let Some(bad) = addrs
+                    .into_iter()
+                    .find(|ip| ferum_domain::net::is_private_ip(*ip))
+                {
                     return Err(AppError::unprocessable(&format!(
                         "Webhook host {host} resolves to {bad}, a private or reserved address"
                     )));
@@ -113,10 +119,7 @@ impl WebhookUseCase {
             validate_webhook_url(u)?;
             self.assert_hostname_not_private(u).await?;
         }
-        self.webhooks
-            .find_by_id(id)
-            .await?
-            .or_not_found()?;
+        self.webhooks.find_by_id(id).await?.or_not_found()?;
         self.webhooks
             .update(
                 id,
@@ -134,19 +137,22 @@ impl WebhookUseCase {
     /// button, so they can confirm the endpoint is reachable and correctly
     /// verifies the signature before relying on it for real events.
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, webhook_id = %id))]
-    pub async fn test_delivery(&self, actor: &AuthUser, id: Uuid) -> Result<WebhookTestResult, AppError> {
+    pub async fn test_delivery(
+        &self,
+        actor: &AuthUser,
+        id: Uuid,
+    ) -> Result<WebhookTestResult, AppError> {
         PermissionChecker::can_manage_webhooks(actor)?;
         let webhook = self.webhooks.find_by_id(id).await?.or_not_found()?;
-        self.delivery.send_test(&webhook.url, webhook.secret.as_deref()).await
+        self.delivery
+            .send_test(&webhook.url, webhook.secret.as_deref())
+            .await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, webhook_id = %id))]
     pub async fn delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         PermissionChecker::can_manage_webhooks(actor)?;
-        self.webhooks
-            .find_by_id(id)
-            .await?
-            .or_not_found()?;
+        self.webhooks.find_by_id(id).await?.or_not_found()?;
         self.webhooks.delete(id).await
     }
 }
@@ -203,7 +209,7 @@ mod validate_webhook_url_tests {
             "http://10.0.0.5/hook",
             "http://192.168.1.1/hook",
             "http://169.254.169.254/latest/meta-data",
-            "http://localhost:8080/hook",
+            "http://localhost:5173/hook",
         ] {
             assert!(validate_webhook_url(u).is_err(), "{u} must be rejected");
         }
@@ -235,7 +241,7 @@ mod validate_webhook_url_tests {
     fn accepts_public_hosts() {
         for u in [
             "https://hooks.slack.com/services/abc",
-            "http://example.com:8080/hook",
+            "http://example.com:5173/hook",
             "https://8.8.8.8/hook",
             "https://[2606:4700::1111]/hook",
         ] {

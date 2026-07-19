@@ -9,7 +9,7 @@ use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::auth::UserResponse;
 use crate::view_models::{DataResponse, HandlerResult};
-use ferum_application::constants::{JWT_EXPIRY_SECS, MAX_AVATAR_BYTES, MAX_COVER_BYTES};
+use ferum_application::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
 use ferum_application::ports::AccessTokenClaims;
 use ferum_application::shared::AppError;
 use ferum_application::usecases::user_usecase::UpdateProfileCmd;
@@ -31,17 +31,14 @@ fn refreshed_token_cookie(
         is_banned: actor.is_banned,
         banned_until: actor.banned_until.map(|t| t.timestamp()),
         exp: (chrono::Utc::now()
-            + chrono::Duration::seconds(JWT_EXPIRY_SECS as i64))
+            + chrono::Duration::seconds(state.token_service.access_token_ttl_secs() as i64))
         .timestamp(),
     };
     let token = state.token_service.mint_access_token(&claims)?;
-    let secure = if state.cookies_secure { "; Secure" } else { "" };
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
-        format!("token={}; HttpOnly; SameSite=Lax; Path=/; Max-Age={JWT_EXPIRY_SECS}{secure}", token)
-            .parse()
-            .unwrap(),
+        crate::utils::access_token_cookie(state, &token).parse().unwrap(),
     );
     Ok(headers)
 }

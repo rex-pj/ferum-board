@@ -4,7 +4,6 @@ use tokio::sync::Mutex;
 
 
 
-use crate::constants::REFRESH_TOKEN_TTL_SECS;
 use crate::ports::{BulkSeedService, CacheService, PasswordHasher, TokenService};
 use super::{build_access_token_claims, refresh_token_key};
 use super::auth_usecase::LoginResult;
@@ -125,14 +124,14 @@ impl SetupUseCase {
             self.bulk_seed.seed_bulk(user.id).await?;
         }
 
-        let claims = build_access_token_claims(&user);
+        let claims = build_access_token_claims(&user, self.tokens.access_token_ttl_secs());
         let access_token = self.tokens.mint_access_token(&claims)?;
         let refresh_token = self.tokens.mint_refresh_token(user.id)?;
         self.cache
             .set(
                 &refresh_token_key(user.id, &refresh_token),
                 "1",
-                Duration::from_secs(REFRESH_TOKEN_TTL_SECS),
+                Duration::from_secs(self.tokens.refresh_token_ttl_secs()),
             )
             .await?;
 

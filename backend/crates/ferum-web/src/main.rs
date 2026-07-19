@@ -100,13 +100,16 @@ async fn main() -> anyhow::Result<()> {
         config.max_upload_size_mb,
     );
 
-    let addr = "0.0.0.0:8080";
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let addr = format!("{}:{}", config.bind_addr, config.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     println!(
         "\n  {}  {}\n",
         "▶  Server ready:".bold(),
-        "http://localhost:8080".bold().bright_cyan().underline()
+        format!("http://localhost:{}", config.port)
+            .bold()
+            .bright_cyan()
+            .underline()
     );
 
     axum::serve(

@@ -63,25 +63,18 @@ pub async fn run(
         })
         .await?;
 
-    let secure = if state.cookies_secure { "; Secure" } else { "" };
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
-        format!(
-            "refresh_token={}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=604800{}",
-            result.refresh_token, secure
-        )
-        .parse()
-        .unwrap(),
+        crate::utils::refresh_token_cookie(&state, &result.refresh_token)
+            .parse()
+            .unwrap(),
     );
     headers.append(
         header::SET_COOKIE,
-        format!(
-            "token={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600{}",
-            result.access_token, secure
-        )
-        .parse()
-        .unwrap(),
+        crate::utils::access_token_cookie(&state, &result.access_token)
+            .parse()
+            .unwrap(),
     );
 
     Ok((

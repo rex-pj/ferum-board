@@ -147,15 +147,8 @@ pub async fn login_post(
 
     match result {
         Ok(r) => {
-            let secure = if state.cookies_secure { "; Secure" } else { "" };
-            let refresh_cookie = format!(
-                "refresh_token={}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=604800{}",
-                r.refresh_token, secure
-            );
-            let token_cookie = format!(
-                "token={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600{}",
-                r.access_token, secure
-            );
+            let refresh_cookie = crate::utils::refresh_token_cookie(&state, &r.refresh_token);
+            let token_cookie = crate::utils::access_token_cookie(&state, &r.access_token);
             (
                 [
                     (header::SET_COOKIE, refresh_cookie),

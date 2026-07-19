@@ -113,12 +113,12 @@ pub trait ThreadRepository: Send + Sync {
     ) -> Result<(Vec<Thread>, u64), AppError>;
     async fn create(&self, cmd: NewThread) -> Result<Thread, AppError>;
     async fn update(&self, id: Uuid, patch: UpdateThread) -> Result<Thread, AppError>;
-    /// Thêm `delta` vào view_count trong một UPDATE duy nhất — dùng bởi batch flush.
+    /// Adds `delta` to view_count in a single UPDATE — used by the batch flush.
     async fn add_view_count(&self, id: Uuid, delta: i32) -> Result<(), AppError>;
-    /// Ghi nhận một lần xem thread vào DB.
-    /// - `viewer_key`: user_id (authenticated) hoặc fingerprint hash (guest).
+    /// Records one thread view in the DB.
+    /// - `viewer_key`: user_id (authenticated) or fingerprint hash (guest).
     /// - `viewer_type`: "user" | "guest".
-    /// Trả về `true` nếu đây là lần xem đầu tiên hôm nay → caller phải gọi increment_view_count.
+    /// Returns `true` if this is the first view today → the caller must call increment_view_count.
     async fn try_record_view(
         &self,
         thread_id: Uuid,

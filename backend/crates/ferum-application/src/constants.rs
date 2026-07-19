@@ -1,7 +1,8 @@
-
 pub const BCRYPT_COST: u32 = 12;
-pub const JWT_EXPIRY_SECS: u64 = 3600; // 1 hour
-pub const REFRESH_TOKEN_TTL_SECS: u64 = 604_800; // 7 days
+/// Fallback when the JWT_EXPIRY_SECONDS env var is not set.
+pub const DEFAULT_JWT_EXPIRY_SECS: u64 = 3600; // 1 hour
+/// Fallback when the REFRESH_TOKEN_EXPIRY_DAYS env var is not set.
+pub const DEFAULT_REFRESH_TOKEN_EXPIRY_DAYS: u64 = 7;
 pub const PASSWORD_RESET_TOKEN_TTL_SECS: u64 = 3600; // 1 hour
 
 // ── Runtime-configurable defaults (fallback when site_config has no value) ──
@@ -23,7 +24,7 @@ pub const DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY: u64 = 5;
 
 // ── Fixed constants — not admin-configurable ─────────────────────────────────
 
-pub const APP_URL_DEFAULT: &str = "http://localhost:8080";
+pub const APP_URL_DEFAULT: &str = "http://localhost:5173";
 
 pub const DEFAULT_THEME_SLUG: &str = "default";
 

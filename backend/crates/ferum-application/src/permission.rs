@@ -88,7 +88,12 @@ impl PermissionChecker {
 
     // ─── Post editing ─────────────────────────────────────────────────────────
 
-    pub fn can_edit_post(user: &AuthUser, post: &Post, category_id: Uuid) -> Result<(), AppError> {
+    pub fn can_edit_post(
+        user: &AuthUser,
+        post: &Post,
+        category_id: Uuid,
+        edit_window_hours: i64,
+    ) -> Result<(), AppError> {
         Self::require_not_banned(user)?;
 
         if post.is_deleted {
@@ -108,7 +113,7 @@ impl PermissionChecker {
             return Err(AppError::forbidden("permission_denied"));
         }
 
-        if !post.is_editable_by_author(Utc::now()) {
+        if !post.is_editable_by_author(Utc::now(), edit_window_hours) {
             return Err(AppError::forbidden("edit_window_expired"));
         }
 

@@ -23,6 +23,7 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 ## Features
 
 ### Content & Discussion
+
 - **Thread-based discussions** with Markdown editor and live preview
 - **Nested replies**, quote reply, soft-delete with edit window (24h)
 - **Best Answer** — mark the post that solved the thread
@@ -32,12 +33,14 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 - **Bookmarks** — save threads for later
 
 ### Discovery & Search
+
 - **Home feed** — newest, hottest, unanswered, solved filters
 - **Full-text search** — PostgreSQL FTS (Phase 1) or Meilisearch (Phase 2)
 - **Forum index** — category overview with thread counts and last activity
 - **Tag-based feeds** — browse all threads by tag
 
 ### Users & Profiles
+
 - **Registration** with email verification
 - **Trust levels** (New → Basic → Member → Regular → Leader) — anti-spam gate for new accounts
 - **Avatar + cover image** upload (content-addressed storage, deduplicates automatically)
@@ -46,12 +49,14 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 - **Watched & muted categories** — per-user feed personalization
 
 ### Notifications
+
 - **In-app notification inbox** with unread count
 - **Server-Sent Events (SSE)** real-time push — no WebSocket overhead
 - **Email notifications** — per-event opt-in (reply, mention, reaction, best answer)
 - **Automatic polling fallback** if SSE connection drops
 
 ### Moderation
+
 - **RBAC** — roles and permissions stored in DB, fully configurable from the admin UI without code changes
 - **Category-scoped moderators** — assign a moderator to specific categories only
 - **Report queue** — report posts/threads, resolve or dismiss per category
@@ -60,6 +65,7 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 - **Audit log** — every mod/admin action is recorded and searchable
 
 ### Administration
+
 - **Dashboard** — DAU, MAU, new threads, new users, pending reports
 - **Role manager** — create custom roles (e.g. `vip`, `supporter`), assign permission matrix per role
 - **Category CRUD** — 2-level hierarchy, view policy (public/members_only/staff_only), post policy
@@ -68,6 +74,7 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 - **First-run setup wizard** — create the initial admin account before first use
 
 ### Plugins
+
 - **3-tier plugin system** — Tier 1 (Manifest: declarative webhooks), Tier 2 (Script: sandboxed JS via boa_engine), Tier 3 (Service: sidecar process — planned)
 - **Before-hooks** — plugins can inspect and block requests (post create, thread create, user register…)
 - **After-events** — fire-and-forget event dispatch to all active plugins
@@ -75,6 +82,7 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 - **Circuit breaker** — a misbehaving plugin is isolated; the forum always stays up
 
 ### Developer / Operations
+
 - **Capability toggles via env vars** — Redis, S3, Meilisearch, read replica are each optional; the system starts and works without them using safe fallbacks
 - **Content-addressed file storage (CAS)** — SHA-256 keyed, ref-counted; backed by S3 (production) or the database (development)
 - **XML sitemap** auto-generated for all public pages
@@ -91,21 +99,21 @@ Running a community means your data, your rules. Ferum Board is built for teams 
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| API server | **Rust** + **Axum 0.8** (async, Tokio) |
-| Database | **PostgreSQL 16** (FTS, JSONB, triggers) |
-| ORM / migrations | **Sea-ORM 1.0** |
-| HTML rendering | **Tera** (Jinja2 syntax, server-rendered) |
+| Layer               | Technology                                                        |
+| ------------------- | ----------------------------------------------------------------- |
+| API server          | **Rust** + **Axum 0.8** (async, Tokio)                            |
+| Database            | **PostgreSQL 16** (FTS, JSONB, triggers)                          |
+| ORM / migrations    | **Sea-ORM 1.0**                                                   |
+| HTML rendering      | **Tera** (Jinja2 syntax, server-rendered)                         |
 | Interactive islands | **Svelte 5** Web Components (compiled to `ferum-widgets.iife.js`) |
-| Admin / mod UI | **HTMX** + **Alpine.js** + vanilla JS |
-| UI framework | **Bootstrap 5.3** |
-| Auth | JWT (httpOnly cookie) + bcrypt |
-| Email | Lettre 0.11 (SMTP) |
-| Plugin scripts | **boa_engine** (pure Rust JS sandbox, no V8/Deno) |
-| Cache / rate limit | Redis 7 (optional; in-memory fallback) |
-| File storage | S3-compatible / MinIO (optional; PostgreSQL fallback) |
-| Search | Meilisearch (optional; PostgreSQL FTS fallback) |
+| Admin / mod UI      | **HTMX** + **Alpine.js** + vanilla JS                             |
+| UI framework        | **Bootstrap 5.3**                                                 |
+| Auth                | JWT (httpOnly cookie) + bcrypt                                    |
+| Email               | Lettre 0.11 (SMTP)                                                |
+| Plugin scripts      | **boa_engine** (pure Rust JS sandbox, no V8/Deno)                 |
+| Cache / rate limit  | Redis 7 (optional; in-memory fallback)                            |
+| File storage        | S3-compatible / MinIO (optional; PostgreSQL fallback)             |
+| Search              | Meilisearch (optional; PostgreSQL FTS fallback)                   |
 
 ---
 
@@ -127,10 +135,10 @@ cd ferum-board
 ```bash
 cd backend
 cp .env.example .env   # edit DATABASE_URL — THEMES_DIR/STATIC_DIR already set to ../frontend/*
-cargo run              # app at http://localhost:8080
+cargo run              # app at http://localhost:5173
 ```
 
-The app is at `http://localhost:8080`. On first run, navigate to `/setup` to create the initial admin account.
+The app is at `http://localhost:5173`. On first run, navigate to `/setup` to create the initial admin account.
 
 > No Redis, S3, or Meilisearch required in development. The app uses in-memory fallbacks automatically.
 
@@ -170,25 +178,25 @@ All configuration is via environment variables. No config files required.
 
 ### Required
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `APP_URL` | Public base URL (e.g. `https://forum.example.com`) |
-| `JWT_SECRET` | 256-bit random hex string |
-| `FROM_EMAIL` | Sender address for outgoing email |
+| Variable       | Description                                        |
+| -------------- | -------------------------------------------------- |
+| `DATABASE_URL` | PostgreSQL connection string                       |
+| `APP_URL`      | Public base URL (e.g. `https://forum.example.com`) |
+| `JWT_SECRET`   | 256-bit random hex string                          |
+| `FROM_EMAIL`   | Sender address for outgoing email                  |
 
 ### Optional (with fallbacks)
 
-| Variable | Default when absent | What it enables |
-|----------|---------------------|-----------------|
-| `REDIS_URL` | In-memory (single instance) | Async jobs, Redis rate limit, shared cache |
-| `S3_ENDPOINT` | PostgreSQL table (dev only) | Scalable file storage |
-| `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | — | Required when `S3_ENDPOINT` is set |
-| `CDN_BASE_URL` | App URL for file links | CDN edge for media |
-| `MEILISEARCH_URL` | PostgreSQL FTS | Typo-tolerant, faceted search |
-| `DATABASE_READ_URL` | Primary for all reads | Read replica routing |
-| `RATE_LIMIT_ENABLED` | `true` | Set `false` for local dev |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | — | Outgoing email |
+| Variable                                           | Default when absent         | What it enables                            |
+| -------------------------------------------------- | --------------------------- | ------------------------------------------ |
+| `REDIS_URL`                                        | In-memory (single instance) | Async jobs, Redis rate limit, shared cache |
+| `S3_ENDPOINT`                                      | PostgreSQL table (dev only) | Scalable file storage                      |
+| `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`      | —                           | Required when `S3_ENDPOINT` is set         |
+| `CDN_BASE_URL`                                     | App URL for file links      | CDN edge for media                         |
+| `MEILISEARCH_URL`                                  | PostgreSQL FTS              | Typo-tolerant, faceted search              |
+| `DATABASE_READ_URL`                                | Primary for all reads       | Read replica routing                       |
+| `RATE_LIMIT_ENABLED`                               | `true`                      | Set `false` for local dev                  |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | —                           | Outgoing email                             |
 
 See [CLAUDE.md](CLAUDE.md) for the full reference.
 
@@ -208,11 +216,11 @@ Ferum Board uses **full RBAC** — roles and permissions are stored in the datab
 
 ## Deployment Profiles
 
-| Profile | Infrastructure | Use case |
-|---------|---------------|----------|
-| **A — Dev** | PostgreSQL only | Local development, no Docker |
-| **B — Staging** | PostgreSQL + Redis + MinIO | Single VPS, small production |
-| **C — Production** | All services + CDN + read replica | High-traffic production |
+| Profile            | Infrastructure                    | Use case                     |
+| ------------------ | --------------------------------- | ---------------------------- |
+| **A — Dev**        | PostgreSQL only                   | Local development, no Docker |
+| **B — Staging**    | PostgreSQL + Redis + MinIO        | Single VPS, small production |
+| **C — Production** | All services + CDN + read replica | High-traffic production      |
 
 The app detects which services are configured and switches adapters automatically. Missing services degrade gracefully with logged warnings — the server never refuses to start.
 

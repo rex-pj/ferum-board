@@ -25,6 +25,18 @@ pub trait TokenService: Send + Sync {
     fn verify_refresh_token(&self, token: &str) -> Result<Uuid, AppError>;
     fn mint_email_token(&self, user_id: Uuid, purpose: &str) -> Result<String, AppError>;
     fn verify_email_token<'a>(&self, token: &'a str, expected_purpose: &'a str) -> Result<Uuid, AppError>;
+
+    /// Lifetime of minted access tokens. Every consumer (claims `exp`, cookie
+    /// Max-Age) must read this instead of hardcoding a duration, so the token
+    /// and its cookie can never disagree.
+    fn access_token_ttl_secs(&self) -> u64 {
+        crate::constants::DEFAULT_JWT_EXPIRY_SECS
+    }
+
+    /// Lifetime of minted refresh tokens (token `exp`, cache-key TTL, cookie Max-Age).
+    fn refresh_token_ttl_secs(&self) -> u64 {
+        crate::constants::DEFAULT_REFRESH_TOKEN_EXPIRY_DAYS * 86_400
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -43,8 +43,8 @@ pub struct ThreadUseCase {
     pub users: Arc<dyn UserRepository>,
     pub plugin_runtime: Arc<dyn PluginHookRuntime>,
     pub site_config: Option<Arc<dyn SiteConfigRepository>>,
-    /// Khi true: dùng DB thread_view_dedup để dedup view (mỗi user chỉ tính 1 lần/thread/ngày).
-    /// Khi false: mọi request đều đếm view.
+    /// When true: dedup views via the thread_view_dedup table (each viewer counts once per thread per day).
+    /// When false: every request counts as a view.
     pub dedup_view_counts: bool,
     /// In-memory buffer: batches view count increments and flushes to DB every 60s.
     /// Eliminates per-request hot-row UPDATE on threads.view_count under concurrent load.

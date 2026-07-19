@@ -53,25 +53,18 @@ pub async fn login(
         })
         .await?;
 
-    let secure = if state.cookies_secure { "; Secure" } else { "" };
     let mut headers = HeaderMap::new();
     headers.insert(
         header::SET_COOKIE,
-        format!(
-            "refresh_token={}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=604800{}",
-            result.refresh_token, secure
-        )
-        .parse()
-        .unwrap(),
+        crate::utils::refresh_token_cookie(&state, &result.refresh_token)
+            .parse()
+            .unwrap(),
     );
     headers.append(
         header::SET_COOKIE,
-        format!(
-            "token={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600{}",
-            result.access_token, secure
-        )
-        .parse()
-        .unwrap(),
+        crate::utils::access_token_cookie(&state, &result.access_token)
+            .parse()
+            .unwrap(),
     );
 
     Ok((
@@ -94,25 +87,14 @@ pub async fn logout(
         }
     }
 
-    let secure = if state.cookies_secure { "; Secure" } else { "" };
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert(
         header::SET_COOKIE,
-        format!(
-            "token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{}",
-            secure
-        )
-        .parse()
-        .unwrap(),
+        crate::utils::clear_access_token_cookie(&state).parse().unwrap(),
     );
     resp_headers.append(
         header::SET_COOKIE,
-        format!(
-            "refresh_token=; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=0{}",
-            secure
-        )
-        .parse()
-        .unwrap(),
+        crate::utils::clear_refresh_token_cookie(&state).parse().unwrap(),
     );
 
     Ok((StatusCode::NO_CONTENT, resp_headers))
@@ -184,16 +166,12 @@ pub async fn refresh(
     let refresh_token = extract_refresh_cookie(&headers).ok_or(AppError::Unauthorized)?;
     let RefreshResult { access_token } = state.auth.refresh_access_token(&refresh_token).await?;
 
-    let secure = if state.cookies_secure { "; Secure" } else { "" };
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert(
         header::SET_COOKIE,
-        format!(
-            "token={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600{}",
-            access_token, secure
-        )
-        .parse()
-        .unwrap(),
+        crate::utils::access_token_cookie(&state, &access_token)
+            .parse()
+            .unwrap(),
     );
 
     // Access token is delivered only via httpOnly cookie — never in the body.

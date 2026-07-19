@@ -13,7 +13,7 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::user::{TrustLevel, User, UserPreferences};
 use ferum_domain::repositories::user_repository::{NewUser, UpdateUser, UserRepository};
 
-const SLOW_QUERY_MS: u128 = 500;
+use crate::observability::slow_query_threshold_ms;
 
 fn primary_role_subexpr() -> SimpleExpr {
     let subq = Query::select()
@@ -200,7 +200,7 @@ impl UserRepository for PgUserRepository {
             .await?
             .map(row_to_domain);
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), "slow_query: find_by_email");
         }
         Ok(result)
@@ -428,7 +428,7 @@ impl UserRepository for PgUserRepository {
             .all(&self.db)
             .await?;
         let elapsed = t0.elapsed();
-        if elapsed.as_millis() > SLOW_QUERY_MS {
+        if elapsed.as_millis() > slow_query_threshold_ms() {
             tracing::warn!(elapsed_ms = elapsed.as_millis(), page, "slow_query: list_paginated");
         }
         Ok((rows.into_iter().map(row_to_domain).collect(), total))

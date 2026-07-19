@@ -46,11 +46,12 @@ pub struct Post {
 }
 
 impl Post {
-    pub fn is_editable_by_author(&self, now: DateTime<Utc>) -> bool {
+    /// `edit_window_hours` comes from site_config (`post_edit_window_hours`) —
+    /// the caller resolves it so admin changes apply to posts and threads alike.
+    pub fn is_editable_by_author(&self, now: DateTime<Utc>, edit_window_hours: i64) -> bool {
         if self.is_deleted {
             return false;
         }
-        let edit_window = chrono::Duration::hours(24);
-        now - self.created_at <= edit_window
+        now - self.created_at <= chrono::Duration::hours(edit_window_hours)
     }
 }

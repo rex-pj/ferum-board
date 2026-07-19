@@ -59,12 +59,12 @@ use ferum_infrastructure::{
 use migration::MigratorTrait;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 
-pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
-    // ─── PostgreSQL ─────────────────────────────────────────────────────────
-    let mut write_opts = ConnectOptions::new(&config.database_url);
-    write_opts
-        .max_connections(20)
-        .min_connections(2)
+/// Pool options shared by the write and read connections. Pool sizing comes
+/// from DB_MAX_CONNECTIONS / DB_MIN_CONNECTIONS; timeouts are fixed.
+fn build_connect_options(url: &str, config: &Config) -> ConnectOptions {
+    let mut opts = ConnectOptions::new(url);
+    opts.max_connections(config.db_max_connections)
+        .min_connections(config.db_min_connections)
         .connect_timeout(std::time::Duration::from_secs(5))
         .acquire_timeout(std::time::Duration::from_secs(5))
         .idle_timeout(std::time::Duration::from_secs(300))
@@ -73,7 +73,15 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         // per-query formatting overhead on the hot path. Re-enable with a level filter
         // only when debugging queries.
         .sqlx_logging(false);
-    let pg_write = Database::connect(write_opts).await?;
+    opts
+}
+
+pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
+    // Observability knobs read by infrastructure without threading through every repo.
+    ferum_infrastructure::observability::set_slow_query_threshold_ms(config.slow_query_ms);
+
+    // ─── PostgreSQL ─────────────────────────────────────────────────────────
+    let pg_write = Database::connect(build_connect_options(&config.database_url, config)).await?;
 
     // ─── Run database migrations ─────────────────────────────────────────────
     tracing::info!("Running database migrations...");
@@ -83,16 +91,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let pg_read: DatabaseConnection = match &config.database_read_url {
         Some(url) => {
             tracing::info!("Read replica enabled");
-            let mut read_opts = ConnectOptions::new(url);
-            read_opts
-                .max_connections(20)
-                .min_connections(2)
-                .connect_timeout(std::time::Duration::from_secs(5))
-                .acquire_timeout(std::time::Duration::from_secs(5))
-                .idle_timeout(std::time::Duration::from_secs(300))
-                .max_lifetime(std::time::Duration::from_secs(1800))
-                .sqlx_logging(false);
-            Database::connect(read_opts).await?
+            Database::connect(build_connect_options(url, config)).await?
         }
         None => {
             tracing::info!("No DATABASE_READ_URL — read queries use primary");
@@ -130,11 +129,18 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             tracing::info!("S3_ENDPOINT set — using S3 object storage");
             let access_key = config.s3_access_key.as_deref().unwrap_or_default();
             let secret_key = config.s3_secret_key.as_deref().unwrap_or_default();
-            let bucket = config.s3_bucket.as_deref().unwrap_or("ferum-board");
+            let bucket = config.s3_bucket.as_deref().unwrap_or("forum-uploads");
             let cdn_base = config.cdn_base_url.as_deref().unwrap_or(endpoint);
             Arc::new(
-                S3StorageService::new(endpoint, access_key, secret_key, bucket, "us-east-1", cdn_base)
-                    .await,
+                S3StorageService::new(
+                    endpoint,
+                    access_key,
+                    secret_key,
+                    bucket,
+                    &config.s3_region,
+                    cdn_base,
+                )
+                .await,
             )
         }
         None => {
@@ -179,7 +185,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let search_svc: Arc<dyn SearchService> = match &config.meilisearch_url {
         Some(url) => {
             tracing::info!("MEILISEARCH_URL set — using Meilisearch");
-            Arc::new(MeilisearchService::new(url, config.meilisearch_key.as_deref(), "threads"))
+            Arc::new(MeilisearchService::new(
+                url,
+                config.meilisearch_key.as_deref(),
+                &config.meilisearch_index,
+            ))
         }
         None => Arc::new(PostgresFtsService::new(pg_read.clone())),
     };
@@ -253,7 +263,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     }
     let hasher = Arc::new(BcryptPasswordHasher);
     let token_service: Arc<dyn ferum_application::ports::TokenService> =
-        Arc::new(JwtTokenService::new(&config.jwt_secret));
+        Arc::new(JwtTokenService::new(
+            &config.jwt_secret,
+            config.jwt_expiry_seconds,
+            config.refresh_token_expiry_days * 86_400,
+        ));
 
     // ─── Plugin system (before event_bus so plugin_runtime can be injected) ──
     let plugin_repo = Arc::new(PgPluginRepository::new(pg_write.clone()));
@@ -535,7 +549,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let tera = TeraEngine::new(themes_dir, admin_templates_dir, static_dir)
         .map_err(|e| anyhow::anyhow!("template load failed: {e}"))?;
 
-    // ─── Background: flush daily stats mỗi 5 phút ──────────────────────────────
+    // ─── Background: flush daily stats every 5 minutes ─────────────────────────
     // One-time backfill: populate daily_stats for all past dates from source tables.
     // Idempotent (ON CONFLICT DO NOTHING) — safe to run on every restart.
     if let Err(e) = admin_stats.backfill_history().await {
@@ -558,7 +572,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         });
     }
 
-    // ─── Background: flush view count buffer mỗi 60s ───────────────────────────
+    // ─── Background: flush view count buffer every 60s ─────────────────────────
     // Batches threads.view_count UPDATE to avoid hot-row contention under load.
     {
         let thread_uc = thread.clone();
