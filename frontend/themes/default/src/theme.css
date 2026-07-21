@@ -4,8 +4,6 @@
    Output: assets/theme.css  — served by Axum unchanged
 ================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 @import "_tokens.css";
 @import "_preferences.css";
 @import "_base.css";
@@ -24,3 +22,7 @@
 @import "_avatar.css";
 @import "_utilities.css";
 @import "_transitions.css";
+/* Last: the catalog block was authored directly into the built asset and had
+   accumulated at the end of the file. Keeping it last preserves that cascade
+   order exactly, so extracting it here changes nothing about what ships. */
+@import "_catalog.css";

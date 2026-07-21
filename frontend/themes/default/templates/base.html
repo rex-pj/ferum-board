@@ -32,9 +32,9 @@
   <link rel="stylesheet" href="/static/css/fontawesome/all.min.css">
   {# Always load the default theme first (layout, fr-* classes, design tokens).
      If a non-default theme is active, load it on top to override colors/vars. #}
-  <link rel="stylesheet" href="/themes/default/assets/theme.css">
+  <link rel="stylesheet" href="/themes/default/assets/theme.css?v={{ asset_version() }}">
   {% if active_theme != "default" %}
-  <link rel="stylesheet" href="/themes/{{ active_theme }}/assets/theme.css">
+  <link rel="stylesheet" href="/themes/{{ active_theme }}/assets/theme.css?v={{ asset_version() }}">
   {% endif %}
 
   {# Primary color override — sets --ferum-primary only; all component hover/active

@@ -1,6 +1,7 @@
 pub mod categories;
 pub mod config;
 pub mod plugins;
+pub mod products;
 pub mod reports;
 pub mod roles;
 pub mod stats;

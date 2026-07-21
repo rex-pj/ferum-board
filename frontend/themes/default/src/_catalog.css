@@ -1,0 +1,218 @@
+
+/* ══════════════════════════════════════════════════════════════════════
+   Interior-review / catalog UI
+   Product catalog cards, product-detail gallery, review rating inputs,
+   star histogram, and the home review widgets (stat band + top-rated shelf).
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Catalog product card ─────────────────────────────────────────── */
+.fr-product-card {
+  display: block;
+  height: 100%;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+.fr-product-card:hover {
+  border-color: var(--ferum-primary);
+  box-shadow: var(--bs-box-shadow-sm);
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: inherit;
+}
+.fr-product-thumb {
+  aspect-ratio: 4 / 3;
+  background: var(--bs-tertiary-bg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-tertiary-color);
+}
+.fr-product-thumb img { width: 100%; height: 100%; object-fit: cover; }
+/* No-photo state: drop the tall 4:3 box so it reads as a modest placeholder. */
+.fr-product-thumb--empty {
+  aspect-ratio: auto;
+  min-height: 160px;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.fr-product-card-body { padding: 0.5rem 0.625rem; }
+.fr-product-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--bs-body-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fr-product-meta { font-size: 0.75rem; color: var(--bs-secondary-color); }
+.fr-product-price { font-size: 0.78rem; color: var(--bs-body-color); font-weight: 500; }
+.fr-rating-line { font-size: 0.72rem; }
+.fr-rating { white-space: nowrap; }
+
+/* ── Review chip (pill) ───────────────────────────────────────────── */
+.fr-review-chip {
+  display: inline-block;
+  font-size: 0.62rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  color: var(--bs-secondary-color);
+}
+
+/* ── Filter bar inside a panel (catalog) ──────────────────────────── */
+.fr-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+/* Match the 36px min-height the theme gives .btn-sm so inputs, selects and the
+   submit button line up as one even row. */
+.fr-filter-bar .form-control,
+.fr-filter-bar .form-select { min-height: 36px; }
+
+/* ── Star distribution histogram ──────────────────────────────────── */
+.fr-histo-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; }
+.fr-histo-label { width: 2.6rem; color: var(--bs-secondary-color); white-space: nowrap; }
+.fr-histo-count { width: 2.2rem; text-align: end; color: var(--bs-secondary-color); }
+
+/* ── Rating panel (product page) ──────────────────────────────────── */
+
+/* Headline score. The stars and the number carry the same value, so the
+   number is what gets the weight — the stars are the at-a-glance shape. */
+
+.fr-rating-headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.fr-rating-score {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--bs-body-color);
+}
+
+/* "/5" stays subordinate: it is the scale, not the reading. */
+
+.fr-rating-max {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--bs-secondary-color);
+}
+
+/* Section label inside a panel body. Separates the two charts in the rating
+   panel, which use different scales (% of reviewers vs score out of 5) and
+   would otherwise read as one continuous series. */
+
+.fr-subhead {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bs-tertiary-color);
+  margin-bottom: 0.375rem;
+}
+
+/* ── Star rating input (new-thread review block) ──────────────────── */
+.fr-star-input { display: inline-flex; align-items: center; gap: 0; }
+.fr-star-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;            /* 44px — meets the mobile tap-target minimum */
+  height: 2.75rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  transition: transform 0.1s ease;
+}
+/* Muted outline until picked, warm gold once painted (JS swaps fa-regular↔fa-solid) */
+.fr-star-btn .fa-regular { color: var(--bs-border-color); }
+.fr-star-btn .fa-solid   { color: #f5a623; }
+.fr-star-btn:hover { transform: scale(1.12); }
+.fr-star-btn:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: -3px;
+  border-radius: 8px;
+}
+.fr-star-input--lg .fr-star-btn { width: 3rem; height: 3rem; font-size: 1.7rem; }
+.fr-rate-label { font-size: 0.875rem; font-weight: 500; color: var(--bs-body-color); }
+.fr-rate-overall .fr-rate-label { min-width: 5.5rem; font-weight: 600; }
+.fr-rate-row { flex-wrap: wrap; }
+.fr-rate-row .fr-rate-label { flex-shrink: 0; }
+.fr-rate-hint { min-width: 6.5rem; }
+
+/* ── Material toggle chips (new-product form) ─────────────────────── */
+.fr-mat-chip {
+  min-height: 2.75rem;       /* 44px — meets the mobile tap-target minimum */
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+/* ── Home: horizontal product shelf ("top rated") ─────────────────── */
+.fr-shelf {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.fr-shelf-card { flex: 0 0 190px; scroll-snap-align: start; }
+@media (max-width: 575.98px) { .fr-shelf-card { flex-basis: 150px; } }
+
+/* ── Home: market-data stat band ──────────────────────────────────── */
+.fr-stat-band { display: flex; flex-wrap: wrap; align-items: center; }
+.fr-stat-band-item {
+  flex: 1 1 0;
+  min-width: 5rem;
+  text-align: center;
+  padding: 0 0.75rem;
+}
+.fr-stat-band-item + .fr-stat-band-item { border-left: 1px solid var(--bs-border-color); }
+
+/* ── Product detail: thumbnail gallery ────────────────────────────── */
+.pdp-thumbs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.pdp-thumb {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 2px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-sm);
+  overflow: hidden;
+  background: var(--bs-tertiary-bg);
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+.pdp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pdp-thumb:hover { border-color: var(--bs-secondary-color); }
+.pdp-thumb.is-active { border-color: var(--ferum-primary); }
+.pdp-thumb:focus-visible { outline: 2px solid var(--ferum-primary); outline-offset: 2px; }
+
+/* ── Product detail: review highlights summary ────────────────────── */
+.fr-highlight-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+.fr-highlight-pill i { font-size: 0.8rem; }
+.fr-highlight-pill .fr-highlight-val { font-weight: 700; }

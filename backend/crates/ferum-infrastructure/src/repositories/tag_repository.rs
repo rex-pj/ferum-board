@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::prelude::*;
+use sea_orm::sea_query::extension::postgres::PgExpr;
 use sea_orm::*;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -36,11 +37,12 @@ impl TagRepository for PgTagRepository {
     async fn list<'a>(&self, query: Option<&'a str>, limit: u32) -> Result<Vec<Tag>, AppError> {
         let mut q = tags::Entity::find().order_by_asc(tags::Column::Name);
         if let Some(search) = query.filter(|s| !s.is_empty()) {
+            // Case-insensitive (ILIKE) so tag suggestions ignore letter case.
             let pattern = format!("%{}%", search);
             q = q.filter(
                 Condition::any()
-                    .add(tags::Column::Name.like(&pattern))
-                    .add(tags::Column::Slug.like(&pattern)),
+                    .add(Expr::col(tags::Column::Name).ilike(pattern.clone()))
+                    .add(Expr::col(tags::Column::Slug).ilike(pattern)),
             );
         }
         Ok(q.limit(limit as u64).all(&self.db).await?.into_iter().map(to_domain).collect())

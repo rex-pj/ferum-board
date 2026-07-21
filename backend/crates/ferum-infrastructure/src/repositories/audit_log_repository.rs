@@ -65,7 +65,13 @@ impl AuditLogRepository for PgAuditLogRepository {
             query = query.filter(audit_logs::Column::TargetType.eq(tt));
         }
         if let Some(q) = action_contains.filter(|s| !s.is_empty()) {
-            query = query.filter(audit_logs::Column::Action.contains(q));
+            // Case-insensitive substring match on the action code.
+            query = query.filter(
+                sea_orm::sea_query::extension::postgres::PgExpr::ilike(
+                    sea_orm::sea_query::Expr::col(audit_logs::Column::Action),
+                    format!("%{q}%"),
+                ),
+            );
         }
         if let Some(from) = created_from {
             query = query.filter(audit_logs::Column::CreatedAt.gte(from));

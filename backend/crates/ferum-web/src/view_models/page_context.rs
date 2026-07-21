@@ -121,6 +121,14 @@ pub struct ThreadCtx {
     pub author_avatar_url: Option<String>,
     pub category_slug: String,
     pub category_name: String,
+    /// True when this thread lives in the canonical Reviews category — lets list
+    /// cards flag reviews apart from ordinary discussions.
+    pub is_review: bool,
+    /// The review's overall star score (1–5), when this is a review with a rating.
+    pub review_overall: Option<i16>,
+    /// Reviewed product's cover image key — a card thumbnail fallback for reviews
+    /// that have no thumbnail of their own.
+    pub review_product_image: Option<String>,
     pub reply_count: i32,
     pub view_count: i32,
     pub is_pinned: bool,

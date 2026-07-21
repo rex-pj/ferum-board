@@ -1,0 +1,39 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Materials — {{ site.name }}{% endblock %}
+{% block description %}Look up furniture materials and browse products by material on {{ site.name }}.{% endblock %}
+
+{% block content %}
+{% include "default/templates/partials/catalog_nav.html" %}
+<p class="text-muted small mb-4">Pick a material to see every product that uses it.</p>
+
+{% if material_groups %}
+  {% for group in material_groups %}
+  <div class="mb-4">
+    <h2 class="h6 text-uppercase text-muted fw-semibold mb-2">{{ m::material_category_label(c=group.category) }}</h2>
+    <div class="row g-2">
+      {% for mat in group.items %}
+      <div class="col-6 col-md-4 col-lg-3">
+        <a href="/catalog?material_id={{ mat.id }}" class="fr-product-card">
+          <div class="fr-product-card-body">
+            <div class="fr-product-name">
+              <i class="fa-solid fa-swatchbook fa-xs text-muted me-1" aria-hidden="true"></i>{{ mat.name }}
+            </div>
+            {% if mat.description %}
+              <div class="fr-product-meta mt-1">{{ mat.description | truncate(length=64) }}</div>
+            {% endif %}
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="fa-solid fa-swatchbook fa-2x mb-2 opacity-25 d-block" aria-hidden="true"></i>
+  No materials yet.
+</div>
+{% endif %}
+{% endblock %}

@@ -2,13 +2,19 @@
 
 pub mod audit_log;
 pub mod bookmark;
+pub mod brand;
 pub mod follow;
+pub mod material;
 pub mod plugin;
 pub mod category;
 pub mod notification;
 pub mod post;
+pub mod product;
+pub mod product_media;
+pub mod product_rating_stats;
 pub mod reaction;
 pub mod report;
+pub mod review_rating;
 pub mod role;
 pub mod tag;
 pub mod thread;
@@ -18,7 +24,13 @@ pub mod theme;
 
 pub use audit_log::AuditLog;
 pub use bookmark::Bookmark;
+pub use brand::{Brand, NewBrand};
 pub use follow::Follow;
+pub use material::{Material, NewMaterial};
+pub use product::{NewProduct, Product, ProductStatus, ProductType};
+pub use product_media::{NewProductMedia, ProductMedia};
+pub use product_rating_stats::ProductRatingStats;
+pub use review_rating::{NewReviewRating, ReviewRating};
 pub use category::{Category, PostPolicy, ViewPolicy};
 pub use notification::{Notification, NotificationKind};
 pub use post::{Post, PostStatus};

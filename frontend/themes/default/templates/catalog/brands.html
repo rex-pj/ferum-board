@@ -1,0 +1,41 @@
+{% extends "default/templates/base.html" %}
+
+{% block title %}Brands — {{ site.name }}{% endblock %}
+{% block description %}A directory of furniture brands on {{ site.name }}.{% endblock %}
+
+{% block content %}
+{% include "default/templates/partials/catalog_nav.html" %}
+<p class="text-muted small mb-4">Pick a brand to see all of its products.</p>
+
+{% if brands %}
+<div class="row g-3">
+  {% for b in brands %}
+  <div class="col-6 col-md-4 col-lg-3">
+    <a href="/catalog?brand_id={{ b.id }}" class="fr-product-card">
+      <div class="fr-product-card-body">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          {% if b.logo_url %}
+            <img src="{{ b.logo_url }}" alt="{{ b.name }}" class="rounded" style="width:32px;height:32px;object-fit:cover">
+          {% else %}
+            <span class="rounded bg-body-tertiary d-inline-flex align-items-center justify-content-center flex-shrink-0"
+                  style="width:32px;height:32px"><i class="fa-solid fa-tag text-muted" aria-hidden="true"></i></span>
+          {% endif %}
+          <span class="fr-product-name">{{ b.name }}</span>
+          {% if b.is_verified %}
+            <i class="fa-solid fa-circle-check text-primary" title="Verified" aria-hidden="true"></i>
+          {% endif %}
+        </div>
+        {% if b.country %}<div class="fr-product-meta"><i class="fa-solid fa-location-dot fa-xs me-1" aria-hidden="true"></i>{{ b.country }}</div>{% endif %}
+        {% if b.description %}<div class="fr-product-meta mt-1">{{ b.description | truncate(length=80) }}</div>{% endif %}
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="fa-solid fa-tag fa-2x mb-2 opacity-25 d-block" aria-hidden="true"></i>
+  No brands yet.
+</div>
+{% endif %}
+{% endblock %}

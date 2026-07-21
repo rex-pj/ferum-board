@@ -121,6 +121,31 @@ pub async fn create_thread(
     let mut content_md: Option<String> = None;
     let mut thumbnail: Option<(bytes::Bytes, String)> = None;
     let mut tag_names: Vec<String> = Vec::new();
+    let mut product_id: Option<Uuid> = None;
+    // Structured rating — present only for product reviews, submitted in the same
+    // request so a review and its rating are created as one operation.
+    let mut overall: Option<i16> = None;
+    let mut durability: Option<i16> = None;
+    let mut materials: Option<i16> = None;
+    let mut comfort: Option<i16> = None;
+    let mut aesthetics: Option<i16> = None;
+    let mut value_for_money: Option<i16> = None;
+    let mut verified_purchase = false;
+
+    // Parse a multipart text field into an optional i16 score.
+    async fn score_field(field: axum::extract::multipart::Field<'_>) -> Result<Option<i16>, AppError> {
+        let s = field
+            .text()
+            .await
+            .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+        let s = s.trim();
+        if s.is_empty() {
+            return Ok(None);
+        }
+        s.parse::<i16>()
+            .map(Some)
+            .map_err(|_| AppError::UnprocessableEntity("Invalid rating value".to_string()))
+    }
 
     while let Some(field) = multipart
         .next_field()
@@ -177,12 +202,44 @@ pub async fn create_thread(
                 validate_image_field(&ct, &data)?;
                 thumbnail = Some((data, ct));
             }
+            Some("product_id") => {
+                let s = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+                let s = s.trim();
+                if !s.is_empty() {
+                    product_id = Some(s.parse::<Uuid>().map_err(|_| {
+                        AppError::UnprocessableEntity("Invalid product_id".to_string())
+                    })?);
+                }
+            }
+            Some("overall") => overall = score_field(field).await?,
+            Some("durability") => durability = score_field(field).await?,
+            Some("materials") => materials = score_field(field).await?,
+            Some("comfort") => comfort = score_field(field).await?,
+            Some("aesthetics") => aesthetics = score_field(field).await?,
+            Some("value_for_money") => value_for_money = score_field(field).await?,
+            Some("verified_purchase") => {
+                let s = field
+                    .text()
+                    .await
+                    .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+                verified_purchase = matches!(s.trim(), "true" | "1" | "on");
+            }
             _ => {}
         }
     }
 
-    let category_id = category_id
-        .ok_or_else(|| AppError::UnprocessableEntity("category_id is required".to_string()))?;
+    // A product review always lands in the canonical Reviews category (resolved
+    // server-side) — the submitter never picks a forum category, and every
+    // product's reviews stay grouped together. Only plain threads need one.
+    let category_id = if product_id.is_some() {
+        state.category.ensure_reviews_category().await?.id
+    } else {
+        category_id
+            .ok_or_else(|| AppError::UnprocessableEntity("category_id is required".to_string()))?
+    };
     let title =
         title.ok_or_else(|| AppError::UnprocessableEntity("title is required".to_string()))?;
     let content_md = content_md
@@ -200,9 +257,26 @@ pub async fn create_thread(
         PermissionChecker::can_upload(actor)?;
     }
 
+    // Enforce the review invariant up front (before any write): a product review
+    // must carry a valid overall score, and every provided score is 1–5. Failing
+    // here means nothing is created — no orphan thread to roll back.
+    if product_id.is_some() {
+        let o = overall.ok_or_else(|| {
+            AppError::UnprocessableEntity("A star rating is required for a product review.".into())
+        })?;
+        for s in [Some(o), durability, materials, comfort, aesthetics, value_for_money]
+            .into_iter()
+            .flatten()
+        {
+            if !(1..=5).contains(&s) {
+                return Err(AppError::UnprocessableEntity("Ratings must be between 1 and 5.".into()).into());
+            }
+        }
+    }
+
     let mut thread = state
         .thread
-        .create(actor, CreateThreadCmd { category_id, title, content_md: content_md.clone(), tag_names })
+        .create(actor, CreateThreadCmd { category_id, title, content_md: content_md.clone(), tag_names, product_id })
         .await?;
 
     let post = match state
@@ -225,6 +299,26 @@ pub async fn create_thread(
             return Err(e.into());
         }
     };
+
+    // Same operation: attach the OP's structured rating. Pre-validated above, so a
+    // failure here is a rare DB error — roll the whole review back rather than
+    // leave a rated-review thread without its rating.
+    if let (Some(_), Some(o)) = (product_id, overall) {
+        let rating = ferum_domain::models::review_rating::NewReviewRating {
+            thread_id: thread.id,
+            overall: o,
+            durability,
+            materials,
+            comfort,
+            aesthetics,
+            value_for_money,
+            verified_purchase,
+        };
+        if let Err(e) = state.review.submit_rating(actor, thread.id, rating).await {
+            let _ = state.thread.soft_delete(actor, thread.id).await;
+            return Err(e.into());
+        }
+    }
 
     if let Some((data, content_type)) = thumbnail {
         let url = state

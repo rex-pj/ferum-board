@@ -1,0 +1,238 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}{{ product.name }} — {{ site.name }}{% endblock %}
+{% block description %}{{ product.description_md | default(value=product.name) | truncate(length=160) }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/catalog">Products</a></li>
+    <li class="breadcrumb-item active">{{ product.name }}</li>
+  </ol>
+</nav>
+
+<div class="row g-4">
+  {# ── Image gallery — click a thumbnail to swap the main image (ferum-page-product.js) ── #}
+  {% set has_image = product.primary_image_key or product.media %}
+  <div class="col-md-5">
+    <div class="fr-product-thumb rounded border mb-2 {% if not has_image %}fr-product-thumb--empty{% endif %}">
+      {% if product.primary_image_key %}
+        <img id="pdp-main-image" src="/files/{{ product.primary_image_key }}" alt="{{ product.name }}" data-name="{{ product.name }}">
+      {% elif product.media %}
+        <img id="pdp-main-image" src="/files/{{ product.media[0].storage_key }}" alt="{{ product.name }}" data-name="{{ product.name }}">
+      {% else %}
+        <div class="text-center">
+          <i class="fa-solid fa-couch fa-2x opacity-25 d-block mb-2" aria-hidden="true"></i>
+          <span class="small">No product images yet</span>
+        </div>
+      {% endif %}
+    </div>
+    {% if product.media | length > 1 %}
+      <div id="pdp-thumbs" class="pdp-thumbs" role="group" aria-label="Product images">
+        {% for md in product.media %}
+          <button type="button" class="pdp-thumb"
+                  data-full="/files/{{ md.storage_key }}"
+                  data-caption="{{ md.caption | default(value=product.name) }}"
+                  aria-label="View image: {{ md.caption | default(value=product.name) }}">
+            <img src="/files/{{ md.storage_key }}" alt="{{ md.caption | default(value=product.name) }}" loading="lazy">
+          </button>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  {# ── Details ── #}
+  <div class="col-md-7">
+    <h1 class="h4 fw-bold mb-1">
+      {{ product.name }}
+      <span class="fr-review-chip align-middle">{{ m::product_type_label(t=product.product_type) }}</span>
+    </h1>
+    {% if product.brand %}
+      <div class="mb-2">
+        <a href="/catalog?brand_id={{ product.brand.id }}" class="text-decoration-none fw-semibold">
+          {% if product.brand.logo_url %}
+            <img src="{{ product.brand.logo_url }}" alt="{{ product.brand.name }}" class="rounded me-1" style="width:20px;height:20px;object-fit:cover">
+          {% else %}
+            <i class="fa-solid fa-tag fa-xs text-muted me-1" aria-hidden="true"></i>
+          {% endif %}{{ product.brand.name }}</a>
+        {% if product.brand.is_verified %}
+          <i class="fa-solid fa-circle-check text-primary ms-1" title="Verified" aria-hidden="true"></i>
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if product.style or product.origin %}
+      <div class="text-muted mb-2">
+        {% if product.style %}{{ product.style }}{% endif %}
+        {% if product.style and product.origin %} · {% endif %}
+        {% if product.origin %}{{ product.origin }}{% endif %}
+      </div>
+    {% endif %}
+
+    <div class="fs-5 fw-semibold mb-3">
+      {% if product.price_min %}
+        {{ product.price_min | thousands }}₫{% if product.price_max and product.price_max != product.price_min %} – {{ product.price_max | thousands }}₫{% endif %}
+      {% else %}<span class="text-muted">Price on request</span>{% endif %}
+    </div>
+
+    {% if product.rating_stats and product.rating_stats.review_count > 0 %}
+      {{ m::product_rating_panel(stats=product.rating_stats, distribution=rating_distribution, min_reviews=stats_min_reviews) }}
+    {% else %}
+      <div class="text-muted small mb-3">No reviews yet — be the first.</div>
+    {% endif %}
+
+    {% if product.materials %}
+      <div class="mb-3">
+        <div class="fw-semibold small mb-1">Materials</div>
+        {% for mat in product.materials %}
+          <span class="fr-review-chip me-1 mb-1 d-inline-block">{{ mat.name }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="d-grid mt-3">
+    {% if my_review_slug %}
+      {# One review per person per product — link back to the existing review instead
+         of inviting a new one and returning 409 after the form is filled in. #}
+      <a href="/forum/t/{{ my_review_slug }}" class="btn btn-outline-primary btn-lg"><i class="fa-solid fa-pen-to-square me-2" aria-hidden="true"></i>View your review</a>
+      <div class="text-muted small text-center mt-2">You have already reviewed this product. Edit your existing review to update it.</div>
+    {% elif current_user %}
+      <a href="/new-thread?product={{ product.slug }}" class="btn btn-primary btn-lg"><i class="fa-solid fa-pen me-2" aria-hidden="true"></i>Write a review</a>
+    {% else %}
+      {% set review_next = "/new-thread?product=" ~ product.slug %}
+      <a href="/login?next={{ review_next | urlencode }}" class="btn btn-outline-primary btn-lg">Log in to review</a>
+    {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if product.description_md %}
+  <div class="mt-4">
+    <h2 class="h6 fw-bold">About this product</h2>
+    <div class="text-body" style="white-space:pre-wrap">{{ product.description_md }}</div>
+  </div>
+{% endif %}
+
+{# ── Review summary — strongest / weakest dimension, for quick scanning ──
+   Same sample threshold as the charts in the panel above: below stats_min_reviews
+   the "strongest" dimension is just whichever sorts first when every score is
+   equal, not a conclusion drawn from the data. #}
+{% if product.rating_stats and product.rating_stats.review_count >= stats_min_reviews %}
+  {% set_global best_label = "" %}
+  {% set_global best_val = 0 %}
+  {% set_global worst_label = "" %}
+  {% set_global worst_val = 6 %}
+  {# Tera can't parse nested array literals, so use two parallel flat arrays. #}
+  {% set dim_labels = ["Durability", "Materials", "Comfort", "Aesthetics", "Value for money"] %}
+  {% set dim_vals = [
+      product.rating_stats.avg_durability,
+      product.rating_stats.avg_materials,
+      product.rating_stats.avg_comfort,
+      product.rating_stats.avg_aesthetics,
+      product.rating_stats.avg_value_for_money
+  ] %}
+  {% for i in range(end=dim_labels | length) %}
+    {% set v = dim_vals[i] %}
+    {% if v %}
+      {% if v > best_val %}{% set_global best_val = v %}{% set_global best_label = dim_labels[i] %}{% endif %}
+      {% if v < worst_val %}{% set_global worst_val = v %}{% set_global worst_label = dim_labels[i] %}{% endif %}
+    {% endif %}
+  {% endfor %}
+
+  {% if best_label %}
+  <div class="fr-panel fr-highlights mt-4">
+    <div class="fr-panel-header"><i class="fa-solid fa-bolt text-warning me-1" aria-hidden="true"></i>Review summary</div>
+    <div class="fr-panel-body d-flex flex-wrap align-items-center gap-3">
+      <div class="text-center px-2" style="min-width:5.5rem">
+        <div class="display-6 fw-bold lh-1 text-warning">{{ product.rating_stats.avg_overall | round(precision=1) }}</div>
+        <div class="text-muted small mt-1">out of 5 · {{ product.rating_stats.review_count }} reviews</div>
+      </div>
+      <div class="vr d-none d-sm-block"></div>
+      <div class="d-flex flex-wrap gap-2 flex-grow-1">
+        <div class="fr-highlight-pill bg-success-subtle text-success-emphasis border border-success-subtle">
+          <i class="fa-solid fa-thumbs-up" aria-hidden="true"></i>
+          <span>Strongest:</span><strong>{{ best_label }}</strong>
+          <span class="fr-highlight-val">{{ best_val | round(precision=1) }}</span>
+        </div>
+        {% if worst_label and worst_label != best_label and worst_val < best_val %}
+        <div class="fr-highlight-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+          <i class="fa-solid fa-arrow-trend-down" aria-hidden="true"></i>
+          <span>Weakest:</span><strong>{{ worst_label }}</strong>
+          <span class="fr-highlight-val">{{ worst_val | round(precision=1) }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+{% endif %}
+
+{# ── Reviews ── #}
+<div class="mt-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h2 class="h6 fw-bold mb-0">
+      Reviews
+      {% if product.rating_stats and product.rating_stats.review_count > 0 %}<span class="text-muted fw-normal">({{ product.rating_stats.review_count }})</span>{% endif %}
+    </h2>
+    {% if product.rating_stats and product.rating_stats.review_count > 0 %}
+    {# Sort / filter — plain GET form (CSP forbids inline on* handlers) #}
+    <form method="get" class="fr-filter-bar">
+      <select name="rsort" class="form-select form-select-sm w-auto" aria-label="Sort reviews">
+        <option value="newest" {% if not active_rsort or active_rsort == "newest" %}selected{% endif %}>Newest</option>
+        <option value="highest" {% if active_rsort == "highest" %}selected{% endif %}>Highest rated</option>
+        <option value="lowest" {% if active_rsort == "lowest" %}selected{% endif %}>Lowest rated</option>
+      </select>
+      <div class="form-check mb-0">
+        <input class="form-check-input" type="checkbox" id="rv-verified" name="verified" value="1" {% if verified_only %}checked{% endif %}>
+        <label class="form-check-label small" for="rv-verified">Verified purchases only</label>
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if reviews %}
+    <div class="fr-panel">
+      {% for rv in reviews %}
+      <a href="/forum/t/{{ rv.slug }}" class="fr-panel-item">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          {{ m::avatar(url=rv.author_avatar_url, name=rv.author_display_name, size=24) }}
+          <span class="fw-semibold small text-body">{{ rv.author_display_name }}</span>
+          {% if rv.overall > 0 %}
+            <span class="text-warning small ms-1">
+              {% for i in range(end=5) %}<i class="fa-{% if i < rv.overall %}solid{% else %}regular{% endif %} fa-star"></i>{% endfor %}
+            </span>
+          {% endif %}
+          {% if rv.verified_purchase %}
+            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle" style="font-size:.65rem">
+              <i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>Verified purchase
+            </span>
+          {% endif %}
+        </div>
+        <div class="fw-semibold text-body">{{ rv.title }}</div>
+        {% if rv.excerpt %}<div class="text-muted small">{{ rv.excerpt }}</div>{% endif %}
+        {% if rv.durability or rv.materials or rv.comfort or rv.aesthetics or rv.value_for_money %}
+          <div class="d-flex flex-wrap gap-1 mt-1">
+            {% if rv.durability %}<span class="fr-review-chip">Durability {{ rv.durability }}</span>{% endif %}
+            {% if rv.materials %}<span class="fr-review-chip">Materials {{ rv.materials }}</span>{% endif %}
+            {% if rv.comfort %}<span class="fr-review-chip">Comfort {{ rv.comfort }}</span>{% endif %}
+            {% if rv.aesthetics %}<span class="fr-review-chip">Aesthetics {{ rv.aesthetics }}</span>{% endif %}
+            {% if rv.value_for_money %}<span class="fr-review-chip">Value {{ rv.value_for_money }}</span>{% endif %}
+          </div>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  {% elif product.rating_stats and product.rating_stats.review_count > 0 %}
+    <p class="text-muted small">No reviews match this filter.</p>
+  {% else %}
+    <p class="text-muted small">No reviews yet.
+      {% if current_user %}<a href="/new-thread?product={{ product.slug }}">Be the first.</a>{% endif %}
+    </p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-page-product.js?v={{ asset_version() }}" defer></script>
+{% endblock %}

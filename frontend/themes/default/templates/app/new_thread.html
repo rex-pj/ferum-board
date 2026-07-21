@@ -1,25 +1,158 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}New Thread — {{ site.name }}{% endblock %}
+{% block title %}New post — {{ site.name }}{% endblock %}
 {% block main_class %}fr-page-reading{% endblock %}
 
 {% block content %}
-<h1 class="h4 fw-bold mb-4">New Thread</h1>
+<h1 class="h4 fw-bold mb-4" id="compose-heading">New post</h1>
 
     <div class="card">
       <div class="card-body p-4">
         <form id="new-thread-form" method="post">
-          <div class="mb-3">
+          <div class="mb-3" id="category-field">
             <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
             <select class="form-select" id="category" name="category_id" required>
-              <option value="">Select a category…</option>
+              <option value="">Choose a category…</option>
               {% for cat in categories %}
                 <option value="{{ cat.id }}" {% if cat.id == preselected_category %}selected{% endif %}>
                   {% if cat.parent_id %}-- {% endif %}{{ cat.name }}
                 </option>
               {% endfor %}
             </select>
+          </div>
+
+          {# Product picker — searchable typeahead (no fixed option cap). When a
+             product page sends ?product=slug, the field renders pre-filled and
+             locked via data-preselect-* below. #}
+          <div class="mb-3" id="product-field"
+               {% if preselected_product %}data-preselect-id="{{ preselected_product.id }}" data-preselect-name="{{ preselected_product.name }}"{% endif %}>
+            <label for="product-search" class="form-label">
+              Reviewing a product?
+              <span class="text-muted small fw-normal">(optional — turns this post into a scored review)</span>
+            </label>
+
+            {# Locked/selected state #}
+            <div id="product-selected" class="d-none align-items-center gap-2 border rounded p-2 bg-body-tertiary">
+              <i class="fa-solid fa-couch text-muted" aria-hidden="true"></i>
+              <span id="product-selected-name" class="fw-semibold flex-grow-1 text-truncate"></span>
+              <button type="button" id="product-clear" class="btn btn-sm btn-outline-secondary">
+                <i class="fa-solid fa-xmark me-1" aria-hidden="true"></i>Change
+              </button>
+            </div>
+
+            {# Search state — the wrap carries a z-index so its absolute results
+               dropdown paints above the "add product" toggle that follows it. #}
+            <div id="product-search-wrap" class="position-relative" style="z-index:30">
+              <input type="text" id="product-search" class="form-control" autocomplete="off"
+                     placeholder="Search for a product to review… (leave empty for a regular post)">
+              <div id="product-results"
+                   class="list-group position-absolute w-100 shadow d-none border rounded overflow-hidden"
+                   style="z-index:1056;max-height:260px;overflow-y:auto;top:calc(100% + 4px);background-color:var(--bs-body-bg)"></div>
+            </div>
+
+            <input type="hidden" id="product-id" name="product_id" value="">
+
+            {% if can_submit_product %}
+            {# Crowd-sourced: propose a product not yet in the catalog, then review it #}
+            <div id="product-add" class="mt-2">
+              <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="product-add-toggle">
+                <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Can’t find it? Add a new product
+              </button>
+              <div id="product-add-form" class="border rounded p-3 mt-2 bg-body-tertiary d-none">
+                <div class="row g-2">
+                  <div class="col-12">
+                    <label class="form-label small mb-1" for="np-name">Product name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" id="np-name" maxlength="200">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small mb-1" for="np-type">Type</label>
+                    <select class="form-select form-select-sm" id="np-type">
+                      <option value="furniture">Furniture</option>
+                      <option value="material">Material</option>
+                      <option value="room">Room</option>
+                    </select>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small mb-1" for="np-brand">Brand</label>
+                    <select class="form-select form-select-sm" id="np-brand">
+                      <option value="">— None —</option>
+                    </select>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small mb-1" for="np-price-min">Price from (₫)</label>
+                    <input type="number" min="0" class="form-control form-control-sm" id="np-price-min">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small mb-1" for="np-price-max">Price to (₫)</label>
+                    <input type="number" min="0" class="form-control form-control-sm" id="np-price-max">
+                  </div>
+                  {# Materials the product is made of — distinct from "Type: Material"
+                     above, which classifies the product itself. Optional, and the
+                     reference list is small enough to show in full: tap to toggle,
+                     no typing. #}
+                  <div class="col-12">
+                    <div class="form-label small mb-1">Materials <span class="text-muted fw-normal">(select if known)</span></div>
+                    <div id="np-mat-picker" class="border rounded p-2 bg-body" style="max-height:190px;overflow-y:auto">
+                      <div class="text-muted small">Loading…</div>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <div class="text-danger small d-none" id="np-error"></div>
+                    <div class="d-flex gap-2 mt-1">
+                      <button type="button" class="btn btn-primary btn-sm" id="np-submit">Add &amp; select for review</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" id="np-cancel">Cancel</button>
+                    </div>
+                    <div class="form-text">
+                      The product becomes public once an admin approves it. Your review is saved right away either way.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+
+          {# Rating block — revealed once a product is chosen. "Overall" is required
+             and prominent; the five sub-dimensions are optional. Click-to-rate and
+             the live hint text are wired up by ferum-page-new-thread.js. #}
+          <div class="mb-3 border rounded p-3 p-md-4 bg-body-tertiary" id="rating-block" style="display:none;">
+            <div class="fw-semibold">
+              <i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>Your rating
+            </div>
+            <p class="text-muted small mb-3">
+              Tap the stars to score · only <span class="fw-semibold">Overall</span> is required.
+            </p>
+
+            {# Overall — required, prominent, with live descriptive hint #}
+            <div class="fr-rate-overall d-flex flex-wrap align-items-center gap-2 pb-3 mb-3 border-bottom">
+              <label class="fr-rate-label mb-0" for="rate-overall">Overall <span class="text-danger">*</span></label>
+              {{ m::star_input(dim="overall", large=true, required=true) }}
+              <span class="fr-rate-hint text-muted small" data-rate-hint data-empty="Not rated">Not rated</span>
+            </div>
+
+            {# Optional sub-dimensions — label left, stars right, aligned per column #}
+            <div class="row g-2 g-md-3">
+              {% for d in ["durability","materials","comfort","aesthetics","value_for_money"] %}
+              <div class="col-12 col-md-6">
+                <div class="fr-rate-row d-flex align-items-center justify-content-between gap-2">
+                  <label class="fr-rate-label mb-0" for="rate-{{ d }}">
+                    {% if d == "durability" %}Durability
+                    {% elif d == "materials" %}Materials
+                    {% elif d == "comfort" %}Comfort
+                    {% elif d == "aesthetics" %}Aesthetics
+                    {% else %}Value for money{% endif %}
+                  </label>
+                  {{ m::star_input(dim=d) }}
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="form-check mt-3">
+              <input class="form-check-input" type="checkbox" id="rate-verified">
+              <label class="form-check-label small" for="rate-verified">I have actually bought or used this product</label>
+            </div>
           </div>
 
           <div class="mb-3">
@@ -32,7 +165,7 @@
           {% if can_upload_thumbnail %}
           {# Thumbnail upload — staged locally, uploaded after thread is created #}
           <div class="mb-3" x-data="newThreadThumbnail()">
-            <label class="form-label">Thumbnail <span class="text-muted small fw-normal">(optional)</span></label>
+            <label class="form-label">Cover image <span class="text-muted small fw-normal">(optional)</span></label>
             <div class="position-relative rounded overflow-hidden border"
                  style="aspect-ratio:16/9;cursor:pointer;max-height:160px;"
                  :class="isDragging ? 'border-primary border-2' : 'border-secondary-subtle'"
@@ -44,11 +177,15 @@
 
               {# Empty state #}
               <div x-show="!preview && !isDragging" class="h-100" style="display:none;">
-                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
+                {# text-center is load-bearing: align-items-center centres each
+                   span as a flex item but does not centre the text inside it, so
+                   once the prompt wraps — narrow viewport, longer translation,
+                   larger base font — the second line hugs the left edge. #}
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted text-center px-2">
                   <i class="fa-solid fa-image fa-2x mb-2 opacity-50" aria-hidden="true"></i>
-                  <span class="small fw-medium">Drop here or <span class="text-primary">click to browse</span></span>
+                  <span class="small fw-medium">Drag and drop here, or <span class="text-primary">click to choose an image</span></span>
                   <span class="small opacity-50 mt-1">JPEG · PNG · WebP · GIF · max 10 MB</span>
-                  <span class="small opacity-25 mt-1">Recommended 1280 × 720 px (16:9)</span>
+                  <span class="small opacity-25 mt-1">1280 × 720 px (16:9) recommended</span>
                 </div>
               </div>
 
@@ -64,7 +201,7 @@
                 <div class="d-flex align-items-center justify-content-center h-100"
                      style="background:rgba(var(--bs-primary-rgb),0.12);">
                   <span class="fw-semibold text-primary">
-                    <i class="fa-solid fa-circle-plus me-1"></i>Drop to set thumbnail
+                    <i class="fa-solid fa-circle-plus me-1"></i>Drop to set the cover image
                   </span>
                 </div>
               </div>
@@ -86,10 +223,10 @@
           </div>
           {% else %}
           <div class="mb-3">
-            <label class="form-label">Thumbnail <span class="text-muted small fw-normal">(optional)</span></label>
+            <label class="form-label">Cover image <span class="text-muted small fw-normal">(optional)</span></label>
             <div class="small text-muted border rounded p-2">
               <i class="fa-solid fa-lock me-1" aria-hidden="true"></i>
-              Reach Member trust level (or get verified) to attach a thumbnail image.
+              Reach Member trust level (or get verified) to attach a cover image.
             </div>
           </div>
           {% endif %}
@@ -125,14 +262,14 @@
                      :placeholder="tags.length === 0 ? 'tag1, tag2…' : ''"
                      class="fr-tag-input-field border-0 bg-transparent">
             </div>
-            <div class="form-text">Press Enter or comma to add. Max 5 tags.</div>
+            <div class="form-text">Press Enter or comma to add. Up to 5 tags.</div>
             <input type="hidden" id="tags-json" :value="JSON.stringify(tags)">
           </div>
 
           {{ m::feedback_alert(id="form-error") }}
 
           <div class="d-flex gap-2">
-            {{ m::btn_submit(text="Post thread", btn_id="submit-btn", spinner_id="btn-spinner", class="") }}
+            {{ m::btn_submit(text="Publish", btn_id="submit-btn", spinner_id="btn-spinner", class="") }}
             <a href="/forum" class="btn btn-outline-secondary">Cancel</a>
           </div>
         </form>

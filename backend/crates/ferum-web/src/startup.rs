@@ -17,7 +17,9 @@ use ferum_application::usecases::category_usecase::CategoryUseCase;
 use ferum_application::usecases::moderation_usecase::ModerationUseCase;
 use ferum_application::usecases::notification_usecase::NotificationUseCase;
 use ferum_application::usecases::post_usecase::PostUseCase;
+use ferum_application::usecases::product_usecase::ProductUseCase;
 use ferum_application::usecases::reaction_usecase::ReactionUseCase;
+use ferum_application::usecases::review_usecase::ReviewUseCase;
 use ferum_application::usecases::role_usecase::RoleUseCase;
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_application::usecases::setup_usecase::SetupUseCase;
@@ -45,11 +47,12 @@ use ferum_infrastructure::{
     plugins::registry::PluginRegistry,
     repositories::{
         PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository, PgFollowRepository,
-        PgNotificationRepository, PgPermissionRepository, PgPluginDbGateway, PgPluginRepository,
-        PgPluginStorageRepository, PgPostRepository,
-        PgReactionRepository, PgReportRepository, PgRoleRepository, PgSiteConfigRepository,
-        PgStatsRepository, PgStoredFileRepository, PgTagRepository, PgThreadRepository,
-        PgUserRepository,
+        PgBrandRepository, PgMaterialRepository, PgNotificationRepository, PgPermissionRepository,
+        PgPluginDbGateway,
+        PgPluginRepository, PgPluginStorageRepository, PgPostRepository, PgProductRepository,
+        PgReactionRepository, PgReportRepository, PgReviewRatingRepository, PgRoleRepository,
+        PgSiteConfigRepository, PgStatsRepository, PgStoredFileRepository, PgTagRepository,
+        PgThreadRepository, PgUserRepository,
         PgUserRoleRepository, PgWebhookRepository,
     },
     role_permission_cache::RolePermissionCache,
@@ -172,6 +175,15 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         Arc::new(PgStoredFileRepository::new(pg_write.clone()));
     let tag_repo: Arc<dyn ferum_domain::repositories::TagRepository> =
         Arc::new(PgTagRepository::new(pg_write.clone()));
+    let product_repo: Arc<dyn ferum_domain::repositories::product_repository::ProductRepository> =
+        Arc::new(PgProductRepository::new(pg_write.clone()));
+    let material_repo: Arc<dyn ferum_domain::repositories::material_repository::MaterialRepository> =
+        Arc::new(PgMaterialRepository::new(pg_write.clone()));
+    let brand_repo: Arc<dyn ferum_domain::repositories::brand_repository::BrandRepository> =
+        Arc::new(PgBrandRepository::new(pg_write.clone()));
+    let review_rating_repo: Arc<
+        dyn ferum_domain::repositories::review_rating_repository::ReviewRatingRepository,
+    > = Arc::new(PgReviewRatingRepository::new(pg_write.clone()));
 
     // ─── RolePermissionCache (in-memory, loaded from DB after migrations) ────
     let role_permission_cache = Arc::new(RolePermissionCache::new(pg_write.clone()));
@@ -429,6 +441,15 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     let notification = Arc::new(NotificationUseCase::new(notification_repo.clone()));
 
+    let product = Arc::new(ProductUseCase::new(
+        product_repo,
+        material_repo,
+        brand_repo,
+        stored_file_repo.clone(),
+        job_queue.clone(),
+    ));
+    let review = Arc::new(ReviewUseCase::new(review_rating_repo));
+
     let moderation = Arc::new(
         ModerationUseCase::new(
             report_repo,
@@ -601,6 +622,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         category,
         thread,
         post,
+        product,
+        review,
         reaction,
         notification,
         moderation,

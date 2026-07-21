@@ -1,0 +1,105 @@
+{% extends "default/templates/base.html" %}
+{% import "default/templates/macros.html" as m %}
+
+{% block title %}Products — {{ site.name }}{% endblock %}
+{% block description %}Browse furniture, materials and rooms on {{ site.name }}.{% endblock %}
+
+{% block content %}
+{% include "default/templates/partials/catalog_nav.html" %}
+
+{# ── Filters ── #}
+<div class="fr-panel">
+  <div class="fr-panel-body">
+    <form method="get" action="/catalog" class="fr-filter-bar">
+      <input type="search" name="q" value="{{ search_query | default(value='') }}"
+             class="form-control form-control-sm" style="max-width:220px" placeholder="Search products…">
+      <select name="type" class="form-select form-select-sm w-auto">
+        <option value="">All types</option>
+        <option value="furniture" {% if active_type == "furniture" %}selected{% endif %}>Furniture</option>
+        <option value="material" {% if active_type == "material" %}selected{% endif %}>Material</option>
+        <option value="room" {% if active_type == "room" %}selected{% endif %}>Room</option>
+      </select>
+      <select name="brand_id" class="form-select form-select-sm w-auto" aria-label="Filter by brand">
+        <option value="">All brands</option>
+        {% for b in brands %}
+          <option value="{{ b.id }}" {% if active_brand == b.id %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="material_id" class="form-select form-select-sm w-auto">
+        <option value="">All materials</option>
+        {% for mat in materials %}
+          <option value="{{ mat.id }}" {% if active_material == mat.id %}selected{% endif %}>{{ mat.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="sort" class="form-select form-select-sm w-auto" aria-label="Sort">
+        <option value="newest" {% if not active_sort or active_sort == "newest" %}selected{% endif %}>Newest</option>
+        <option value="top_rated" {% if active_sort == "top_rated" %}selected{% endif %}>Top rated</option>
+        <option value="most_reviewed" {% if active_sort == "most_reviewed" %}selected{% endif %}>Most reviewed</option>
+      </select>
+      <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="fa-solid fa-filter me-1" aria-hidden="true"></i>Filter</button>
+    </form>
+  </div>
+</div>
+
+{% if products %}
+<div class="row g-3">
+  {% for p in products %}
+  <div class="col-6 col-md-4 col-lg-3">
+    <a href="/catalog/{{ p.slug }}" class="fr-product-card">
+      <div class="fr-product-thumb">
+        {% if p.primary_image_key %}
+          <img src="/files/{{ p.primary_image_key }}" alt="{{ p.name }}">
+        {% else %}
+          <i class="fa-solid fa-couch fa-2x opacity-25" aria-hidden="true"></i>
+        {% endif %}
+      </div>
+      <div class="fr-product-card-body">
+        <div class="fr-product-name">{{ p.name }}</div>
+        <div class="fr-product-price">
+          {% if p.price_min %}
+            {{ p.price_min | thousands }}₫{% if p.price_max and p.price_max != p.price_min %} – {{ p.price_max | thousands }}₫{% endif %}
+          {% else %}<span class="text-muted fw-normal">Price on request</span>{% endif %}
+        </div>
+        {# Rating score — the review platform's primary signal #}
+        <div class="fr-rating-line mt-1">
+          {% if p.review_count and p.review_count > 0 and p.avg_overall %}
+            <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+            <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}</span>
+            <span class="text-muted">({{ p.review_count }})</span>
+          {% else %}
+            <span class="text-muted"><i class="fa-regular fa-star me-1" aria-hidden="true"></i>No reviews yet</span>
+          {% endif %}
+        </div>
+        <div class="mt-1">
+          <span class="fr-review-chip">{{ m::product_type_label(t=p.product_type) }}</span>
+          {% if p.style %}<span class="fr-product-meta ms-1">{{ p.style }}</span>{% endif %}
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="d-flex justify-content-between align-items-center mt-3">
+  {% if has_prev %}
+    <a href="/catalog?page={{ page - 1 }}" class="btn btn-outline-secondary btn-sm">← Previous</a>
+  {% else %}<span></span>{% endif %}
+  <span class="text-muted small">{{ total }} products</span>
+  {% if has_next %}
+    <a href="/catalog?page={{ page + 1 }}" class="btn btn-outline-secondary btn-sm">Next →</a>
+  {% else %}<span></span>{% endif %}
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="fa-solid fa-box-open fa-2x mb-2 opacity-25 d-block" aria-hidden="true"></i>
+  {% if search_query %}No products found for “{{ search_query }}”.{% else %}No products match this filter.{% endif %}
+  {% if can_submit_product %}
+  <div class="mt-3">
+    <a href="/new-thread?add_product=1{% if search_query %}&name={{ search_query | urlencode }}{% endif %}" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Suggest a product{% if search_query %} “{{ search_query }}”{% endif %}
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

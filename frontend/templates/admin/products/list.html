@@ -1,0 +1,289 @@
+{% extends "admin/base.html" %}
+{% block title %}Catalog{% endblock %}
+{% block page_title %}Catalog{% endblock %}
+{% block nav_products %}active fw-semibold{% endblock %}
+
+{% block content %}
+<div id="catalogStatus" class="alert d-none" role="alert"></div>
+
+<ul class="nav nav-tabs mb-3" id="catalogTabs">
+  <li class="nav-item"><button type="button" class="nav-link active" data-tab="products">Products</button></li>
+  <li class="nav-item"><button type="button" class="nav-link" data-tab="materials">Materials</button></li>
+  <li class="nav-item"><button type="button" class="nav-link" data-tab="brands">Brands</button></li>
+</ul>
+
+<!-- ═══ Tab: Products ══════════════════════════════════════════════ -->
+<div data-panel="products">
+  <div class="card">
+    <div class="card-header p-0">
+      <div class="adm-filter-row px-3 py-2">
+        <div class="input-group input-group-sm flex-grow-1" style="max-width:280px">
+          <span class="input-group-text bg-transparent"><i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i></span>
+          <input type="search" id="filterQuery" class="form-control border-start-0 ps-0" placeholder="Search by name…" autocomplete="off">
+        </div>
+        <select id="filterType" class="form-select form-select-sm" style="max-width:140px">
+          <option value="">All types</option>
+          <option value="furniture">Furniture</option>
+          <option value="material">Material</option>
+          <option value="room">Room</option>
+        </select>
+        <select id="filterStatus" class="form-select form-select-sm" style="max-width:150px">
+          <option value="">All statuses</option>
+          <option value="draft">Draft / pending</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </select>
+        <button type="button" id="applyFilters" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>Filter</button>
+        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewProduct" data-bs-toggle="modal" data-bs-target="#productModal">
+          <i class="fa-solid fa-plus me-1"></i>New product
+        </button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-active">
+          <tr>
+            <th>Product</th>
+            <th style="width:18%">Price (₫)</th>
+            <th style="width:12%">Brand</th>
+            <th style="width:12%">Status</th>
+            <th style="width:14%" class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody id="productRows"><tr><td colspan="5" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
+      <span class="text-muted small" id="catalogMeta"></span>
+      <nav aria-label="Product pagination">
+        <ul class="pagination pagination-sm mb-0 flex-wrap gap-0" id="catalogPager"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Tab: Materials ═════════════════════════════════════════════ -->
+<div data-panel="materials" class="d-none">
+  <div class="card">
+    <div class="card-header p-0">
+      <div class="adm-filter-row px-3 py-2">
+        <div class="input-group input-group-sm flex-grow-1" style="max-width:280px">
+          <span class="input-group-text bg-transparent"><i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i></span>
+          <input type="search" id="matFilterQuery" class="form-control border-start-0 ps-0" placeholder="Search materials…" autocomplete="off">
+        </div>
+        <select id="matFilterCategory" class="form-select form-select-sm" style="max-width:180px">
+          <option value="">All categories</option>
+          <option value="wood_natural">Solid wood</option>
+          <option value="wood_engineered">Engineered wood</option>
+          <option value="rattan_bamboo">Rattan &amp; bamboo</option>
+          <option value="metal">Metal</option>
+          <option value="fabric">Fabric</option>
+          <option value="leather">Leather</option>
+          <option value="stone">Stone</option>
+          <option value="glass">Glass</option>
+          <option value="plastic">Plastic</option>
+          <option value="other">Other</option>
+        </select>
+        <button type="button" id="matApply" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>Filter</button>
+        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewMaterial"><i class="fa-solid fa-plus me-1"></i>New material</button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-active"><tr><th>Name</th><th style="width:20%">Category</th><th style="width:14%" class="text-end"></th></tr></thead>
+        <tbody id="materialRows"><tr><td colspan="3" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Tab: Brands ════════════════════════════════════════════════ -->
+<div data-panel="brands" class="d-none">
+  <div class="card">
+    <div class="card-header p-0">
+      <div class="adm-filter-row px-3 py-2">
+        <div class="input-group input-group-sm flex-grow-1" style="max-width:280px">
+          <span class="input-group-text bg-transparent"><i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i></span>
+          <input type="search" id="brandFilterQuery" class="form-control border-start-0 ps-0" placeholder="Search name / country…" autocomplete="off">
+        </div>
+        <select id="brandFilterVerified" class="form-select form-select-sm" style="max-width:170px">
+          <option value="">All</option>
+          <option value="1">Verified</option>
+          <option value="0">Not verified</option>
+        </select>
+        <button type="button" id="brandApply" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>Filter</button>
+        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewBrand"><i class="fa-solid fa-plus me-1"></i>New brand</button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-active"><tr><th>Name</th><th style="width:16%">Country</th><th style="width:12%">Verified</th><th style="width:14%" class="text-end"></th></tr></thead>
+        <tbody id="brandRows"><tr><td colspan="4" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Product (create / edit) ═════════════════════════════ -->
+<div class="modal fade" id="productModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="productForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="productModalTitle">New product</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="productId">
+
+          <div class="text-uppercase small fw-semibold text-muted mb-2">Basics</div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-8">
+              <label class="form-label">Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="pName" required maxlength="200">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label d-flex justify-content-between align-items-center">
+                <span>Slug</span>
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="pSlugEdit">Edit</button>
+              </label>
+              <input type="text" class="form-control" id="pSlug" required maxlength="200"
+                     pattern="[a-z0-9\-]+" title="lowercase letters, numbers, hyphens" readonly>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Type</label>
+              <select class="form-select" id="pType">
+                <option value="furniture">Furniture</option>
+                <option value="material">Material</option>
+                <option value="room">Room</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="pStatus">
+                <option value="draft">Draft / pending</option>
+                <option value="published">Published</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Brand</label>
+              <select class="form-select" id="pBrand"><option value="">— None —</option></select>
+            </div>
+          </div>
+
+          <div class="text-uppercase small fw-semibold text-muted mb-2">Price &amp; origin</div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4"><label class="form-label">Price from (₫)</label><input type="number" min="0" class="form-control" id="pPriceMin"></div>
+            <div class="col-md-4"><label class="form-label">Price to (₫)</label><input type="number" min="0" class="form-control" id="pPriceMax"></div>
+            <div class="col-md-4"><label class="form-label">Origin</label><input type="text" class="form-control" id="pOrigin" placeholder="Vietnam"></div>
+            <div class="col-md-4"><label class="form-label">Style</label><input type="text" class="form-control" id="pStyle" placeholder="Scandinavian…"></div>
+          </div>
+
+          <div class="text-uppercase small fw-semibold text-muted mb-2">Materials</div>
+          <div class="mb-3 position-relative" style="z-index:5">
+            <div class="d-flex flex-wrap gap-1 align-items-center border rounded p-2" id="pMatWrap">
+              <div id="pMatChips" class="d-flex flex-wrap gap-1"></div>
+              <input type="text" id="pMatSearch" class="border-0 flex-grow-1 bg-transparent" style="outline:none;min-width:120px" placeholder="Type to search &amp; add materials…" autocomplete="off">
+            </div>
+            <div id="pMatResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1060;max-height:200px;overflow:auto"></div>
+            <div class="form-text" id="pMaterialsHint">Type a material name, then pick it to add.</div>
+          </div>
+
+          <div class="text-uppercase small fw-semibold text-muted mb-2">Description</div>
+          <div class="mb-3">
+            <textarea class="form-control" id="pDescription" rows="2" placeholder="Description (Markdown)"></textarea>
+          </div>
+
+          <div id="imagesSection" style="display:none">
+            <div class="text-uppercase small fw-semibold text-muted mb-2">Images <span class="text-lowercase fw-normal">(the first image is the cover)</span></div>
+            <input type="file" class="form-control form-control-sm mb-2" id="pImageInput" accept="image/jpeg,image/png,image/webp,image/gif">
+            <div class="d-flex flex-wrap gap-2" id="pGallery"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="productSubmit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Material (create / edit) ════════════════════════════ -->
+<div class="modal fade" id="materialModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="materialForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="materialModalTitle">New material</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="mId">
+          <div class="row g-3">
+            <div class="col-md-7"><label class="form-label">Name</label><input type="text" class="form-control" id="mName" required maxlength="120" placeholder="Solid oak"></div>
+            <div class="col-md-5"><label class="form-label">Slug</label><input type="text" class="form-control" id="mSlug" required maxlength="120" pattern="[a-z0-9\-]+" placeholder="go-soi"></div>
+            <div class="col-12">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="mCategory">
+                <option value="wood_natural">Solid wood</option>
+                <option value="wood_engineered">Engineered wood</option>
+                <option value="rattan_bamboo">Rattan &amp; bamboo</option>
+                <option value="metal">Metal</option>
+                <option value="fabric">Fabric</option>
+                <option value="leather">Leather</option>
+                <option value="stone">Stone</option>
+                <option value="glass">Glass</option>
+                <option value="plastic">Plastic</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" id="mDescription" rows="2"></textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Brand (create / edit) ═══════════════════════════════ -->
+<div class="modal fade" id="brandModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="brandForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="brandModalTitle">New brand</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="bId">
+          <div class="row g-3">
+            <div class="col-md-7"><label class="form-label">Name</label><input type="text" class="form-control" id="bName" required maxlength="200" placeholder="Acme Furniture"></div>
+            <div class="col-md-5"><label class="form-label">Slug</label><input type="text" class="form-control" id="bSlug" required maxlength="200" pattern="[a-z0-9\-]+" placeholder="nha-xinh"></div>
+            <div class="col-md-7"><label class="form-label">Website</label><input type="url" class="form-control" id="bWebsite" placeholder="https://…"></div>
+            <div class="col-md-5"><label class="form-label">Country</label><input type="text" class="form-control" id="bCountry" placeholder="Vietnam"></div>
+            <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" id="bDescription" rows="2"></textarea></div>
+            <div class="col-12 form-check ms-2">
+              <input class="form-check-input" type="checkbox" id="bVerified">
+              <label class="form-check-label" for="bVerified">Verified</label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ferum-admin-products.js?v={{ asset_version() }}" defer></script>
+{% endblock %}

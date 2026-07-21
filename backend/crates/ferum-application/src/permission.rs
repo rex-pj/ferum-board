@@ -296,6 +296,37 @@ impl PermissionChecker {
         }
     }
 
+    // ─── Catalog (furniture review) ───────────────────────────────────────────
+
+    /// Managing the product / material catalog is a curation action. Global
+    /// permission — not category-scoped.
+    pub fn can_manage_products(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
+        if user.has_perm(perm::PRODUCT_MANAGE) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    /// Crowd-sourced contribution: any email-verified member may PROPOSE a
+    /// product. It is created as `draft` and only a curator (`product.manage`)
+    /// can publish it, so submissions never appear in the public catalog
+    /// unreviewed. Curators bypass the trust gate.
+    pub fn can_submit_products(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
+        if user.has_perm(perm::PRODUCT_MANAGE) {
+            return Ok(());
+        }
+        if !user.has_perm(perm::PRODUCT_SUBMIT) {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+        if !user.meets_trust(TrustLevel::Basic) {
+            return Err(AppError::forbidden("trust_level_insufficient"));
+        }
+        Ok(())
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     pub fn require_not_banned(user: &AuthUser) -> Result<(), AppError> {

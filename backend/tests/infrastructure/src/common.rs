@@ -201,7 +201,7 @@ pub async fn insert_thread(
             category_id,
             author_id,
             title: format!("Thread {n}"),
-            slug: format!("thread-{n}"),
+            slug: format!("thread-{n}"), product_id: None,
         })
         .await
         .unwrap_or_else(|e| panic!("insert_thread({n}): {e}"))

@@ -8,12 +8,17 @@ use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CategoryCtx, TagCtx};
 use ferum_application::permission::PermissionChecker;
+use ferum_domain::models::product::ProductStatus;
 
 use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct NewThreadQuery {
     pub category_id: Option<String>,
+    /// When set (e.g. arriving from a product page's "Write a review"), the
+    /// picker is pre-filled and locked to this product, and the rating block
+    /// is revealed immediately.
+    pub product: Option<String>,
 }
 
 pub async fn new_thread(
@@ -47,6 +52,22 @@ pub async fn new_thread(
         .collect();
 
     let can_upload_thumbnail = PermissionChecker::can_upload(&auth_user).is_ok();
+    // Eligible to propose a brand-new catalog product (lands as draft for review).
+    let can_submit_product = PermissionChecker::can_submit_products(&auth_user).is_ok();
+
+    // Resolve an optional ?product=slug into a locked preselection. A missing or
+    // unpublished product simply falls back to the normal (unlocked) picker.
+    let preselected_product = match q.product.as_deref().filter(|s| !s.is_empty()) {
+        Some(slug) => match state.product.get_by_slug(slug).await {
+            Ok(p) if p.status == ProductStatus::Published => Some(serde_json::json!({
+                "id": p.id.to_string(),
+                "slug": p.slug,
+                "name": p.name,
+            })),
+            _ => None,
+        },
+        None => None,
+    };
 
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
@@ -56,8 +77,10 @@ pub async fn new_thread(
     ctx.insert("active_theme", &active);
     ctx.insert("categories", &categories_ctx);
     ctx.insert("preselected_category", &q.category_id.unwrap_or_default());
+    ctx.insert("preselected_product", &preselected_product);
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
+    ctx.insert("can_submit_product", &can_submit_product);
 
     render_with_theme(&state, &active, "app/new_thread.html", &ctx)
         .await

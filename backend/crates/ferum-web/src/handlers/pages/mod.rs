@@ -1,5 +1,6 @@
 pub mod account;
 pub mod auth;
+pub mod catalog;
 pub mod compose;
 pub mod forum;
 pub mod profile;
@@ -180,6 +181,19 @@ pub async fn render_with_theme(
 pub(super) fn map_threads(
     threads: &[ferum_domain::models::Thread],
 ) -> Vec<ThreadCtx> {
+    let empty_r = std::collections::HashMap::new();
+    let empty_i = std::collections::HashMap::new();
+    map_threads_with_ratings(threads, &empty_r, &empty_i)
+}
+
+/// Like `map_threads`, but attaches each review's overall score and product
+/// cover from pre-loaded `thread_id → …` maps (batch-fetched by the caller —
+/// no N+1).
+pub(super) fn map_threads_with_ratings(
+    threads: &[ferum_domain::models::Thread],
+    ratings: &std::collections::HashMap<uuid::Uuid, i16>,
+    product_images: &std::collections::HashMap<uuid::Uuid, String>,
+) -> Vec<ThreadCtx> {
     threads
         .iter()
         .map(|t| {
@@ -196,6 +210,10 @@ pub(super) fn map_threads(
                 author_avatar_url: t.author_avatar_url.clone(),
                 category_slug: t.category_slug.clone(),
                 category_name: t.category_name.clone().unwrap_or_default(),
+                is_review: t.category_slug
+                    == ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG,
+                review_overall: ratings.get(&t.id).copied(),
+                review_product_image: product_images.get(&t.id).cloned(),
                 reply_count: t.reply_count,
                 view_count: t.view_count,
                 is_pinned: t.is_pinned,
@@ -218,6 +236,50 @@ pub(super) fn map_threads(
             }
         })
         .collect()
+}
+
+/// Batch-load the overall score for every review thread in `threads`, keyed by
+/// thread id. One query for the whole page (no N+1); empty when none are reviews.
+pub(super) async fn review_overall_map(
+    state: &crate::app_state::AppState,
+    threads: &[ferum_domain::models::Thread],
+) -> std::collections::HashMap<uuid::Uuid, i16> {
+    use ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG;
+    let ids: Vec<uuid::Uuid> = threads
+        .iter()
+        .filter(|t| t.category_slug == REVIEWS_CATEGORY_SLUG)
+        .map(|t| t.id)
+        .collect();
+    if ids.is_empty() {
+        return std::collections::HashMap::new();
+    }
+    state
+        .review
+        .ratings_for_threads(&ids)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(id, r)| (id, r.overall))
+        .collect()
+}
+
+/// Batch-load `review_thread_id → product cover key` for the review threads in
+/// `threads`, so review cards can fall back to the product image. One query;
+/// empty when none are reviews.
+pub(super) async fn review_product_image_map(
+    state: &crate::app_state::AppState,
+    threads: &[ferum_domain::models::Thread],
+) -> std::collections::HashMap<uuid::Uuid, String> {
+    use ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG;
+    let ids: Vec<uuid::Uuid> = threads
+        .iter()
+        .filter(|t| t.category_slug == REVIEWS_CATEGORY_SLUG)
+        .map(|t| t.id)
+        .collect();
+    if ids.is_empty() {
+        return std::collections::HashMap::new();
+    }
+    state.product.review_thumbnails(&ids).await.unwrap_or_default()
 }
 
 // ─── Static fallback HTML ─────────────────────────────────────────────────────

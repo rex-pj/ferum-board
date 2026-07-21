@@ -10,6 +10,61 @@
   {% for slot in plugin_slots.home_feed_top %}{{ slot.html | safe }}{% endfor %}
 {% endif %}
 
+{# ── Market data band — aggregate signals for the review platform ── #}
+{% if total_products and total_products > 0 %}
+<div class="fr-panel mb-3">
+  <div class="fr-panel-body fr-stat-band py-3">
+    <a href="/catalog" class="fr-stat-band-item text-decoration-none text-body">
+      <div class="h4 fw-bold mb-0">{{ total_products | thousands }}</div>
+      <div class="text-muted small"><i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>Products</div>
+    </a>
+    <div class="fr-stat-band-item">
+      <div class="h4 fw-bold mb-0">{{ total_reviews | thousands }}</div>
+      <div class="text-muted small"><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>Reviews</div>
+    </div>
+    {% if avg_rating %}
+    <div class="fr-stat-band-item">
+      <div class="h4 fw-bold mb-0 text-warning">{{ avg_rating | round(precision=1) }}<i class="fa-solid fa-star fa-sm ms-1" aria-hidden="true"></i></div>
+      <div class="text-muted small">Average rating</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Top Rated products shelf — horizontal scroll, reads well at any count ── #}
+{% if top_rated %}
+<div class="fr-feed mb-3">
+  <div class="fr-cat-header" style="cursor:default;pointer-events:none">
+    <span class="fw-semibold"><i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>Top rated products</span>
+    <a href="/catalog?sort=top_rated" class="btn btn-xs btn-outline-secondary" style="pointer-events:auto">View all</a>
+  </div>
+  <div class="fr-shelf p-2">
+    {% for p in top_rated %}
+    <a href="/catalog/{{ p.slug }}" class="fr-shelf-card card text-decoration-none shadow-sm">
+      <div class="ratio ratio-4x3 bg-body-tertiary rounded-top overflow-hidden">
+        {% if p.primary_image_key %}
+          <img src="/files/{{ p.primary_image_key }}" alt="{{ p.name }}" style="object-fit:cover;width:100%;height:100%">
+        {% else %}
+          <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+            <i class="fa-solid fa-couch fa-2x opacity-25" aria-hidden="true"></i>
+          </div>
+        {% endif %}
+      </div>
+      <div class="card-body p-2">
+        <div class="fw-semibold text-body small text-truncate">{{ p.name }}</div>
+        <div style="font-size:.72rem">
+          <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+          <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}</span>
+          <span class="text-muted">({{ p.review_count }})</span>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="fr-feed mb-3">
 
   {# ── Feed header: title + sort tabs ── #}
@@ -19,21 +74,21 @@
         <i class="fa-solid fa-tag fa-xs text-muted" aria-hidden="true"></i>
         <span class="fw-semibold text-truncate">#{{ active_tag }}</span>
         <a href="/" class="btn btn-xs btn-outline-secondary ms-2" style="pointer-events:auto">
-          <i class="fa-solid fa-xmark me-1"></i>Clear
+          <i class="fa-solid fa-xmark me-1"></i>Clear filter
         </a>
       </div>
     {% else %}
-      <span class="fw-semibold">Latest Discussions</span>
+      <span class="fw-semibold">Latest discussions</span>
       {% if watched_count and watched_count > 0 %}
         <a href="/account#preferences" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none ms-2"
            style="pointer-events:auto" title="Manage watched categories">
-          <i class="fa-solid fa-eye fa-xs me-1"></i>Personalized to {{ watched_count }} watched categor{% if watched_count == 1 %}y{% else %}ies{% endif %}
+          <i class="fa-solid fa-eye fa-xs me-1"></i>Personalised from {{ watched_count }} categories
         </a>
       {% endif %}
     {% endif %}
     {% if current_user %}
       <a href="/new-thread" class="btn btn-primary btn-sm" style="pointer-events:auto">
-        <i class="fa-solid fa-plus me-1"></i>New Thread
+        <i class="fa-solid fa-plus me-1"></i>New post
       </a>
     {% endif %}
   </div>
@@ -42,10 +97,10 @@
   {% if not active_tag %}
   <div class="fr-sort-tabs">
     <a href="/?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' or not active_sort %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>Active
+      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>Activity
     </a>
     <a href="/?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>New
+      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>Newest
     </a>
     <a href="/?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
       <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>Hottest
@@ -68,19 +123,19 @@
     <div class="text-center py-5 px-3">
       <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block text-muted opacity-50" aria-hidden="true"></i>
       {% if active_tag %}
-        <p class="text-secondary mb-3">No threads found for tag <strong>#{{ active_tag }}</strong>.</p>
-        <a href="/" class="btn btn-outline-secondary btn-sm">Browse all discussions</a>
+        <p class="text-secondary mb-3">No posts found for the tag <strong>#{{ active_tag }}</strong>.</p>
+        <a href="/" class="btn btn-outline-secondary btn-sm">View all discussions</a>
       {% elif active_sort == "unanswered" %}
-        <p class="text-secondary mb-0">No unanswered threads — great work!</p>
+        <p class="text-secondary mb-0">Nothing left unanswered — nice work!</p>
       {% elif active_sort == "solved" %}
-        <p class="text-secondary mb-0">No solved threads yet.</p>
+        <p class="text-secondary mb-0">No posts have been marked solved yet.</p>
       {% else %}
         <p class="text-secondary mb-3">No discussions yet. Be the first to start one!</p>
         {% if current_user %}
-          <a href="/new-thread" class="btn btn-primary btn-sm">Start a thread</a>
+          <a href="/new-thread" class="btn btn-primary btn-sm">Create a post</a>
         {% else %}
           <a href="/register" class="btn btn-primary btn-sm me-2">Join the community</a>
-          <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+          <a href="/login" class="btn btn-outline-secondary btn-sm">Log in</a>
         {% endif %}
       {% endif %}
     </div>
@@ -96,16 +151,16 @@
   {# Community panel #}
   {% if not current_user %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Get Involved</div>
+    <div class="fr-panel-header">Join in</div>
     <div class="fr-panel-body">
       <p class="small text-secondary mb-3">
-        {% if site.tagline %}{{ site.tagline }}{% else %}Join the conversation and share your ideas.{% endif %}
+        {% if site.tagline %}{{ site.tagline }}{% else %}Join the conversation and share your thoughts.{% endif %}
       </p>
       <div class="d-grid gap-2">
         <a href="/register" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-user-plus me-1"></i>Create account
         </a>
-        <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+        <a href="/login" class="btn btn-outline-secondary btn-sm">Log in</a>
       </div>
     </div>
   </div>
@@ -116,18 +171,26 @@
     <div class="fr-panel-header">Community</div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Threads</span>
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Posts</span>
         <span class="fr-panel-stat-val">{{ total_threads | default(value=0) }}</span>
       </div>
       <div class="fr-panel-stat-row">
         <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>Categories</span>
         <span class="fr-panel-stat-val">{{ total_categories | default(value=0) }}</span>
       </div>
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>Products</span>
+        <span class="fr-panel-stat-val">{{ total_products | default(value=0) | thousands }}</span>
+      </div>
+      <div class="fr-panel-stat-row">
+        <span><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>Reviews</span>
+        <span class="fr-panel-stat-val">{{ total_reviews | default(value=0) | thousands }}</span>
+      </div>
     </div>
     {% if current_user %}
     <div class="fr-panel-body border-top" style="padding-top:.5rem;padding-bottom:.5rem">
       <a href="/new-thread" class="btn btn-primary btn-sm w-100">
-        <i class="fa-solid fa-plus me-1"></i>New Thread
+        <i class="fa-solid fa-plus me-1"></i>New post
       </a>
     </div>
     {% endif %}
@@ -136,7 +199,7 @@
   {# Active discussions — most-viewed from current feed #}
   {% if threads %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Active Discussions</div>
+    <div class="fr-panel-header">Trending now</div>
     {% set hot = threads | sort(attribute="view_count") | reverse | slice(end=5) %}
     {% for t in hot %}
       <a href="/forum/t/{{ t.slug }}" class="fr-panel-row">

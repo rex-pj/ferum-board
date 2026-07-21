@@ -118,6 +118,211 @@
 {% endmacro color_dot %}
 
 
+{# ── product_type_label ───────────────────────────────────────────
+   Display label for a product_type enum value.
+   furniture → Furniture | material → Material | room → Room
+#}
+{% macro product_type_label(t) %}
+{%- if t == "furniture" -%}Furniture
+{%- elif t == "material" -%}Material
+{%- elif t == "room" -%}Room
+{%- else -%}{{ t }}
+{%- endif -%}
+{% endmacro product_type_label %}
+
+
+{# ── material_category_label ──────────────────────────────────────
+   Display label for a material category code.
+#}
+{% macro material_category_label(c) %}
+{%- if c == "wood_natural" -%}Solid wood
+{%- elif c == "wood_engineered" -%}Engineered wood
+{%- elif c == "rattan_bamboo" -%}Rattan &amp; bamboo
+{%- elif c == "metal" -%}Metal
+{%- elif c == "fabric" -%}Fabric
+{%- elif c == "leather" -%}Leather
+{%- elif c == "stone" -%}Stone
+{%- elif c == "glass" -%}Glass
+{%- elif c == "plastic" -%}Plastic
+{%- elif c == "other" -%}Other
+{%- else -%}{{ c | replace(from="_", to=" ") | title }}
+{%- endif -%}
+{% endmacro material_category_label %}
+
+
+{# ── rating_stars ─────────────────────────────────────────────────
+   Read-only 5-star display for an average/whole score (0–5).
+   value: number (may be fractional) | count: optional review count
+#}
+{% macro rating_stars(value, count=0) %}
+<span class="fr-rating" aria-label="{{ value }} out of 5">
+  {% for i in range(end=5) %}
+    {%- if value >= i + 1 -%}
+      <i class="fa-solid fa-star text-warning" aria-hidden="true"></i>
+    {%- elif value > i -%}
+      <i class="fa-solid fa-star-half-stroke text-warning" aria-hidden="true"></i>
+    {%- else -%}
+      <i class="fa-regular fa-star text-warning" aria-hidden="true"></i>
+    {%- endif -%}
+  {% endfor %}
+  <span class="fw-semibold ms-1">{{ value | round(precision=1) }}</span>
+  {% if count and count > 0 %}<span class="text-muted small">({{ count }})</span>{% endif %}
+</span>
+{% endmacro rating_stars %}
+
+
+{# ── star_input ───────────────────────────────────────────────────
+   Interactive 1–5 star picker backed by a hidden input (#rate-{dim}).
+   Enhanced by ferum-page-new-thread.js (initStars): click to set,
+   click again to clear (optional dims), hover to preview.
+   large=true → prominent variant used for the required "overall" score.
+#}
+{% macro star_input(dim, large=false, required=false) %}
+<div class="fr-star-input{% if large %} fr-star-input--lg{% endif %}"
+     data-dim="{{ dim }}"{% if required %} data-required="1"{% endif %}>
+  <input type="hidden" id="rate-{{ dim }}" value="">
+  {% for n in range(start=1, end=6) %}
+  <button type="button" class="fr-star-btn" data-val="{{ n }}" aria-label="{{ n }} stars"
+          title="{% if n == 1 %}Terrible{% elif n == 2 %}Poor{% elif n == 3 %}Average{% elif n == 4 %}Good{% else %}Excellent{% endif %}">
+    <i class="fa-regular fa-star" aria-hidden="true"></i>
+  </button>
+  {% endfor %}
+</div>
+{% endmacro star_input %}
+
+
+{# ── subscore_row ─────────────────────────────────────────────────
+   One review sub-dimension as a labelled progress bar (value 1–5).
+   Renders nothing when value is empty, so optional dimensions stay hidden.
+   Meant to sit inside a Bootstrap .row (renders its own column).
+   avg=true  → value is an average; show it rounded to 1 decimal.
+   cols      → column classes (e.g. "col-6" for a 2-up layout).
+#}
+{% macro subscore_row(label, value, avg=false, cols="col-6 col-md-4", bar_class="bg-warning") %}
+{% if value %}
+<div class="{{ cols }}">
+  <div class="small text-muted">{{ label }}</div>
+  <div class="d-flex align-items-center gap-2">
+    <div class="progress flex-grow-1" style="height:6px" role="progressbar"
+         aria-label="{{ label }}" aria-valuenow="{{ value }}" aria-valuemin="0" aria-valuemax="5">
+      <div class="progress-bar {{ bar_class }}" style="width: {{ value * 20 }}%"></div>
+    </div>
+    <span class="small fw-semibold" style="min-width:1.5rem">{% if avg %}{{ value | round(precision=1) }}{% else %}{{ value }}{% endif %}/5</span>
+  </div>
+</div>
+{% endif %}
+{% endmacro subscore_row %}
+
+
+{# ── subscore_chip ────────────────────────────────────────────────
+   One sub-dimension as a plain "label + score" chip, with no bar.
+   Used when the sample is too small for a bar to mean anything: at one
+   or two reviews every dimension tends to the same value, and five equal
+   bars imply a comparison the data does not support. Renders nothing
+   when value is empty, matching subscore_row.
+#}
+{% macro subscore_chip(label, value) %}
+{%- if value %}<span class="fr-review-chip">{{ label }} <strong>{{ value | round(precision=1) }}</strong>/5</span>{% endif -%}
+{% endmacro subscore_chip %}
+
+
+{# ── rating_headline ──────────────────────────────────────────────
+   Prominent average score for a product panel.
+
+   Differs from rating_stars, which is the compact inline form used in
+   cards and lists: here the score and the review count are separated and
+   individually labelled. Rendered together and unlabelled they read as
+   one figure — "4 (1) reviews" parses as neither "4/5" nor "1 review".
+#}
+{% macro rating_headline(value, count) %}
+{# role="img" is required: aria-label on a bare <div> is ignored by most screen
+   readers, so without it the stars, the score and the count are all hidden. #}
+<div class="fr-rating-headline" role="img"
+     aria-label="{{ value | round(precision=1) }} out of 5 stars, {{ count }} reviews">
+  <span aria-hidden="true">
+    {% for i in range(end=5) %}
+      {%- if value >= i + 1 -%}
+        <i class="fa-solid fa-star text-warning"></i>
+      {%- elif value > i -%}
+        <i class="fa-solid fa-star-half-stroke text-warning"></i>
+      {%- else -%}
+        <i class="fa-regular fa-star text-warning"></i>
+      {%- endif -%}
+    {% endfor %}
+  </span>
+  <span class="fr-rating-score" aria-hidden="true">
+    {{ value | round(precision=1) }}<span class="fr-rating-max">/5</span>
+  </span>
+</div>
+<div class="text-muted small" aria-hidden="true">{{ count }} review{{ count | pluralize }}</div>
+{% endmacro rating_headline %}
+
+
+{# ── product_rating_panel ─────────────────────────────────────────
+   The rating summary card on a product page: overall score, star
+   distribution, and the five sub-dimension averages.
+
+   WHY THE TWO LAYOUTS
+   The panel used to render both charts unconditionally, which produced
+   two problems that compounded each other:
+
+     1. At a low review count the histogram is four empty rows and the
+        sub-scores are five identical bars — a lot of ink, no information.
+     2. The two charts use different scales — the histogram bar is a
+        *share of reviewers* (0–100%), the sub-score bar is a *score out
+        of 5* — yet they were drawn adjacent, same height, same colour.
+        Read as one series, "Durability 4/5" looks like "80% chose Durability".
+
+   So: below `min_reviews` only the headline and sub-score chips render.
+   At or above it both charts appear, each under its own heading and in
+   its own colour, so the scale change is visible.
+
+   distribution — rows of {star, count, pct}, built in handlers/pages/catalog.rs
+   min_reviews  — MIN_REVIEWS_FOR_RATING_BREAKDOWN, passed in as stats_min_reviews
+#}
+{% macro product_rating_panel(stats, distribution, min_reviews) %}
+{% set detailed = stats.review_count >= min_reviews %}
+<div class="fr-panel">
+  <div class="fr-panel-body">
+    {{ self::rating_headline(value=stats.avg_overall, count=stats.review_count) }}
+
+    {% if detailed %}
+      <div class="fr-subhead mt-3">Rating distribution</div>
+      {% for row in distribution %}
+        <div class="fr-histo-row">
+          <span class="fr-histo-label">{{ row.star }} <i class="fa-solid fa-star text-warning" aria-hidden="true"></i></span>
+          <div class="progress flex-grow-1" style="height:7px" role="progressbar"
+               aria-label="{{ row.star }} stars: {{ row.count }} reviews" aria-valuenow="{{ row.pct }}" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar bg-warning" style="width: {{ row.pct }}%"></div>
+          </div>
+          <span class="fr-histo-count">{{ row.count }}</span>
+        </div>
+      {% endfor %}
+
+      {# bar_class differs from the histogram above on purpose: different scale,
+         different colour, so the eye does not read the two blocks as one. #}
+      <div class="fr-subhead mt-3">Scores by dimension</div>
+      <div class="row g-2">
+        {{ self::subscore_row(label="Durability", value=stats.avg_durability, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label="Materials", value=stats.avg_materials, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label="Comfort", value=stats.avg_comfort, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label="Aesthetics", value=stats.avg_aesthetics, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label="Value", value=stats.avg_value_for_money, avg=true, cols="col-6", bar_class="bg-primary") }}
+      </div>
+    {% else %}
+      <div class="d-flex flex-wrap gap-1 mt-2 pt-2 border-top">
+        {{ self::subscore_chip(label="Durability", value=stats.avg_durability) }}
+        {{ self::subscore_chip(label="Materials", value=stats.avg_materials) }}
+        {{ self::subscore_chip(label="Comfort", value=stats.avg_comfort) }}
+        {{ self::subscore_chip(label="Aesthetics", value=stats.avg_aesthetics) }}
+        {{ self::subscore_chip(label="Value", value=stats.avg_value_for_money) }}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro product_rating_panel %}
+
+
 {# ── trust_badge ─────────────────────────────────────────────────
    Small trust level badge next to a username.
 #}

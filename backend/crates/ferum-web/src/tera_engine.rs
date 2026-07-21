@@ -159,6 +159,19 @@ impl TeraEngine {
             },
         );
 
+        // `thousands` filter — groups an integer with comma separators:
+        // 15000000 → "15,000,000". Non-numeric input passes through
+        // unchanged so a template never errors on a missing price.
+        tera.register_filter(
+            "thousands",
+            |value: &tera::Value, _args: &std::collections::HashMap<String, tera::Value>| {
+                match value.as_i64().or_else(|| value.as_f64().map(|f| f as i64)) {
+                    Some(n) => Ok(tera::Value::String(group_thousands(n))),
+                    None => Ok(value.clone()),
+                }
+            },
+        );
+
         Ok(tera)
     }
 
@@ -253,6 +266,26 @@ fn compute_asset_version(static_dir: &PathBuf) -> String {
         .max()
         .map(|secs| secs.to_string())
         .unwrap_or_else(|| "dev".to_string())
+}
+
+/// Group an integer with comma thousands-separators: 15000000 → "15,000,000".
+/// Negatives keep their sign.
+fn group_thousands(n: i64) -> String {
+    let neg = n < 0;
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    let bytes = digits.as_bytes();
+    for (i, b) in bytes.iter().enumerate() {
+        if i > 0 && (bytes.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(*b as char);
+    }
+    if neg {
+        format!("-{out}")
+    } else {
+        out
+    }
 }
 
 /// Flatten a `std::error::Error` chain into one line — Tera nests the actual

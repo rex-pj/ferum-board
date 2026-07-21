@@ -267,4 +267,5 @@ pub mod ids {
     pub fn category_a() -> Uuid { Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap() }
     pub fn thread_a() -> Uuid { Uuid::parse_str("00000000-0000-0000-0000-000000000020").unwrap() }
     pub fn post_a() -> Uuid { Uuid::parse_str("00000000-0000-0000-0000-000000000030").unwrap() }
+    pub fn product_a() -> Uuid { Uuid::parse_str("00000000-0000-0000-0000-000000000040").unwrap() }
 }

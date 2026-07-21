@@ -7,9 +7,9 @@ use crate::permission::PermissionChecker;
 use crate::ports::CacheService;
 use crate::shared::{AppError, OptionExt};
 use crate::usecases::user_usecase::preferences_cache_key;
-use ferum_domain::models::category::Category;
+use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 use ferum_domain::models::thread::Thread;
-use ferum_domain::repositories::category_repository::CategoryRepository;
+use ferum_domain::repositories::category_repository::{CategoryRepository, NewCategory};
 use ferum_domain::repositories::site_config_repository::{get_config_u64, SiteConfigRepository};
 use ferum_domain::repositories::tag_repository::TagRepository;
 use ferum_domain::repositories::thread_repository::ThreadRepository;
@@ -18,6 +18,9 @@ use ferum_domain::AuthUser;
 use uuid::Uuid;
 
 // ─── Use case ─────────────────────────────────────────────────────────────────
+
+/// Slug of the canonical category that holds every product-review thread.
+pub const REVIEWS_CATEGORY_SLUG: &str = "reviews";
 
 pub struct CategoryUseCase {
     pub categories: Arc<dyn CategoryRepository>,
@@ -59,6 +62,40 @@ impl CategoryUseCase {
     async fn invalidate_preferences_cache(&self, user_id: Uuid) {
         if let Some(cache) = &self.cache {
             let _ = cache.del(&preferences_cache_key(user_id)).await;
+        }
+    }
+
+    /// Get-or-create the canonical "Reviews" category. Every product-review
+    /// thread lives here so a product's reviews are never scattered across the
+    /// forum (which would fragment the review data). Self-healing: if an admin
+    /// deleted it, the next review recreates it. Safe under concurrent first
+    /// reviews — a losing INSERT race falls back to the row the winner created.
+    pub async fn ensure_reviews_category(&self) -> Result<Category, AppError> {
+        if let Some(c) = self.categories.find_by_slug(REVIEWS_CATEGORY_SLUG).await? {
+            return Ok(c);
+        }
+        match self
+            .categories
+            .create(NewCategory {
+                slug: REVIEWS_CATEGORY_SLUG.to_string(),
+                name: "Product reviews".to_string(),
+                description: Some("Reviews of furniture products.".to_string()),
+                parent_id: None,
+                position: 0,
+                view_policy: ViewPolicy::Public,
+                post_policy: PostPolicy::Members,
+                color: None,
+                created_by_id: None,
+            })
+            .await
+        {
+            Ok(c) => Ok(c),
+            // Lost the create race (or slug already taken) — the row now exists.
+            Err(_) => self
+                .categories
+                .find_by_slug(REVIEWS_CATEGORY_SLUG)
+                .await?
+                .or_not_found(),
         }
     }
 

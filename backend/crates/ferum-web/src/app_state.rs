@@ -17,7 +17,9 @@ use ferum_application::usecases::category_usecase::CategoryUseCase;
 use ferum_application::usecases::moderation_usecase::ModerationUseCase;
 use ferum_application::usecases::notification_usecase::NotificationUseCase;
 use ferum_application::usecases::post_usecase::PostUseCase;
+use ferum_application::usecases::product_usecase::ProductUseCase;
 use ferum_application::usecases::reaction_usecase::ReactionUseCase;
+use ferum_application::usecases::review_usecase::ReviewUseCase;
 use ferum_application::usecases::role_usecase::RoleUseCase;
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_application::usecases::setup_usecase::SetupUseCase;
@@ -42,6 +44,8 @@ pub struct AppState {
     pub category: Arc<CategoryUseCase>,
     pub thread: Arc<ThreadUseCase>,
     pub post: Arc<PostUseCase>,
+    pub product: Arc<ProductUseCase>,
+    pub review: Arc<ReviewUseCase>,
     pub reaction: Arc<ReactionUseCase>,
     pub notification: Arc<NotificationUseCase>,
     pub moderation: Arc<ModerationUseCase>,

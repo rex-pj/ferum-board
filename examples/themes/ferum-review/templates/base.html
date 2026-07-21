@@ -1,0 +1,32 @@
+{% extends "default/templates/base.html" %}
+{#
+  Ferum Review — base.html
+  ─────────────────────────────────────────────────────────────────────────────
+  A pass-through shell that inherits the default theme's document structure.
+  (`{% extends %}` is kept on line 1: Tera requires it to be the first tag.)
+
+  WHY IT EXISTS
+  1. The theme-package validator (handlers/admin/pages/themes.rs) rejects any
+     upload that does not contain 'templates/base.html'. This file satisfies
+     that contract.
+  2. It is a real link in the render chain, not a dead file: this theme's
+     catalog/product.html extends THIS base, which in turn extends the
+     default one. So it is the seam where shell-level changes belong.
+
+  WHY IT OVERRIDES NOTHING
+  Ferum Review is a re-skin, not a re-layout. Cloning the default <head>/<body>
+  would mean maintaining a second copy of the preload script, plugin slots,
+  user-preference attributes and script tags — and quietly drifting out of sync
+  the next time the default gains a feature (the shipped ferum-sumi example has
+  already drifted this way). All visual work is done in assets/theme.css, which
+  the default base.html loads automatically for the active theme.
+
+  TO CUSTOMISE THE SHELL
+  Override a block from the default base here, e.g.:
+
+      {% block bottom_nav %} …your mobile nav… {% endblock %}
+
+  Blocks available: title, description, meta_social, head_extra, topbar,
+  layout_class, page_inner_class, main_class, content, right_sidebar_wrap,
+  bottom_nav, scripts.
+#}

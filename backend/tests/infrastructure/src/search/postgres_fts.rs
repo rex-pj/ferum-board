@@ -69,7 +69,7 @@ async fn search_prefix_match_finds_partial_word() {
             category_id: cat.id,
             author_id: user.id,
             title: "Introduction to Rustaceans".to_string(),
-            slug: "intro-rustaceans".to_string(),
+            slug: "intro-rustaceans".to_string(), product_id: None,
         })
         .await.expect("create thread");
 
@@ -90,8 +90,8 @@ async fn search_with_category_filter_excludes_other_categories() {
     use ferum_domain::repositories::thread_repository::{NewThread, ThreadRepository};
     use ferum_infrastructure::repositories::PgThreadRepository;
     let repo = PgThreadRepository::new(db.conn.clone());
-    repo.create(NewThread { id: uuid::Uuid::new_v4(), category_id: cat_a.id, author_id: user.id, title: "Rust basics".to_string(), slug: "rust-basics".to_string() }).await.expect("cat_a thread");
-    repo.create(NewThread { id: uuid::Uuid::new_v4(), category_id: cat_b.id, author_id: user.id, title: "Rust advanced".to_string(), slug: "rust-advanced".to_string() }).await.expect("cat_b thread");
+    repo.create(NewThread { id: uuid::Uuid::new_v4(), category_id: cat_a.id, author_id: user.id, title: "Rust basics".to_string(), slug: "rust-basics".to_string(), product_id: None }).await.expect("cat_a thread");
+    repo.create(NewThread { id: uuid::Uuid::new_v4(), category_id: cat_b.id, author_id: user.id, title: "Rust advanced".to_string(), slug: "rust-advanced".to_string(), product_id: None }).await.expect("cat_b thread");
 
     let svc = PostgresFtsService::new(db.conn.clone());
 
@@ -120,7 +120,7 @@ async fn search_pagination_works() {
             category_id: cat.id,
             author_id: user.id,
             title: format!("Forum topic number {i}"),
-            slug: format!("topic-{i}"),
+            slug: format!("topic-{i}"), product_id: None,
         }).await.expect("create");
     }
 
@@ -148,7 +148,7 @@ async fn search_returns_excerpt_from_ts_headline() {
             category_id: cat.id,
             author_id: user.id,
             title: "Deep dive into async Rust patterns".to_string(),
-            slug: "async-rust-patterns".to_string(),
+            slug: "async-rust-patterns".to_string(), product_id: None,
         })
         .await.expect("create");
 

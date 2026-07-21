@@ -47,10 +47,66 @@
   </ol>
 </nav>
 
+{# ── Reviewed product card (product-review threads only) ─────────────── #}
+{% if review_product %}
+<div class="card mb-3">
+  <div class="card-body d-flex align-items-center gap-3 py-2">
+    {% if review_product.primary_image_key %}
+      <img src="/files/{{ review_product.primary_image_key }}" alt="{{ review_product.name }}"
+           class="rounded flex-shrink-0" style="width:56px;height:56px;object-fit:cover">
+    {% else %}
+      <span class="rounded bg-body-tertiary d-inline-flex align-items-center justify-content-center flex-shrink-0"
+            style="width:56px;height:56px"><i class="fa-solid fa-couch text-muted" aria-hidden="true"></i></span>
+    {% endif %}
+    <div class="flex-grow-1 min-w-0">
+      <div class="text-muted small">Product review</div>
+      <div class="fw-semibold text-truncate">
+        {{ review_product.name }}
+        {% if not review_product.is_published %}
+          <span class="badge text-bg-warning ms-1"><i class="fa-solid fa-clock me-1" aria-hidden="true"></i>Pending approval</span>
+        {% endif %}
+      </div>
+      {% if review_product.review_count and review_product.review_count > 0 %}
+        <div class="small">{{ m::rating_stars(value=review_product.avg_overall, count=review_product.review_count) }}</div>
+      {% endif %}
+    </div>
+    {% if review_product.is_published %}
+      <a href="/catalog/{{ review_product.slug }}" class="btn btn-sm btn-outline-primary flex-shrink-0">View product</a>
+    {% else %}
+      <span class="text-muted small flex-shrink-0 text-end">Will be public<br>once approved</span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Review verdict — the OP's own structured rating (review threads only) ── #}
+{% if review_rating %}
+<div class="card mb-3 border-warning-subtle">
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+      <span class="display-6 fw-bold lh-1">{{ review_rating.overall }}<span class="fs-5 text-muted">/5</span></span>
+      <span class="fs-4">{{ m::rating_stars(value=review_rating.overall) }}</span>
+      {% if review_rating.verified_purchase %}
+        <span class="badge text-bg-success align-self-center"><i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>Verified purchase</span>
+      {% endif %}
+    </div>
+    <div class="row g-2">
+      {{ m::subscore_row(label="Durability", value=review_rating.durability) }}
+      {{ m::subscore_row(label="Materials", value=review_rating.materials) }}
+      {{ m::subscore_row(label="Comfort", value=review_rating.comfort) }}
+      {{ m::subscore_row(label="Aesthetics", value=review_rating.aesthetics) }}
+      {{ m::subscore_row(label="Value for money", value=review_rating.value_for_money) }}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% set best_answer_href = "" %}
 {% if thread.best_answer_id %}
   {% set best_answer_href = "/go/post/" ~ thread.best_answer_id %}
 {% endif %}
+{# Forum-only "solved / best answer" concepts don't apply to reviews. #}
+{% set show_solved = thread.is_solved and not is_review %}
 
 {# ── Thread hero ─────────────────────────────────────────────────────── #}
 {% if thread.thumbnail_url %}
@@ -59,7 +115,7 @@
   <div class="fr-thread-hero-overlay">
     <div class="fr-thread-hero-body">
       <div class="d-flex flex-wrap gap-1 mb-2">
-        {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked, best_answer_href=best_answer_href) }}
+        {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=show_solved, is_locked=thread.is_locked, best_answer_href=best_answer_href) }}
       </div>
       <h1 class="h3 fw-bold text-white mb-1 lh-sm">{{ thread.title }}</h1>
       <div class="d-flex align-items-center gap-2 mt-1">
@@ -77,7 +133,7 @@
 {# ── Thread header (no thumbnail) ─────────────────────────────────── #}
 <div class="mb-3">
   <div class="d-flex flex-wrap gap-1 mb-1">
-    {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked) }}
+    {{ m::thread_status_badges(is_pinned=thread.is_pinned, is_solved=show_solved, is_locked=thread.is_locked) }}
   </div>
   <h1 class="h4 fw-bold mb-1 lh-sm">{{ thread.title }}</h1>
   <div class="d-flex align-items-center gap-2 mt-1">
@@ -260,7 +316,7 @@
                     </button>
                   </li>
                 {% endif %}
-                {% if not post.is_best_answer and not thread.is_solved and thread.can_mark_best_answer %}
+                {% if not post.is_best_answer and not thread.is_solved and not is_review and thread.can_mark_best_answer %}
                   <li><hr class="dropdown-divider"></li>
                   <li>
                     <button type="button" class="dropdown-item text-success"
@@ -480,12 +536,12 @@
         {% endif %}
 
         {# Status badges #}
-        {% if thread.is_pinned or thread.is_solved or thread.is_locked %}
+        {% if thread.is_pinned or show_solved or thread.is_locked %}
           <div class="d-flex flex-wrap gap-1 mt-1">
             {% if thread.is_pinned %}
               <span class="badge bg-primary"><i class="fa-solid fa-thumbtack me-1"></i>Pinned</span>
             {% endif %}
-            {% if thread.is_solved %}
+            {% if show_solved %}
               {% if best_answer_href %}
                 <a href="{{ best_answer_href }}" class="badge bg-success text-decoration-none" title="Jump to best answer">
                   <i class="fa-solid fa-circle-check me-1"></i>Solved

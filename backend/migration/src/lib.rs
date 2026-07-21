@@ -22,6 +22,18 @@ mod m20260001_000017_create_themes;
 mod m20260001_000018_create_daily_stats;
 mod m20260001_000019_create_bookmarks;
 mod m20260001_000020_create_plugin_storage;
+mod m20260001_000021_create_furniture_enums;
+mod m20260001_000022_create_brands;
+mod m20260001_000023_create_materials;
+mod m20260001_000024_create_products;
+mod m20260001_000025_create_product_materials;
+mod m20260001_000026_create_product_media;
+mod m20260001_000027_add_product_to_threads;
+mod m20260001_000028_create_review_ratings;
+mod m20260001_000029_create_product_rating_stats;
+mod m20260001_000030_seed_product_permissions;
+mod m20260001_000031_seed_product_submit_permission;
+mod m20260001_000032_unique_review_per_author;
 
 pub struct Migrator;
 
@@ -49,6 +61,18 @@ impl MigratorTrait for Migrator {
             Box::new(m20260001_000018_create_daily_stats::Migration),
             Box::new(m20260001_000019_create_bookmarks::Migration),
             Box::new(m20260001_000020_create_plugin_storage::Migration),
+            Box::new(m20260001_000021_create_furniture_enums::Migration),
+            Box::new(m20260001_000022_create_brands::Migration),
+            Box::new(m20260001_000023_create_materials::Migration),
+            Box::new(m20260001_000024_create_products::Migration),
+            Box::new(m20260001_000025_create_product_materials::Migration),
+            Box::new(m20260001_000026_create_product_media::Migration),
+            Box::new(m20260001_000027_add_product_to_threads::Migration),
+            Box::new(m20260001_000028_create_review_ratings::Migration),
+            Box::new(m20260001_000029_create_product_rating_stats::Migration),
+            Box::new(m20260001_000030_seed_product_permissions::Migration),
+            Box::new(m20260001_000031_seed_product_submit_permission::Migration),
+            Box::new(m20260001_000032_unique_review_per_author::Migration),
         ]
     }
 }

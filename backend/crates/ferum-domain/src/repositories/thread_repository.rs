@@ -76,6 +76,23 @@ pub trait ThreadRepository: Send + Sync {
     /// Batch fetch by ids, author-enriched. Order is not guaranteed — callers
     /// re-order as needed. Ids that don't resolve are simply absent.
     async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<Thread>, AppError>;
+    /// Author-enriched review threads for one product, newest first (non-deleted).
+    async fn list_by_product(
+        &self,
+        product_id: Uuid,
+        limit: u64,
+    ) -> Result<Vec<Thread>, AppError>;
+    /// The author's existing (non-deleted) review of this product, if any.
+    ///
+    /// Backs the one-review-per-author rule. `uq_threads_product_author` enforces
+    /// it in the database; this read exists so the use case can refuse with a
+    /// useful message — and the slug of the review already written — instead of
+    /// surfacing a unique-violation.
+    async fn find_review_by_author(
+        &self,
+        product_id: Uuid,
+        author_id: Uuid,
+    ) -> Result<Option<Thread>, AppError>;
     /// When `cached_total` is `Some`, the COUNT query is skipped and the supplied
     /// value is returned as the total — used by the use-case layer to avoid an exact
     /// COUNT(*) on every paginated guest request.
@@ -163,6 +180,8 @@ pub struct NewThread {
     pub author_id: Uuid,
     pub title: String,
     pub slug: String,
+    /// Set when the thread is a product review — links it to the reviewed product.
+    pub product_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Default)]

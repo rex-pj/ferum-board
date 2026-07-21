@@ -80,6 +80,10 @@ impl SearchService for PostgresFtsService {
         values.push((query.per_page as i64).into());
         values.push((offset as i64).into());
 
+        // Hide review threads whose product is still a draft (matches the public
+        // feed listings — a pending product's review is unlisted until approval).
+        let product_clause = " AND (t.product_id IS NULL OR EXISTS (SELECT 1 FROM products pr WHERE pr.id = t.product_id AND pr.status = 'published'))";
+
         let data_sql = format!(
             r#"
             SELECT
@@ -95,7 +99,7 @@ impl SearchService for PostgresFtsService {
             WHERE to_tsvector('simple', t.title) @@ to_tsquery('simple', $1)
               AND t.deleted_at IS NULL
               AND t.status != 'deleted'::thread_status
-              {cat_clause}
+              {cat_clause}{product_clause}
             ORDER BY ts_rank(to_tsvector('simple', t.title), to_tsquery('simple', $1)) DESC
             LIMIT ${limit_idx} OFFSET ${offset_idx}
             "#
@@ -108,7 +112,7 @@ impl SearchService for PostgresFtsService {
             WHERE to_tsvector('simple', t.title) @@ to_tsquery('simple', $1)
               AND t.deleted_at IS NULL
               AND t.status != 'deleted'::thread_status
-              {cat_clause}
+              {cat_clause}{product_clause}
             "#
         );
 

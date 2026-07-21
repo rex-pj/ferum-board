@@ -2,16 +2,20 @@
 
 pub mod audit_log_repository;
 pub mod bookmark_repository;
+pub mod brand_repository;
 pub mod follow_repository;
 pub mod plugin_db_repository;
 pub mod plugin_repository;
 pub mod plugin_storage_repository;
 pub mod category_repository;
+pub mod material_repository;
 pub mod notification_repository;
 pub mod permission_repository;
 pub mod post_repository;
+pub mod product_repository;
 pub mod reaction_repository;
 pub mod report_repository;
+pub mod review_rating_repository;
 pub mod role_repository;
 pub mod site_config_repository;
 pub mod stats_repository;
@@ -25,13 +29,17 @@ pub mod theme_repository;
 
 pub use audit_log_repository::AuditLogRepository;
 pub use bookmark_repository::BookmarkRepository;
+pub use brand_repository::BrandRepository;
 pub use follow_repository::FollowRepository;
 pub use category_repository::{CategoryRepository, NewCategory, UpdateCategory};
+pub use material_repository::MaterialRepository;
 pub use notification_repository::NotificationRepository;
 pub use permission_repository::PermissionRepository;
 pub use post_repository::{NewPost, PostRepository};
+pub use product_repository::{ProductListFilter, ProductRepository, UpdateProduct};
 pub use reaction_repository::ReactionRepository;
 pub use report_repository::ReportRepository;
+pub use review_rating_repository::{ReviewRatingRepository, ReviewThreadRef};
 pub use role_repository::{NewRole, RoleRepository, UpdateRole};
 pub use site_config_repository::SiteConfigRepository;
 pub use stats_repository::{DashboardCounts, StatHistoryPoint, StatsRepository};

@@ -62,7 +62,7 @@ async fn make_thread(
             category_id,
             author_id,
             title: format!("Thread {n}"),
-            slug: format!("thread-{n}"),
+            slug: format!("thread-{n}"), product_id: None,
         })
         .await
         .expect("create test thread")

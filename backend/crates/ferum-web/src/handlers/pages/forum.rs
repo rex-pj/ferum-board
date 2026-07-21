@@ -8,15 +8,18 @@ use crate::app_state::AppState;
 use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use ferum_domain::models::ThreadStatus;
+use ferum_domain::models::product::ProductStatus;
+use ferum_domain::repositories::product_repository::{ProductListFilter, ProductSort};
 use ferum_domain::repositories::thread_repository::ThreadSort;
 use crate::view_models::page_context::{
     CategoryCtx, PaginationCtx, PostCtx, ReactionSummaryCtx, TagCtx, ThreadDetailCtx,
     ForumGroupCtx,
 };
+use crate::view_models::product::{ProductResponse, RatingStatsResponse};
 use ferum_domain::models::reaction::ReactionKind;
 
 use ferum_application::permission::PermissionChecker;
-use super::{active_theme, map_threads, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
+use super::{active_theme, map_threads, map_threads_with_ratings, review_overall_map, review_product_image_map, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -79,11 +82,45 @@ pub async fn home(
     }
     let extra_params = extra_parts.join("");
 
+    // ── Homepage market data ────────────────────────────────────────────────
+    // Only on the primary view (no tag filter, first page) — pagination and tag
+    // drill-downs shouldn't re-render the product strip. All failures degrade to
+    // an empty band rather than failing the page.
+    let show_market = q.tag.is_none() && page == 1;
+    let (top_rated, total_products, total_reviews, avg_rating) = if show_market {
+        let (items, product_total) = state
+            .product
+            .list(
+                ProductListFilter {
+                    status: Some(ProductStatus::Published),
+                    sort: ProductSort::TopRated,
+                    ..Default::default()
+                },
+                1,
+                8,
+            )
+            .await
+            .unwrap_or_default();
+        // The strip is a "top rated" shelf — only products that actually carry a
+        // score belong on it (TopRated already sorts the unrated last).
+        let top: Vec<ProductResponse> = items
+            .into_iter()
+            .filter(|it| it.review_count > 0)
+            .map(ProductResponse::from)
+            .collect();
+        let (review_count, avg) = state.review.global_stats().await.unwrap_or((0, None));
+        (top, product_total, review_count, avg)
+    } else {
+        (Vec::new(), 0, 0, None)
+    };
+
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
-    ctx.insert("threads", &map_threads(&threads));
+    let thread_ratings = review_overall_map(&state, &threads).await;
+    let thread_images = review_product_image_map(&state, &threads).await;
+    ctx.insert("threads", &map_threads_with_ratings(&threads, &thread_ratings, &thread_images));
     ctx.insert("pagination", &PaginationCtx::new(page, per_page, total, extra_params));
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("total_threads", &total_threads);
@@ -91,6 +128,10 @@ pub async fn home(
     ctx.insert("active_tag", &q.tag);
     ctx.insert("active_sort", &sort_str);
     ctx.insert("watched_count", &watched_count);
+    ctx.insert("top_rated", &top_rated);
+    ctx.insert("total_products", &total_products);
+    ctx.insert("total_reviews", &total_reviews);
+    ctx.insert("avg_rating", &avg_rating);
 
     render_with_theme(&state, &active, "home.html", &ctx).await
 }
@@ -268,7 +309,9 @@ pub async fn category(
     ctx.insert("parent_category", &parent_category);
     ctx.insert("subcategories", &subcategories);
     ctx.insert("sibling_categories", &sibling_categories);
-    ctx.insert("threads", &map_threads(&threads));
+    let thread_ratings = review_overall_map(&state, &threads).await;
+    let thread_images = review_product_image_map(&state, &threads).await;
+    ctx.insert("threads", &map_threads_with_ratings(&threads, &thread_ratings, &thread_images));
     ctx.insert("pagination", &PaginationCtx::new(page, per_page, total, extra_params));
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("active_sort", &sort_str);
@@ -436,6 +479,52 @@ pub async fn thread_detail(
         .as_ref()
         .is_some_and(|u| PermissionChecker::can_upload(u).is_ok());
 
+    // If this thread reviews a product, surface it as a card — flagged "pending
+    // approval" while the product is still a draft, so a public review of a
+    // not-yet-approved submission reads clearly rather than 404-ing on the link.
+    let review_product = match state.review.product_for_thread(thread.id).await {
+        Ok(Some(pid)) => match state.product.get_by_id(pid).await {
+            Ok(product) => {
+                let stats = state
+                    .review
+                    .product_stats(pid)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(RatingStatsResponse::from);
+                Some(serde_json::json!({
+                    "slug": product.slug,
+                    "name": product.name,
+                    "primary_image_key": product.primary_image_key,
+                    "is_published": product.status == ProductStatus::Published,
+                    "avg_overall": stats.as_ref().and_then(|s| s.avg_overall),
+                    "review_count": stats.as_ref().map(|s| s.review_count).unwrap_or(0),
+                }))
+            }
+            Err(_) => None,
+        },
+        _ => None,
+    };
+    let is_review = review_product.is_some();
+
+    // The OP's own structured rating — the spine of a review view. May be absent
+    // if the review thread exists but its rating failed to save (rare).
+    let review_rating = if is_review {
+        state.review.get_rating(thread.id).await.ok().flatten().map(|r| {
+            serde_json::json!({
+                "overall": r.overall,
+                "durability": r.durability,
+                "materials": r.materials,
+                "comfort": r.comfort,
+                "aesthetics": r.aesthetics,
+                "value_for_money": r.value_for_money,
+                "verified_purchase": r.verified_purchase,
+            })
+        })
+    } else {
+        None
+    };
+
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
@@ -447,6 +536,9 @@ pub async fn thread_detail(
     ctx.insert("active_category_slug", &category.slug);
     ctx.insert("can_post", &can_post);
     ctx.insert("can_upload_attachment", &can_upload_attachment);
+    ctx.insert("review_product", &review_product);
+    ctx.insert("review_rating", &review_rating);
+    ctx.insert("is_review", &is_review);
 
     render_with_theme(&state, &active, "forum/thread.html", &ctx).await
 }

@@ -11,6 +11,7 @@ pub mod category;
 pub mod lookup;
 pub mod notification;
 pub mod post;
+pub mod product;
 pub mod reaction;
 pub mod report;
 pub mod role;

@@ -1,3 +1,15 @@
+/* ── Self-hosted UI font ──────────────────────────────────────────
+   Inter is served from /static/fonts (not Google Fonts) so it complies
+   with the CSP (style-src/font-src 'self') and keeps the app fully
+   self-contained. Single variable file covers weights 400–700. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin-variable.woff2') format('woff2');
+}
+
 /* ── Base typography ──────────────────────────────────────────── */
 html {
   scroll-behavior: smooth;

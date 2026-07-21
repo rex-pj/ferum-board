@@ -48,8 +48,34 @@ pub fn admin_api_routes() -> Router<AppState> {
         )
         .route("/permissions", get(admin::api::roles::list_all_permissions));
 
+    let admin_product_routes = Router::new()
+        .route(
+            "/",
+            get(admin::api::products::list_products).post(admin::api::products::create_product),
+        )
+        .route(
+            "/{id}",
+            patch(admin::api::products::update_product).delete(admin::api::products::delete_product),
+        )
+        .route("/{id}/materials", post(admin::api::products::set_materials))
+        .route(
+            "/{id}/media",
+            get(admin::api::products::list_media).post(admin::api::products::upload_media),
+        )
+        .route("/{id}/media/{media_id}", delete(admin::api::products::delete_media));
+
     let admin_routes = Router::new()
         .route("/stats", get(admin::api::stats::stats))
+        .route("/materials", post(admin::api::products::create_material))
+        .route(
+            "/materials/{id}",
+            patch(admin::api::products::update_material).delete(admin::api::products::delete_material),
+        )
+        .route("/brands", post(admin::api::products::create_brand))
+        .route(
+            "/brands/{id}",
+            patch(admin::api::products::update_brand).delete(admin::api::products::delete_brand),
+        )
         .route("/stats/history", get(admin::api::stats::stats_history))
         .route("/reports", get(admin::api::reports::list_reports))
         .route("/audit-log", get(admin::api::reports::list_audit_log))
@@ -88,6 +114,7 @@ pub fn admin_api_routes() -> Router<AppState> {
         .route("/plugins/{slug}/ui-slots", get(admin::api::plugins::list_ui_slots))
         .route("/plugins/{slug}/ui-slots/{slot_id}", patch(admin::api::plugins::update_ui_slot))
         .nest("/categories", admin_category_routes)
+        .nest("/products", admin_product_routes)
         .nest("/users", admin_user_routes)
         .nest("/roles", admin_role_routes);
 
@@ -107,6 +134,7 @@ pub fn admin_page_routes() -> Router<AppState> {
         .route("/users/{id}", get(admin::pages::users::user_detail))
         .route("/categories", get(admin::pages::categories::categories))
         .route("/categories/{id}/moderators", get(admin::pages::categories::category_moderators))
+        .route("/products", get(admin::pages::products::products))
         .route("/roles", get(admin::pages::roles::roles))
         .route("/roles/{id}", get(admin::pages::roles::role_detail))
         .route("/reports", get(admin::pages::reports::reports))

@@ -192,6 +192,19 @@ const ENRICHED_SELECT: &str = r#"
     ) p ON true
 "#;
 
+/// Public-feed visibility guard (data queries, alias `t`): a review thread whose
+/// product is still a `draft` must not surface in public listings (home /
+/// category / tag / search). Applied ONLY to public feeds — thread detail,
+/// author-profile and admin queries are left untouched so the author and staff
+/// keep seeing pending-product reviews.
+const HIDE_PENDING_PRODUCT_SQL: &str = " AND (t.product_id IS NULL OR EXISTS (SELECT 1 FROM products pr WHERE pr.id = t.product_id AND pr.status = 'published'))";
+
+/// Same guard for COUNT queries built with the Sea-ORM query builder, where the
+/// threads table is referenced by its real name `threads` (no `t` alias).
+fn hide_pending_product_cond() -> SimpleExpr {
+    Expr::cust("(threads.product_id IS NULL OR EXISTS (SELECT 1 FROM products pr WHERE pr.id = threads.product_id AND pr.status = 'published'))")
+}
+
 #[async_trait]
 impl ThreadRepository for PgThreadRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Thread>, AppError> {
@@ -232,6 +245,54 @@ impl ThreadRepository for PgThreadRepository {
             .collect())
     }
 
+    async fn list_by_product(
+        &self,
+        product_id: Uuid,
+        limit: u64,
+    ) -> Result<Vec<Thread>, AppError> {
+        let sql = format!(
+            "{ENRICHED_SELECT}
+             WHERE t.product_id = $1 AND t.deleted_at IS NULL
+             ORDER BY t.created_at DESC
+             LIMIT $2"
+        );
+        let stmt = Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            &sql,
+            [product_id.into(), (limit as i64).into()],
+        );
+        Ok(ThreadRow::find_by_statement(stmt)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(row_to_domain)
+            .collect())
+    }
+
+    async fn find_review_by_author(
+        &self,
+        product_id: Uuid,
+        author_id: Uuid,
+    ) -> Result<Option<Thread>, AppError> {
+        // Matches uq_threads_product_author: same columns, same partial predicate,
+        // so this read and the constraint can never disagree about what counts as
+        // an existing review.
+        let sql = format!(
+            "{ENRICHED_SELECT}
+             WHERE t.product_id = $1 AND t.author_id = $2 AND t.deleted_at IS NULL
+             LIMIT 1"
+        );
+        let stmt = Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            &sql,
+            [product_id.into(), author_id.into()],
+        );
+        Ok(ThreadRow::find_by_statement(stmt)
+            .one(&self.db)
+            .await?
+            .map(row_to_domain))
+    }
+
     async fn list_by_category(
         &self,
         category_id: Uuid,
@@ -246,7 +307,7 @@ impl ThreadRepository for PgThreadRepository {
 
         let data_sql = format!(
             "{ENRICHED_SELECT}
-             WHERE t.category_id = $1 AND t.deleted_at IS NULL{extra_where}
+             WHERE t.category_id = $1 AND t.deleted_at IS NULL{HIDE_PENDING_PRODUCT_SQL}{extra_where}
              {order_by}
              LIMIT $2 OFFSET $3"
         );
@@ -272,6 +333,7 @@ impl ThreadRepository for PgThreadRepository {
                     .from(threads::Entity)
                     .and_where(Expr::col(threads::Column::CategoryId).eq(category_id))
                     .and_where(Expr::col(threads::Column::DeletedAt).is_null())
+                    .and_where(hide_pending_product_cond())
                     .to_owned();
                 if let Some(cond) = sort_condition(filter) {
                     count_q.and_where(cond);
@@ -324,7 +386,7 @@ impl ThreadRepository for PgThreadRepository {
 
         let data_sql = format!(
             "{ENRICHED_SELECT}
-             WHERE t.category_id IN ({in_clause}) AND t.deleted_at IS NULL{extra_where}
+             WHERE t.category_id IN ({in_clause}) AND t.deleted_at IS NULL{HIDE_PENDING_PRODUCT_SQL}{extra_where}
              {order_by}
              LIMIT ${limit_pos} OFFSET ${offset_pos}"
         );
@@ -349,6 +411,7 @@ impl ThreadRepository for PgThreadRepository {
                             .is_in(category_ids.to_vec()),
                     )
                     .and_where(Expr::col(threads::Column::DeletedAt).is_null())
+                    .and_where(hide_pending_product_cond())
                     .to_owned();
                 if let Some(cond) = sort_condition(filter) {
                     count_q.and_where(cond);
@@ -462,6 +525,7 @@ impl ThreadRepository for PgThreadRepository {
             )
             .and_where(Expr::col((tags::Entity, tags::Column::Slug)).eq(tag_slug))
             .and_where(Expr::col(threads::Column::DeletedAt).is_null())
+            .and_where(hide_pending_product_cond())
             .to_owned();
         if !category_ids.is_empty() {
             count_q.and_where(
@@ -488,7 +552,7 @@ impl ThreadRepository for PgThreadRepository {
             "{ENRICHED_SELECT}
              JOIN thread_tags ttg ON ttg.thread_id = t.id
              JOIN tags tg ON tg.id = ttg.tag_id
-             WHERE tg.slug = $1 AND t.deleted_at IS NULL {cat_filter}{extra_where}
+             WHERE tg.slug = $1 AND t.deleted_at IS NULL{HIDE_PENDING_PRODUCT_SQL} {cat_filter}{extra_where}
              {order_by}
              LIMIT ${limit_pos} OFFSET ${offset_pos}"
         );
@@ -514,6 +578,7 @@ impl ThreadRepository for PgThreadRepository {
             author_id: Set(cmd.author_id),
             title: Set(cmd.title),
             slug: Set(cmd.slug),
+            product_id: Set(cmd.product_id),
             ..Default::default()
         };
         let inserted = model.insert(&self.db).await?;
@@ -828,7 +893,7 @@ impl ThreadRepository for PgThreadRepository {
                        WHERE thread_id = t.id AND is_deleted = false
                        ORDER BY created_at ASC LIMIT 1
                    ) p ON true
-                   WHERE t.category_id IN ({in_clause}) AND t.deleted_at IS NULL
+                   WHERE t.category_id IN ({in_clause}) AND t.deleted_at IS NULL{HIDE_PENDING_PRODUCT_SQL}
                ) ranked
                WHERE rn <= ${limit_pos}
                ORDER BY category_id, is_pinned DESC, last_post_at DESC NULLS LAST"#

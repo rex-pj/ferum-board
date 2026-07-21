@@ -3,6 +3,8 @@ pub mod plugin_status;
 pub mod plugin_tier;
 pub mod post_policy;
 pub mod post_status;
+pub mod product_status;
+pub mod product_type;
 pub mod reaction_kind;
 pub mod report_status;
 pub mod thread_status;

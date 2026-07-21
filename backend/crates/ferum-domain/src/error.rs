@@ -146,6 +146,9 @@ fn human_message(code: &str) -> String {
         "email_taken" => "This email is already registered.",
         "username_taken" => "This username is already taken.",
         "plugin_already_installed" => "This plugin is already installed.",
+        "product_already_reviewed" => {
+            "You've already reviewed this product. Edit your existing review instead."
+        }
         other => return other.replace('_', " "),
     };
     message.to_string()

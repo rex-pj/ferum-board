@@ -14,6 +14,10 @@ pub fn public_page_routes() -> Router<AppState> {
         .route("/forum", get(pages::forum::forum_index))
         .route("/forum/{slug}", get(pages::forum::category))
         .route("/forum/t/{slug}", get(pages::forum::thread_detail))
+        .route("/catalog", get(pages::catalog::catalog_index))
+        .route("/catalog/{slug}", get(pages::catalog::catalog_detail))
+        .route("/materials", get(pages::catalog::materials_index))
+        .route("/brands", get(pages::catalog::brands_index))
         .route("/go/post/{id}", get(pages::forum::goto_post))
         .route("/sitemap.xml", get(pages::sitemap::sitemap_xml))
         .route("/robots.txt", get(pages::sitemap::robots_txt))
@@ -87,6 +91,12 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
             "/{id}/thumbnail",
             post(api::threads::upload_thumbnail).delete(api::threads::delete_thumbnail),
         )
+        .route(
+            "/{slug}/rating",
+            get(api::reviews::get_rating)
+                .post(api::reviews::submit_rating)
+                .delete(api::reviews::delete_rating),
+        )
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .layer(axum::Extension(write_rl.clone()));
 
@@ -158,6 +168,20 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .layer(axum::Extension(write_rl.clone()));
 
+    // Public catalog reads (no auth, no rate limit — same class as category/thread reads).
+    let catalog_routes = Router::new()
+        .route("/products", get(api::products::list_products))
+        .route("/products/{slug}", get(api::products::get_product))
+        .route("/materials", get(api::products::list_materials))
+        .route("/brands", get(api::products::list_brands));
+
+    // Member-submitted products (crowd-sourced catalog). Rate-limited like other
+    // public writes; the handler enforces `product.submit` + email-verified.
+    let catalog_write_routes = Router::new()
+        .route("/products", post(api::products::submit_product))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
+        .layer(axum::Extension(write_rl.clone()));
+
     let plugin_rpc_routes = Router::new()
         .route("/{slug}/rpc/{action}", post(api::plugin_rpc::invoke))
         .route("/{slug}/media", post(api::plugin_rpc::upload_media))
@@ -168,6 +192,8 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .merge(search_routes)
         .merge(tag_routes)
         .merge(preview_routes)
+        .merge(catalog_routes)
+        .merge(catalog_write_routes)
         .nest("/categories", category_routes)
         .nest("/threads", thread_routes)
         .nest("/posts", post_routes)

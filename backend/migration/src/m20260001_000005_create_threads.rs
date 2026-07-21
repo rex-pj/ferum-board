@@ -32,6 +32,8 @@ pub enum Threads {
     DeletedAt,
     DeletedById,
     CustomFields,
+    // Added in m20260001_000027 — links a review thread to the product it reviews.
+    ProductId,
 }
 
 #[derive(Iden)]

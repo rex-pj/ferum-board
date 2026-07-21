@@ -1,6 +1,13 @@
 pub mod audit_logs;
 pub mod bookmarks;
+pub mod brands;
 pub mod daily_stats;
+pub mod materials;
+pub mod product_materials;
+pub mod product_media;
+pub mod product_rating_stats;
+pub mod products;
+pub mod review_ratings;
 pub mod plugin_hooks;
 pub mod plugin_logs;
 pub mod plugin_storage;

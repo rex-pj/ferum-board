@@ -562,3 +562,76 @@ async fn update_tags_non_author_without_edit_any_perm_returns_forbidden() {
     let result = b.build().update_tags(&actor, ids::thread_a(), vec!["rust".to_string()]).await;
     assert!(matches!(result, Err(AppError::Forbidden(c)) if c == "edit_window_expired"));
 }
+
+// ─── create: one review per author per product ───────────────────────────────
+//
+// `uq_threads_product_author` (migration 32) is the real guarantee; these cover
+// the use-case check that turns a would-be unique violation into a 409 the
+// caller can act on. Without the rule one account can open N threads on the
+// same product and set the product's average single-handed, because
+// recompute_stats sums every rating on every non-deleted thread and does not
+// group by author.
+
+fn review_cmd(product_id: Option<uuid::Uuid>) -> ferum_application::usecases::thread_usecase::CreateThreadCmd {
+    ferum_application::usecases::thread_usecase::CreateThreadCmd {
+        category_id: ids::category_a(),
+        title: "Ghế công thái học dùng 6 tháng".to_string(),
+        content_md: "Chi tiết cảm nhận sau nửa năm.".to_string(),
+        tag_names: vec![],
+        product_id,
+    }
+}
+
+#[tokio::test]
+async fn create_rejects_second_review_of_same_product() {
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perm("post.create")
+        .build();
+    let existing = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
+
+    let mut b = Uc::new();
+    b.categories.expect_find_by_id().return_once(|_| Ok(Some(make_category(ids::category_a()))));
+    b.threads.expect_find_review_by_author().return_once(move |_, _| Ok(Some(existing)));
+    // expect_create NOT set — the thread must never be inserted.
+
+    let result = b.build().create(&actor, review_cmd(Some(ids::product_a()))).await;
+    assert!(matches!(result, Err(AppError::Conflict(c)) if c == "product_already_reviewed"));
+}
+
+#[tokio::test]
+async fn create_allows_first_review_of_product() {
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perm("post.create")
+        .build();
+    let created = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
+
+    let mut b = Uc::new();
+    b.categories.expect_find_by_id().return_once(|_| Ok(Some(make_category(ids::category_a()))));
+    b.threads.expect_find_review_by_author().return_once(|_, _| Ok(None));
+    b.threads.expect_create().return_once(move |_| Ok(created));
+    b.events.expect_publish().return_once(|_| ());
+
+    let result = b.build().create(&actor, review_cmd(Some(ids::product_a()))).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn create_skips_review_check_for_non_product_thread() {
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perm("post.create")
+        .build();
+    let created = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
+
+    let mut b = Uc::new();
+    b.categories.expect_find_by_id().return_once(|_| Ok(Some(make_category(ids::category_a()))));
+    // expect_find_review_by_author NOT set — an ordinary thread must not pay for
+    // the lookup, and mockall fails the test if it is called anyway.
+    b.threads.expect_create().return_once(move |_| Ok(created));
+    b.events.expect_publish().return_once(|_| ());
+
+    let result = b.build().create(&actor, review_cmd(None)).await;
+    assert!(result.is_ok());
+}

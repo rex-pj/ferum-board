@@ -62,6 +62,15 @@ const POST_RUST_GO_3: Uuid = uuid!("30000000-0000-0000-0000-000000000011");
 const POST_DARK_1: Uuid = uuid!("30000000-0000-0000-0000-000000000012");
 const POST_DARK_2: Uuid = uuid!("30000000-0000-0000-0000-000000000013");
 
+// Furniture-review demo (products + one full review) — showcases the catalog.
+const P_SOFA: Uuid = uuid!("60000000-0000-0000-0000-000000000001");
+const P_TABLE: Uuid = uuid!("60000000-0000-0000-0000-000000000002");
+const P_MDF: Uuid = uuid!("60000000-0000-0000-0000-000000000003");
+const BRAND_NHA_XINH: Uuid = uuid!("61000000-0000-0000-0000-000000000001");
+const BRAND_HOA_PHAT: Uuid = uuid!("61000000-0000-0000-0000-000000000002");
+const TH_SOFA_REVIEW: Uuid = uuid!("21000000-0000-0000-0000-000000000001");
+const POST_SOFA_REVIEW: Uuid = uuid!("31000000-0000-0000-0000-000000000001");
+
 const BULK_THREAD_TITLE_PREFIXES: [&str; 10] = [
     "What do you think about",
     "How to approach",
@@ -152,6 +161,9 @@ impl BulkSeedService for PgBulkSeedService {
         self.sync_bulk_thread_stats().await?;
         self.seed_bulk_reactions().await?;
         self.seed_bulk_notifications().await?;
+        self.seed_materials().await?;
+        self.seed_brands().await?;
+        self.seed_furniture_demo(admin_id).await?;
 
         Ok(())
     }
@@ -1046,5 +1058,221 @@ impl PgBulkSeedService {
             .collect();
 
         insert_in_chunks::<notifications::Entity, _>(&self.db, rows, 200).await
+    }
+
+    // ── Reference materials common in the Vietnamese furniture market ──────────
+    // Opt-in starter taxonomy (seeded only when the admin chooses example data).
+    // Production installs start empty and add materials via the admin UI.
+
+    async fn seed_materials(&self) -> Result<(), AppError> {
+        use crate::entities::materials;
+
+        let rows: [(&str, &str, &str); 20] = [
+            ("go-soi", "Gỗ sồi tự nhiên", "wood_natural"),
+            ("go-oc-cho", "Gỗ óc chó", "wood_natural"),
+            ("go-cao-su", "Gỗ cao su", "wood_natural"),
+            ("go-thong", "Gỗ thông", "wood_natural"),
+            ("go-xoan-dao", "Gỗ xoan đào", "wood_natural"),
+            ("mdf-melamine", "MDF phủ Melamine", "wood_engineered"),
+            ("mdf-laminate", "MDF phủ Laminate", "wood_engineered"),
+            ("mdf-veneer", "MDF phủ Veneer", "wood_engineered"),
+            ("hdf", "Gỗ HDF", "wood_engineered"),
+            ("plywood", "Gỗ dán (Plywood)", "wood_engineered"),
+            ("may-tre-dan", "Mây tre đan", "rattan_bamboo"),
+            ("kim-loai-son", "Kim loại sơn tĩnh điện", "metal"),
+            ("inox", "Inox (thép không gỉ)", "metal"),
+            ("vai-ni", "Vải nỉ", "fabric"),
+            ("vai-bo", "Vải bố (canvas)", "fabric"),
+            ("da-that", "Da thật", "leather"),
+            ("da-simili", "Da công nghiệp (simili)", "leather"),
+            ("da-marble", "Đá marble", "stone"),
+            ("kinh-cuong-luc", "Kính cường lực", "glass"),
+            ("nhua-pp", "Nhựa PP", "plastic"),
+        ];
+
+        let models: Vec<materials::ActiveModel> = rows
+            .iter()
+            .map(|(slug, name, category)| materials::ActiveModel {
+                slug: Set((*slug).to_string()),
+                name: Set((*name).to_string()),
+                category: Set((*category).to_string()),
+                ..Default::default()
+            })
+            .collect();
+
+        insert_or_ignore::<materials::Entity, _, _>(&self.db, models).await
+    }
+
+    async fn seed_brands(&self) -> Result<(), AppError> {
+        use crate::entities::brands;
+
+        // Fixed IDs so the demo products below can reference them.
+        let rows: [(Uuid, &str, &str, &str, &str); 5] = [
+            (BRAND_NHA_XINH, "nha-xinh", "Nhà Xinh", "Việt Nam", "Nội thất cao cấp phong cách hiện đại."),
+            (BRAND_HOA_PHAT, "noi-that-hoa-phat", "Nội thất Hòa Phát", "Việt Nam", "Nội thất văn phòng và gia đình phổ thông."),
+            (uuid!("61000000-0000-0000-0000-000000000003"), "an-cuong", "An Cường", "Việt Nam", "Gỗ công nghiệp và vật liệu bề mặt."),
+            (uuid!("61000000-0000-0000-0000-000000000004"), "xuan-hoa", "Xuân Hòa", "Việt Nam", "Nội thất kim loại và gia dụng."),
+            (uuid!("61000000-0000-0000-0000-000000000005"), "baya", "BAYA", "Việt Nam", "Nội thất thiết kế theo phong cách Bắc Âu."),
+        ];
+
+        let models: Vec<brands::ActiveModel> = rows
+            .iter()
+            .map(|(id, slug, name, country, description)| brands::ActiveModel {
+                id: Set(*id),
+                slug: Set((*slug).to_string()),
+                name: Set((*name).to_string()),
+                country: Set(Some((*country).to_string())),
+                description: Set(Some((*description).to_string())),
+                is_verified: Set(true),
+                // `tier` left unset → DB default ('free'); allowed set is free|sponsored.
+                ..Default::default()
+            })
+            .collect();
+
+        insert_or_ignore::<brands::Entity, _, _>(&self.db, models).await
+    }
+
+    // ── Furniture-review demo (catalog + one full review with aggregate stats) ──
+
+    async fn seed_furniture_demo(&self, admin_id: Uuid) -> Result<(), AppError> {
+        use crate::entities::{
+            materials, product_materials, product_rating_stats, products, review_ratings,
+        };
+        use rust_decimal::Decimal;
+
+        let now = Utc::now().fixed_offset();
+
+        // 1. Products (VN prices in đồng; category left unset for the demo).
+        insert_or_ignore::<products::Entity, _, _>(&self.db, [
+            products::ActiveModel {
+                id: Set(P_SOFA),
+                slug: Set("sofa-vang-boc-ni-scandinavian".into()),
+                name: Set("Sofa văng bọc nỉ Scandinavian".into()),
+                product_type: Set(products::ProductType::Furniture),
+                status: Set(products::ProductStatus::Published),
+                brand_id: Set(Some(BRAND_NHA_XINH)),
+                style: Set(Some("Scandinavian".into())),
+                price_min: Set(Some(6_500_000)),
+                price_max: Set(Some(8_900_000)),
+                origin: Set(Some("Việt Nam".into())),
+                description_md: Set(Some("Sofa văng khung gỗ sồi, đệm bọc nỉ, dài 1m8.".into())),
+                created_by_id: Set(Some(admin_id)),
+                ..Default::default()
+            },
+            products::ActiveModel {
+                id: Set(P_TABLE),
+                slug: Set("ban-an-go-oc-cho-6-ghe".into()),
+                name: Set("Bàn ăn gỗ óc chó 6 ghế".into()),
+                product_type: Set(products::ProductType::Furniture),
+                status: Set(products::ProductStatus::Published),
+                brand_id: Set(Some(BRAND_HOA_PHAT)),
+                style: Set(Some("Hiện đại".into())),
+                price_min: Set(Some(18_000_000)),
+                price_max: Set(Some(24_000_000)),
+                origin: Set(Some("Việt Nam".into())),
+                created_by_id: Set(Some(admin_id)),
+                ..Default::default()
+            },
+            products::ActiveModel {
+                id: Set(P_MDF),
+                slug: Set("van-mdf-phu-melamine".into()),
+                name: Set("Ván MDF phủ Melamine".into()),
+                product_type: Set(products::ProductType::Material),
+                status: Set(products::ProductStatus::Published),
+                price_min: Set(Some(220_000)),
+                price_max: Set(Some(450_000)),
+                description_md: Set(Some("Đánh giá vật liệu ván MDF phủ Melamine.".into())),
+                created_by_id: Set(Some(admin_id)),
+                ..Default::default()
+            },
+        ])
+        .await?;
+
+        // 2. Link products to materials seeded by migration 031 (look up by slug).
+        let mat_ids: std::collections::HashMap<String, Uuid> = materials::Entity::find()
+            .all(&self.db)
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?
+            .into_iter()
+            .map(|m| (m.slug, m.id))
+            .collect();
+
+        let mut links: Vec<product_materials::ActiveModel> = Vec::new();
+        for (product_id, slug) in [
+            (P_SOFA, "go-soi"),
+            (P_SOFA, "vai-ni"),
+            (P_TABLE, "go-oc-cho"),
+            (P_MDF, "mdf-melamine"),
+        ] {
+            if let Some(&material_id) = mat_ids.get(slug) {
+                links.push(product_materials::ActiveModel {
+                    product_id: Set(product_id),
+                    material_id: Set(material_id),
+                });
+            }
+        }
+        if !links.is_empty() {
+            insert_or_ignore::<product_materials::Entity, _, _>(&self.db, links).await?;
+        }
+
+        // 3. One review thread linked to the sofa, with its opening post.
+        insert_or_ignore::<threads::Entity, _, _>(&self.db, [threads::ActiveModel {
+            id: Set(TH_SOFA_REVIEW),
+            category_id: Set(CAT_GENERAL),
+            author_id: Set(ALICE_ID),
+            title: Set("Đánh giá Sofa văng bọc nỉ sau 6 tháng sử dụng".into()),
+            slug: Set("danh-gia-sofa-vang-boc-ni".into()),
+            status: Set(ThreadStatus::Open),
+            view_count: Set(42),
+            last_post_at: Set(Some(now)),
+            product_id: Set(Some(P_SOFA)),
+            custom_fields: Set(serde_json::Value::Object(Default::default())),
+            ..Default::default()
+        }])
+        .await?;
+
+        insert_or_ignore::<posts::Entity, _, _>(&self.db, [posts::ActiveModel {
+            id: Set(POST_SOFA_REVIEW),
+            thread_id: Set(TH_SOFA_REVIEW),
+            author_id: Set(ALICE_ID),
+            parent_id: Set(None),
+            content_md: Set("Khung gỗ sồi chắc chắn, vải nỉ ít bám bụi và dễ vệ sinh. Rất đáng tiền.".into()),
+            content_html: Set("<p>Khung gỗ sồi chắc chắn, vải nỉ ít bám bụi và dễ vệ sinh. Rất đáng tiền.</p>".into()),
+            created_at: Set(now),
+            ..Default::default()
+        }])
+        .await?;
+
+        // 4. Structured rating + its precomputed aggregate (numeric, exact).
+        insert_or_ignore::<review_ratings::Entity, _, _>(&self.db, [review_ratings::ActiveModel {
+            thread_id: Set(TH_SOFA_REVIEW),
+            overall: Set(5),
+            durability: Set(Some(5)),
+            materials: Set(Some(5)),
+            comfort: Set(Some(4)),
+            aesthetics: Set(Some(5)),
+            value_for_money: Set(Some(4)),
+            verified_purchase: Set(true),
+            ..Default::default()
+        }])
+        .await?;
+
+        insert_or_ignore::<product_rating_stats::Entity, _, _>(
+            &self.db,
+            [product_rating_stats::ActiveModel {
+                product_id: Set(P_SOFA),
+                review_count: Set(1),
+                avg_overall: Set(Some(Decimal::from(5))),
+                avg_durability: Set(Some(Decimal::from(5))),
+                avg_materials: Set(Some(Decimal::from(5))),
+                avg_comfort: Set(Some(Decimal::from(4))),
+                avg_aesthetics: Set(Some(Decimal::from(5))),
+                avg_value_for_money: Set(Some(Decimal::from(4))),
+                updated_at: Set(now),
+            }],
+        )
+        .await?;
+
+        Ok(())
     }
 }

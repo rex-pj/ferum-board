@@ -1,12 +1,11 @@
-
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 /* ================================================================
    Ferum Board — Default Theme  (source entry)
    Build:  npm run build  (in themes/default/)
    Output: assets/theme.css  — served by Axum unchanged
 ================================================================ */
+
 /* ── Design tokens — light (default) ─────────────────────────── */
+
 :root,
 [data-bs-theme="light"] {
   /* Primary accent — dark variant derived via color-mix so any server-injected
@@ -55,7 +54,9 @@
   /* Thread cards */
   --fr-thread-title-hover: var(--ferum-primary);
 }
+
 /* ── Design tokens — dark ─────────────────────────────────────── */
+
 [data-bs-theme="dark"] {
   /* In dark mode "dark" means lighter (more pastel) for legibility on dark bg */
   --ferum-primary:       #818cf8;
@@ -82,16 +83,38 @@
 
   --fr-thread-title-hover: var(--ferum-primary);
 }
+
 /* ── User preference selectors ────────────────────────────────── */
+
 [data-font-size="small"]  { font-size: 87.5%; }
+
 [data-font-size="large"]  { font-size: 112.5%; }
+
 [data-layout="compact"] .fr-thread-row   { padding: 0.4375rem 1rem; }
+
 [data-layout="compact"] .fr-notif-row    { padding: 0.4375rem 1rem; }
+
 [data-layout="compact"] .fr-thread-thumb { width: 56px; height: 36px; }
+
+/* ── Self-hosted UI font ──────────────────────────────────────────
+   Inter is served from /static/fonts (not Google Fonts) so it complies
+   with the CSP (style-src/font-src 'self') and keeps the app fully
+   self-contained. Single variable file covers weights 400–700. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin-variable.woff2') format('woff2');
+}
+
 /* ── Base typography ──────────────────────────────────────────── */
+
 html {
   scroll-behavior: smooth;
 }
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.9375rem;
@@ -99,15 +122,20 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
 :focus-visible {
   outline: 2px solid var(--ferum-primary);
   outline-offset: 2px;
 }
+
 :target {
   scroll-margin-top: calc(var(--fr-topbar-height) + 0.5rem);
 }
+
 /* ── Bootstrap component overrides ───────────────────────────── */
+
 /* Buttons */
+
 .btn {
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -117,8 +145,11 @@ body {
   justify-content: center;
   transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
+
 .btn-sm  { min-height: 36px; font-size: 0.8125rem; }
+
 .btn-xs  { min-height: 28px; font-size: 0.75rem; padding: 0 0.625rem; }
+
 .btn-primary {
   --bs-btn-bg:           var(--ferum-primary);
   --bs-btn-border-color: var(--ferum-primary);
@@ -129,6 +160,7 @@ body {
   --bs-btn-hover-color:  #fff;
   --bs-btn-active-color: #fff;
 }
+
 .btn-outline-primary {
   --bs-btn-color:        var(--ferum-primary);
   --bs-btn-border-color: var(--ferum-primary);
@@ -136,28 +168,35 @@ body {
   --bs-btn-hover-color:  #fff;
   --bs-btn-active-bg:    var(--ferum-primary-dark);
 }
+
 .btn-link {
   --bs-btn-color:       var(--ferum-primary);
   --bs-btn-hover-color: var(--ferum-primary-dark);
   min-height: unset;
 }
+
 /* Cards */
+
 .card {
   --bs-card-border-color: var(--bs-border-color);
   --bs-card-bg: var(--bs-body-bg);
   box-shadow: none;
   border-radius: var(--bs-border-radius);
 }
+
 .card-header {
   background: var(--bs-tertiary-bg);
   border-bottom-color: var(--bs-border-color);
   font-size: 0.875rem;
 }
+
 .card-footer {
   background: var(--bs-tertiary-bg);
   border-top-color: var(--bs-border-color);
 }
+
 /* Forms */
+
 .form-control,
 .form-select {
   font-size: 0.9375rem;
@@ -167,6 +206,7 @@ body {
   border-radius: var(--bs-border-radius-sm);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+
 .form-control:focus,
 .form-select:focus {
   border-color: var(--ferum-primary);
@@ -174,25 +214,31 @@ body {
   background-color: var(--bs-body-bg);
   color: var(--bs-body-color);
 }
+
 [data-bs-theme="dark"] .form-control,
 [data-bs-theme="dark"] .form-select {
   background-color: var(--bs-secondary-bg);
 }
+
 .form-label {
   font-weight: 500;
   font-size: 0.875rem;
   margin-bottom: 0.375rem;
 }
+
 .form-text {
   font-size: 0.8125rem;
   color: var(--bs-secondary-color);
 }
+
 .input-group-text {
   background: var(--bs-secondary-bg);
   border-color: var(--bs-border-color);
   color: var(--bs-secondary-color);
 }
+
 /* Dropdowns */
+
 .dropdown-menu {
   --bs-dropdown-border-color: var(--bs-border-color);
   --bs-dropdown-bg: var(--bs-body-bg);
@@ -207,6 +253,7 @@ body {
   padding: 0.25rem;
   min-width: 160px;
 }
+
 .dropdown-item {
   border-radius: var(--bs-border-radius-sm);
   padding: 0.4375rem 0.625rem;
@@ -216,6 +263,7 @@ body {
   font-weight: 500;
   transition: background 0.1s;
 }
+
 .dropdown-header {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -224,8 +272,11 @@ body {
   color: var(--bs-tertiary-color);
   padding: 0.5rem 0.625rem 0.25rem;
 }
+
 .dropdown-divider { border-color: var(--bs-border-color); margin: 0.25rem 0; }
+
 /* Pagination */
+
 .page-link {
   color: var(--bs-secondary-color);
   background: var(--bs-body-bg);
@@ -235,45 +286,66 @@ body {
   text-align: center;
   transition: background 0.1s, color 0.1s;
 }
+
 .page-link:hover {
   color: var(--bs-body-color);
   background: var(--bs-secondary-bg);
   border-color: var(--bs-border-color);
 }
+
 .page-item.active .page-link {
   background: var(--ferum-primary);
   border-color: var(--ferum-primary);
   color: #fff;
 }
+
 .page-item.disabled .page-link {
   color: var(--bs-tertiary-color);
   background: var(--bs-body-bg);
 }
+
 /* Breadcrumb */
+
 .breadcrumb { font-size: 0.8125rem; }
+
 .breadcrumb-item a { color: var(--bs-secondary-color); text-decoration: none; transition: color 0.1s; }
+
 .breadcrumb-item a:hover { color: var(--bs-body-color); }
+
 .breadcrumb-item.active { color: var(--bs-tertiary-color); }
+
 .breadcrumb-item + .breadcrumb-item::before { color: var(--bs-border-color); }
+
 /* Modals */
+
 .modal-content {
   border-radius: var(--bs-border-radius-lg);
   border-color: var(--bs-border-color);
   background: var(--bs-body-bg);
 }
+
 .modal-header { border-bottom-color: var(--bs-border-color); padding: 1rem 1.25rem; }
+
 .modal-footer { border-top-color: var(--bs-border-color); padding: 0.875rem 1.25rem; }
+
 .modal-body   { padding: 1.25rem; }
+
 /* List groups */
+
 .list-group-item {
   border-color: var(--bs-border-color);
   background: var(--bs-body-bg);
   color: var(--bs-body-color);
 }
+
 .list-group-item-action:hover { background: var(--fr-nav-hover-bg); color: var(--bs-body-color); }
+
 /* Alerts */
+
 .alert { border-radius: var(--bs-border-radius); }
+
 /* ── Topbar ───────────────────────────────────────────────────── */
+
 .navbar {
   height: var(--fr-topbar-height);
   background: var(--bs-body-bg) !important;
@@ -281,6 +353,7 @@ body {
   box-shadow: var(--bs-box-shadow-sm);
   padding: 0 1rem;
 }
+
 .navbar .nav-link {
   color: var(--bs-secondary-color);
   font-weight: 500;
@@ -291,20 +364,25 @@ body {
   padding: 0 0.5rem;
   transition: color 0.15s;
 }
+
 .navbar .nav-link:hover,
 .navbar .nav-link.active { color: var(--bs-body-color); }
+
 .navbar .form-control {
   font-size: 0.875rem;
   height: 36px;
   background: var(--bs-secondary-bg);
   border-color: var(--bs-border-color);
 }
+
 .navbar .form-control:focus {
   background: var(--bs-body-bg);
   border-color: var(--ferum-primary);
   box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
 }
+
 /* ── Icon button ──────────────────────────────────────────────── */
+
 .fr-icon-btn {
   width: var(--fr-tap-target);
   height: var(--fr-tap-target);
@@ -321,9 +399,13 @@ body {
   font-size: 1rem;
   flex-shrink: 0;
 }
+
 .fr-icon-btn:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
+
 .fr-icon-btn:focus-visible { outline: 2px solid var(--ferum-primary); outline-offset: 2px; }
+
 /* ── Brand block ──────────────────────────────────────────────── */
+
 .fr-topbar-brand {
   text-decoration: none;
   display: flex;
@@ -332,6 +414,7 @@ body {
   flex-shrink: 0;
   min-width: 0;
 }
+
 .fr-brand-mark {
   width: 32px;
   height: 32px;
@@ -347,6 +430,7 @@ body {
   letter-spacing: -0.01em;
   line-height: 1;
 }
+
 .fr-brand-img {
   height: 32px;
   width: auto;
@@ -354,12 +438,14 @@ body {
   object-fit: contain;
   flex-shrink: 0;
 }
+
 .fr-brand-text {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
+
 .fr-brand-name {
   font-size: 0.9375rem;
   font-weight: 700;
@@ -371,6 +457,7 @@ body {
   text-overflow: ellipsis;
   max-width: 180px;
 }
+
 .fr-brand-slogan {
   font-size: 0.6875rem;
   font-weight: 400;
@@ -381,16 +468,20 @@ body {
   text-overflow: ellipsis;
   max-width: 180px;
 }
+
 /* ── 3-column app layout ──────────────────────────────────────── */
+
 :root {
   --fr-sidebar-width: 220px;
 }
+
 .fr-layout {
   display: flex;
   min-height: calc(100dvh - var(--fr-topbar-height));
   max-width: 1440px;
   margin-inline: auto;
 }
+
 .fr-sidebar-left {
   width: var(--fr-sidebar-width);
   flex-shrink: 0;
@@ -403,14 +494,18 @@ body {
   padding: 0.5rem 0.5rem 2rem;
   scrollbar-width: thin;
 }
+
 .fr-sidebar-left::-webkit-scrollbar { width: 4px; }
+
 .fr-sidebar-left::-webkit-scrollbar-thumb { background: var(--bs-border-color); border-radius: 2px; }
+
 .fr-page {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
 }
+
 .fr-page-inner {
   flex: 1;
   display: flex;
@@ -420,35 +515,47 @@ body {
   width: 100%;
   box-sizing: border-box;
 }
+
 .fr-main-col {
   flex: 1;
   min-width: 0;
 }
+
 /* Reading pages (thread): cap the main column for a comfortable line length,
    then center the [main + rail] group so the leftover space falls into
    balanced outer margins instead of a gap between the two columns. The inner
    gutter stays tight (2rem) so the rail reads as attached to the post. */
+
 .fr-page-inner--reading               { justify-content: center; gap: 2rem; }
+
 .fr-page-inner--reading .fr-main-col  { max-width: 800px; }
+
 .fr-right-col {
   width: 280px;
   flex-shrink: 0;
   display: none;            /* shown from small-laptop width up (query below) */
 }
+
 /* Bring the right rail in earlier (1100px) so its content no longer vanishes
    for the whole small-laptop range. Main stays ≥ ~560px at this width. */
+
 @media (min-width: 1100px) {
   .fr-right-col { display: block; }
 }
+
 @media (max-width: 1199.98px) {
   .fr-right-col { width: 240px; }
 }
+
 @media (max-width: 991.98px) {
   .fr-sidebar-left { display: none !important; }
   .fr-page-inner { padding: 1rem; }
 }
+
 /* ── Mobile sidebar drawer ────────────────────────────────────── */
+
 /* Re-enable the sidebar panel that the media query hides above   */
+
 #mobileSidebar .fr-sidebar-left {
   display: flex !important;
   flex-direction: column;
@@ -459,27 +566,36 @@ body {
   transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
 }
+
 #mobileSidebar.is-open .fr-sidebar-left {
   transform: translateX(0);
 }
+
 /* Backdrop fade */
+
 #mobileSidebar .fr-drawer-backdrop {
   opacity: 0;
   transition: opacity 0.26s ease;
 }
+
 #mobileSidebar.is-open .fr-drawer-backdrop {
   opacity: 1;
 }
+
 /* ── Sidebar nav links (left sidebar) ────────────────────────── */
+
 .fr-nav-link--child {
   padding-left: 1.5rem;
 }
+
 /* ── Icon column — fixed-width icon in a flex row (panel / list items) */
+
 .fr-icon-col {
   width: 1rem;
   text-align: center;
   flex-shrink: 0;
 }
+
 .fr-nav-link-badge {
   font-size: 0.5625rem;
   font-weight: 700;
@@ -487,9 +603,12 @@ body {
   padding: 3px 5px;
   min-width: 16px;
 }
+
 /* ── Compact top bar (new design) ────────────────────────────── */
+
 /* .fr-brand-mark/-img/-text/-name/-slogan already live in _navbar.css —
    this section only adds the new topbar shell + search + actions. */
+
 .fr-topbar {
   height: var(--fr-topbar-height);
   background: var(--bs-body-bg);
@@ -499,6 +618,7 @@ body {
   z-index: 1030;
   box-shadow: var(--bs-box-shadow-sm);
 }
+
 .fr-topbar-inner {
   display: flex;
   align-items: center;
@@ -508,7 +628,9 @@ body {
   max-width: 1440px;
   margin-inline: auto;
 }
+
 /* .fr-topbar-brand already lives in _navbar.css */
+
 .fr-topbar-search {
   flex: 1;
   min-width: 0; /* allow shrinking below content size on narrow viewports */
@@ -524,11 +646,13 @@ body {
   height: 36px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+
 .fr-topbar-search:focus-within {
   border-color: var(--ferum-primary);
   box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
   background: var(--bs-body-bg);
 }
+
 .fr-topbar-search input {
   border: none;
   background: transparent;
@@ -538,8 +662,11 @@ body {
   flex: 1;
   min-width: 0;
 }
+
 .fr-topbar-search input::placeholder { color: var(--bs-tertiary-color); }
+
 .fr-topbar-search-icon { color: var(--bs-tertiary-color); font-size: 0.8125rem; flex-shrink: 0; }
+
 .fr-topbar-search-btn {
   background: none;
   border: none;
@@ -550,7 +677,9 @@ body {
   flex-shrink: 0;
   line-height: 1;
 }
+
 .fr-topbar-search-btn:hover .fr-topbar-search-icon { color: var(--bs-body-color); }
+
 .fr-topbar-actions {
   display: flex;
   align-items: center;
@@ -558,6 +687,7 @@ body {
   flex-shrink: 0;
   margin-left: auto;
 }
+
 .fr-topbar-menu-btn {
   width: var(--fr-tap-target);
   height: var(--fr-tap-target);
@@ -572,8 +702,11 @@ body {
   font-size: 1rem;
   flex-shrink: 0;
 }
+
 .fr-topbar-menu-btn:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
+
 /* ── User avatar button in topbar ────────────────────────────── */
+
 .fr-avatar-btn {
   width: var(--fr-tap-target);
   height: var(--fr-tap-target);
@@ -592,7 +725,9 @@ body {
   transition: background 0.1s;
   flex-shrink: 0;
 }
+
 .fr-avatar-btn:hover { background: var(--bs-secondary-bg); }
+
 .fr-avatar-btn img,
 .fr-avatar-btn .fr-avatar-img {
   width: 32px;
@@ -604,8 +739,10 @@ body {
   flex-shrink: 0;
   display: block;
 }
+
 .fr-avatar-btn:hover img,
 .fr-avatar-btn:hover .fr-avatar-img { border-color: var(--ferum-primary); }
+
 .fr-avatar-initials {
   display: flex;
   align-items: center;
@@ -622,8 +759,11 @@ body {
   transition: border-color 0.15s;
   flex-shrink: 0;
 }
+
 .fr-avatar-btn:hover .fr-avatar-initials { border-color: var(--ferum-primary); }
+
 /* ── Right sidebar panel row links ───────────────────────────── */
+
 .fr-panel-row {
   display: flex;
   align-items: center;
@@ -635,12 +775,15 @@ body {
   transition: background 0.1s, color 0.1s;
   min-height: 36px;
 }
+
 a.fr-panel-row:hover {
   background: var(--fr-nav-hover-bg);
   color: var(--bs-body-color);
   text-decoration: none;
 }
+
 /* ── Right sidebar panel cards ────────────────────────────────── */
+
 .fr-panel {
   background: var(--bs-tertiary-bg);
   border: 1px solid var(--bs-border-color);
@@ -648,6 +791,7 @@ a.fr-panel-row:hover {
   overflow: hidden;
   margin-bottom: 0.75rem;
 }
+
 .fr-panel-section {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -656,10 +800,13 @@ a.fr-panel-row:hover {
   color: var(--bs-tertiary-color);
   padding: 0.75rem 0.875rem 0.375rem;
 }
+
 .fr-panel-body {
   padding: 0.625rem 0.875rem 0.75rem;
 }
+
 /* Key-value stat row at the bottom of a panel (border-top separator) */
+
 .fr-panel-stat {
   padding: 0.5rem 0.875rem;
   display: flex;
@@ -669,8 +816,11 @@ a.fr-panel-row:hover {
   color: var(--bs-secondary-color);
   border-top: 1px solid var(--bs-border-color);
 }
+
 .fr-panel-stat .fw-semibold { color: var(--bs-body-color); }
+
 /* Legacy inline stat rows (inside panel body) */
+
 .fr-panel-stat-row {
   display: flex;
   justify-content: space-between;
@@ -679,14 +829,18 @@ a.fr-panel-row:hover {
   color: var(--bs-secondary-color);
   padding: 0.1875rem 0;
 }
+
 .fr-panel-stat-val { font-weight: 600; color: var(--bs-body-color); }
+
 /* ── Thread feed ──────────────────────────────────────────────── */
+
 .fr-feed {
   border: 1px solid var(--bs-border-color);
   border-radius: var(--bs-border-radius);
   overflow: hidden;
   background: var(--bs-body-bg);
 }
+
 .fr-thread-row {
   display: flex;
   align-items: flex-start;
@@ -698,15 +852,20 @@ a.fr-panel-row:hover {
   transition: background 0.1s;
   position: relative;
 }
+
 .fr-thread-row:last-child { border-bottom: none; }
+
 .fr-thread-row:hover { background: var(--bs-tertiary-bg); text-decoration: none; color: inherit; }
+
 .fr-thread-row--pinned {
   border-left: 3px solid var(--ferum-primary);
   background: color-mix(in srgb, var(--ferum-primary) 5%, var(--bs-body-bg));
 }
+
 .fr-thread-row--pinned:hover {
   background: color-mix(in srgb, var(--ferum-primary) 8%, var(--bs-tertiary-bg));
 }
+
 .fr-thread-thumb {
   width: 80px;
   height: 50px;
@@ -716,7 +875,9 @@ a.fr-panel-row:hover {
   margin-top: 2px;
   align-self: flex-start;
 }
+
 .fr-thread-body  { flex: 1; min-width: 0; }
+
 .fr-thread-title {
   font-size: 1rem;
   font-weight: 600;
@@ -726,7 +887,9 @@ a.fr-panel-row:hover {
   transition: color 0.1s;
   word-break: break-word;
 }
+
 .fr-thread-row:hover .fr-thread-title { color: var(--fr-thread-title-hover); }
+
 .fr-thread-excerpt {
   font-size: 0.8125rem;
   color: var(--bs-secondary-color);
@@ -736,6 +899,7 @@ a.fr-panel-row:hover {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+
 .fr-thread-meta {
   display: flex;
   flex-wrap: wrap;
@@ -745,8 +909,11 @@ a.fr-panel-row:hover {
   font-size: 0.8125rem;
   color: var(--bs-secondary-color);
 }
+
 .fr-thread-meta a { color: inherit; text-decoration: none; }
+
 .fr-thread-meta a:hover { color: var(--bs-body-color); text-decoration: underline; }
+
 .fr-thread-meta-tags {
   display: inline-flex;
   align-items: center;
@@ -754,6 +921,7 @@ a.fr-panel-row:hover {
   flex-wrap: wrap;
   margin-left: 0.125rem;
 }
+
 .fr-thread-stats {
   display: flex;
   flex-direction: column;
@@ -765,12 +933,19 @@ a.fr-panel-row:hover {
   white-space: nowrap;
   min-width: 52px;
 }
+
 /* ── Thread status icons ──────────────────────────────────────── */
+
 .fr-status-icon         { font-size: 0.75rem; }
+
 .fr-status-icon--pinned { color: var(--ferum-primary); }
+
 .fr-status-icon--solved { color: #10b981; }
+
 .fr-status-icon--locked { color: #f59e0b; }
+
 /* ── Category pill ────────────────────────────────────────────── */
+
 .fr-category-pill {
   display: inline-flex;
   align-items: center;
@@ -787,12 +962,15 @@ a.fr-panel-row:hover {
   white-space: nowrap;
   line-height: 1;
 }
+
 .fr-category-pill:hover {
   background: var(--fr-nav-hover-bg);
   color: var(--bs-body-color);
   text-decoration: none;
 }
+
 /* ── Tag chips ────────────────────────────────────────────────── */
+
 .fr-tag-chip {
   display: inline-flex;
   align-items: center;
@@ -809,16 +987,20 @@ a.fr-panel-row:hover {
   line-height: 1;
   transition: background 0.12s;
 }
+
 .fr-tag-chip:hover {
   background: color-mix(in srgb, var(--tag-color, #6b7280) 22%, transparent);
   text-decoration: none;
 }
+
 .fr-tag-more {
   font-size: 0.6875rem;
   color: var(--bs-tertiary-color);
   font-weight: 500;
 }
+
 /* ── Collapsible category header (forum index / home feed) ────── */
+
 .fr-cat-header {
   display: flex;
   align-items: center;
@@ -830,13 +1012,18 @@ a.fr-panel-row:hover {
   user-select: none;
   transition: background 0.1s;
 }
+
 .fr-cat-header:hover { background: var(--bs-secondary-bg); }
+
 /* Keyboard-operable collapse header — inset ring, .fr-feed clips outset */
+
 .fr-cat-header:focus-visible {
   outline: 2px solid var(--ferum-primary);
   outline-offset: -2px;
 }
+
 /* Sort / filter tab bar */
+
 .fr-sort-tabs {
   display: flex;
   gap: 0;
@@ -845,7 +1032,9 @@ a.fr-panel-row:hover {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+
 .fr-sort-tabs::-webkit-scrollbar { display: none; }
+
 .fr-sort-tab {
   display: inline-flex;
   align-items: center;
@@ -865,28 +1054,35 @@ a.fr-panel-row:hover {
   border-right: none;
   cursor: pointer;
 }
+
 .fr-sort-tab:hover { color: var(--bs-body-color); text-decoration: none; }
+
 .fr-sort-tab--active {
   color: var(--ferum-primary);
   border-bottom-color: var(--ferum-primary);
   font-weight: 600;
 }
+
 /* ── Thread hero banner (thumbnail as cover, thread detail page) ── */
+
 .fr-thread-hero {
   position: relative;
   border-radius: var(--bs-border-radius-lg);
   overflow: hidden;
   background: var(--bs-secondary-bg);
 }
+
 .fr-thread-hero-img {
   display: block;
   width: 100%;
   height: 240px;
   object-fit: cover;
 }
+
 @media (max-width: 575.98px) {
   .fr-thread-hero-img { height: 180px; }
 }
+
 .fr-thread-hero-overlay {
   position: absolute;
   inset: 0;
@@ -899,15 +1095,20 @@ a.fr-panel-row:hover {
   display: flex;
   align-items: flex-end;
 }
+
 .fr-thread-hero-body {
   padding: 1.25rem 1.5rem;
   width: 100%;
 }
+
 /* ── OP (original post) card accent ───────────────────────────── */
+
 .fr-post-op {
   border-left: 3px solid var(--ferum-primary) !important;
 }
+
 /* ── Post content ─────────────────────────────────────────────── */
+
 .post-content {
   line-height: 1.75;
   font-size: 0.9375rem;
@@ -915,6 +1116,7 @@ a.fr-panel-row:hover {
   overflow-wrap: break-word;
   word-break: break-word;
 }
+
 .post-content h1, .post-content h2, .post-content h3,
 .post-content h4, .post-content h5, .post-content h6 {
   margin-top: 1.5em;
@@ -922,7 +1124,9 @@ a.fr-panel-row:hover {
   font-weight: 600;
   line-height: 1.3;
 }
+
 .post-content p { margin-bottom: 0.875em; }
+
 .post-content pre {
   background: var(--bs-secondary-bg);
   border: 1px solid var(--bs-border-color);
@@ -933,6 +1137,7 @@ a.fr-panel-row:hover {
   line-height: 1.6;
   margin: 1em 0;
 }
+
 .post-content code {
   background: var(--bs-secondary-bg);
   border-radius: 3px;
@@ -940,7 +1145,9 @@ a.fr-panel-row:hover {
   font-size: 0.875em;
   color: var(--bs-body-color);
 }
+
 .post-content pre code { background: none; padding: 0; font-size: inherit; }
+
 .post-content blockquote {
   border-left: 3px solid var(--ferum-primary);
   padding: 0.5rem 1rem;
@@ -949,16 +1156,23 @@ a.fr-panel-row:hover {
   background: rgba(var(--bs-primary-rgb), 0.04);
   border-radius: 0 var(--bs-border-radius-sm) var(--bs-border-radius-sm) 0;
 }
+
 .post-content img {
   max-width: 100%;
   height: auto;
   border-radius: var(--bs-border-radius-sm);
 }
+
 .post-content a { color: var(--bs-link-color); word-break: break-word; }
+
 .post-content a:hover { color: var(--bs-link-hover-color); }
+
 .post-content ul, .post-content ol { padding-left: 1.5em; margin-bottom: 0.875em; }
+
 .post-content li { margin-bottom: 0.25em; }
+
 .post-content hr { border-color: var(--bs-border-color); margin: 1.5rem 0; }
+
 .post-content table {
   width: 100%;
   border-collapse: collapse;
@@ -967,47 +1181,61 @@ a.fr-panel-row:hover {
   overflow-x: auto;
   display: block;
 }
+
 .post-content th, .post-content td {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--bs-border-color);
   text-align: left;
 }
+
 .post-content th { background: var(--bs-secondary-bg); font-weight: 600; }
+
 /* Best answer highlight */
+
 .post-best-answer { border-left: 3px solid #10b981 !important; }
+
 .fr-post-best-answer {
   border-left: 4px solid #10b981 !important;
   background: color-mix(in srgb, #10b981 5%, var(--bs-body-bg)) !important;
 }
+
 /* NOTE: .fr-best-answer-header's *effective* color/background/border-bottom-color
    are actually set by the !important duplicate in _utilities.css (later import
    wins ties among !important rules) — this block only contributes font-weight,
    which nothing else overrides. Pre-existing duplication in the shipped CSS,
    reproduced here verbatim rather than silently resolved. */
+
 .fr-best-answer-header {
   background: color-mix(in srgb, #10b981 10%, var(--bs-body-bg));
   color: #059669;
   font-weight: 600;
   border-bottom-color: color-mix(in srgb, #10b981 20%, var(--bs-border-color));
 }
+
 [data-bs-theme="dark"] .fr-post-best-answer {
   background: color-mix(in srgb, #10b981 8%, var(--bs-body-bg)) !important;
 }
+
 [data-bs-theme="dark"] .fr-best-answer-header {
   color: #34d399;
 }
+
 /* Deep-link highlight */
+
 .card:target {
   border-color: var(--ferum-primary) !important;
   box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.15) !important;
 }
+
 /* ── Notification feed ────────────────────────────────────────── */
+
 .fr-notif-feed {
   border: 1px solid var(--bs-border-color);
   border-radius: var(--bs-border-radius);
   overflow: hidden;
   background: var(--bs-body-bg);
 }
+
 .fr-notif-row {
   display: flex;
   align-items: flex-start;
@@ -1017,9 +1245,13 @@ a.fr-panel-row:hover {
   transition: background 0.1s;
   position: relative;
 }
+
 .fr-notif-row:last-child  { border-bottom: none; }
+
 .fr-notif-row:hover       { background: var(--bs-tertiary-bg); }
+
 .fr-notif-row--unread     { background: rgba(var(--bs-primary-rgb), 0.04); }
+
 .fr-notif-icon {
   width: 32px;
   height: 32px;
@@ -1033,18 +1265,31 @@ a.fr-panel-row:hover {
   color: var(--bs-secondary-color);
   margin-top: 2px;
 }
+
 /* ── Notification icon colors ─────────────────────────────────── */
+
 .fr-notif-icon--reply    { color: var(--ferum-primary); }
+
 .fr-notif-icon--mention  { color: #0ea5e9; }
+
 .fr-notif-icon--reaction { color: #ef4444; }
+
 .fr-notif-icon--solved   { color: #10b981; }
+
 .fr-notif-icon--warn     { color: #f59e0b; }
+
 .fr-notif-icon--system   { color: var(--bs-secondary-color); }
+
 /* ── Notification body/time text ──────────────────────────────── */
+
 .fr-notif-body    { font-size: 0.8125rem; color: var(--bs-secondary-color); min-width: 0; }
+
 .fr-notif-time    { font-size: 0.75rem;   color: var(--bs-tertiary-color); white-space: nowrap; }
+
 .fr-notif-content { min-width: 0; flex: 1; }
+
 /* ── Mobile bottom navigation ─────────────────────────────────── */
+
 .fr-bottom-nav {
   position: fixed;
   bottom: 0;
@@ -1058,6 +1303,7 @@ a.fr-panel-row:hover {
   z-index: 1030;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
+
 .fr-bn-item {
   flex: 1;
   display: flex;
@@ -1076,9 +1322,12 @@ a.fr-panel-row:hover {
   padding: 0;
   position: relative;
 }
+
 .fr-bn-item:hover,
 .fr-bn-item.active { color: var(--ferum-primary); text-decoration: none; }
+
 .fr-bn-item i { font-size: 1.1rem; line-height: 1; }
+
 .fr-bn-badge {
   position: absolute;
   top: 6px;
@@ -1096,6 +1345,7 @@ a.fr-panel-row:hover {
   justify-content: center;
   line-height: 1;
 }
+
 .fr-bn-cta {
   width: 40px;
   height: 28px;
@@ -1108,20 +1358,30 @@ a.fr-panel-row:hover {
   font-size: 1rem;
   transition: transform 0.1s;
 }
+
 .fr-bn-cta:hover { transform: scale(1.06); }
+
 @media (max-width: 991.98px) {
   body { padding-bottom: var(--fr-bottom-nav-height); }
 }
+
 @media (min-width: 992px) {
   .fr-bottom-nav { display: none !important; }
 }
+
 /* ── Auth pages ───────────────────────────────────────────────── */
+
 /* .fr-auth-page replaces the old .fr-auth-bg + .fr-auth-container pairing —
    it is both the full-viewport background AND the centering wrapper. */
+
 .fr-layout--auth                  { min-height: 100dvh !important; }
+
 .fr-layout--auth .fr-sidebar-left { display: none !important; }
+
 .fr-layout--auth .fr-page-inner   { padding: 0; gap: 0; }
+
 .fr-layout--auth .fr-footer       { display: none !important; }
+
 .fr-auth-page {
   min-height: 100dvh;
   display: flex;
@@ -1134,13 +1394,16 @@ a.fr-panel-row:hover {
     radial-gradient(ellipse at 25% 100%, rgba(var(--bs-primary-rgb), 0.05) 0%, transparent 50%),
     var(--bs-body-bg);
 }
+
 .fr-auth-card {
   width: 100%;
   max-width: 420px;
   border-color: rgba(var(--bs-primary-rgb), 0.15) !important;
   box-shadow: var(--bs-box-shadow-lg) !important;
 }
+
 /* ── Brand above the card — vertical stack: mark → name → slogan ─ */
+
 .fr-auth-brand {
   display: flex;
   flex-direction: column;
@@ -1150,6 +1413,7 @@ a.fr-panel-row:hover {
   text-decoration: none;
   margin-bottom: 2rem;
 }
+
 .fr-auth-brand-mark {
   width: 52px;
   height: 52px;
@@ -1166,6 +1430,7 @@ a.fr-panel-row:hover {
   box-shadow: 0 4px 14px rgba(var(--bs-primary-rgb), 0.35);
   margin-bottom: 0.25rem;
 }
+
 .fr-auth-brand-img {
   height: 52px;
   width: auto;
@@ -1173,6 +1438,7 @@ a.fr-panel-row:hover {
   border-radius: 10px;
   margin-bottom: 0.25rem;
 }
+
 .fr-auth-brand-name {
   font-size: 1.25rem;
   font-weight: 700;
@@ -1180,6 +1446,7 @@ a.fr-panel-row:hover {
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
+
 .fr-auth-brand-slogan {
   font-size: 0.8125rem;
   font-weight: 400;
@@ -1187,9 +1454,13 @@ a.fr-panel-row:hover {
   line-height: 1.4;
   max-width: 280px;
 }
+
 /* Password show/hide toggle */
+
 .fr-password-wrapper { position: relative; }
+
 .fr-password-wrapper .form-control { padding-right: 2.5rem; }
+
 .fr-password-toggle {
   position: absolute;
   right: 0.75rem;
@@ -1203,8 +1474,11 @@ a.fr-panel-row:hover {
   line-height: 1;
   font-size: 0.875rem;
 }
+
 .fr-password-toggle:hover { color: var(--bs-body-color); }
+
 /* "or" divider */
+
 .fr-auth-divider {
   display: flex;
   align-items: center;
@@ -1214,6 +1488,7 @@ a.fr-panel-row:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
 .fr-auth-divider::before,
 .fr-auth-divider::after {
   content: '';
@@ -1221,7 +1496,9 @@ a.fr-panel-row:hover {
   height: 1px;
   background: var(--bs-border-color);
 }
+
 /* ── Sidebar nav ──────────────────────────────────────────────── */
+
 .fr-nav-link {
   display: flex;
   align-items: center;
@@ -1236,8 +1513,11 @@ a.fr-panel-row:hover {
   margin: 0.0625rem 0;
   transition: background 0.1s, color 0.1s;
 }
+
 .fr-nav-link:hover  { background: var(--fr-nav-hover-bg); color: var(--bs-body-color); }
+
 .fr-nav-link.active { background: var(--fr-nav-active-bg); color: var(--fr-nav-active-color); font-weight: 600; }
+
 .fr-nav-section {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -1246,7 +1526,9 @@ a.fr-panel-row:hover {
   color: var(--bs-tertiary-color);
   padding: 0.75rem 0.75rem 0.25rem;
 }
+
 /* ── Home sidebar categories panel ───────────────────────────── */
+
 .fr-panel-header {
   font-size: 0.6875rem;
   font-weight: 600;
@@ -1256,9 +1538,11 @@ a.fr-panel-row:hover {
   padding: 0.625rem 0.875rem;
   border-bottom: 1px solid var(--bs-border-color);
 }
+
 /* ── Right sidebar panels: section separator instead of card boxes ──
    Base .fr-layout / .fr-page-inner--reading / .fr-right-col rules live
    in _layout.css. These are refinements layered on top. */
+
 .fr-right-col .fr-panel {
   background: transparent;
   border: none;
@@ -1268,13 +1552,18 @@ a.fr-panel-row:hover {
   padding-top: 0.875rem;
   padding-bottom: 0.875rem;
 }
+
 .fr-right-col .fr-panel:first-child {
   border-top: none;
   padding-top: 0;
 }
+
 /* Stat rows: more breathing room than the 3px global default */
+
 .fr-right-col .fr-panel-stat-row { padding: 0.3125rem 0; }
+
 /* Section labels: left accent stripe as rhythm marker + brand signal */
+
 .fr-right-col .fr-panel-header,
 .fr-right-col .fr-panel-section {
   border-bottom: none;
@@ -1284,40 +1573,56 @@ a.fr-panel-row:hover {
   color: var(--bs-secondary-color);
   font-weight: 700;
 }
+
 /* Stat values: slightly larger than label to create label → value hierarchy */
+
 .fr-right-col .fr-panel-stat-val {
   font-weight: 700;
   font-size: 0.9375rem;
 }
+
 /* Same treatment for fr-panel-stat numbers (thread/reply counts) */
+
 .fr-right-col .fr-panel-stat .fw-semibold {
   font-weight: 700;
   font-size: 0.9375rem;
 }
+
 /* Nav icons in sidebar rows: primary color at 65% instead of generic gray at 50% */
+
 .fr-right-col .fr-icon-col {
   color: var(--ferum-primary);
   opacity: 0.65;
 }
+
 .fr-right-col a.fr-panel-row:hover .fr-icon-col {
   opacity: 1;
 }
+
 /* Stat-row icons (in home community/thread stats): same treatment */
+
 .fr-right-col .fr-panel-stat i,
 .fr-right-col .fr-panel-stat-row > span:first-child i {
   color: var(--ferum-primary);
   opacity: 0.6;
 }
+
 /* Preserve explicit semantic colors (text-success, text-warning, text-danger, text-info) */
+
 .fr-right-col .fr-panel-stat i.text-success,
 .fr-right-col .fr-panel-stat-row > span:first-child i.text-success { color: var(--bs-success) !important; opacity: 1; }
+
 .fr-right-col .fr-panel-stat i.text-warning,
 .fr-right-col .fr-panel-stat-row > span:first-child i.text-warning { color: var(--bs-warning) !important; opacity: 1; }
+
 .fr-right-col .fr-panel-stat i.text-danger,
 .fr-right-col .fr-panel-stat-row > span:first-child i.text-danger  { color: var(--bs-danger)  !important; opacity: 1; }
+
 .fr-right-col .fr-panel-stat i.text-info,
 .fr-right-col .fr-panel-stat-row > span:first-child i.text-info    { color: var(--bs-info)    !important; opacity: 1; }
+
 /* ── Profile page ─────────────────────────────────────────────── */
+
 .fr-profile-cover {
   height: 180px;
   background: linear-gradient(140deg,
@@ -1329,13 +1634,16 @@ a.fr-panel-row:hover {
   overflow: hidden;
   position: relative;
 }
+
 .fr-profile-cover img { width: 100%; height: 100%; object-fit: cover; }
+
 .fr-profile-avatar-wrap {
   display: inline-block;
   margin-top: -52px;
   position: relative;
   z-index: 1;
 }
+
 .fr-profile-avatar {
   width: 96px;
   height: 96px;
@@ -1345,6 +1653,7 @@ a.fr-panel-row:hover {
   object-fit: cover;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
+
 .fr-profile-avatar-placeholder {
   width: 96px;
   height: 96px;
@@ -1359,14 +1668,19 @@ a.fr-panel-row:hover {
   color: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
+
 /* ── Profile stat labels ──────────────────────────────────────── */
+
 .fr-stat-label { color: var(--bs-tertiary-color); font-size: 0.875rem; }
+
 /* ── Profile tab bar ──────────────────────────────────────────── */
+
 .fr-profile-tab-bar {
   display: flex;
   background: var(--bs-card-bg, var(--bs-body-bg));
   border-top: 1px solid var(--bs-border-color);
 }
+
 .fr-profile-tab {
   flex: 1;
   display: flex;
@@ -1390,33 +1704,42 @@ a.fr-panel-row:hover {
   font-size: inherit;
   line-height: 1;
 }
+
 .fr-profile-tab:last-child { border-right: none; }
+
 /* Inset focus ring — the parent card is overflow:hidden, an outset ring would clip */
+
 .fr-profile-tab:focus-visible {
   outline: 2px solid var(--ferum-primary);
   outline-offset: -2px;
 }
+
 .fr-profile-tab:hover {
   background-color: rgba(var(--bs-primary-rgb), 0.04);
   color: var(--bs-body-color);
 }
+
 .fr-profile-tab:active {
   background-color: rgba(var(--bs-primary-rgb), 0.08);
 }
+
 .fr-profile-tab--active {
   color: var(--ferum-primary) !important;
   background-color: rgba(var(--bs-primary-rgb), 0.06) !important;
   box-shadow: inset 0 -3px 0 var(--ferum-primary) !important;
 }
+
 .fr-profile-tab-count {
   font-size: 1.125rem;
   font-weight: 700;
   line-height: 1;
   color: var(--bs-body-color);
 }
+
 .fr-profile-tab--active .fr-profile-tab-count {
   color: var(--ferum-primary);
 }
+
 .fr-profile-tab-label {
   font-size: 0.6875rem;
   font-weight: 500;
@@ -1425,11 +1748,14 @@ a.fr-panel-row:hover {
   color: var(--bs-tertiary-color);
   line-height: 1;
 }
+
 .fr-profile-tab--active .fr-profile-tab-label {
   color: var(--ferum-primary);
   opacity: 0.85;
 }
+
 /* ── Profile action buttons (Follow / Edit profile) ───────────── */
+
 .fr-profile-action-btn {
   min-height: 36px;
   padding-inline: 1rem;
@@ -1437,35 +1763,49 @@ a.fr-panel-row:hover {
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+
 /* ── Account page cover preview ──────────────────────────────── */
+
 .fr-cover-preview {
   height: 100px;
   border: 1px solid var(--bs-border-color);
 }
+
 .fr-cover-preview-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 .fr-cover-placeholder {
   width: 100%; height: 100%;
   background: linear-gradient(135deg, hsl(210,55%,38%) 0%, hsl(190,65%,52%) 100%);
   padding: .5rem 1rem; text-align: center;
 }
+
 [data-bs-theme="dark"] .fr-cover-placeholder { filter: brightness(.55) saturate(1.3); }
+
 /* ── Alpine: hide x-cloak elements until Alpine initialises ── */
+
 [x-cloak] { display: none !important; }
+
 /* ── Filter/search rows — all sibling controls match input height ── */
+
 .adm-filter-row {
   display: flex;
   align-items: stretch;
   flex-wrap: wrap;
   gap: .5rem;
 }
+
 /* ── Admin shell ──────────────────────────────────────────────── */
+
 html, body { height: 100%; margin: 0; }
+
 .adm-shell {
   --adm-header-h: 64px;
   display: flex;
   min-height: 100vh;
 }
+
 /* ── Sidebar ──────────────────────────────────────────────────── */
+
 .adm-sidebar {
   width: 220px;
   flex-shrink: 0;
@@ -1478,6 +1818,7 @@ html, body { height: 100%; margin: 0; }
   height: 100vh;
   overflow-y: auto;
 }
+
 .adm-brand {
   display: flex;
   align-items: center;
@@ -1488,6 +1829,7 @@ html, body { height: 100%; margin: 0; }
   border-bottom: 1px solid var(--bs-border-color);
   flex-shrink: 0;
 }
+
 .adm-brand-logo {
   width: 30px;
   height: 30px;
@@ -1501,6 +1843,7 @@ html, body { height: 100%; margin: 0; }
   font-size: .85rem;
   flex-shrink: 0;
 }
+
 .adm-brand-logo-img {
   width: 30px;
   height: 30px;
@@ -1508,26 +1851,32 @@ html, body { height: 100%; margin: 0; }
   border-radius: .375rem;
   flex-shrink: 0;
 }
+
 .adm-brand-text {
   display: flex;
   flex-direction: column;
   line-height: 1.2;
 }
+
 .adm-brand-name {
   font-weight: 700;
   font-size: .85rem;
   color: var(--bs-body-color);
 }
+
 .adm-brand-sub {
   font-size: .7rem;
   color: var(--bs-secondary-color);
 }
+
 /* ── Sidebar nav ────────────────────────────────────────────── */
+
 .adm-nav {
   flex: 1;
   padding: .5rem .75rem 0;
   overflow-y: auto;
 }
+
 .adm-nav-label {
   display: block;
   padding: .75rem .5rem .2rem;
@@ -1537,7 +1886,9 @@ html, body { height: 100%; margin: 0; }
   text-transform: uppercase;
   color: var(--bs-secondary-color);
 }
+
 .adm-nav-label:first-child { padding-top: .35rem; }
+
 .adm-nav-link {
   display: flex;
   align-items: center;
@@ -1549,15 +1900,18 @@ html, body { height: 100%; margin: 0; }
   text-decoration: none;
   transition: background .1s, color .1s;
 }
+
 .adm-nav-link:hover {
   background: var(--bs-secondary-bg);
   color: var(--bs-body-color);
 }
+
 .adm-nav-link.active {
   background: var(--bs-primary-bg-subtle);
   color: var(--bs-primary);
   font-weight: 600;
 }
+
 .adm-nav-icon {
   width: .875rem;
   text-align: center;
@@ -1565,12 +1919,16 @@ html, body { height: 100%; margin: 0; }
   flex-shrink: 0;
   font-size: .8rem;
 }
+
 .adm-nav-link.active .adm-nav-icon { opacity: 1; }
+
 .adm-sidebar-footer {
   padding: .625rem .75rem .875rem;
   border-top: 1px solid var(--bs-border-color);
 }
+
 /* ── Main body ──────────────────────────────────────────────── */
+
 .adm-body {
   flex: 1;
   display: flex;
@@ -1578,6 +1936,7 @@ html, body { height: 100%; margin: 0; }
   min-width: 0;
   background: var(--bs-secondary-bg);
 }
+
 .adm-topbar {
   display: flex;
   align-items: center;
@@ -1591,26 +1950,34 @@ html, body { height: 100%; margin: 0; }
   z-index: 100;
   flex-shrink: 0;
 }
+
 .adm-topbar-title {
   font-size: 1rem;
   font-weight: 600;
   margin: 0;
   color: var(--bs-body-color);
 }
+
 .adm-content { flex: 1; padding: 1.5rem; }
+
 .adm-footer {
   font-size: .73rem;
   color: var(--bs-tertiary-color);
   flex-shrink: 0;
 }
+
 /* ── Utilities ──────────────────────────────────────────────── */
+
 .hover-bg:hover { background: var(--bs-secondary-bg); }
+
 /* ── Table: thead typographic style ────────────────────────── */
+
 .adm-content thead.table-active {
   --bs-table-active-bg: transparent;
   --bs-table-bg-state: transparent;
   background-color: transparent !important;
 }
+
 .adm-content thead.table-active > tr > th {
   font-size: .6875rem;
   font-weight: 700;
@@ -1620,20 +1987,28 @@ html, body { height: 100%; margin: 0; }
   border-bottom: 2px solid var(--bs-border-color);
   white-space: nowrap;
 }
+
 .adm-content .table > * > tr > *:first-child { padding-left: 1rem; }
+
 .adm-content .table > * > tr > *:last-child  { padding-right: 1rem; }
+
 .adm-content .table > tbody > tr > td {
   padding-top: .5625rem;
   padding-bottom: .5625rem;
 }
+
 /* ── Theme card preview area ────────────────────────────────── */
+
 .adm-theme-preview {
   height: 140px;
   overflow: hidden;
   border-bottom: 1px solid var(--bs-border-color);
 }
+
 .adm-theme-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 /* ── Dashboard stat icon ────────────────────────────────────── */
+
 .adm-stat-icon {
   width: 40px;
   height: 40px;
@@ -1644,10 +2019,15 @@ html, body { height: 100%; margin: 0; }
   flex-shrink: 0;
   font-size: 1.1rem;
 }
+
 /* ── Dashboard stat card link ───────────────────────────────── */
+
 .adm-stat-link { transition: box-shadow .15s; }
+
 .adm-stat-link:hover { box-shadow: 0 0 0 2px var(--bs-primary); }
+
 /* ── Dashboard today table ──────────────────────────────────── */
+
 .adm-today-table td:first-child {
   padding-left: 1rem;
   padding-right: .5rem;
@@ -1656,17 +2036,23 @@ html, body { height: 100%; margin: 0; }
   white-space: normal;
   word-break: break-word;
 }
+
 .adm-today-table td:last-child { padding-right: 1rem; white-space: nowrap; }
+
 /* ── Settings section sub-label ────────────────────────────── */
+
 .adm-section-label {
   font-size: .7rem;
   letter-spacing: .06em;
 }
+
 /* ── Audit log ──────────────────────────────────────────────── */
+
 .audit-group {
   border-left: 2px solid var(--audit-group-color, var(--bs-border-color));
   padding-left: .75rem;
 }
+
 .audit-chip {
   display: inline-block;
   cursor: pointer;
@@ -1681,25 +2067,36 @@ html, body { height: 100%; margin: 0; }
   transition: background .12s, color .12s;
   white-space: nowrap;
 }
+
 .audit-chip:hover,
 .audit-chip:focus-visible {
   background: var(--audit-chip-border, var(--bs-border-color));
   color: var(--bs-body-color);
   outline: none;
 }
+
 .audit-group--content { --audit-group-color: var(--bs-secondary-color); --audit-chip-border: var(--bs-secondary-color); --audit-chip-color: var(--bs-secondary-color); }
+
 .audit-group--user    { --audit-group-color: var(--bs-danger);           --audit-chip-border: var(--bs-danger);           --audit-chip-color: var(--bs-danger); }
+
 .audit-group--mod     { --audit-group-color: var(--bs-warning);          --audit-chip-border: var(--bs-warning);          --audit-chip-color: var(--bs-warning); }
+
 .audit-group--admin   { --audit-group-color: var(--bs-primary);          --audit-chip-border: var(--bs-primary);          --audit-chip-color: var(--bs-primary); }
+
 .audit-group-label {
   font-size: .6rem;
   text-transform: uppercase;
   letter-spacing: .08em;
 }
+
 .audit-ref-hint { font-size: .75rem; }
+
 .audit-log-popover { --bs-popover-max-width: 500px; }
+
 .audit-log-popover .popover-body { padding: 1rem; min-width: 440px; }
+
 /* ── Mobile sidebar toggle ──────────────────────────────────── */
+
 @media (max-width: 991.98px) {
   .adm-sidebar { display: none; }
   .adm-sidebar.show {
@@ -1709,7 +2106,9 @@ html, body { height: 100%; margin: 0; }
     box-shadow: 0 0 24px rgba(0,0,0,.2);
   }
 }
+
 /* ── Touch target — WCAG 2.1 AA min 44px on touch devices ──── */
+
 @media (pointer: coarse) {
   .table .btn-sm,
   .table .btn {
@@ -1720,21 +2119,30 @@ html, body { height: 100%; margin: 0; }
     justify-content: center;
   }
 }
+
 /* ── Subcategory pill link ─────────────────────────────────── */
+
 .fr-subcat-pill { color: var(--bs-secondary-color); }
+
 .fr-subcat-pill:hover { color: var(--bs-body-color); }
+
 /* ── Collapse chevron — category expander in forum index ─────── */
+
 .fr-collapse-icon {
   font-size: 0.75rem;
   transition: transform 0.2s;
 }
+
 .fr-collapse-icon--closed { transform: rotate(-90deg); }
+
 /* ── Avatar sizes ─────────────────────────────────────────────── */
+
 .fr-avatar {
   object-fit: cover;
   flex-shrink: 0;
   display: block;
 }
+
 .fr-avatar--placeholder {
   display: flex;
   align-items: center;
@@ -1744,26 +2152,42 @@ html, body { height: 100%; margin: 0; }
   background: var(--ferum-primary);
   flex-shrink: 0;
 }
+
 .fr-avatar--24 { width: 24px; height: 24px; font-size: 10px;    border-radius: 50%; }
+
 .fr-avatar--32 { width: 32px; height: 32px; font-size: 12px;    border-radius: 50%; }
+
 .fr-avatar--40 { width: 40px; height: 40px; font-size: 16px;    border-radius: 50%; }
+
 .fr-avatar--80 { width: 80px; height: 80px; font-size: 28px;    border-radius: 50%; }
+
 .fr-avatar--96 { width: 96px; height: 96px; font-size: 2.25rem; border-radius: 50%; border: 4px solid var(--bs-body-bg); }
+
 /* ── Extra avatar sizes ───────────────────────────────────────── */
+
 .fr-avatar--22 { width: 22px; height: 22px; font-size:  9px; border-radius: 50%; }
+
 .fr-avatar--28 { width: 28px; height: 28px; font-size: 11px; border-radius: 50%; }
+
 .fr-avatar--36 { width: 36px; height: 36px; font-size: 14px; border-radius: 50%; }
+
 .fr-avatar--38 { width: 38px; height: 38px; font-size: 15px; border-radius: 50%; }
+
 /* ── Trust badge ──────────────────────────────────────────────── */
+
 .fr-trust-badge {
   background: rgba(var(--bs-primary-rgb), 0.1);
   color: var(--ferum-primary);
   font-size: 0.65rem;
   font-weight: 600;
 }
+
 /* ── Page layout helpers ──────────────────────────────────────── */
+
 .fr-page-reading { max-width: 860px; margin-inline: auto; }
+
 /* ── Footer ───────────────────────────────────────────────────── */
+
 .fr-footer {
   background: var(--bs-tertiary-bg);
   border-top: 1px solid var(--bs-border-color);
@@ -1771,15 +2195,20 @@ html, body { height: 100%; margin: 0; }
   font-size: 0.8125rem;
   flex-shrink: 0;
 }
+
 .fr-footer-link {
   color: var(--bs-secondary-color);
   text-decoration: none;
   transition: color 0.1s;
 }
+
 .fr-footer-link:hover { color: var(--bs-body-color); }
+
 .fr-footer-copy       { color: var(--bs-tertiary-color); }
+
 /* Footer brand — mirrors .fr-topbar-brand at a smaller scale so the mark/logo
    never appears without the site name (unlike the old logo-only footer). */
+
 .fr-footer-brand {
   display: inline-flex;
   align-items: center;
@@ -1787,6 +2216,7 @@ html, body { height: 100%; margin: 0; }
   text-decoration: none;
   min-width: 0;
 }
+
 .fr-footer-brand .fr-brand-mark,
 .fr-footer-brand .fr-brand-img {
   width: 22px;
@@ -1794,22 +2224,32 @@ html, body { height: 100%; margin: 0; }
   font-size: 0.75rem;
   border-radius: 6px;
 }
+
 .fr-footer-brand-name {
   font-weight: 600;
   color: var(--bs-body-color);
   transition: color 0.1s;
 }
+
 .fr-footer-brand:hover .fr-footer-brand-name { color: var(--ferum-primary); }
+
 /* ── Bootstrap primary overrides ─────────────────────────────── */
+
 .text-primary   { color: var(--ferum-primary) !important; }
+
 .border-primary { border-color: var(--ferum-primary) !important; }
+
 .bg-primary     { background-color: var(--ferum-primary) !important; }
+
 /* Sits above stretched-link ::after (z-index 1) so inner links stay clickable */
+
 .fr-link-elevated {
   position: relative;
   z-index: 2;
 }
+
 /* ── Multi-line panel list item (e.g. Popular sidebar) ────────── */
+
 .fr-panel-item {
   display: flex;
   flex-direction: column;
@@ -1821,8 +2261,11 @@ html, body { height: 100%; margin: 0; }
   font-size: 0.875rem;
   transition: background 0.1s, color 0.1s;
 }
+
 .fr-panel-item:last-child { border-bottom: none; }
+
 .fr-panel-item:hover { background: var(--fr-nav-hover-bg); text-decoration: none; color: var(--bs-body-color); }
+
 .fr-panel-item-title {
   font-weight: 600;
   font-size: 0.8125rem;
@@ -1833,26 +2276,36 @@ html, body { height: 100%; margin: 0; }
   -webkit-box-orient: vertical;
   color: var(--bs-body-color);
 }
+
 .fr-panel-item-meta {
   font-size: 0.75rem;
   color: var(--bs-tertiary-color);
 }
+
 /* ── Color dot sizes ──────────────────────────────────────────── */
+
 .fr-color-dot {
   display: inline-block;
   border-radius: 50%;
   flex-shrink: 0;
 }
+
 .fr-color-dot--8  { width:  8px; height:  8px; }
+
 .fr-color-dot--10 { width: 10px; height: 10px; }
+
 /* ── Best answer card header ──────────────────────────────────── */
+
 .fr-best-answer-header {
   background: rgba(16, 185, 129, 0.08) !important;
   color: #059669 !important;
   border-bottom-color: rgba(16, 185, 129, 0.2) !important;
 }
+
 /* ── Removable tag chip (Alpine tag input) ────────────────────── */
+
 .fr-tag-chip--removable { gap: 0.25rem; cursor: default; }
+
 .fr-tag-chip-remove {
   background: none;
   border: none;
@@ -1863,8 +2316,11 @@ html, body { height: 100%; margin: 0; }
   opacity: 0.7;
   font-size: 0.875em;
 }
+
 .fr-tag-chip-remove:hover { opacity: 1; }
+
 /* ── Tag chip input field (Alpine new-thread form) ────────────── */
+
 .fr-tag-input-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -1877,10 +2333,12 @@ html, body { height: 100%; margin: 0; }
   border-radius: var(--bs-border-radius-sm);
   background: var(--bs-body-bg);
 }
+
 .fr-tag-input-wrap:focus-within {
   border-color: var(--ferum-primary);
   box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
 }
+
 .fr-tag-input-field {
   border: 0;
   background: transparent;
@@ -1890,14 +2348,18 @@ html, body { height: 100%; margin: 0; }
   min-width: 80px;
   flex: 1;
 }
+
 /* ── Post # permalink ─────────────────────────────────────────── */
+
 .fr-post-num {
   font-size: 0.75rem;
   color: var(--bs-tertiary-color);
   font-weight: 500;
   text-decoration: none;
 }
+
 .fr-post-num:hover { color: var(--ferum-primary); text-decoration: none; }
+
 /* ── Icon-only button (post ellipsis menu) ─────────────────────────
    NOTE: this is a second, later-imported .fr-icon-btn definition. Same
    specificity as _navbar.css's 44px tap-target version, so per-property
@@ -1905,6 +2367,7 @@ html, body { height: 100%; margin: 0; }
    while font-size/flex-shrink/:focus-visible from the navbar block survive
    untouched. Pre-existing duplication in the shipped CSS — reproduced
    verbatim rather than silently merged into one rule. */
+
 .fr-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -1920,10 +2383,15 @@ html, body { height: 100%; margin: 0; }
   text-decoration: none !important;
   transition: background 0.1s, color 0.1s;
 }
+
 .fr-icon-btn:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
+
 /* Bookmark button stretches to grid width in right-rail Actions panel */
+
 ferum-bookmark-btn.w-100 .bookmark-btn { width: 100%; }
+
 /* ── Floating reply FAB (mobile) ──────────────────────────────── */
+
 .fr-fab {
   position: fixed;
   bottom: calc(var(--fr-bottom-nav-height) + 1rem);
@@ -1942,11 +2410,15 @@ ferum-bookmark-btn.w-100 .bookmark-btn { width: 100%; }
   text-decoration: none;
   transition: background 0.15s, transform 0.15s;
 }
+
 .fr-fab:hover { background: var(--ferum-primary-dark); color: #fff; transform: scale(1.05); text-decoration: none; }
+
 @media (min-width: 992px) {
   .fr-fab { display: none !important; }
 }
+
 /* Smooth theme transitions on key elements only */
+
 body,
 .navbar,
 .card,
@@ -1961,3 +2433,273 @@ body,
 .fr-bottom-nav {
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
+
+/* Last: the catalog block was authored directly into the built asset and had
+   accumulated at the end of the file. Keeping it last preserves that cascade
+   order exactly, so extracting it here changes nothing about what ships. */
+
+/* ══════════════════════════════════════════════════════════════════════
+   Interior-review / catalog UI
+   Product catalog cards, product-detail gallery, review rating inputs,
+   star histogram, and the home review widgets (stat band + top-rated shelf).
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Catalog product card ─────────────────────────────────────────── */
+
+.fr-product-card {
+  display: block;
+  height: 100%;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.fr-product-card:hover {
+  border-color: var(--ferum-primary);
+  box-shadow: var(--bs-box-shadow-sm);
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: inherit;
+}
+
+.fr-product-thumb {
+  aspect-ratio: 4 / 3;
+  background: var(--bs-tertiary-bg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-tertiary-color);
+}
+
+.fr-product-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+/* No-photo state: drop the tall 4:3 box so it reads as a modest placeholder. */
+
+.fr-product-thumb--empty {
+  aspect-ratio: auto;
+  min-height: 160px;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fr-product-card-body { padding: 0.5rem 0.625rem; }
+
+.fr-product-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--bs-body-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fr-product-meta { font-size: 0.75rem; color: var(--bs-secondary-color); }
+
+.fr-product-price { font-size: 0.78rem; color: var(--bs-body-color); font-weight: 500; }
+
+.fr-rating-line { font-size: 0.72rem; }
+
+.fr-rating { white-space: nowrap; }
+
+/* ── Review chip (pill) ───────────────────────────────────────────── */
+
+.fr-review-chip {
+  display: inline-block;
+  font-size: 0.62rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  color: var(--bs-secondary-color);
+}
+
+/* ── Filter bar inside a panel (catalog) ──────────────────────────── */
+
+.fr-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Match the 36px min-height the theme gives .btn-sm so inputs, selects and the
+   submit button line up as one even row. */
+
+.fr-filter-bar .form-control,
+.fr-filter-bar .form-select { min-height: 36px; }
+
+/* ── Star distribution histogram ──────────────────────────────────── */
+
+.fr-histo-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; }
+
+.fr-histo-label { width: 2.6rem; color: var(--bs-secondary-color); white-space: nowrap; }
+
+.fr-histo-count { width: 2.2rem; text-align: end; color: var(--bs-secondary-color); }
+
+/* ── Rating panel (product page) ──────────────────────────────────── */
+
+/* Headline score. The stars and the number carry the same value, so the
+   number is what gets the weight — the stars are the at-a-glance shape. */
+
+.fr-rating-headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.fr-rating-score {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--bs-body-color);
+}
+
+/* "/5" stays subordinate: it is the scale, not the reading. */
+
+.fr-rating-max {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--bs-secondary-color);
+}
+
+/* Section label inside a panel body. Separates the two charts in the rating
+   panel, which use different scales (% of reviewers vs score out of 5) and
+   would otherwise read as one continuous series. */
+
+.fr-subhead {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bs-tertiary-color);
+  margin-bottom: 0.375rem;
+}
+
+/* ── Star rating input (new-thread review block) ──────────────────── */
+
+.fr-star-input { display: inline-flex; align-items: center; gap: 0; }
+
+.fr-star-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;            /* 44px — meets the mobile tap-target minimum */
+  height: 2.75rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  transition: transform 0.1s ease;
+}
+
+/* Muted outline until picked, warm gold once painted (JS swaps fa-regular↔fa-solid) */
+
+.fr-star-btn .fa-regular { color: var(--bs-border-color); }
+
+.fr-star-btn .fa-solid   { color: #f5a623; }
+
+.fr-star-btn:hover { transform: scale(1.12); }
+
+.fr-star-btn:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: -3px;
+  border-radius: 8px;
+}
+
+.fr-star-input--lg .fr-star-btn { width: 3rem; height: 3rem; font-size: 1.7rem; }
+
+.fr-rate-label { font-size: 0.875rem; font-weight: 500; color: var(--bs-body-color); }
+
+.fr-rate-overall .fr-rate-label { min-width: 5.5rem; font-weight: 600; }
+
+.fr-rate-row { flex-wrap: wrap; }
+
+.fr-rate-row .fr-rate-label { flex-shrink: 0; }
+
+.fr-rate-hint { min-width: 6.5rem; }
+
+/* ── Material toggle chips (new-product form) ─────────────────────── */
+
+.fr-mat-chip {
+  min-height: 2.75rem;       /* 44px — meets the mobile tap-target minimum */
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+/* ── Home: horizontal product shelf ("top rated") ─────────────────── */
+
+.fr-shelf {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.fr-shelf-card { flex: 0 0 190px; scroll-snap-align: start; }
+
+@media (max-width: 575.98px) { .fr-shelf-card { flex-basis: 150px; } }
+
+/* ── Home: market-data stat band ──────────────────────────────────── */
+
+.fr-stat-band { display: flex; flex-wrap: wrap; align-items: center; }
+
+.fr-stat-band-item {
+  flex: 1 1 0;
+  min-width: 5rem;
+  text-align: center;
+  padding: 0 0.75rem;
+}
+
+.fr-stat-band-item + .fr-stat-band-item { border-left: 1px solid var(--bs-border-color); }
+
+/* ── Product detail: thumbnail gallery ────────────────────────────── */
+
+.pdp-thumbs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.pdp-thumb {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 2px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-sm);
+  overflow: hidden;
+  background: var(--bs-tertiary-bg);
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.pdp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.pdp-thumb:hover { border-color: var(--bs-secondary-color); }
+
+.pdp-thumb.is-active { border-color: var(--ferum-primary); }
+
+.pdp-thumb:focus-visible { outline: 2px solid var(--ferum-primary); outline-offset: 2px; }
+
+/* ── Product detail: review highlights summary ────────────────────── */
+
+.fr-highlight-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+.fr-highlight-pill i { font-size: 0.8rem; }
+
+.fr-highlight-pill .fr-highlight-val { font-weight: 700; }

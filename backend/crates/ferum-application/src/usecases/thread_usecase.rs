@@ -566,6 +566,28 @@ impl ThreadUseCase {
         Ok(thread)
     }
 
+    /// Author-enriched review threads for one product (public — newest first).
+    pub async fn list_reviews_for_product(
+        &self,
+        product_id: Uuid,
+        limit: u64,
+    ) -> Result<Vec<Thread>, AppError> {
+        self.threads.list_by_product(product_id, limit).await
+    }
+
+    /// This author's existing review of the product, if they have written one.
+    ///
+    /// Lets the product page offer "edit your review" instead of a Write button
+    /// that would 409 — the one-review-per-author rule made visible before the
+    /// user commits to filling in a form.
+    pub async fn find_review_by_author(
+        &self,
+        product_id: Uuid,
+        author_id: Uuid,
+    ) -> Result<Option<Thread>, AppError> {
+        self.threads.find_review_by_author(product_id, author_id).await
+    }
+
     #[tracing::instrument(skip(self, actor, cmd), fields(user_id = %actor.id, category_id = %cmd.category_id))]
     pub async fn create(&self, actor: &AuthUser, cmd: CreateThreadCmd) -> Result<Thread, AppError> {
         let category = self
@@ -580,6 +602,22 @@ impl ThreadUseCase {
             return Err(AppError::unprocessable(
                 "Thread title must be 5–255 characters",
             ));
+        }
+
+        // One review per author per product. `uq_threads_product_author` is the
+        // real guarantee — this check exists so the caller gets a 409 it can act
+        // on rather than an opaque unique-violation surfacing as a 500. The race
+        // between the two is fine: the index still wins, and losing it costs a
+        // failed insert, not a duplicate rating.
+        if let Some(product_id) = cmd.product_id {
+            if self
+                .threads
+                .find_review_by_author(product_id, actor.id)
+                .await?
+                .is_some()
+            {
+                return Err(AppError::Conflict("product_already_reviewed".to_string()));
+            }
         }
 
         // Pre-validate tag permissions before creating the thread to avoid partial creation:
@@ -633,6 +671,7 @@ impl ThreadUseCase {
                 author_id: actor.id,
                 title: cmd.title,
                 slug,
+                product_id: cmd.product_id,
             })
             .await?;
 
@@ -1144,4 +1183,6 @@ pub struct CreateThreadCmd {
     pub title: String,
     pub content_md: String,
     pub tag_names: Vec<String>,
+    /// Optional product link — makes the thread a structured product review.
+    pub product_id: Option<Uuid>,
 }

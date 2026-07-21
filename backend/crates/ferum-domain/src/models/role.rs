@@ -70,6 +70,11 @@ pub mod perm {
     pub const LINK_EMBED: &str = "link.embed";
     pub const TAG_CREATE: &str = "tag.create";
 
+    // Catalog (furniture review) — curation of the product/material catalog.
+    pub const PRODUCT_MANAGE: &str = "product.manage";
+    // Crowd-sourced: propose a product (lands as draft, admin publishes).
+    pub const PRODUCT_SUBMIT: &str = "product.submit";
+
     // Moderation
     pub const REPORT_CREATE: &str = "report.create";
     pub const MOD_VIEW_REPORTS: &str = "moderation.view_reports";

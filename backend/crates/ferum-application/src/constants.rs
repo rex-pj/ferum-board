@@ -54,3 +54,13 @@ pub const MAX_TAGS_PER_THREAD: usize = 5;
 
 /// Auto-disable a webhook after this many consecutive failures.
 pub const WEBHOOK_MAX_FAILURES: i32 = 5;
+
+/// Reviews a product needs before its rating panel shows the star-distribution
+/// histogram and the per-dimension comparison bars.
+///
+/// Below this, both charts mislead rather than inform: a distribution over one
+/// or two reviews is four empty rows, and sub-scores that are all equal render
+/// as five identical bars implying a comparison that does not exist. Under the
+/// threshold the panel falls back to the headline score plus plain sub-score
+/// chips (see `product_rating_panel` in themes/default/templates/macros.html).
+pub const MIN_REVIEWS_FOR_RATING_BREAKDOWN: i64 = 5;

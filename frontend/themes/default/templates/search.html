@@ -59,9 +59,18 @@
       {% for result in results %}
         <div class="fr-thread-row">
           <div class="fr-thread-body">
-            <a href="/forum/t/{{ result.thread_slug }}" class="fr-thread-title stretched-link">
-              {{ result.thread_title }}
-            </a>
+            <div class="d-flex align-items-center gap-1">
+              {# "reviews" is the canonical Reviews category slug (see REVIEWS_CATEGORY_SLUG). #}
+              {% if result.category_slug == "reviews" %}
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle flex-shrink-0"
+                      style="font-size:.62rem" title="Product review">
+                  <i class="fa-solid fa-star me-1" aria-hidden="true"></i>Review
+                </span>
+              {% endif %}
+              <a href="/forum/t/{{ result.thread_slug }}" class="fr-thread-title stretched-link">
+                {{ result.thread_title }}
+              </a>
+            </div>
             {% if result.excerpt %}
               <p class="fr-thread-excerpt mb-0">{{ result.excerpt | safe }}</p>
             {% endif %}
