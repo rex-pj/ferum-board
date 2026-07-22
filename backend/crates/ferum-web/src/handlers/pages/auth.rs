@@ -9,7 +9,7 @@ use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::CurrentUserCtx;
 
-use super::{active_theme, render_with_theme, PageError};
+use super::{active_theme, render_with_theme_in, PageError};
 
 #[derive(Deserialize, Default)]
 pub struct LoginPageQuery {
@@ -31,6 +31,7 @@ pub struct LoginFormBody {
 pub async fn login(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<LoginPageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     if auth_user.is_some() {
@@ -45,7 +46,7 @@ pub async fn login(
     ctx.insert("error", &q.error);
     ctx.insert("verified", &q.verified.is_some());
 
-    render_with_theme(&state, &active, "auth/login.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/login.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -53,6 +54,7 @@ pub async fn login(
 pub async fn register(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     if auth_user.is_some() {
         return Ok(Redirect::to("/").into_response());
@@ -71,7 +73,7 @@ pub async fn register(
     ctx.insert("active_theme", &active);
     ctx.insert("registration_open", &registration_open);
 
-    render_with_theme(&state, &active, "auth/register.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/register.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -79,6 +81,7 @@ pub async fn register(
 pub async fn forgot_password(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     if auth_user.is_some() {
         return Ok(Redirect::to("/").into_response());
@@ -90,7 +93,7 @@ pub async fn forgot_password(
     ctx.insert("current_user", &Option::<CurrentUserCtx>::None);
     ctx.insert("active_theme", &active);
 
-    render_with_theme(&state, &active, "auth/forgot_password.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/forgot_password.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -98,6 +101,7 @@ pub async fn forgot_password(
 pub async fn reset_password(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<TokenQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     if auth_user.is_some() {
@@ -111,7 +115,7 @@ pub async fn reset_password(
     ctx.insert("active_theme", &active);
     ctx.insert("token", &q.token.unwrap_or_default());
 
-    render_with_theme(&state, &active, "auth/reset_password.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/reset_password.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }

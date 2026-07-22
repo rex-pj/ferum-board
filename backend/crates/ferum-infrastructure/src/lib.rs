@@ -6,6 +6,7 @@ pub mod bulk_seed_service;
 pub mod cache;
 pub mod email;
 pub mod entities;
+pub mod i18n;
 pub mod job_queue;
 pub mod jwt_token_service;
 pub mod notification;

@@ -91,7 +91,7 @@ pub async fn upload_media(
         }
     }
 
-    let data = file_bytes.ok_or_else(|| AppError::unprocessable("No file field in request"))?;
+    let data = file_bytes.ok_or_else(|| AppError::invalid("file_field_missing"))?;
     let url = state.plugin.upload_media(actor, &slug, data, content_type).await?;
     Ok(Json(DataResponse::new(UploadMediaResponse { url })))
 }

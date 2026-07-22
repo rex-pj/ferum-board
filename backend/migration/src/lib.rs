@@ -34,6 +34,8 @@ mod m20260001_000029_create_product_rating_stats;
 mod m20260001_000030_seed_product_permissions;
 mod m20260001_000031_seed_product_submit_permission;
 mod m20260001_000032_unique_review_per_author;
+mod m20260001_000033_add_locale_to_user_preferences;
+mod m20260001_000034_seed_languages_permission;
 
 pub struct Migrator;
 
@@ -73,6 +75,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260001_000030_seed_product_permissions::Migration),
             Box::new(m20260001_000031_seed_product_submit_permission::Migration),
             Box::new(m20260001_000032_unique_review_per_author::Migration),
+            Box::new(m20260001_000033_add_locale_to_user_preferences::Migration),
+            Box::new(m20260001_000034_seed_languages_permission::Migration),
         ]
     }
 }

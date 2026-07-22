@@ -14,6 +14,7 @@ use ferum_domain::repositories::thread_repository::ThreadSort;
 pub async fn threads(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<PageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -115,5 +116,5 @@ pub async fn threads(
     ctx.insert("date_from_filter", &date_from);
     ctx.insert("date_to_filter", &date_to);
 
-    render_admin(&state, "admin/threads.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/threads.html", &ctx).await
 }

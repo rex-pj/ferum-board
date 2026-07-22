@@ -159,9 +159,7 @@ pub async fn set_trust_level(
         "regular" => TrustLevel::Regular,
         "leader" => TrustLevel::Leader,
         _ => {
-            return Err(ferum_application::shared::AppError::unprocessable(
-                "Invalid trust_level. Use: new, basic, member, regular, leader",
-            )
+            return Err(ferum_application::shared::AppError::invalid("invalid_trust_level")
             .into())
         }
     };

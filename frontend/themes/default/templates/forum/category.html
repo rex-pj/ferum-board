@@ -5,9 +5,9 @@
 {% block description %}{{ category.description | default(value="") }}{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb" class="mb-2">
+<nav aria-label="{{ t(k='ui-breadcrumb') }}" class="mb-2">
   <ol class="breadcrumb mb-0">
-    <li class="breadcrumb-item"><a href="/forum">Forum</a></li>
+    <li class="breadcrumb-item"><a href="/forum">{{ t(k="ui-forum") }}</a></li>
     {% if parent_category %}
       <li class="breadcrumb-item"><a href="/forum/{{ parent_category.slug }}">{{ parent_category.name }}</a></li>
     {% endif %}
@@ -27,7 +27,7 @@
       <div class="min-w-0">
         <h1 class="fs-5 fw-bold mb-0 lh-sm">
           {{ category.name }}
-          <small class="fw-normal ms-1" style="font-size:.75rem;color:var(--bs-tertiary-color)">{{ category.thread_count }} threads</small>
+          <small class="fw-normal ms-1" style="font-size:.75rem;color:var(--bs-tertiary-color)">{{ category.thread_count }} {{ t(k="ui-threads-label", count=category.thread_count) }}</small>
         </h1>
         {% if category.description %}
           <p class="mb-0 mt-1" style="font-size:.875rem;color:var(--bs-secondary-color);line-height:1.55">{{ category.description }}</p>
@@ -39,12 +39,12 @@
       {% if current_user %}
         {% if category.can_post %}
         <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-plus me-1"></i>New Thread
+          <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
         </a>
         {% else %}
         <button type="button" class="btn btn-primary btn-sm" disabled
                 title="{% if category.post_policy == 'closed' %}This category is closed to new posts.{% elif category.post_policy == 'trusted' %}You need a higher trust level to post here.{% elif category.post_policy == 'staff_only' %}Only staff can post here.{% else %}You don't have permission to post here.{% endif %}">
-          <i class="fa-solid fa-plus me-1"></i>New Thread
+          <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
         </button>
         {% endif %}
         <div x-data="categoryWatchState('{{ category.id }}')" class="d-flex gap-1">
@@ -53,7 +53,7 @@
                   class="btn btn-sm" :disabled="loading"
                   :title="watched ? 'Stop watching' : 'Watch for new threads'">
             <i class="fa-solid fa-eye"></i>
-            <span class="d-none d-md-inline ms-1" x-text="watched ? 'Watching' : 'Watch'">Watch</span>
+            <span class="d-none d-md-inline ms-1" x-text="watched ? 'Watching' : 'Watch'">{{ t(k="ui-watch") }}</span>
           </button>
           <button @click="toggleMute()"
                   :class="muted ? 'btn-warning' : 'btn-outline-secondary'"
@@ -64,11 +64,11 @@
         </div>
       {% else %}
         <a href="/login?next=/new-thread" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-plus me-1"></i>New Thread
+          <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
         </a>
         <a href="/login?next=/forum/{{ category.slug }}"
            class="btn btn-outline-secondary btn-sm"
-           title="Sign in to watch this category">
+           title="{{ t(k='ui-sign-in-to-watch-this-category') }}">
           <i class="fa-solid fa-eye"></i>
         </a>
       {% endif %}
@@ -78,19 +78,19 @@
   {# Sort / filter tab bar #}
   <div class="fr-sort-tabs">
     <a href="?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>Active
+      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>{{ t(k="ui-active") }}
     </a>
     <a href="?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>New
+      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>{{ t(k="ui-new") }}
     </a>
     <a href="?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>Hottest
+      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>{{ t(k="ui-hottest") }}
     </a>
     <a href="?sort=unanswered" class="fr-sort-tab {% if active_sort == 'unanswered' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>Unanswered
+      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>{{ t(k="ui-unanswered") }}
     </a>
     <a href="?sort=solved" class="fr-sort-tab {% if active_sort == 'solved' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>Solved
+      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>{{ t(k="ui-solved") }}
     </a>
   </div>
 
@@ -102,16 +102,16 @@
     <div class="text-center py-5 text-muted">
       <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block"></i>
       {% if active_sort == "unanswered" %}
-        No unanswered threads — great work!
+        {{ t(k="ui-no-unanswered-threads") }}
       {% elif active_sort == "solved" %}
-        No solved threads in this category yet.
+        {{ t(k="ui-no-solved-threads-yet") }}
       {% else %}
-        No threads in this category yet.
+        {{ t(k="ui-no-threads-in-this-category") }}
       {% endif %}
       {% if current_user and category.can_post %}
         <div class="mt-2">
           <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm">
-            Start the first thread
+            {{ t(k="ui-start-the-first-thread") }}
           </a>
         </div>
       {% endif %}
@@ -136,16 +136,16 @@
     </div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Threads</span>
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-threads") }}</span>
         <span class="fr-panel-stat-val">{{ category.thread_count }}</span>
       </div>
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>Posting</span>
+        <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-posting") }}</span>
         <span class="fr-panel-stat-val" style="font-size:.8125rem">
-          {% if category.post_policy == "members" %}<i class="fa-solid fa-circle-check fa-xs text-success me-1" aria-hidden="true"></i>Members
-          {% elif category.post_policy == "trusted" %}<i class="fa-solid fa-shield-halved fa-xs text-warning me-1" aria-hidden="true"></i>Trusted
-          {% elif category.post_policy == "staff_only" %}<i class="fa-solid fa-lock fa-xs text-danger me-1" aria-hidden="true"></i>Staff only
-          {% elif category.post_policy == "closed" %}<i class="fa-solid fa-ban fa-xs text-danger me-1" aria-hidden="true"></i>Closed
+          {% if category.post_policy == "members" %}<i class="fa-solid fa-circle-check fa-xs text-success me-1" aria-hidden="true"></i>{{ t(k="ui-policy-members") }}
+          {% elif category.post_policy == "trusted" %}<i class="fa-solid fa-shield-halved fa-xs text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-policy-trusted") }}
+          {% elif category.post_policy == "staff_only" %}<i class="fa-solid fa-lock fa-xs text-danger me-1" aria-hidden="true"></i>{{ t(k="ui-policy-staff-only") }}
+          {% elif category.post_policy == "closed" %}<i class="fa-solid fa-ban fa-xs text-danger me-1" aria-hidden="true"></i>{{ t(k="ui-policy-closed") }}
           {% else %}{{ category.post_policy }}{% endif %}
         </span>
       </div>
@@ -157,7 +157,7 @@
   <div class="fr-panel">
     <div class="fr-panel-body">
       <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm w-100">
-        <i class="fa-solid fa-plus me-1"></i>New Thread
+        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
       </a>
     </div>
   </div>
@@ -166,7 +166,7 @@
   {# Subcategories with thread counts for navigation context #}
   {% if subcategories %}
     <div class="fr-panel">
-      <div class="fr-panel-header">Subcategories</div>
+      <div class="fr-panel-header">{{ t(k="ui-subcategories") }}</div>
       <div class="py-1">
         {% for sub in subcategories %}
           <a href="/forum/{{ sub.slug }}" class="fr-panel-row">
@@ -187,7 +187,7 @@
   {% if sibling_categories %}
     <div class="fr-panel">
       <div class="fr-panel-header">
-        {% if parent_category %}In {{ parent_category.name }}{% else %}Related{% endif %}
+        {% if parent_category %}{{ t(k="ui-in-parent-category", category=parent_category.name) }}{% else %}{{ t(k="ui-related") }}{% endif %}
       </div>
       <div class="py-1">
         {% for sib in sibling_categories %}

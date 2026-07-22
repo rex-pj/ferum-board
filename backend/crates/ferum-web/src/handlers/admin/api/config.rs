@@ -105,11 +105,11 @@ pub async fn upload_favicon(
 
             if !validate_favicon_content_type(&ct) || !validate_favicon_magic(&data) {
                 return Err(
-                    AppError::unprocessable("favicon must be ico, png, gif, or jpeg (SVG not allowed)").into(),
+                    AppError::invalid("favicon_invalid_type").into(),
                 );
             }
             if data.len() > MAX_FAVICON_BYTES {
-                return Err(AppError::unprocessable("favicon exceeds 512 KB size limit").into());
+                return Err(AppError::invalid_with("favicon_too_large", [("limit_kb", (MAX_FAVICON_BYTES / 1024).into())]).into());
             }
 
             content_type = ct;
@@ -201,10 +201,10 @@ pub async fn upload_logo(
                 .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
 
             if !validate_image_content_type(&ct) || !validate_image_magic(&data) {
-                return Err(AppError::unprocessable("logo must be JPEG, PNG, WebP, or GIF").into());
+                return Err(AppError::invalid("logo_invalid_type").into());
             }
             if data.len() > MAX_LOGO_BYTES {
-                return Err(AppError::unprocessable("logo exceeds 2 MB size limit").into());
+                return Err(AppError::invalid_with("logo_too_large", [("limit_mb", (MAX_LOGO_BYTES / (1024 * 1024)).into())]).into());
             }
 
             content_type = ct;

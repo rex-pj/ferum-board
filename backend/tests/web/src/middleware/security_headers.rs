@@ -62,4 +62,9 @@ async fn content_security_policy_is_set() {
     let csp = resp.headers()["content-security-policy"].to_str().unwrap();
     assert!(csp.contains("default-src 'self'"));
     assert!(csp.contains("frame-ancestors 'none'"));
+    // `blob:` is load-bearing, not decoration: the product photo and thumbnail
+    // pickers preview a freshly chosen file via `URL.createObjectURL`, which
+    // yields a blob: URL. Drop it and every such preview renders as a broken
+    // image with only a console warning to say why.
+    assert!(csp.contains("img-src 'self' data: blob:"));
 }

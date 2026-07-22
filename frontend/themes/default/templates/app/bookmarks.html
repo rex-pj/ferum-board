@@ -1,10 +1,10 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Bookmarks — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-bookmarks") }} — {{ site.name }}{% endblock %}
 
 {% block content %}
-<h1 class="h4 fw-bold mb-4">Saved Threads</h1>
+<h1 class="h4 fw-bold mb-4">{{ t(k="ui-saved-threads") }}</h1>
 
 {% if threads %}
 <div class="fr-feed mb-3">
@@ -18,9 +18,9 @@
 {% else %}
 <div class="text-center py-5 text-body-secondary">
   <i class="fa-regular fa-bookmark fa-3x mb-3 opacity-25" aria-hidden="true"></i>
-  <h2 class="h5 mb-2">No bookmarks yet</h2>
-  <p class="mb-3 small">Save threads for later by clicking the bookmark icon on any thread page.</p>
-  <a href="/" class="btn btn-primary btn-sm px-4">Browse discussions</a>
+  <h2 class="h5 mb-2">{{ t(k="ui-no-bookmarks-yet") }}</h2>
+  <p class="mb-3 small">{{ t(k="ui-save-threads-for-later-by-clicking") }}</p>
+  <a href="/" class="btn btn-primary btn-sm px-4">{{ t(k="ui-browse-discussions") }}</a>
 </div>
 {% endif %}
 {% endblock %}
@@ -29,28 +29,28 @@
 <aside class="fr-right-col">
 
   <div class="fr-panel">
-    <div class="fr-panel-header">Summary</div>
+    <div class="fr-panel-header">{{ t(k="ui-summary") }}</div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span class="text-muted">Saved threads</span>
+        <span class="text-muted">{{ t(k="ui-saved-threads-2") }}</span>
         <span class="fr-panel-stat-val">{{ pagination.total | default(value=0) }}</span>
       </div>
     </div>
   </div>
 
   <div class="fr-panel">
-    <div class="fr-panel-header">Account</div>
+    <div class="fr-panel-header">{{ t(k="ui-account") }}</div>
     <a href="/notifications" class="fr-panel-row">
       <i class="fa-solid fa-bell fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Notifications</span>
+      <span>{{ t(k="ui-notifications") }}</span>
     </a>
     <a href="/account" class="fr-panel-row">
       <i class="fa-solid fa-user fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Profile settings</span>
+      <span>{{ t(k="ui-profile-settings") }}</span>
     </a>
     <a href="/" class="fr-panel-row">
       <i class="fa-solid fa-house fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Back to feed</span>
+      <span>{{ t(k="ui-back-to-feed") }}</span>
     </a>
   </div>
 

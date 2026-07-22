@@ -16,7 +16,7 @@ use ferum_domain::models::product_media::{NewProductMedia, ProductMedia};
 use ferum_domain::repositories::brand_repository::BrandRepository;
 use ferum_domain::repositories::material_repository::MaterialRepository;
 use ferum_domain::repositories::product_repository::{
-    ProductListFilter, ProductListItem, ProductRepository, UpdateProduct,
+    ProductDependents, ProductListFilter, ProductListItem, ProductRepository, UpdateProduct,
 };
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::AuthUser;
@@ -24,6 +24,10 @@ use ferum_domain::AuthUser;
 /// Product photos are capped smaller than thread thumbnails — catalog pages load
 /// many at once.
 const MAX_PRODUCT_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+
+/// Upper bound on images per product. Mostly an anti-abuse guard on the
+/// crowd-sourced submission path, where any Basic member can attach photos.
+const MAX_PRODUCT_MEDIA: usize = 12;
 
 pub struct ProductUseCase {
     pub products: Arc<dyn ProductRepository>,
@@ -57,7 +61,7 @@ impl ProductUseCase {
     ) -> Result<Material, AppError> {
         PermissionChecker::can_manage_products(actor)?;
         if material.name.trim().is_empty() {
-            return Err(AppError::unprocessable("Material name cannot be empty."));
+            return Err(AppError::invalid("material_name_required"));
         }
         if self.materials.find_by_slug(&material.slug).await?.is_some() {
             return Err(AppError::Conflict("slug_taken".into()));
@@ -74,7 +78,7 @@ impl ProductUseCase {
         PermissionChecker::can_manage_products(actor)?;
         if let Some(name) = &patch.name {
             if name.trim().is_empty() {
-                return Err(AppError::unprocessable("Material name cannot be empty."));
+                return Err(AppError::invalid("material_name_required"));
             }
         }
         self.materials.update(id, patch).await
@@ -102,7 +106,7 @@ impl ProductUseCase {
     pub async fn create_brand(&self, actor: &AuthUser, brand: NewBrand) -> Result<Brand, AppError> {
         PermissionChecker::can_manage_products(actor)?;
         if brand.name.trim().is_empty() {
-            return Err(AppError::unprocessable("Brand name cannot be empty."));
+            return Err(AppError::invalid("brand_name_required"));
         }
         if self.brands.find_by_slug(&brand.slug).await?.is_some() {
             return Err(AppError::Conflict("slug_taken".into()));
@@ -119,7 +123,7 @@ impl ProductUseCase {
         PermissionChecker::can_manage_products(actor)?;
         if let Some(name) = &patch.name {
             if name.trim().is_empty() {
-                return Err(AppError::unprocessable("Brand name cannot be empty."));
+                return Err(AppError::invalid("brand_name_required"));
             }
         }
         self.brands.update(id, patch).await
@@ -234,18 +238,66 @@ impl ProductUseCase {
         id: Uuid,
         patch: UpdateProduct,
     ) -> Result<Product, AppError> {
-        PermissionChecker::can_manage_products(actor)?;
+        let product = self.products.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        Self::authorize_product_edit(actor, &product)?;
+        Self::reject_curator_only_fields(actor, &patch)?;
         if let Some(name) = &patch.name {
             if name.trim().is_empty() {
-                return Err(AppError::unprocessable("Product name cannot be empty."));
+                return Err(AppError::invalid("product_name_required"));
             }
         }
         self.products.update(id, patch).await
     }
 
+    /// What a hard delete of this product would affect. Drives the admin
+    /// confirmation dialog so "Delete" is never a blind action.
+    pub async fn dependents(
+        &self,
+        actor: &AuthUser,
+        id: Uuid,
+    ) -> Result<ProductDependents, AppError> {
+        let product = self.products.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        Self::authorize_product_edit(actor, &product)?;
+        self.products.count_dependents(id).await
+    }
+
+    /// Hide a product from the catalog while keeping every review that points at
+    /// it. This is the safe counterpart to `delete` and the only way to retire a
+    /// product that has been reviewed.
+    pub async fn archive(&self, actor: &AuthUser, id: Uuid) -> Result<Product, AppError> {
+        self.update(
+            actor,
+            id,
+            UpdateProduct {
+                status: Some(ProductStatus::Archived),
+                ..Default::default()
+            },
+        )
+        .await
+    }
+
+    /// Permanently remove a product.
+    ///
+    /// Refused while review threads still reference it: `threads.product_id` is
+    /// `ON DELETE SET NULL`, so deleting would leave every review in place but
+    /// reviewing nothing — silent corruption rather than a visible error. Callers
+    /// should `archive` instead. Media rows cascade in the database, so their CAS
+    /// refs are released here first; otherwise the blobs leak forever.
     pub async fn delete(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
-        PermissionChecker::can_manage_products(actor)?;
-        self.products.delete(id).await
+        let product = self.products.find_by_id(id).await?.ok_or(AppError::NotFound)?;
+        Self::authorize_product_edit(actor, &product)?;
+
+        let dependents = self.products.count_dependents(id).await?;
+        if dependents.blocks_hard_delete() {
+            return Err(AppError::Conflict("product_has_reviews".into()));
+        }
+
+        let media = self.products.list_media(id).await?;
+        self.products.delete(id).await?;
+        for m in media {
+            self.release_key(&m.storage_key).await;
+        }
+        Ok(())
     }
 
     pub async fn set_materials(
@@ -254,8 +306,71 @@ impl ProductUseCase {
         product_id: Uuid,
         material_ids: &[Uuid],
     ) -> Result<(), AppError> {
-        PermissionChecker::can_manage_products(actor)?;
+        let product = self
+            .products
+            .find_by_id(product_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        Self::authorize_product_edit(actor, &product)?;
         self.products.set_materials(product_id, material_ids).await
+    }
+
+    /// Who may edit a product at all.
+    ///
+    /// Curators (`product.manage`) may edit anything. A contributor may edit only
+    /// a product they submitted, and only while it is still an unapproved
+    /// `draft`. The moment a curator publishes it, other people's reviews start
+    /// hanging off it and it becomes shared catalogue content — no longer the
+    /// submitter's to change.
+    ///
+    /// One predicate for details, materials and images alike, so the three can
+    /// never disagree about who owns an entry. Note this decides *whether* the
+    /// actor may edit; `reject_curator_only_fields` decides *what* they may
+    /// change once allowed.
+    fn authorize_product_edit(actor: &AuthUser, product: &Product) -> Result<(), AppError> {
+        if PermissionChecker::can_manage_products(actor).is_ok() {
+            return Ok(());
+        }
+        PermissionChecker::can_submit_products(actor)?;
+        let own_draft =
+            product.created_by_id == Some(actor.id) && product.status == ProductStatus::Draft;
+        if own_draft {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
+    /// Fields only a curator may set, refused for everyone else.
+    ///
+    /// `status` is the one that matters: without this, a contributor allowed to
+    /// edit their own draft could PATCH `status = published` and approve their
+    /// own submission, walking straight past the moderation queue. `category_id`
+    /// is curation too — where an entry files in the catalogue is not the
+    /// submitter's call.
+    ///
+    /// Refused loudly rather than silently dropped, so a caller that tries finds
+    /// out instead of believing it worked.
+    fn reject_curator_only_fields(actor: &AuthUser, patch: &UpdateProduct) -> Result<(), AppError> {
+        if PermissionChecker::can_manage_products(actor).is_ok() {
+            return Ok(());
+        }
+        if patch.status.is_some() || patch.category_id.is_some() {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+        Ok(())
+    }
+
+    /// Gate for reading the curator-only detail behind the edit form (a product's
+    /// material ids and its full media list, draft or not). Same rule as editing:
+    /// letting someone read the form they may not submit is only a slower refusal.
+    pub async fn authorize_edit(&self, actor: &AuthUser, product_id: Uuid) -> Result<(), AppError> {
+        let product = self
+            .products
+            .find_by_id(product_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        Self::authorize_product_edit(actor, &product)
     }
 
     /// Store an uploaded image in the CAS blob store and attach it to the product.
@@ -267,29 +382,34 @@ impl ProductUseCase {
         data: Bytes,
         content_type: String,
     ) -> Result<ProductMedia, AppError> {
-        PermissionChecker::can_manage_products(actor)?;
-
-        if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
-            return Err(AppError::unprocessable(
-                "Image must be JPEG, PNG, WebP, or GIF.",
-            ));
-        }
-        if data.len() > MAX_PRODUCT_IMAGE_BYTES {
-            return Err(AppError::unprocessable("Image exceeds the 5 MB size limit."));
-        }
-
         let product = self
             .products
             .find_by_id(product_id)
             .await?
             .ok_or(AppError::NotFound)?;
+        Self::authorize_product_edit(actor, &product)?;
+
+        if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
+            return Err(AppError::invalid("image_invalid_type"));
+        }
+        if data.len() > MAX_PRODUCT_IMAGE_BYTES {
+            return Err(AppError::invalid_with("image_too_large", [("limit_mb", (MAX_PRODUCT_IMAGE_BYTES / (1024 * 1024)).into())]));
+        }
+
+        let existing = self.products.list_media(product_id).await?;
+        if existing.len() >= MAX_PRODUCT_MEDIA {
+            return Err(AppError::invalid_with(
+                "product_media_limit",
+                [("limit", MAX_PRODUCT_MEDIA.into())],
+            ));
+        }
 
         let key = cas_key("products", &data, &content_type);
         self.stored_files
             .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
             .await?;
 
-        let position = self.products.list_media(product_id).await?.len() as i32;
+        let position = existing.len() as i32;
         let media = match self
             .products
             .add_media(NewProductMedia {
@@ -328,12 +448,44 @@ impl ProductUseCase {
     }
 
     pub async fn delete_media(&self, actor: &AuthUser, media_id: Uuid) -> Result<(), AppError> {
-        PermissionChecker::can_manage_products(actor)?;
-        let media = self.products.find_media(media_id).await?;
+        let media = self
+            .products
+            .find_media(media_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        let product = self
+            .products
+            .find_by_id(media.product_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        Self::authorize_product_edit(actor, &product)?;
+
         self.products.delete_media(media_id).await?;
-        if let Some(m) = media {
-            self.release_key(&m.storage_key).await;
+
+        // Removing the cover image would otherwise leave the product pointing at a
+        // key whose ref-count just dropped: re-point it at the next image, or clear
+        // it when none is left.
+        if product.primary_image_key.as_deref() == Some(media.storage_key.as_str()) {
+            let next = self
+                .products
+                .list_media(product.id)
+                .await?
+                .into_iter()
+                .next()
+                .map(|m| m.storage_key);
+            let _ = self
+                .products
+                .update(
+                    product.id,
+                    UpdateProduct {
+                        primary_image_key: Some(next),
+                        ..Default::default()
+                    },
+                )
+                .await;
         }
+
+        self.release_key(&media.storage_key).await;
         Ok(())
     }
 
@@ -352,17 +504,15 @@ impl ProductUseCase {
 
     fn validate(name: &str, price_min: Option<i32>, price_max: Option<i32>) -> Result<(), AppError> {
         if name.trim().is_empty() {
-            return Err(AppError::unprocessable("Product name cannot be empty."));
+            return Err(AppError::invalid("product_name_required"));
         }
         if let (Some(min), Some(max)) = (price_min, price_max) {
             if max < min {
-                return Err(AppError::unprocessable(
-                    "Maximum price cannot be lower than the minimum price.",
-                ));
+                return Err(AppError::invalid("price_range_inverted"));
             }
         }
         if price_min.map(|v| v < 0).unwrap_or(false) || price_max.map(|v| v < 0).unwrap_or(false) {
-            return Err(AppError::unprocessable("Price cannot be negative."));
+            return Err(AppError::invalid("price_negative"));
         }
         Ok(())
     }

@@ -67,6 +67,26 @@ pub struct UpdatePreferencesRequest {
     pub email_notifications: Option<serde_json::Value>,
     pub watched_categories: Option<Vec<uuid::Uuid>>,
     pub muted_categories: Option<Vec<uuid::Uuid>>,
+    /// Display language. Absent leaves the current choice alone; an explicit
+    /// `null` clears it, returning the user to site-default negotiation. That
+    /// three-way distinction is why this is a nested `Option`.
+    #[serde(default, deserialize_with = "deserialize_optional_locale")]
+    pub locale: Option<Option<ferum_domain::Locale>>,
+}
+
+/// Distinguishes "field absent" from "field explicitly null".
+///
+/// `Option<Option<T>>` with `#[serde(default)]` alone cannot do this — serde
+/// collapses both to `None`. Going through `deserialize_with` makes an explicit
+/// `"locale": null` arrive as `Some(None)`, which is the "reset me to the site
+/// default" signal the switcher's *Auto* option needs.
+fn deserialize_optional_locale<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<ferum_domain::Locale>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<ferum_domain::Locale>::deserialize(deserializer).map(Some)
 }
 
 pub async fn update_profile(
@@ -134,14 +154,29 @@ pub async fn update_preferences(
     let layout = body.layout.unwrap_or(existing.layout);
 
     if !valid_themes.contains(&theme.as_str()) {
-        return Err(AppError::unprocessable("theme must be auto, light, or dark").into());
+        return Err(AppError::invalid("invalid_theme").into());
     }
     if !valid_font_sizes.contains(&font_size.as_str()) {
-        return Err(AppError::unprocessable("font_size must be small, medium, or large").into());
+        return Err(AppError::invalid("invalid_font_size").into());
     }
     if !valid_layouts.contains(&layout.as_str()) {
-        return Err(AppError::unprocessable("layout must be compact or comfortable").into());
+        return Err(AppError::invalid("invalid_layout").into());
     }
+
+    // Unlike theme/font_size/layout, the valid set here is not a fixed array —
+    // it is whatever the site currently has installed. Validating against the
+    // live roster means removing a language pack immediately stops anyone from
+    // selecting it, with no code change and no stale allowlist.
+    let locale = match body.locale {
+        None => existing.locale,
+        Some(None) => None,
+        Some(Some(requested)) => {
+            if !state.translator.available_locales().contains(&requested) {
+                return Err(AppError::invalid("locale_not_enabled").into());
+            }
+            Some(requested)
+        }
+    };
 
     let prefs = UserPreferences {
         user_id: actor.id,
@@ -153,10 +188,23 @@ pub async fn update_preferences(
             .unwrap_or(existing.email_notifications),
         muted_categories: body.muted_categories.unwrap_or(existing.muted_categories),
         watched_categories: body.watched_categories.unwrap_or(existing.watched_categories),
+        locale: locale.clone(),
     };
 
     state.user.update_preferences(actor, prefs).await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+
+    // Mirror the durable choice into the cookie the negotiator reads, so the very
+    // next page render is already in the new language — without this the user
+    // would save a language and see no change until their cookie happened to be
+    // refreshed elsewhere.
+    let cookie = match locale {
+        Some(l) => crate::utils::locale_cookie(&state, l.as_str()),
+        None => crate::utils::clear_locale_cookie(&state),
+    };
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
+
+    Ok((axum::http::StatusCode::NO_CONTENT, headers))
 }
 
 /// POST /api/users/me/avatar — upload a new avatar image.

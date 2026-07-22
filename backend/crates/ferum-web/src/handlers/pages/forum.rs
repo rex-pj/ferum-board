@@ -19,7 +19,7 @@ use crate::view_models::product::{ProductResponse, RatingStatsResponse};
 use ferum_domain::models::reaction::ReactionKind;
 
 use ferum_application::permission::PermissionChecker;
-use super::{active_theme, map_threads, map_threads_with_ratings, review_overall_map, review_product_image_map, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
+use super::{active_theme, map_threads, map_threads_with_ratings, review_overall_map, review_product_image_map, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme_in, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -33,6 +33,7 @@ pub struct ListQuery {
 pub async fn home(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let page = q.page.unwrap_or(1).max(1);
@@ -133,13 +134,14 @@ pub async fn home(
     ctx.insert("total_reviews", &total_reviews);
     ctx.insert("avg_rating", &avg_rating);
 
-    render_with_theme(&state, &active, "home.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "home.html", &ctx).await
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn forum_index(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let items = state.category.get_forum_index(auth_user.as_ref()).await?;
     let active = active_theme(&state).await;
@@ -198,13 +200,14 @@ pub async fn forum_index(
     ctx.insert("total_threads", &total_threads);
     ctx.insert("total_categories", &total_categories);
 
-    render_with_theme(&state, &active, "forum/index.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "forum/index.html", &ctx).await
 }
 
 #[tracing::instrument(skip(state, auth_user, q), fields(slug))]
 pub async fn category(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(slug): Path<String>,
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
@@ -317,13 +320,14 @@ pub async fn category(
     ctx.insert("active_sort", &sort_str);
     ctx.insert("active_category_slug", &category.slug);
 
-    render_with_theme(&state, &active, "forum/category.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "forum/category.html", &ctx).await
 }
 
 #[tracing::instrument(skip(state, auth_user, headers, q), fields(slug))]
 pub async fn thread_detail(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     headers: HeaderMap,
     Path(slug): Path<String>,
     Query(q): Query<ListQuery>,
@@ -540,7 +544,7 @@ pub async fn thread_detail(
     ctx.insert("review_rating", &review_rating);
     ctx.insert("is_review", &is_review);
 
-    render_with_theme(&state, &active, "forum/thread.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "forum/thread.html", &ctx).await
 }
 
 /// GET /go/post/{id} — resolves a post to the thread page + pagination offset

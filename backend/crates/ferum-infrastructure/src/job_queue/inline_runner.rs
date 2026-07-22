@@ -3,8 +3,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::network_utils::build_pinned_client;
-use ferum_application::ports::{EmailService, ForumJob, JobQueue, StorageService};
+use ferum_application::ports::{
+    EmailService, ForumJob, JobQueue, StorageService, TransArg, Translator,
+};
 use ferum_application::shared::AppError;
+use ferum_domain::Locale;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::webhook_repository::WebhookRepository;
 
@@ -14,6 +17,12 @@ pub struct JobExecutor {
     pub storage: Arc<dyn StorageService>,
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub webhooks: Arc<dyn WebhookRepository>,
+    /// Optional so the executor can still be constructed in tests and during
+    /// early startup. When absent, emails fall back to their catalog keys rather
+    /// than failing to send.
+    pub translator: Option<Arc<dyn Translator>>,
+    /// Site name interpolated into email copy.
+    pub site_name: String,
 }
 
 impl JobExecutor {
@@ -30,32 +39,62 @@ impl JobExecutor {
             storage,
             stored_files,
             webhooks,
+            translator: None,
+            site_name: "Ferum Board".to_string(),
+        }
+    }
+
+    pub fn with_translator(mut self, translator: Arc<dyn Translator>, site_name: String) -> Self {
+        self.translator = Some(translator);
+        self.site_name = site_name;
+        self
+    }
+
+    /// Resolves an email string in the recipient's language.
+    ///
+    /// Degrades to the raw key when no translator is wired rather than refusing
+    /// to send — a verification link the user can still click beats a silent
+    /// failure that locks them out of their new account.
+    fn t(&self, locale: &Locale, key: &str, args: &[(&str, TransArg)]) -> String {
+        match &self.translator {
+            Some(t) => t.translate(locale, key, args),
+            None => key.to_string(),
         }
     }
 
     pub async fn run(&self, job: ForumJob) -> Result<(), AppError> {
         match job {
-            ForumJob::SendEmailVerification { email, token, .. } => {
+            ForumJob::SendEmailVerification {
+                email,
+                token,
+                locale,
+                ..
+            } => {
                 let url = format!("{}/verify-email/{}", self.app_url, token);
-                let body = format!(
-                    "<p>Welcome to Ferum Board! Click the link below to verify your email:</p>\
-                     <p><a href=\"{url}\">{url}</a></p>"
-                );
-                self.email.send(&email, "Verify your email", &body).await
+                let args: &[(&str, TransArg)] = &[
+                    ("url", TransArg::Str(url)),
+                    ("site_name", TransArg::Str(self.site_name.clone())),
+                ];
+                let subject = self.t(&locale, "email-verify-subject", &[]);
+                let body = self.t(&locale, "email-verify-body", args);
+                self.email.send(&email, &subject, &body).await
             }
-            ForumJob::SendPasswordResetEmail { email, token } => {
+            ForumJob::SendPasswordResetEmail {
+                email,
+                token,
+                locale,
+            } => {
                 let url = format!("{}/reset-password?token={}", self.app_url, token);
-                let body = format!(
-                    "<p>You requested a password reset. Click below to reset it (valid 1 hour):</p>\
-                     <p><a href=\"{url}\">{url}</a></p>\
-                     <p>If you did not request this, ignore this email.</p>"
-                );
-                self.email.send(&email, "Reset your password", &body).await
+                let args: &[(&str, TransArg)] = &[("url", TransArg::Str(url))];
+                let subject = self.t(&locale, "email-reset-subject", &[]);
+                let body = self.t(&locale, "email-reset-body", args);
+                self.email.send(&email, &subject, &body).await
             }
             ForumJob::SendNotificationEmail {
                 user_id: _,
                 subject,
                 body: _,
+                locale: _,
             } => {
                 tracing::debug!(
                     "notification email job skipped in inline runner: {}",

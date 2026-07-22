@@ -7,12 +7,13 @@ use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{PaginationCtx, UserProfileCtx};
 
-use super::{active_theme, map_threads, nav_categories_ctx, render_with_theme, user_ctx, PageError, PageQuery};
+use super::{active_theme, map_threads, nav_categories_ctx, render_with_theme_in, user_ctx, PageError, PageQuery};
 
 #[tracing::instrument(skip(state, auth_user, q), fields(username))]
 pub async fn user_profile(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(username): Path<String>,
     Query(q): Query<PageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
@@ -76,5 +77,5 @@ pub async fn user_profile(
     ctx.insert("profile", &profile);
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme(&state, &active, "user/profile.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "user/profile.html", &ctx).await
 }

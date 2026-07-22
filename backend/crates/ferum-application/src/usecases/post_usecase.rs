@@ -102,19 +102,13 @@ impl PostUseCase {
         PermissionChecker::can_upload(actor)?;
 
         if !validate_image_content_type(&content_type) {
-            return Err(AppError::unprocessable(
-                "attachment must be jpeg, png, webp, or gif",
-            ));
+            return Err(AppError::invalid("attachment_invalid_type"));
         }
         if data.len() > MAX_POST_ATTACHMENT_BYTES {
-            return Err(AppError::unprocessable(
-                "attachment exceeds 8 MB size limit",
-            ));
+            return Err(AppError::invalid_with("attachment_too_large", [("limit_mb", (MAX_POST_ATTACHMENT_BYTES / (1024 * 1024)).into())]));
         }
         if !crate::validators::validate_image_magic(&data) {
-            return Err(AppError::unprocessable(
-                "file content does not match a supported image format",
-            ));
+            return Err(AppError::invalid("image_content_mismatch"));
         }
 
         let stored_files = self
@@ -350,10 +344,10 @@ impl PostUseCase {
         }
 
         if cmd.content_md.trim().is_empty() {
-            return Err(AppError::unprocessable("Post content cannot be empty"));
+            return Err(AppError::invalid("post_content_empty"));
         }
         if cmd.content_md.len() > MAX_POST_CONTENT_BYTES {
-            return Err(AppError::unprocessable("Post content exceeds 100 KB limit"));
+            return Err(AppError::invalid_with("post_content_too_long", [("limit_kb", (MAX_POST_CONTENT_BYTES / 1024).into())]));
         }
 
         if let Some(parent_id) = cmd.parent_id {
@@ -363,9 +357,7 @@ impl PostUseCase {
                 .await?
                 .or_not_found()?;
             if parent.thread_id != cmd.thread_id {
-                return Err(AppError::unprocessable(
-                    "parent_id does not belong to this thread",
-                ));
+                return Err(AppError::invalid("parent_post_wrong_thread"));
             }
         }
 
@@ -454,10 +446,10 @@ impl PostUseCase {
         content_md: String,
     ) -> Result<Post, AppError> {
         if content_md.trim().is_empty() {
-            return Err(AppError::unprocessable("Post content cannot be empty"));
+            return Err(AppError::invalid("post_content_empty"));
         }
         if content_md.len() > MAX_POST_CONTENT_BYTES {
-            return Err(AppError::unprocessable("Post content exceeds 100 KB limit"));
+            return Err(AppError::invalid_with("post_content_too_long", [("limit_kb", (MAX_POST_CONTENT_BYTES / 1024).into())]));
         }
         let post = self.posts.find_by_id(id).await?.or_not_found()?;
         let thread = self
@@ -627,7 +619,7 @@ impl PostUseCase {
     pub async fn approve_post(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         let post = self.posts.find_by_id(id).await?.or_not_found()?;
         if !post.status.is_pending() {
-            return Err(AppError::unprocessable("Post is not pending approval"));
+            return Err(AppError::invalid("post_not_pending_approval"));
         }
         let thread = self
             .threads
@@ -672,7 +664,7 @@ impl PostUseCase {
     pub async fn reject_post(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         let post = self.posts.find_by_id(id).await?.or_not_found()?;
         if !post.status.is_pending() {
-            return Err(AppError::unprocessable("Post is not pending approval"));
+            return Err(AppError::invalid("post_not_pending_approval"));
         }
         let thread = self
             .threads
@@ -813,7 +805,7 @@ async fn render_content(md: &str) -> Result<String, crate::shared::AppError> {
     let md = md.to_owned();
     tokio::task::spawn_blocking(move || {
         crate::validators::markdown::render_and_sanitize(&md).ok_or_else(|| {
-            crate::shared::AppError::unprocessable("Post content exceeds the maximum allowed size")
+            crate::shared::AppError::invalid_with("post_content_too_long", [("limit_kb", (MAX_POST_CONTENT_BYTES / 1024).into())])
         })
     })
     .await

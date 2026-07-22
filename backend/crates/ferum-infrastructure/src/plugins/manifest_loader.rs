@@ -40,12 +40,12 @@ pub fn parse_manifest_str(content: &str) -> Result<PluginManifest, AppError> {
 
     let meta = table
         .get("meta")
-        .ok_or_else(|| AppError::unprocessable("plugin.toml missing [meta] section"))?;
+        .ok_or_else(|| AppError::invalid("plugin_manifest_missing_meta"))?;
 
     let id = meta
         .get("id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::unprocessable("plugin.toml missing meta.id"))?
+        .ok_or_else(|| AppError::invalid("plugin_manifest_missing_id"))?
         .to_string();
 
     validate_plugin_id(&id)?;
@@ -53,19 +53,19 @@ pub fn parse_manifest_str(content: &str) -> Result<PluginManifest, AppError> {
     let name = meta
         .get("name")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::unprocessable("plugin.toml missing meta.name"))?
+        .ok_or_else(|| AppError::invalid("plugin_manifest_missing_name"))?
         .to_string();
 
     let version = meta
         .get("version")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::unprocessable("plugin.toml missing meta.version"))?
+        .ok_or_else(|| AppError::invalid("plugin_manifest_missing_version"))?
         .to_string();
 
     let tier_str = meta
         .get("tier")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::unprocessable("plugin.toml missing meta.tier"))?;
+        .ok_or_else(|| AppError::invalid("plugin_manifest_missing_tier"))?;
 
     let tier = match tier_str {
         "manifest" => PluginTier::Manifest,
@@ -107,24 +107,18 @@ pub fn parse_manifest_str(content: &str) -> Result<PluginManifest, AppError> {
 /// e.g. "com.example.my-plugin" — alphanumeric, dots, hyphens only.
 pub fn validate_plugin_id(id: &str) -> Result<(), AppError> {
     if id.is_empty() || id.len() > 256 {
-        return Err(AppError::unprocessable(
-            "Plugin ID must be between 1 and 256 characters",
-        ));
+        return Err(AppError::invalid("plugin_id_length"));
     }
 
     if !id
         .chars()
         .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
     {
-        return Err(AppError::unprocessable(
-            "Plugin ID must contain only alphanumeric characters, dots, hyphens, and underscores",
-        ));
+        return Err(AppError::invalid("plugin_id_charset"));
     }
 
     if id.starts_with('.') || id.ends_with('.') {
-        return Err(AppError::unprocessable(
-            "Plugin ID must not start or end with a dot",
-        ));
+        return Err(AppError::invalid("plugin_id_dot_boundary"));
     }
 
     Ok(())

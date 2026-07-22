@@ -69,23 +69,17 @@ impl UserUseCase {
 
         if let Some(ref v) = cmd.display_name {
             if !crate::validators::validate_display_name(v) {
-                return Err(AppError::unprocessable(
-                    "Display name must be 1–60 characters",
-                ));
+                return Err(AppError::invalid("display_name_length"));
             }
         }
         if let Some(ref v) = cmd.bio {
             if !crate::validators::validate_bio(v) {
-                return Err(AppError::unprocessable(
-                    "Bio must be 500 characters or fewer",
-                ));
+                return Err(AppError::invalid("bio_too_long"));
             }
         }
         if let Some(ref v) = cmd.website {
             if !crate::validators::validate_website(v) {
-                return Err(AppError::unprocessable(
-                    "Website must be an http:// or https:// URL, up to 255 characters",
-                ));
+                return Err(AppError::invalid("invalid_website_url"));
             }
         }
 
@@ -110,9 +104,7 @@ impl UserUseCase {
         new_password: &str,
     ) -> Result<(), AppError> {
         if !crate::validators::validate_password(new_password) {
-            return Err(AppError::unprocessable(
-                crate::validators::PASSWORD_REQUIREMENTS,
-            ));
+            return Err(AppError::invalid("password_requirements"));
         }
 
         let user = self
@@ -187,12 +179,10 @@ impl UserUseCase {
         PermissionChecker::can_upload_profile_image(actor)?;
 
         if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
-            return Err(AppError::unprocessable(
-                "avatar must be jpeg, png, webp, or gif",
-            ));
+            return Err(AppError::invalid("avatar_invalid_type"));
         }
         if data.len() > MAX_AVATAR_BYTES {
-            return Err(AppError::unprocessable("avatar exceeds 5 MB size limit"));
+            return Err(AppError::invalid_with("avatar_too_large", [("limit_mb", (MAX_AVATAR_BYTES / (1024 * 1024)).into())]));
         }
 
         let key = cas_key("avatars", &data, &content_type);
@@ -240,12 +230,10 @@ impl UserUseCase {
         PermissionChecker::can_upload_profile_image(actor)?;
 
         if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
-            return Err(AppError::unprocessable(
-                "cover must be jpeg, png, webp, or gif",
-            ));
+            return Err(AppError::invalid("cover_invalid_type"));
         }
         if data.len() > MAX_COVER_BYTES {
-            return Err(AppError::unprocessable("cover exceeds 8 MB size limit"));
+            return Err(AppError::invalid_with("cover_too_large", [("limit_mb", (MAX_COVER_BYTES / (1024 * 1024)).into())]));
         }
 
         let key = cas_key("covers", &data, &content_type);

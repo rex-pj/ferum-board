@@ -21,6 +21,7 @@ use crate::handlers::pages::{render_404_page, render_error_page};
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::AuthUser;
 use crate::middleware::csrf::csrf_origin_check;
+use crate::middleware::locale::{negotiate_locale, translate_errors};
 use crate::middleware::rate_limit::RateLimitConfig;
 use crate::middleware::security_headers::security_headers;
 use crate::middleware::setup_guard::setup_guard;
@@ -38,8 +39,9 @@ use public_routes::{api_routes, auth_routes, public_page_routes};
 async fn page_not_found(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::Extension(auth_user): axum::Extension<Option<AuthUser>>,
+    axum::Extension(req_locale): axum::Extension<crate::middleware::locale::RequestLocale>,
 ) -> Response {
-    render_404_page(&state, auth_user.as_ref()).await
+    render_404_page(&state, &req_locale, auth_user.as_ref()).await
 }
 
 // Intercepts 4xx/5xx responses on page routes and replaces them with themed
@@ -51,6 +53,15 @@ async fn error_page_layer(
     req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
+    // Read before the request is consumed. `negotiate_locale` runs outside this
+    // layer, so the extension is already present; the default is a safety net
+    // for any path where it somehow isn't.
+    let req_locale = req
+        .extensions()
+        .get::<crate::middleware::locale::RequestLocale>()
+        .cloned()
+        .unwrap_or_default();
+
     let path = req.uri().path().to_owned();
     let skip = path.starts_with("/api/")
         || path.starts_with("/static/")
@@ -65,9 +76,9 @@ async fn error_page_layer(
     }
 
     match response.status() {
-        StatusCode::NOT_FOUND => render_404_page(&state, auth_user.as_ref()).await,
+        StatusCode::NOT_FOUND => render_404_page(&state, &req_locale, auth_user.as_ref()).await,
         s if s.is_client_error() || s.is_server_error() => {
-            render_error_page(&state, auth_user.as_ref()).await
+            render_error_page(&state, &req_locale, auth_user.as_ref()).await
         }
         _ => response,
     }
@@ -132,7 +143,7 @@ pub fn build_router(
     #[cfg(not(debug_assertions))]
     let router = Router::new();
 
-    router
+    let routed = router
         .route("/health", get(crate::handlers::api::health::health))
         .merge(files_routes())
         // Static files (Bootstrap, HTMX, Alpine, theme CSS, widgets).
@@ -233,7 +244,27 @@ pub fn build_router(
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(body_limit)
-        .with_state(state)
+        .with_state(state.clone());
+
+    // The locale layers wrap the *routed* router rather than being added to it.
+    //
+    // `Router::layer` attaches middleware to each endpoint, which means route
+    // matching has already happened by the time it runs. `negotiate_locale`
+    // rewrites the URI to strip a `/vi` prefix, so running it after matching is
+    // useless — `/vi/forum` matches nothing and 404s before the prefix is ever
+    // removed. Nesting the whole router behind a fallback_service puts these two
+    // ahead of matching, which is where they have to be.
+    //
+    // Order: `negotiate_locale` outermost (it sets the `Locale` extension), then
+    // `translate_errors`, which reads that extension and rewrites error bodies on
+    // the way out — including errors from layers that never reach a handler.
+    Router::new()
+        .fallback_service(routed)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            translate_errors,
+        ))
+        .layer(middleware::from_fn_with_state(state, negotiate_locale))
 }
 
 /// Build a CORS layer from a comma-separated origin list.

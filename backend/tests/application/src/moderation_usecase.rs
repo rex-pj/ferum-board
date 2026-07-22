@@ -86,7 +86,8 @@ async fn create_report_no_target_returns_422() {
     let result = uc.create_report(&actor, CreateReportCmd {
         post_id: None, thread_id: None, reason: "spam".to_string(),
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "report_target_required"),
+        "expected report_target_required, got {result:?}");
 }
 
 #[tokio::test]

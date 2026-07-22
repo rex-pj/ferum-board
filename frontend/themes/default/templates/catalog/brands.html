@@ -1,11 +1,11 @@
 {% extends "default/templates/base.html" %}
 
-{% block title %}Brands — {{ site.name }}{% endblock %}
-{% block description %}A directory of furniture brands on {{ site.name }}.{% endblock %}
+{% block title %}{{ t(k="ui-brands") }} — {{ site.name }}{% endblock %}
+{% block description %}{{ t(k="ui-desc-brands", site=site.name) }}{% endblock %}
 
 {% block content %}
 {% include "default/templates/partials/catalog_nav.html" %}
-<p class="text-muted small mb-4">Pick a brand to see all of its products.</p>
+<p class="text-muted small mb-4">{{ t(k="ui-pick-a-brand-to-see-all") }}</p>
 
 {% if brands %}
 <div class="row g-3">
@@ -22,7 +22,7 @@
           {% endif %}
           <span class="fr-product-name">{{ b.name }}</span>
           {% if b.is_verified %}
-            <i class="fa-solid fa-circle-check text-primary" title="Verified" aria-hidden="true"></i>
+            <i class="fa-solid fa-circle-check text-primary" title="{{ t(k='ui-verified') }}" aria-hidden="true"></i>
           {% endif %}
         </div>
         {% if b.country %}<div class="fr-product-meta"><i class="fa-solid fa-location-dot fa-xs me-1" aria-hidden="true"></i>{{ b.country }}</div>{% endif %}
@@ -35,7 +35,7 @@
 {% else %}
 <div class="text-center text-muted py-5">
   <i class="fa-solid fa-tag fa-2x mb-2 opacity-25 d-block" aria-hidden="true"></i>
-  No brands yet.
+  {{ t(k="ui-no-brands-yet") }}
 </div>
 {% endif %}
 {% endblock %}

@@ -127,7 +127,7 @@
     FerumApi.admin.removeBranding(type).then(function (r) {
       if (r.ok) location.reload();
       else showSettingsAlert('Failed to remove ' + type + '.', 'danger');
-    }).catch(function () { showSettingsAlert('Network error.', 'danger'); });
+    }).catch(function () { showSettingsAlert(Ferum.t('js-network-error'), 'danger'); });
   };
 
   // ── Permissions panel (Alpine component) ─────────────────────────
@@ -222,7 +222,7 @@
         FerumApi.admin.createWebhook(body).then(function (r) {
           if (r.ok) { self.form = { url: '', secret: '', events: [] }; self.load(); }
           else return r.json().then(function (d) { self.webhookError = (d.error && d.error.message) || 'Failed to add webhook.'; });
-        }).catch(function () { self.webhookError = 'Network error.'; })
+        }).catch(function () { self.webhookError = Ferum.t('js-network-error'); })
           .finally(function () { self.saving = false; });
       },
       testWebhook: function (wh) {
@@ -239,7 +239,7 @@
                 : 'Test failed: ' + (result.error || ('HTTP ' + result.status_code)),
             };
           })
-          .catch(function () { wh.testResult = { success: false, message: 'Network error.' }; })
+          .catch(function () { wh.testResult = { success: false, message: Ferum.t('js-network-error') }; })
           .finally(function () { wh.testing = false; self.webhooks = self.webhooks.slice(); });
       },
       startEdit: function (wh) {
@@ -262,7 +262,7 @@
         FerumApi.admin.updateWebhook(self.editingId, body).then(function (r) {
           if (r.ok) { self.editingId = null; self.load(); }
           else return r.json().then(function (d) { self.editError = (d.error && d.error.message) || 'Failed to save changes.'; });
-        }).catch(function () { self.editError = 'Network error.'; })
+        }).catch(function () { self.editError = Ferum.t('js-network-error'); })
           .finally(function () { self.saving = false; });
       },
     };
@@ -417,7 +417,7 @@
     FerumApi.mod.resolveReport(id, status).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed.', true); }).catch(function () { Ferum.toast('Failed.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   // ── User detail page ───────────────────────────────────────────────
@@ -427,7 +427,7 @@
     FerumApi.admin.unbanUser(userId).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to unban.', true); }).catch(function () { Ferum.toast('Failed to unban.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   window.assignRole = function (btn) {
@@ -442,7 +442,7 @@
         r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to assign role.', true); }).catch(function () { Ferum.toast('Failed to assign role.', true); });
         btn.disabled = false;
       }
-    }).catch(function () { Ferum.toast('Network error.', true); btn.disabled = false; });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); btn.disabled = false; });
   };
 
   window.revokeRole = async function (userId, roleId, roleName) {
@@ -451,7 +451,7 @@
     FerumApi.admin.revokeRole(userId, roleId).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to remove role.', true); }).catch(function () { Ferum.toast('Failed to remove role.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   window.assignRoleById = async function (userId) {
@@ -472,7 +472,7 @@
     FerumApi.admin.assignRole(userId, roleId).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to assign role.', true); }).catch(function () { Ferum.toast('Failed to assign role.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   window.editUserProfile = function (userId) {
@@ -489,7 +489,7 @@
       } else {
         r.json().then(function (d) { Ferum.showFeedback('edit-profile-feedback', 'danger', (d.error && d.error.message) || 'Failed to save.'); }).catch(function () { Ferum.showFeedback('edit-profile-feedback', 'danger', 'Failed to save.'); });
       }
-    }).catch(function () { Ferum.showFeedback('edit-profile-feedback', 'danger', 'Network error.'); });
+    }).catch(function () { Ferum.showFeedback('edit-profile-feedback', 'danger', Ferum.t('js-network-error')); });
   };
 
   window.setUserTrustLevel = async function (userId) {
@@ -504,7 +504,7 @@
       } else {
         r.json().then(function (d) { Ferum.showFeedback('trust-level-feedback', 'danger', (d.error && d.error.message) || 'Failed.'); }).catch(function () { Ferum.showFeedback('trust-level-feedback', 'danger', 'Failed.'); });
       }
-    }).catch(function () { Ferum.showFeedback('trust-level-feedback', 'danger', 'Network error.'); });
+    }).catch(function () { Ferum.showFeedback('trust-level-feedback', 'danger', Ferum.t('js-network-error')); });
   };
 
   window.unlockUser = async function (userId) {
@@ -513,7 +513,7 @@
     FerumApi.admin.unlockUser(userId).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to unlock.', true); }).catch(function () { Ferum.toast('Failed to unlock.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   window.verifyUserEmail = async function (userId) {
@@ -522,7 +522,7 @@
     FerumApi.admin.verifyUserEmail(userId).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to verify.', true); }).catch(function () { Ferum.toast('Failed to verify.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   window.confirmBanUser = function (userId, username) {
@@ -532,7 +532,7 @@
     FerumApi.admin.banUser(userId, reason, until || null).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.showFeedback('ban-feedback', 'danger', (d.error && d.error.message) || 'Failed to ban.'); }).catch(function () { Ferum.showFeedback('ban-feedback', 'danger', 'Failed to ban.'); });
-    }).catch(function () { Ferum.showFeedback('ban-feedback', 'danger', 'Network error.'); });
+    }).catch(function () { Ferum.showFeedback('ban-feedback', 'danger', Ferum.t('js-network-error')); });
   };
 
   // ── Moderators page ───────────────────────────────────────────────
@@ -542,7 +542,7 @@
     FerumApi.admin.revokeModerator(categoryId, userId).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to remove moderator.', true); }).catch(function () { Ferum.toast('Failed to remove moderator.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   window.assignModerator = function (btn) {
@@ -566,7 +566,7 @@
         if (r2.ok) location.reload();
         else r2.json().then(function (d2) { Ferum.toast((d2.error && d2.error.message) || 'Failed to assign moderator.', true); btn.disabled = false; }).catch(function () { Ferum.toast('Failed to assign moderator.', true); btn.disabled = false; });
       });
-    }).catch(function () { Ferum.toast('Network error.', true); btn.disabled = false; });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); btn.disabled = false; });
   };
 
   window.deleteRole = async function (id, name, memberCount) {
@@ -579,7 +579,7 @@
     FerumApi.admin.deleteRole(id).then(function (r) {
       if (r.ok) location.reload();
       else r.json().then(function (b) { Ferum.toast((b.error && b.error.message) || 'Failed to delete role.', true); }).catch(function () { Ferum.toast('Failed to delete role.', true); });
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   // ── Roles page ────────────────────────────────────────────────────
@@ -608,7 +608,7 @@
         if (spinner) spinner.classList.add('d-none');
       }
     }).catch(function () {
-      Ferum.showFeedback('new-role-feedback', 'danger', 'Network error.');
+      Ferum.showFeedback('new-role-feedback', 'danger', Ferum.t('js-network-error'));
       btn.disabled = false;
       if (spinner) spinner.classList.add('d-none');
     });
@@ -681,7 +681,7 @@
         if (spinner) spinner.classList.add('d-none');
       }
     }).catch(function () {
-      Ferum.toast('Network error.', true);
+      Ferum.toast(Ferum.t('js-network-error'), true);
       btn.disabled = false;
       if (spinner) spinner.classList.add('d-none');
     });
@@ -805,7 +805,7 @@
     FerumApi.admin.deleteCategory(id).then(function (r) {
       if (r.ok) location.reload();
       else catToastError(r);
-    }).catch(function () { Ferum.toast('Network error.', true); });
+    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
   // ── Ban form on users/detail page ─────────────────────────────────
@@ -843,7 +843,7 @@
           if (r.ok) location.reload();
           else r.json().then(function (b) { Ferum.showFeedback('ban-feedback', 'danger', (b.error && b.error.message) || 'Failed to ban user.'); btn.disabled = false; });
         })
-        .catch(function () { Ferum.showFeedback('ban-feedback', 'danger', 'Network error.'); btn.disabled = false; });
+        .catch(function () { Ferum.showFeedback('ban-feedback', 'danger', Ferum.t('js-network-error')); btn.disabled = false; });
     });
   }());
 

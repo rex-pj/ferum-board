@@ -22,10 +22,10 @@
             <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
           </span>
           <input type="search" name="q" class="form-control border-start-0 ps-0"
-                 placeholder="Search by title…" value="{{ search_query }}" autocomplete="off">
+                 placeholder="{{ t(k='adm-search-by-title') }}" value="{{ search_query }}" autocomplete="off">
         </div>
         <button type="submit" class="btn btn-sm btn-outline-success">
-          <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+          <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="adm-search") }}
         </button>
 
         {# Filters toggle — Bootstrap collapse, dot indicator when active #}
@@ -42,8 +42,8 @@
         </button>
 
         {% if any_active %}
-          <a href="/admin/threads" class="btn btn-sm btn-outline-secondary ms-auto" title="Clear all">
-            <i class="fa-solid fa-xmark me-1"></i>Clear
+          <a href="/admin/threads" class="btn btn-sm btn-outline-secondary ms-auto" title="{{ t(k='adm-clear-all') }}">
+            <i class="fa-solid fa-xmark me-1"></i>{{ t(k="adm-clear") }}
           </a>
         {% endif %}
       </div>
@@ -55,15 +55,15 @@
         <div class="adm-filter-row px-3 py-2">
 
           <select name="sort_by" class="form-select form-select-sm" style="width:auto">
-            <option value="latest"  {% if sort_by == "latest" or not sort_by %}selected{% endif %}>Latest activity</option>
-            <option value="newest"  {% if sort_by == "newest"  %}selected{% endif %}>Newest</option>
-            <option value="hottest" {% if sort_by == "hottest" %}selected{% endif %}>Most replies</option>
+            <option value="latest"  {% if sort_by == "latest" or not sort_by %}selected{% endif %}>{{ t(k="adm-latest-activity") }}</option>
+            <option value="newest"  {% if sort_by == "newest"  %}selected{% endif %}>{{ t(k="adm-newest") }}</option>
+            <option value="hottest" {% if sort_by == "hottest" %}selected{% endif %}>{{ t(k="adm-most-replies") }}</option>
           </select>
 
           <div class="vr opacity-25 align-self-stretch"></div>
 
           <select name="category_id" class="form-select form-select-sm" style="width:auto">
-            <option value="">All categories</option>
+            <option value="">{{ t(k="adm-all-categories") }}</option>
             {% for opt in category_options %}
               <option value="{{ opt.id }}" {% if category_id_filter == opt.id %}selected{% endif %}>
                 {{ opt.name }}
@@ -73,19 +73,19 @@
 
           <ferum-remote-select name="author_id" endpoint="/api/admin/lookups/users"
                                value="{{ author_id_filter }}" label="{{ author_label }}"
-                               placeholder="Any author"></ferum-remote-select>
+                               placeholder="{{ t(k='adm-any-author') }}"></ferum-remote-select>
 
           <select name="status" class="form-select form-select-sm" style="width:auto">
-            <option value="">All statuses</option>
-            <option value="open"    {% if status_filter == "open"    %}selected{% endif %}>Open</option>
-            <option value="locked"  {% if status_filter == "locked"  %}selected{% endif %}>Locked</option>
-            <option value="deleted" {% if status_filter == "deleted" %}selected{% endif %}>Deleted</option>
+            <option value="">{{ t(k="adm-all-statuses") }}</option>
+            <option value="open"    {% if status_filter == "open"    %}selected{% endif %}>{{ t(k="adm-open") }}</option>
+            <option value="locked"  {% if status_filter == "locked"  %}selected{% endif %}>{{ t(k="adm-locked") }}</option>
+            <option value="deleted" {% if status_filter == "deleted" %}selected{% endif %}>{{ t(k="adm-deleted") }}</option>
           </select>
 
           <div class="vr opacity-25 align-self-stretch"></div>
 
           <div class="d-flex align-items-center gap-1">
-            <span class="text-muted small text-nowrap">From</span>
+            <span class="text-muted small text-nowrap">{{ t(k="adm-from") }}</span>
             <input type="date" name="date_from" class="form-control form-control-sm" style="max-width:145px"
                    value="{{ date_from_filter }}">
           </div>
@@ -95,12 +95,12 @@
                    value="{{ date_to_filter }}">
           </div>
 
-          <button type="submit" class="btn btn-sm btn-outline-success ms-auto">Apply</button>
+          <button type="submit" class="btn btn-sm btn-outline-success ms-auto">{{ t(k="adm-apply") }}</button>
 
           {% if has_filters %}
             <a href="/admin/threads{% if search_query %}?q={{ search_query }}{% endif %}"
                class="btn btn-sm btn-link text-danger text-decoration-none p-0">
-              <i class="fa-solid fa-xmark me-1"></i>Clear filters
+              <i class="fa-solid fa-xmark me-1"></i>{{ t(k="adm-clear-filters") }}
             </a>
           {% endif %}
 
@@ -115,11 +115,11 @@
       <thead class="table-active">
         <tr>
           {# CONTENT: title + category #}
-          <th>Thread</th>
+          <th>{{ t(k="adm-thread") }}</th>
           {# AUTHORSHIP: author + created date #}
-          <th style="width:16%">Author</th>
+          <th style="width:16%">{{ t(k="adm-author") }}</th>
           {# STATE: status + flags + reply count #}
-          <th style="width:14%">Status</th>
+          <th style="width:14%">{{ t(k="adm-status") }}</th>
           {# ACTIONS #}
           <th style="width:6%"></th>
         </tr>
@@ -133,10 +133,10 @@
                class="text-body text-decoration-none fw-semibold text-truncate d-block"
                style="max-width:400px">
               {% if thread.is_pinned %}
-                <i class="fa-solid fa-thumbtack fa-xs text-warning me-1" title="Pinned — stays at top of category"></i>
+                <i class="fa-solid fa-thumbtack fa-xs text-warning me-1" title="{{ t(k='adm-pinned-stays-at-top-of-category') }}"></i>
               {% endif %}
               {% if thread.is_solved %}
-                <i class="fa-solid fa-circle-check fa-xs text-success me-1" title="Solved — has a marked best answer"></i>
+                <i class="fa-solid fa-circle-check fa-xs text-success me-1" title="{{ t(k='adm-solved-has-a-marked-best-answer') }}"></i>
               {% endif %}
               {{ thread.title }}
             </a>
@@ -165,18 +165,18 @@
             </a>
             <div class="text-muted small">@{{ thread.author_username }}</div>
             <div class="text-muted small text-nowrap">
-              {{ thread.created_at | date(format="%b %d, %Y") }}
+              {{ thread.created_at | localdate }}
             </div>
           </td>
           {# STATE cell: status badge + reply count #}
           <td class="align-middle">
             <div>
               {% if thread.status == "deleted" %}
-                <span class="badge bg-danger">Deleted</span>
+                <span class="badge bg-danger">{{ t(k="adm-deleted") }}</span>
               {% elif thread.is_locked or thread.status == "locked" %}
-                <span class="badge bg-warning text-dark">Locked</span>
+                <span class="badge bg-warning text-dark">{{ t(k="adm-locked") }}</span>
               {% else %}
-                <span class="badge bg-success">Open</span>
+                <span class="badge bg-success">{{ t(k="adm-open") }}</span>
               {% endif %}
               <div class="text-muted small mt-1">
                 <i class="fa-regular fa-comment fa-xs me-1 opacity-50"></i>{{ thread.reply_count }} replies
@@ -187,12 +187,12 @@
           <td class="align-middle">
             <div class="d-flex gap-1">
               <a href="/forum/t/{{ thread.slug }}" target="_blank"
-                 class="btn btn-sm btn-outline-secondary" title="View">
+                 class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-view') }}">
                 <i class="fa-solid fa-arrow-up-right-from-square"></i>
               </a>
               <button class="btn btn-sm btn-outline-danger"
                       data-admin-action="delete-thread" data-thread-id="{{ thread.id }}" data-thread-title="{{ thread.title | escape }}"
-                      title="Delete">
+                      title="{{ t(k='adm-delete') }}">
                 <i class="fa-solid fa-trash"></i>
               </button>
             </div>

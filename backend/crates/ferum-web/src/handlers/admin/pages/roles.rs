@@ -14,6 +14,7 @@ use crate::view_models::page_context::{CurrentUserCtx, PermissionCtx, RoleCtx};
 pub async fn roles(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
@@ -41,13 +42,14 @@ pub async fn roles(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("roles", &roles_ctx);
 
-    render_admin(&state, "admin/roles/list.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/roles/list.html", &ctx).await
 }
 
 #[tracing::instrument(skip(state, auth_user), fields(role_id = %id))]
 pub async fn role_detail(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -117,12 +119,13 @@ pub async fn role_detail(
     ctx.insert("role_perm_keys", &role_perm_keys);
     ctx.insert("permission_groups", &permission_groups);
 
-    render_admin(&state, "admin/roles/detail.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/roles/detail.html", &ctx).await
 }
 
 pub async fn permissions(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
@@ -164,5 +167,5 @@ pub async fn permissions(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("permission_groups", &permission_groups);
 
-    render_admin(&state, "admin/permissions.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/permissions.html", &ctx).await
 }

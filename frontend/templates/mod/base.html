@@ -7,21 +7,21 @@
 {% block sidebar_nav %}
 <div class="adm-nav">
 
-  <span class="adm-nav-label">Moderation</span>
+  <span class="adm-nav-label">{{ t(k="adm-moderation") }}</span>
   <a href="/mod/reports" class="adm-nav-link {% block nav_reports %}{% endblock %}">
-    <i class="fa-solid fa-flag adm-nav-icon"></i>Reports
+    <i class="fa-solid fa-flag adm-nav-icon"></i>{{ t(k="adm-reports") }}
   </a>
   <a href="/mod/queue" class="adm-nav-link {% block nav_queue %}{% endblock %}">
-    <i class="fa-solid fa-list-check adm-nav-icon"></i>Approval Queue
+    <i class="fa-solid fa-list-check adm-nav-icon"></i>{{ t(k="adm-approval-queue") }}
   </a>
   <a href="/mod/threads" class="adm-nav-link {% block nav_threads %}{% endblock %}">
-    <i class="fa-solid fa-comments adm-nav-icon"></i>Threads
+    <i class="fa-solid fa-comments adm-nav-icon"></i>{{ t(k="adm-threads") }}
   </a>
   <a href="/mod/users" class="adm-nav-link {% block nav_users %}{% endblock %}">
-    <i class="fa-solid fa-users adm-nav-icon"></i>Users
+    <i class="fa-solid fa-users adm-nav-icon"></i>{{ t(k="adm-users") }}
   </a>
   <a href="/mod/log" class="adm-nav-link {% block nav_log %}{% endblock %}">
-    <i class="fa-solid fa-clipboard-list adm-nav-icon"></i>Audit Log
+    <i class="fa-solid fa-clipboard-list adm-nav-icon"></i>{{ t(k="adm-audit-log") }}
   </a>
 
 </div>
@@ -30,7 +30,7 @@
 {% block sidebar_footer_links %}
 {% if current_user and current_user.is_admin %}
 <a href="/admin/dashboard" class="adm-nav-link">
-  <i class="fa-solid fa-shield-halved adm-nav-icon"></i>Admin Panel
+  <i class="fa-solid fa-shield-halved adm-nav-icon"></i>{{ t(k="adm-admin-panel") }}
 </a>
 {% endif %}
 {% endblock %}

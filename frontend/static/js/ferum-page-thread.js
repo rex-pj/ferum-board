@@ -18,7 +18,7 @@
   var _confirmResolve = null;
 
   function showConfirm(title, body, okLabel, okVariant) {
-    okLabel   = okLabel   || 'Confirm';
+    okLabel   = okLabel   || Ferum.t('js-confirm');
     okVariant = okVariant || 'danger';
     return new Promise(function (resolve) {
       document.getElementById('confirmModalTitle').textContent = title;
@@ -102,7 +102,7 @@
 
   // ── Post actions ─────────────────────────────────────────────────
   async function deletePost(postId) {
-    var ok = await showConfirm('Delete Post', 'Delete this post? This cannot be undone.', 'Delete');
+    var ok = await showConfirm(Ferum.t('js-delete-post-title'), Ferum.t('js-delete-post-body'), Ferum.t('js-delete'));
     if (!ok) return;
     var res = await FerumApi.posts.delete(postId);
     if (res.ok) {
@@ -110,7 +110,7 @@
       if (el) el.innerHTML = '<div class="card-body text-muted small py-2"><i class="fa-solid fa-trash me-1"></i>Post deleted.</div>';
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || 'Failed to delete post.');
+      showToast((body.error && body.error.message) || Ferum.t('js-failed-delete-post'));
     }
   }
 
@@ -157,12 +157,12 @@
         }
       } else {
         var body = await res.json().catch(function () { return {}; });
-        showToast((body.error && body.error.message) || 'Failed to save changes.');
+        showToast((body.error && body.error.message) || Ferum.t('js-failed-save-changes'));
         if (saveBtn) saveBtn.disabled = false;
         delete _editInFlight[postId];
       }
     } catch (_) {
-      showToast('Network error. Please try again.');
+      showToast(Ferum.t('js-network-error'));
       if (saveBtn) saveBtn.disabled = false;
       delete _editInFlight[postId];
     }
@@ -174,7 +174,7 @@
     var fb     = document.getElementById('report-feedback');
     if (!reason) {
       fb.className = 'alert alert-warning';
-      fb.textContent = 'Please provide a reason.';
+      fb.textContent = Ferum.t('js-provide-a-reason');
       fb.classList.remove('d-none');
       return;
     }
@@ -186,7 +186,7 @@
       var res = await FerumApi.posts.report(postId, reason);
       if (res.ok) {
         fb.className   = 'alert alert-success';
-        fb.textContent = 'Report submitted. Thank you.';
+        fb.textContent = Ferum.t('js-report-submitted');
         fb.classList.remove('d-none');
         setTimeout(function () {
           bootstrap.Modal.getInstance(document.getElementById('reportModal'))?.hide();
@@ -194,14 +194,14 @@
       } else {
         var body = await res.json().catch(function () { return {}; });
         fb.className   = 'alert alert-danger';
-        fb.textContent = (body.error && body.error.message) || 'Failed to submit report.';
+        fb.textContent = (body.error && body.error.message) || Ferum.t('js-failed-submit-report');
         fb.classList.remove('d-none');
         btn.disabled   = false;
         if (spinner) spinner.classList.add('d-none');
       }
     } catch (_) {
       fb.className   = 'alert alert-danger';
-      fb.textContent = 'Network error. Please try again.';
+      fb.textContent = Ferum.t('js-network-error');
       fb.classList.remove('d-none');
       btn.disabled   = false;
       if (spinner) spinner.classList.add('d-none');
@@ -220,7 +220,7 @@
 
     if (!content) {
       feedback.className = 'alert alert-warning mt-2';
-      feedback.textContent = 'Please write something before posting.';
+      feedback.textContent = Ferum.t('js-write-something-first');
       feedback.classList.remove('d-none');
       return;
     }
@@ -238,7 +238,7 @@
         if (post && post.id) {
           if (post.status === 'pending') {
             feedback.className   = 'alert alert-info mt-2';
-            feedback.textContent = 'Your reply has been submitted and is awaiting moderator approval.';
+            feedback.textContent = Ferum.t('js-reply-pending-approval');
             feedback.classList.remove('d-none');
             if (composer && composer.reset) composer.reset();
           } else {
@@ -261,14 +261,14 @@
       } else {
         var body = await res.json().catch(function () { return {}; });
         feedback.className   = 'alert alert-danger mt-2';
-        feedback.textContent = (body.error && body.error.message) || 'Failed to post reply.';
+        feedback.textContent = (body.error && body.error.message) || Ferum.t('js-failed-post-reply');
         feedback.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
       }
     } catch (_) {
       feedback.className   = 'alert alert-danger mt-2';
-      feedback.textContent = 'Network error. Please try again.';
+      feedback.textContent = Ferum.t('js-network-error');
       feedback.classList.remove('d-none');
       btn.disabled = false;
       spinner.classList.add('d-none');
@@ -279,14 +279,14 @@
 
   // ── Thread actions ───────────────────────────────────────────────
   async function markBestAnswer(threadId, postId) {
-    var ok = await showConfirm('Mark Best Answer', 'Mark this post as the best answer?', 'Mark as best', 'success');
+    var ok = await showConfirm(Ferum.t('js-mark-best-answer-title'), Ferum.t('js-mark-best-answer-body'), Ferum.t('js-mark-as-best'), 'success');
     if (!ok) return;
     var res = await FerumApi.threads.solve(threadId, postId);
     if (res.ok) {
       window.location.reload();
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || 'Failed to mark best answer.');
+      showToast((body.error && body.error.message) || Ferum.t('js-failed-mark-best-answer'));
     }
   }
 
@@ -295,7 +295,7 @@
     var fb         = document.getElementById('move-feedback');
     if (!categoryId) {
       fb.className   = 'alert alert-warning mt-2';
-      fb.textContent = 'Please select a target category.';
+      fb.textContent = Ferum.t('js-select-target-category');
       fb.classList.remove('d-none');
       return;
     }
@@ -310,14 +310,14 @@
       } else {
         var body = await res.json().catch(function () { return {}; });
         fb.className   = 'alert alert-danger mt-2';
-        fb.textContent = (body.error && body.error.message) || 'Failed to move thread.';
+        fb.textContent = (body.error && body.error.message) || Ferum.t('js-failed-move-thread');
         fb.classList.remove('d-none');
         btn.disabled   = false;
         if (spinner) spinner.classList.add('d-none');
       }
     } catch (_) {
       fb.className   = 'alert alert-danger mt-2';
-      fb.textContent = 'Network error. Please try again.';
+      fb.textContent = Ferum.t('js-network-error');
       fb.classList.remove('d-none');
       btn.disabled   = false;
       if (spinner) spinner.classList.add('d-none');
@@ -325,14 +325,14 @@
   }
 
   async function deleteThread(threadSlug, categorySlug) {
-    var ok = await showConfirm('Delete Thread', 'Delete this entire thread? This cannot be undone.', 'Delete thread');
+    var ok = await showConfirm(Ferum.t('js-delete-thread-title'), Ferum.t('js-delete-thread-body'), Ferum.t('js-delete-thread-ok'));
     if (!ok) return;
     var res = await FerumApi.threads.delete(threadSlug);
     if (res.ok) {
       window.location.href = categorySlug ? '/forum/' + categorySlug : '/forum';
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || 'Failed to delete thread.');
+      showToast((body.error && body.error.message) || Ferum.t('js-failed-delete-thread'));
     }
   }
 
@@ -345,7 +345,7 @@
       window.location.reload();
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || 'Failed to ' + action + ' thread.');
+      showToast((body.error && body.error.message) || Ferum.t('js-failed-thread-action'));
       if (triggerBtn) triggerBtn.disabled = false;
     }
   }

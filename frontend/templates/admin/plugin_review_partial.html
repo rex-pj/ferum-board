@@ -2,32 +2,32 @@
    Swap target: #plugin-review-container via HTMX. #}
 <div class="alert alert-info mb-3" role="alert">
   <i class="fa-solid fa-shield-halved me-2"></i>
-  <strong>Review plugin capabilities before installing.</strong>
+  <strong>{{ t(k="adm-review-plugin-capabilities-before-installing") }}</strong>
 </div>
 
 <table class="table table-sm mb-3">
   <tbody>
     <tr>
-      <th class="w-25">Name</th>
+      <th class="w-25">{{ t(k="adm-name") }}</th>
       <td>{{ plugin.name }} <span class="badge bg-secondary ms-1">{{ plugin.tier }}</span></td>
     </tr>
     <tr>
-      <th>Slug</th>
+      <th>{{ t(k="adm-slug") }}</th>
       <td class="font-monospace">{{ plugin.slug }}</td>
     </tr>
     <tr>
-      <th>Version</th>
+      <th>{{ t(k="adm-version") }}</th>
       <td>{{ plugin.version }}</td>
     </tr>
     {% if plugin.author %}
     <tr>
-      <th>Author</th>
+      <th>{{ t(k="adm-author") }}</th>
       <td>{{ plugin.author }}</td>
     </tr>
     {% endif %}
     {% if plugin.description %}
     <tr>
-      <th>Description</th>
+      <th>{{ t(k="adm-description") }}</th>
       <td>{{ plugin.description }}</td>
     </tr>
     {% endif %}
@@ -36,8 +36,8 @@
 
 {% if plugin.hooks and plugin.hooks | length > 0 %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">Server-side hooks requested</label>
-  <p class="text-muted small mb-1">Uncheck any hook you do not want to grant. Denied hooks are never registered — the plugin will not run for them.</p>
+  <label class="form-label fw-semibold">{{ t(k="adm-server-side-hooks-requested") }}</label>
+  <p class="text-muted small mb-1">{{ t(k="adm-uncheck-any-hook-you-do-not") }}</p>
   <div class="border rounded p-2">
     {% for h in plugin.hooks %}
     <div class="form-check">
@@ -51,8 +51,8 @@
 
 {% if plugin.http_allowlist and plugin.http_allowlist | length > 0 %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">Outbound HTTP hosts requested</label>
-  <p class="text-muted small mb-1">Uncheck any host you do not want the plugin to reach. Denied hosts are blocked even if the plugin's code tries to call them.</p>
+  <label class="form-label fw-semibold">{{ t(k="adm-outbound-http-hosts-requested") }}</label>
+  <p class="text-muted small mb-1">{{ t(k="adm-uncheck-any-host-you-do-not") }}</p>
   <div class="border rounded p-2">
     {% for host in plugin.http_allowlist %}
     <div class="form-check">
@@ -66,8 +66,8 @@
 
 {% if plugin.rpc_actions and plugin.rpc_actions | length > 0 %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">RPC actions requested</label>
-  <p class="text-muted small mb-1">Uncheck any action you do not want callable from the browser. Denied actions return 403 at <code>/api/plugins/{{ plugin.slug }}/rpc/&lt;action&gt;</code> without ever reaching the plugin's code.</p>
+  <label class="form-label fw-semibold">{{ t(k="adm-rpc-actions-requested") }}</label>
+  <p class="text-muted small mb-1">{{ t(k="adm-uncheck-any-action-you-do-not") }} <code>/api/plugins/{{ plugin.slug }}/rpc/&lt;action&gt;</code> {{ t(k="adm-without-ever-reaching-the-plugin-s") }}</p>
   <div class="border rounded p-2">
     {% for action in plugin.rpc_actions %}
     <div class="form-check">
@@ -81,8 +81,8 @@
 
 {% if plugin.api_functions and plugin.api_functions | length > 0 %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">Curated API functions requested</label>
-  <p class="text-muted small mb-1">Uncheck any <code>Ferum.forum.*</code> function the plugin should not be able to call — e.g. <code>createNotification</code> lets it message users; <code>getUserPublic</code> only reads public profile fields.</p>
+  <label class="form-label fw-semibold">{{ t(k="adm-curated-api-functions-requested") }}</label>
+  <p class="text-muted small mb-1">{{ t(k="adm-uncheck-any") }} <code>{{ t(k="adm-ferum-forum") }}</code> {{ t(k="adm-function-the-plugin-should-not-be") }} <code>createNotification</code> {{ t(k="adm-lets-it-message-users") }} <code>getUserPublic</code> {{ t(k="adm-only-reads-public-profile-fields") }}</p>
   <div class="border rounded p-2">
     {% for fn in plugin.api_functions %}
     <div class="form-check">
@@ -96,11 +96,9 @@
 
 {% if plugin.wants_db %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">Own SQL schema (high trust)</label>
+  <label class="form-label fw-semibold">{{ t(k="adm-own-sql-schema-high-trust") }}</label>
   <p class="text-muted small mb-1">
-    Grants a dedicated Postgres schema (<code>plugin_{{ plugin.slug | replace(from=".", to="_") | replace(from="-", to="_") }}</code>) the plugin can run real SQL against via <code>Ferum.db.query()</code>.
-    Isolated by schema boundary and a forced search_path, <strong>not</strong> a dedicated least-privilege database role —
-    review the DDL below carefully before granting.
+    {{ t(k="adm-grants-a-dedicated-postgres-schema") }}<code>plugin_{{ plugin.slug | replace(from=".", to="_") | replace(from="-", to="_") }}</code>{{ t(k="adm-the-plugin-can-run-real-sql") }} <code>{{ t(k="adm-ferum-db-query") }}</code>{{ t(k="adm-isolated-by-schema-boundary-and-a") }} <strong>not</strong> {{ t(k="adm-a-dedicated-least-privilege-database-role") }}
   </p>
   {% if plugin.schema_tables and plugin.schema_tables | length > 0 %}
   <pre class="bg-body-secondary rounded p-2 small mb-2" style="max-height:160px;overflow:auto">{% for stmt in plugin.schema_tables %}{{ stmt }}
@@ -109,25 +107,25 @@
   {% endif %}
   <div class="form-check">
     <input class="form-check-input" type="checkbox" id="review-cap-db" checked onchange="window.updatePluginGrant()">
-    <label class="form-check-label" for="review-cap-db">Grant <code>db</code> — allow this plugin to run SQL in its own schema</label>
+    <label class="form-check-label" for="review-cap-db">{{ t(k="adm-grant") }} <code>db</code> {{ t(k="adm-allow-this-plugin-to-run-sql") }}</label>
   </div>
 </div>
 {% endif %}
 
 {% if plugin.wants_media %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">Media upload</label>
-  <p class="text-muted small mb-1">Allows members to upload images through this plugin (<code>POST /api/plugins/{{ plugin.slug }}/media</code>), stored under the plugin's own namespace.</p>
+  <label class="form-label fw-semibold">{{ t(k="adm-media-upload") }}</label>
+  <p class="text-muted small mb-1">{{ t(k="adm-allows-members-to-upload-images-through") }}<code>POST /api/plugins/{{ plugin.slug }}/media</code>{{ t(k="adm-stored-under-the-plugin-s-own") }}</p>
   <div class="form-check">
     <input class="form-check-input" type="checkbox" id="review-cap-media" checked onchange="window.updatePluginGrant()">
-    <label class="form-check-label" for="review-cap-media">Grant <code>media</code> — allow image uploads via this plugin</label>
+    <label class="form-check-label" for="review-cap-media">{{ t(k="adm-grant") }} <code>media</code> {{ t(k="adm-allow-image-uploads-via-this-plugin") }}</label>
   </div>
 </div>
 {% endif %}
 
 {% if plugin.capabilities_json and plugin.capabilities_json != "{}" %}
 <div class="mb-3">
-  <label class="form-label fw-semibold">Full capabilities requested (raw)</label>
+  <label class="form-label fw-semibold">{{ t(k="adm-full-capabilities-requested-raw") }}</label>
   <pre class="bg-body-secondary rounded p-2 small mb-0" style="max-height:120px;overflow:auto">{{ plugin.capabilities_json }}</pre>
 </div>
 {% endif %}
@@ -141,7 +139,6 @@
   <input type="hidden" id="plugin-capabilities-original" value="{{ plugin.capabilities_json }}">
   <input type="hidden" name="granted_capabilities" value="{{ plugin.capabilities_json }}">
   <p class="text-muted small">
-    By clicking <strong>Confirm Install</strong> you approve the capabilities checked above.
-    The plugin will be installed and available for activation.
+    {{ t(k="adm-by-clicking") }} <strong>{{ t(k="adm-confirm-install") }}</strong> {{ t(k="adm-you-approve-the-capabilities-checked-above") }}
   </p>
 </form>

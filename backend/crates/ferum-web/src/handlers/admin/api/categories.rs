@@ -40,9 +40,9 @@ pub async fn create_category(
     let user = auth_user.require_auth()?;
 
     let view_policy = parse_view_policy(&body.view_policy)
-        .ok_or_else(|| AppError::unprocessable("Invalid view_policy value"))?;
+        .ok_or_else(|| AppError::invalid("invalid_view_policy"))?;
     let post_policy = parse_post_policy(&body.post_policy)
-        .ok_or_else(|| AppError::unprocessable("Invalid post_policy value"))?;
+        .ok_or_else(|| AppError::invalid("invalid_post_policy"))?;
 
     let category = state
         .admin
@@ -76,12 +76,12 @@ pub async fn update_category(
     let view_policy = body
         .view_policy
         .as_deref()
-        .map(|s| parse_view_policy(s).ok_or_else(|| AppError::unprocessable("Invalid view_policy")))
+        .map(|s| parse_view_policy(s).ok_or_else(|| AppError::invalid("invalid_view_policy")))
         .transpose()?;
     let post_policy = body
         .post_policy
         .as_deref()
-        .map(|s| parse_post_policy(s).ok_or_else(|| AppError::unprocessable("Invalid post_policy")))
+        .map(|s| parse_post_policy(s).ok_or_else(|| AppError::invalid("invalid_post_policy")))
         .transpose()?;
 
     let category = state

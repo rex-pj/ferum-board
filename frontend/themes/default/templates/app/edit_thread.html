@@ -1,11 +1,11 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Edit Thread — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-edit-thread") }} — {{ site.name }}{% endblock %}
 {% block main_class %}fr-page-reading{% endblock %}
 
 {% block content %}
-<h1 class="h4 fw-bold mb-4">Edit Thread</h1>
+<h1 class="h4 fw-bold mb-4">{{ t(k="ui-edit-thread") }}</h1>
 
     <div class="card">
       <div class="card-body p-4">
@@ -13,7 +13,7 @@
           <input type="hidden" id="thread-id" value="{{ thread_id }}">
 
           <div class="mb-3">
-            <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
+            <label for="category" class="form-label">{{ t(k="ui-category") }} <span class="text-danger">*</span></label>
             <select class="form-select" id="category" disabled>
               {% for cat in categories %}
                 <option value="{{ cat.id }}" {% if cat.id == thread_category_id %}selected{% endif %}>
@@ -23,12 +23,12 @@
             </select>
             <div class="form-text text-muted">
               <i class="fa-solid fa-shield-halved me-1 opacity-50"></i>
-              Moving a thread to a different category is a moderator action.
+              {{ t(k="ui-moving-a-thread-to-a-different") }}
             </div>
           </div>
 
           <div class="mb-3">
-            <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
+            <label for="title" class="form-label">{{ t(k="ui-title") }} <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="title" name="title"
                    minlength="5" maxlength="255" required
                    value="{{ thread_title }}">
@@ -37,7 +37,7 @@
           {# Thumbnail upload — shown if the user can upload, or to let them remove an existing one #}
           {% if can_upload_thumbnail or thread_thumbnail_url %}
           <div class="mb-3" x-data="thumbnailUpload('{{ thread_id }}', '{{ thread_thumbnail_url | default(value="") }}')">
-            <label class="form-label">Thumbnail</label>
+            <label class="form-label">{{ t(k="ui-thumbnail") }}</label>
             <div class="position-relative rounded overflow-hidden border"
                  style="aspect-ratio:16/9;cursor:pointer;max-height:160px;"
                  :class="isDragging ? 'border-primary border-2' : 'border-secondary-subtle'"
@@ -51,14 +51,14 @@
               <div x-show="!preview && !isDragging && !uploading" class="h-100" style="display:none;">
                 <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
                   <i class="fa-solid fa-image fa-2x mb-2 opacity-50" aria-hidden="true"></i>
-                  <span class="small fw-medium">Drop here or <span class="text-primary">click to browse</span></span>
-                  <span class="small opacity-50 mt-1">JPEG · PNG · WebP · GIF · max 10 MB</span>
-                  <span class="small opacity-25 mt-1">Recommended 1280 × 720 px (16:9)</span>
+                  <span class="small fw-medium text-primary">{{ t(k="ui-drop-or-browse") }}</span>
+                  <span class="small opacity-50 mt-1">{{ t(k="ui-jpeg-png-webp-gif-max-10") }}</span>
+                  <span class="small opacity-25 mt-1">{{ t(k="ui-recommended-1280-720-px-16-9") }}</span>
                 </div>
               </div>
 
               {# Preview image #}
-              <img x-show="preview" :src="preview || ''" alt="Thumbnail preview"
+              <img x-show="preview" :src="preview || ''" alt="{{ t(k='ui-thumbnail-preview') }}"
                    class="position-absolute top-0 start-0 w-100 h-100"
                    style="object-fit:cover;display:none;">
 
@@ -69,7 +69,7 @@
                 <div class="d-flex align-items-center justify-content-center h-100"
                      style="background:rgba(var(--bs-primary-rgb),0.12);">
                   <span class="fw-semibold text-primary">
-                    <i class="fa-solid fa-circle-plus me-1"></i>Drop to set thumbnail
+                    <i class="fa-solid fa-circle-plus me-1"></i>{{ t(k="ui-drop-to-set-thumbnail") }}
                   </span>
                 </div>
               </div>
@@ -80,8 +80,8 @@
                    style="background:rgba(0,0,0,0.45);display:none;">
                 <div class="d-flex align-items-center justify-content-center h-100">
                   <div class="text-center text-white">
-                    <div class="spinner-border spinner-border-sm mb-1" role="status" aria-label="Uploading"></div>
-                    <div class="small">Uploading…</div>
+                    <div class="spinner-border spinner-border-sm mb-1" role="status" aria-label="{{ t(k='ui-uploading') }}"></div>
+                    <div class="small">{{ t(k="ui-uploading-2") }}</div>
                   </div>
                 </div>
               </div>
@@ -92,7 +92,7 @@
                       class="btn btn-sm position-absolute top-0 end-0 m-2"
                       style="background:rgba(0,0,0,0.55);color:#fff;backdrop-filter:blur(4px);display:none;"
                       @click.stop="removeThumbnail()"
-                      title="Remove thumbnail">
+                      title="{{ t(k='ui-remove-thumbnail') }}">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
@@ -103,16 +103,16 @@
           </div>
           {% else %}
           <div class="mb-3">
-            <label class="form-label">Thumbnail</label>
+            <label class="form-label">{{ t(k="ui-thumbnail") }}</label>
             <div class="small text-muted border rounded p-2">
               <i class="fa-solid fa-lock me-1" aria-hidden="true"></i>
-              Reach Member trust level (or get verified) to attach a thumbnail image.
+              {{ t(k="ui-reach-member-trust-level-or-get") }}
             </div>
           </div>
           {% endif %}
 
           <div class="mb-3">
-            <label class="form-label">Content <span class="text-danger">*</span></label>
+            <label class="form-label">{{ t(k="ui-content") }} <span class="text-danger">*</span></label>
             <ferum-post-composer id="composer" thread-id="{{ thread_id }}" mode="edit"
               initial-content="{{ first_post_content | escape }}" can-upload="{{ can_upload_thumbnail }}"></ferum-post-composer>
             <noscript>
@@ -123,14 +123,14 @@
 
           {# Tag chip input, pre-populated from existing tags #}
           <div class="mb-4" x-data="tagChipInput({{ thread_tags | json_encode }})">
-            <label class="form-label">Tags</label>
+            <label class="form-label">{{ t(k="ui-tags") }}</label>
             <div class="d-flex flex-wrap gap-1 align-items-center border rounded p-2 fr-tag-input-wrap"
                  @click="$refs.tagField.focus()">
               <template x-for="(tag, idx) in tags" :key="idx">
                 <span class="fr-tag-chip fr-tag-chip--removable">
                   <span x-text="tag"></span>
                   <button type="button" class="fr-tag-chip-remove"
-                          @click.stop="remove(idx)" aria-label="Remove tag">×</button>
+                          @click.stop="remove(idx)" aria-label="{{ t(k='ui-remove-tag') }}">×</button>
                 </span>
               </template>
               <input type="text"
@@ -142,7 +142,7 @@
                      :placeholder="tags.length === 0 ? 'tag1, tag2…' : ''"
                      class="fr-tag-input-field border-0 bg-transparent">
             </div>
-            <div class="form-text">Press Enter or comma to add. Max 5 tags.</div>
+            <div class="form-text">{{ t(k="ui-press-enter-or-comma-to-add") }}</div>
             <input type="hidden" id="tags-json" :value="JSON.stringify(tags)">
           </div>
 
@@ -150,7 +150,7 @@
 
           <div class="d-flex gap-2">
             {{ m::btn_submit(text="Save changes", btn_id="submit-btn", spinner_id="btn-spinner", class="") }}
-            <a href="/forum/t/{{ thread_slug }}" class="btn btn-outline-secondary">Cancel</a>
+            <a href="/forum/t/{{ thread_slug }}" class="btn btn-outline-secondary">{{ t(k="ui-cancel") }}</a>
           </div>
         </form>
       </div>

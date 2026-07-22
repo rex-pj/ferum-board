@@ -90,4 +90,11 @@ pub mod perm {
     pub const ADMIN_CONFIG: &str = "admin.config";
     pub const ADMIN_WEBHOOKS: &str = "admin.webhooks";
     pub const ADMIN_PLUGINS: &str = "admin.plugins";
+    /// Manage installed languages: enable/disable, set the site default, and
+    /// (later) upload language packs and override individual strings.
+    ///
+    /// Its own key rather than reusing `admin.config`, so a translator can be
+    /// given language access without also handing them SMTP settings and
+    /// registration controls.
+    pub const ADMIN_LANGUAGES: &str = "admin.languages";
 }

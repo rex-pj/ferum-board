@@ -170,6 +170,35 @@ pub fn make_post(id: Uuid, thread_id: Uuid, author_id: Uuid) -> Post {
     }
 }
 
+/// A catalogue product. Defaults to an unapproved `draft` submitted by
+/// `created_by_id`, which is the state the ownership rules actually turn on —
+/// pass a different status to test an approved entry.
+pub fn make_product(
+    id: Uuid,
+    created_by_id: Option<Uuid>,
+    status: ferum_domain::models::product::ProductStatus,
+) -> ferum_domain::models::product::Product {
+    ferum_domain::models::product::Product {
+        id,
+        slug: "test-product".into(),
+        name: "Test product".into(),
+        product_type: ferum_domain::models::product::ProductType::Furniture,
+        status,
+        brand_id: None,
+        category_id: None,
+        style: None,
+        price_min: None,
+        price_max: None,
+        currency: "VND".into(),
+        dimensions: serde_json::json!({}),
+        origin: None,
+        primary_image_key: None,
+        description_md: None,
+        created_by_id,
+        created_at: chrono::Utc::now(),
+    }
+}
+
 pub fn make_bookmark(user_id: Uuid, thread_id: Uuid) -> Bookmark {
     Bookmark {
         id: Uuid::new_v4(),

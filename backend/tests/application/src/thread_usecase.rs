@@ -450,7 +450,8 @@ async fn mark_solved_best_post_from_different_thread_returns_unprocessable() {
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
 
     let result = b.build().mark_solved(&actor, ids::thread_a(), ids::post_a()).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "best_answer_wrong_thread"),
+        "expected best_answer_wrong_thread, got {result:?}");
 }
 
 #[tokio::test]

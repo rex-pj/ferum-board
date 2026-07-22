@@ -20,7 +20,7 @@
   <div class="card overflow-hidden mb-3">
     <div class="fr-profile-cover"
          style="{% if not profile.cover_url %}background:linear-gradient(135deg,hsl(210,55%,38%) 0%,hsl(190,65%,52%) 100%);{% endif %}">
-      {% if profile.cover_url %}<img src="{{ profile.cover_url }}" alt="Cover">{% endif %}
+      {% if profile.cover_url %}<img src="{{ profile.cover_url }}" alt="{{ t(k='ui-cover') }}">{% endif %}
     </div>
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -49,13 +49,13 @@
                       :class="following ? 'btn-outline-secondary' : 'btn-primary'"
                       class="btn btn-sm fr-profile-action-btn" :disabled="loading">
                 <i class="fa-solid me-1" :class="following ? 'fa-user-minus' : 'fa-user-plus'"></i>
-                <span x-text="following ? 'Following' : 'Follow'">Follow</span>
+                <span x-text="following ? 'Following' : 'Follow'">{{ t(k="ui-follow") }}</span>
               </button>
             </div>
           {% endif %}
           {% if current_user and current_user.username == profile.username %}
             <a href="/account" class="btn btn-outline-secondary btn-sm fr-profile-action-btn">
-              <i class="fa-solid fa-pen-to-square me-1"></i>Edit profile
+              <i class="fa-solid fa-pen-to-square me-1"></i>{{ t(k="ui-edit-profile") }}
             </a>
           {% endif %}
         </div>
@@ -68,25 +68,25 @@
               :class="active === 'threads' ? 'fr-profile-tab--active' : ''"
               class="fr-profile-tab">
         <div class="fr-profile-tab-count">{{ profile.thread_pagination.total | default(value=0) }}</div>
-        <div class="fr-profile-tab-label">Threads</div>
+        <div class="fr-profile-tab-label">{{ t(k="ui-threads") }}</div>
       </button>
       <button @click="setTab('posts')"
               :class="active === 'posts' ? 'fr-profile-tab--active' : ''"
               class="fr-profile-tab">
         <div class="fr-profile-tab-count">{{ profile.post_count }}</div>
-        <div class="fr-profile-tab-label">Posts</div>
+        <div class="fr-profile-tab-label">{{ t(k="ui-posts") }}</div>
       </button>
       <button @click="setTab('followers')"
               :class="active === 'followers' ? 'fr-profile-tab--active' : ''"
               class="fr-profile-tab">
         <div class="fr-profile-tab-count">{{ profile.follower_count }}</div>
-        <div class="fr-profile-tab-label">Followers</div>
+        <div class="fr-profile-tab-label">{{ t(k="ui-followers") }}</div>
       </button>
       <button @click="setTab('following')"
               :class="active === 'following' ? 'fr-profile-tab--active' : ''"
               class="fr-profile-tab">
         <div class="fr-profile-tab-count">{{ profile.following_count }}</div>
-        <div class="fr-profile-tab-label">Following</div>
+        <div class="fr-profile-tab-label">{{ t(k="ui-following") }}</div>
       </button>
     </div>
   </div>
@@ -108,7 +108,7 @@
       <div class="fr-feed">
         <div class="text-center py-5 text-secondary">
           <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block opacity-50" aria-hidden="true"></i>
-          No threads yet.
+          {{ t(k="ui-no-threads-yet") }}
         </div>
       </div>
     {% endif %}
@@ -117,7 +117,7 @@
   <div x-show="active === 'posts'" x-transition>
     <div id="posts-content">
       <div class="text-center py-4 text-secondary">
-        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading…
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>{{ t(k="ui-loading") }}
       </div>
     </div>
   </div>
@@ -125,7 +125,7 @@
   <div x-show="active === 'followers'" x-transition>
     <div id="followers-content">
       <div class="text-center py-4 text-secondary">
-        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading…
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>{{ t(k="ui-loading") }}
       </div>
     </div>
   </div>
@@ -133,7 +133,7 @@
   <div x-show="active === 'following'" x-transition>
     <div id="following-content">
       <div class="text-center py-4 text-secondary">
-        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading…
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>{{ t(k="ui-loading") }}
       </div>
     </div>
   </div>
@@ -146,36 +146,36 @@
 
 {% if profile.bio %}
 <div class="fr-panel">
-  <div class="fr-panel-header">Bio</div>
+  <div class="fr-panel-header">{{ t(k="ui-bio") }}</div>
   <div class="fr-panel-body"><p class="mb-0 small">{{ profile.bio }}</p></div>
 </div>
 {% endif %}
 
 {# Merged Stats + Member status into one panel — same subject, no reason to split #}
 <div class="fr-panel">
-  <div class="fr-panel-header">About</div>
+  <div class="fr-panel-header">{{ t(k="ui-about") }}</div>
   <div class="fr-panel-body">
     <div class="fr-panel-stat-row">
-      <span><i class="fa-solid fa-shield-halved fa-xs me-1 text-info" aria-hidden="true"></i>Trust level</span>
+      <span><i class="fa-solid fa-shield-halved fa-xs me-1 text-info" aria-hidden="true"></i>{{ t(k="ui-trust-level") }}</span>
       {{ m::trust_badge(level=profile.trust_level) }}
     </div>
     <div class="fr-panel-stat-row">
-      <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>Posts</span>
+      <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-posts") }}</span>
       <span class="fr-panel-stat-val">{{ profile.post_count }}</span>
     </div>
     {% if profile.trust_score %}
     <div class="fr-panel-stat-row">
-      <span><i class="fa-solid fa-star fa-xs text-warning me-1" aria-hidden="true"></i>Trust score</span>
+      <span><i class="fa-solid fa-star fa-xs text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-trust-score") }}</span>
       <span class="fr-panel-stat-val">{{ profile.trust_score }}<span class="fw-normal text-muted" style="font-size:.75em"> / 100</span></span>
     </div>
     {% endif %}
     <div class="fr-panel-stat-row">
-      <span><i class="fa-solid fa-calendar-days fa-xs me-1" aria-hidden="true"></i>Member since</span>
-      <time class="fr-panel-stat-val" datetime="{{ profile.created_at }}">{{ profile.created_at | date(format="%b %Y") }}</time>
+      <span><i class="fa-solid fa-calendar-days fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-member-since") }}</span>
+      <time class="fr-panel-stat-val" datetime="{{ profile.created_at }}">{{ profile.created_at | localdate(style="monthyear") }}</time>
     </div>
     {% if profile.primary_role_name %}
     <div class="fr-panel-stat-row">
-      <span><i class="fa-solid fa-id-badge fa-xs me-1" aria-hidden="true"></i>Role</span>
+      <span><i class="fa-solid fa-id-badge fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-role") }}</span>
       {% if profile.primary_role_color %}
         <span class="badge" style="background:{{ profile.primary_role_color }}">{{ profile.primary_role_name }}</span>
       {% else %}
@@ -185,7 +185,7 @@
     {% endif %}
     {% if profile.website %}
     <div class="fr-panel-stat-row">
-      <span><i class="fa-solid fa-globe fa-xs me-1" aria-hidden="true"></i>Website</span>
+      <span><i class="fa-solid fa-globe fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-website") }}</span>
       <a href="{{ profile.website }}" target="_blank" rel="noopener noreferrer"
          class="text-truncate text-decoration-none" style="max-width:130px;font-size:.8125rem">
         {{ profile.website | truncate(length=22) }}
@@ -197,17 +197,17 @@
 
 {# Quick actions panel — fills dead space and provides handy shortcuts #}
 <div class="fr-panel">
-  <div class="fr-panel-header">Actions</div>
+  <div class="fr-panel-header">{{ t(k="ui-actions") }}</div>
   <div class="fr-panel-body d-grid gap-2">
     {% if current_user and current_user.username == profile.username %}
       <a href="/account" class="btn btn-outline-secondary btn-sm">
-        <i class="fa-solid fa-sliders me-1"></i>Edit profile
+        <i class="fa-solid fa-sliders me-1"></i>{{ t(k="ui-edit-profile") }}
       </a>
       <a href="/new-thread" class="btn btn-primary btn-sm">
-        <i class="fa-solid fa-plus me-1"></i>New Thread
+        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
       </a>
       <a href="/bookmarks" class="btn btn-outline-secondary btn-sm">
-        <i class="fa-solid fa-bookmark me-1"></i>My Bookmarks
+        <i class="fa-solid fa-bookmark me-1"></i>{{ t(k="ui-my-bookmarks") }}
       </a>
     {% elif current_user %}
       <div x-data="followState('{{ profile.id }}')">
@@ -215,17 +215,17 @@
                 :class="following ? 'btn-outline-secondary' : 'btn-primary'"
                 class="btn btn-sm w-100" :disabled="loading">
           <i class="fa-solid me-1" :class="following ? 'fa-user-minus' : 'fa-user-plus'"></i>
-          <span x-text="following ? 'Following' : 'Follow'">Follow</span>
+          <span x-text="following ? 'Following' : 'Follow'">{{ t(k="ui-follow") }}</span>
         </button>
       </div>
       <a href="/new-thread" class="btn btn-outline-secondary btn-sm">
-        <i class="fa-solid fa-plus me-1"></i>New Thread
+        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
       </a>
     {% else %}
       <a href="/register" class="btn btn-primary btn-sm">
-        <i class="fa-solid fa-user-plus me-1"></i>Create account
+        <i class="fa-solid fa-user-plus me-1"></i>{{ t(k="ui-create-account") }}
       </a>
-      <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+      <a href="/login" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-sign-in") }}</a>
     {% endif %}
   </div>
 </div>

@@ -13,7 +13,7 @@
     <form method="GET" action="/mod/queue" class="adm-filter-row px-3 py-2">
       <select name="category_id" class="form-select form-select-sm" style="width:auto"
               onchange="this.form.submit()">
-        <option value="">All categories</option>
+        <option value="">{{ t(k="adm-all-categories") }}</option>
         {% for cat in categories %}
           <option value="{{ cat.id }}"
             {% if category_id_filter == cat.id %}selected{% endif %}>
@@ -22,7 +22,7 @@
         {% endfor %}
       </select>
       {% if category_id_filter %}
-        <a href="/mod/queue" class="btn btn-sm btn-outline-secondary" title="Clear">
+        <a href="/mod/queue" class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-clear') }}">
           <i class="fa-solid fa-xmark"></i>
         </a>
       {% endif %}
@@ -39,7 +39,7 @@
         <div class="flex-grow-1 min-w-0">
           <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
             <span class="fw-semibold small">{{ post.author_username | default(value="Unknown") }}</span>
-            <span class="text-muted small">replied in</span>
+            <span class="text-muted small">{{ t(k="adm-replied-in") }}</span>
             <a href="/forum/t/{{ post.thread_slug | default(value='') }}" class="text-decoration-none small fw-semibold text-truncate" style="max-width:260px" target="_blank">
               {{ post.thread_title | default(value="Thread") }}
             </a>
@@ -48,11 +48,11 @@
           <div class="text-muted small" style="white-space:pre-wrap;word-break:break-word;max-height:6rem;overflow:hidden">{{ post.content_md | truncate(length=400) }}</div>
         </div>
         <div class="d-flex gap-1 flex-shrink-0">
-          <button type="button" class="btn btn-sm btn-success" data-mod-action="approve" data-post-id="{{ post.id }}" title="Approve">
-            <i class="fa-solid fa-check me-1"></i>Approve
+          <button type="button" class="btn btn-sm btn-success" data-mod-action="approve" data-post-id="{{ post.id }}" title="{{ t(k='adm-approve') }}">
+            <i class="fa-solid fa-check me-1"></i>{{ t(k="adm-approve") }}
           </button>
-          <button type="button" class="btn btn-sm btn-outline-danger" data-mod-action="reject" data-post-id="{{ post.id }}" title="Reject">
-            <i class="fa-solid fa-xmark me-1"></i>Reject
+          <button type="button" class="btn btn-sm btn-outline-danger" data-mod-action="reject" data-post-id="{{ post.id }}" title="{{ t(k='adm-reject') }}">
+            <i class="fa-solid fa-xmark me-1"></i>{{ t(k="adm-reject") }}
           </button>
         </div>
       </div>
@@ -63,7 +63,7 @@
   {% else %}
   <div class="text-center py-5 text-secondary">
     <i class="fa-solid fa-list-check fa-3x mb-3 d-block opacity-25"></i>
-    <div class="fw-semibold mb-1">Queue is empty</div>
+    <div class="fw-semibold mb-1">{{ t(k="adm-queue-is-empty") }}</div>
     <div class="small">
       {% if category_id_filter %}
         No pending posts in the selected category.

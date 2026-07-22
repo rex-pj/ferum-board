@@ -75,7 +75,7 @@ async fn run_setup_username_too_short_returns_422() {
         config: None,
         seed_example_data: false,
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "invalid_username_format"));
 }
 
 #[tokio::test]
@@ -93,7 +93,7 @@ async fn run_setup_password_too_weak_returns_422() {
         config: None,
         seed_example_data: false,
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "password_requirements"));
 }
 
 #[tokio::test]

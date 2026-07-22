@@ -13,6 +13,7 @@ use crate::view_models::page_context::{CurrentUserCtx, DashboardStatsCtx};
 pub async fn dashboard(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
@@ -40,5 +41,5 @@ pub async fn dashboard(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("stats", &stats_ctx);
 
-    render_admin(&state, "admin/dashboard.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/dashboard.html", &ctx).await
 }

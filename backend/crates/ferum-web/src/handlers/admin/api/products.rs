@@ -10,8 +10,8 @@ use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::product::{
     parse_product_sort, parse_product_status, parse_product_type, BrandResponse,
     CreateBrandRequest, CreateMaterialRequest, CreateProductRequest, MaterialResponse,
-    ProductListQuery, ProductMediaResponse, ProductResponse, SetMaterialsRequest,
-    UpdateBrandRequest, UpdateMaterialRequest, UpdateProductRequest,
+    ProductDependentsResponse, ProductListQuery, ProductMediaResponse, ProductResponse,
+    SetMaterialsRequest, UpdateBrandRequest, UpdateMaterialRequest, UpdateProductRequest,
 };
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
 use ferum_application::permission::PermissionChecker;
@@ -62,7 +62,7 @@ pub async fn create_product(
     let user = auth_user.require_auth()?;
 
     let product_type = parse_product_type(&body.product_type)
-        .ok_or_else(|| AppError::unprocessable("Invalid product type."))?;
+        .ok_or_else(|| AppError::invalid("invalid_product_type"))?;
 
     let input = NewProduct {
         id: Uuid::new_v4(),
@@ -89,6 +89,20 @@ pub async fn create_product(
     ))
 }
 
+/// GET /api/admin/products/:id — one product in any status. Backs the
+/// `/admin/products?edit=<id>` deep link from the public product page, which
+/// can't use the public endpoint (that one hides anything unpublished).
+pub async fn get_product(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    PermissionChecker::can_manage_products(user)?;
+    let product = state.product.get_by_id(id).await?;
+    Ok(Json(DataResponse::new(ProductResponse::from(product))))
+}
+
 pub async fn update_product(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
@@ -100,7 +114,7 @@ pub async fn update_product(
     let status = body
         .status
         .as_deref()
-        .map(|s| parse_product_status(s).ok_or_else(|| AppError::unprocessable("Invalid status.")))
+        .map(|s| parse_product_status(s).ok_or_else(|| AppError::invalid("invalid_status")))
         .transpose()?;
 
     let patch = UpdateProduct {
@@ -143,6 +157,38 @@ pub async fn set_materials(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// GET /api/admin/products/:id/materials — the product's current material ids, so
+/// the edit form can pre-fill the picker (and therefore express "no materials").
+pub async fn list_product_materials(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    // Not `can_manage_products`: a contributor editing their own unapproved draft
+    // has to be able to read its current materials to pre-fill the form.
+    state.product.authorize_edit(user, id).await?;
+    let ids = state.product.list_material_ids(id).await?;
+    Ok(Json(DataResponse::new(ids)))
+}
+
+/// GET /api/admin/products/:id/dependents — what a hard delete would affect.
+/// The admin UI calls this before showing the delete confirmation.
+pub async fn product_dependents(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    let d = state.product.dependents(user, id).await?;
+    Ok(Json(DataResponse::new(ProductDependentsResponse {
+        reviews: d.reviews,
+        media: d.media,
+        materials: d.materials,
+        can_hard_delete: !d.blocks_hard_delete(),
+    })))
+}
+
 // ─── Product media ─────────────────────────────────────────────────────────
 
 /// GET /api/admin/products/:id/media — list a product's images (any status).
@@ -152,7 +198,9 @@ pub async fn list_media(
     Path(id): Path<Uuid>,
 ) -> HandlerResult<impl IntoResponse> {
     let user = auth_user.require_auth()?;
-    ferum_application::permission::PermissionChecker::can_manage_products(user)?;
+    // Same reasoning as `list_product_materials`: the owner of an unapproved
+    // draft needs its gallery to manage the photos they are still allowed to change.
+    state.product.authorize_edit(user, id).await?;
     let media = state.product.list_media(id).await?;
     Ok(Json(DataResponse::new(
         media.into_iter().map(ProductMediaResponse::from).collect::<Vec<_>>(),
@@ -167,28 +215,7 @@ pub async fn upload_media(
     mut multipart: Multipart,
 ) -> HandlerResult<impl IntoResponse> {
     let user = auth_user.require_auth()?;
-
-    let mut file: Option<(bytes::Bytes, String)> = None;
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
-    {
-        if field.name() == Some("image") {
-            let ct = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-            let data = field
-                .bytes()
-                .await
-                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
-            file = Some((data, ct));
-        }
-    }
-
-    let (data, content_type) =
-        file.ok_or_else(|| AppError::unprocessable("No image field in the upload."))?;
+    let (data, content_type) = crate::utils::read_image_field(&mut multipart, "image").await?;
     let media = state.product.upload_media(user, id, data, content_type).await?;
     Ok((
         StatusCode::CREATED,

@@ -49,7 +49,7 @@ pub async fn temp_ban(
     body.validate()
         .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
     if body.until <= Utc::now() {
-        return Err(AppError::unprocessable("Ban expiry must be in the future").into());
+        return Err(AppError::invalid("ban_expiry_must_be_future").into());
     }
     let actor = auth_user.require_auth()?;
     state.moderation.temp_ban(actor, user_id, body.reason, body.until).await?;

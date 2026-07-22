@@ -15,6 +15,7 @@ use super::super::{require_moderator, ModPageQuery};
 pub async fn queue(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ModPageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -105,5 +106,5 @@ pub async fn queue(
     ctx.insert("categories", &categories_ctx);
     ctx.insert("category_id_filter", &category_id_str);
 
-    render_admin(&state, "mod/queue.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/queue.html", &ctx).await
 }

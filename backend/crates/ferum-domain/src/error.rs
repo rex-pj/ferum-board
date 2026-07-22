@@ -3,6 +3,8 @@ use axum::response::{IntoResponse, Response};
 use serde_json::json;
 use thiserror::Error;
 
+use crate::i18n::{error_key, TransArg};
+
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("unauthorized")]
@@ -13,8 +15,28 @@ pub enum AppError {
     NotFound,
     #[error("conflict: {0}")]
     Conflict(String),
+    /// Validation failure carrying **free-form English prose**.
+    ///
+    /// Retained only for genuinely dynamic text that has no stable code — in
+    /// practice `validator::ValidationErrors::to_string()`, whose content is
+    /// assembled per-field at runtime. This variant is **not translatable**;
+    /// translating it requires mapping validator's per-field codes, which is
+    /// tracked separately in docs/i18n-plan.md.
+    ///
+    /// For anything with a fixed meaning, use [`AppError::Invalid`] instead so
+    /// the message lives in the catalog and clients can branch on the code.
     #[error("unprocessable entity: {0}")]
     UnprocessableEntity(String),
+    /// Validation failure identified by a stable machine code.
+    ///
+    /// Unlike `UnprocessableEntity`, the code is part of the API contract and
+    /// the human text lives in the translation catalog, so a client can branch
+    /// on `code` and a user can read it in their own language.
+    #[error("invalid: {code}")]
+    Invalid {
+        code: String,
+        args: Vec<(String, TransArg)>,
+    },
     #[error("too many requests")]
     TooManyRequests(u64),
     #[error("internal error: {0}")]
@@ -32,6 +54,34 @@ impl AppError {
         AppError::UnprocessableEntity(message.to_string())
     }
 
+    /// A validation failure with a stable code and no interpolated values.
+    pub fn invalid(code: &str) -> Self {
+        AppError::Invalid {
+            code: code.to_string(),
+            args: Vec::new(),
+        }
+    }
+
+    /// A validation failure whose message interpolates runtime values.
+    ///
+    /// Prefer this over baking a number into the message text: the limit then
+    /// lives in exactly one place (the constant), and translators can move it
+    /// wherever their language's word order requires.
+    ///
+    /// ```ignore
+    /// AppError::invalid_with("post_content_too_long", [("limit_kb", (MAX_POST_BYTES / 1024).into())])
+    /// ```
+    pub fn invalid_with<I, K>(code: &str, args: I) -> Self
+    where
+        I: IntoIterator<Item = (K, TransArg)>,
+        K: Into<String>,
+    {
+        AppError::Invalid {
+            code: code.to_string(),
+            args: args.into_iter().map(|(k, v)| (k.into(), v)).collect(),
+        }
+    }
+
     #[track_caller]
     pub fn internal(message: impl Into<String>) -> Self {
         let loc = std::panic::Location::caller();
@@ -47,6 +97,7 @@ impl AppError {
             AppError::UnprocessableEntity(_) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "validation_error")
             }
+            AppError::Invalid { code, .. } => (StatusCode::UNPROCESSABLE_ENTITY, code.as_str()),
             AppError::TooManyRequests(_) => (StatusCode::TOO_MANY_REQUESTS, "rate_limit_exceeded"),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
             AppError::PluginBlocked { error_code, .. } => {
@@ -80,17 +131,48 @@ impl IntoResponse for AppError {
             }
             _ => {}
         }
-        let message = match &self {
-            AppError::Forbidden(c) => human_message(c),
-            AppError::Conflict(c) => human_message(c),
-            AppError::UnprocessableEntity(m) => m.clone(),
-            AppError::TooManyRequests(retry) => {
-                format!("Too many requests. Please try again in {} seconds.", retry)
+        // Which errors carry text the catalog owns, and with what arguments.
+        //
+        // `PluginBlocked` is deliberately excluded: its `reason` is authored by
+        // a third-party plugin at runtime, so there is no key for it and no
+        // catalog we could translate it against.
+        let payload = match &self {
+            AppError::Forbidden(c) | AppError::Conflict(c) => {
+                Some(ErrorPayload::new(c.clone(), Vec::new()))
             }
-            AppError::Internal(_) => "An internal error occurred.".to_string(),
+            AppError::Invalid { code, args } => {
+                Some(ErrorPayload::new(code.clone(), args.clone()))
+            }
+            AppError::TooManyRequests(retry) => Some(ErrorPayload::new(
+                "rate_limit_exceeded".to_string(),
+                vec![("seconds".to_string(), TransArg::Int(*retry as i64))],
+            )),
+            AppError::Unauthorized => Some(ErrorPayload::new("unauthorized".to_string(), Vec::new())),
+            AppError::NotFound => Some(ErrorPayload::new("not_found".to_string(), Vec::new())),
+            AppError::Internal(_) => {
+                Some(ErrorPayload::new("internal_error".to_string(), Vec::new()))
+            }
+            // Free-form prose and plugin-authored text pass through untouched.
+            AppError::UnprocessableEntity(_) | AppError::PluginBlocked { .. } => None,
+        };
+
+        // The body is written with an *untranslated* placeholder. The
+        // `translate_errors` middleware rewrites `message` using the request's
+        // locale before the response leaves the server.
+        //
+        // Doing it in middleware rather than here is what keeps this crate free
+        // of a global translator handle: `IntoResponse` has no access to
+        // `AppState` or to request extensions, so the only alternatives would be
+        // a process-wide static or a task-local — both of which this codebase
+        // deliberately avoids.
+        let message = match &self {
+            AppError::UnprocessableEntity(m) => m.clone(),
             AppError::PluginBlocked { reason, .. } => reason.clone(),
+            // Readable degradation if the middleware is ever absent: the user
+            // sees "thread locked" rather than a blank string.
             _ => code.replace('_', " "),
         };
+
         let body = json!({ "error": { "code": code, "message": message } });
         let mut res = (status, axum::Json(body)).into_response();
         if let Some(secs) = retry_after {
@@ -99,59 +181,42 @@ impl IntoResponse for AppError {
                 axum::http::HeaderValue::from_str(&secs.to_string()).unwrap(),
             );
         }
+        if let Some(payload) = payload {
+            res.extensions_mut().insert(payload);
+        }
         res
     }
 }
 
-/// Maps a machine error code (used by `Forbidden`/`Conflict`) to a sentence a
-/// user can act on. Falls back to a space-separated rendering of the code for
-/// anything not yet catalogued here, so new codes never crash — they just
-/// read a bit raw until added below.
-fn human_message(code: &str) -> String {
-    let message = match code {
-        "trust_level_insufficient" => {
-            "Your account needs a higher trust level to do this. Keep participating to level up."
-        }
-        "category_closed" => "This category is closed to new posts.",
-        "permission_denied" => "You don't have permission to do that.",
-        "not_author" => "You can only do that with your own content.",
-        "edit_window_expired" => "The 24-hour edit window for this has passed.",
-        "thread_locked" => "This thread is locked.",
-        "account_suspended" => "Your account has been suspended.",
-        "account_locked" => "Your account is temporarily locked due to failed login attempts. Try again later.",
-        "email_not_verified" => "Please verify your email address before continuing.",
-        "no_password_set" => "This account has no password set yet.",
-        "incorrect_current_password" => "Your current password is incorrect.",
-        "tag_create_permission_required" => "You don't have permission to create new tags.",
-        "invalid_or_expired_token" => "This link is invalid or has expired.",
-        "token_already_used" => "This link has already been used.",
-        "cannot_modify_system_role_permissions" => "Built-in role permissions can't be modified.",
-        "cannot_grant_permissions_you_lack" => "You can't grant a permission you don't have yourself.",
-        "cannot_remove_last_admin" => "You can't remove the last administrator.",
-        "cannot_delete_system_role" => "Built-in roles can't be deleted.",
-        "cannot_react_to_own_post" => "You can't react to your own post.",
-        "registration_closed" => "Registration is currently closed.",
-        "upload_quota_exceeded" => {
-            "You've reached your daily upload limit. Try again tomorrow."
-        }
-        "media_capability_not_granted" => "This plugin isn't allowed to upload media.",
-        "rpc_action_not_granted" => "This plugin action isn't available.",
-        "sql_not_allowed" => "This database operation isn't allowed.",
-        "role_already_assigned" => "That role is already assigned to this user.",
-        "reaction_exists" => "You've already reacted with this.",
-        "registration_conflict" => "An account with this email or username already exists.",
-        "slug_taken" => "That name is already in use.",
-        "category_has_subcategories" => "This category still has subcategories and can't be deleted.",
-        "category_has_threads" => "This category still has threads and can't be deleted.",
-        "email_taken" => "This email is already registered.",
-        "username_taken" => "This username is already taken.",
-        "plugin_already_installed" => "This plugin is already installed.",
-        "product_already_reviewed" => {
-            "You've already reviewed this product. Edit your existing review instead."
-        }
-        other => return other.replace('_', " "),
-    };
-    message.to_string()
+/// Carries an error's catalog key and arguments from `IntoResponse` to the
+/// translation middleware, via response extensions.
+///
+/// This exists because the two ends cannot meet any other way: the error knows
+/// its code but not the locale, and the middleware knows the locale but sees
+/// only a serialized body.
+#[derive(Clone, Debug)]
+pub struct ErrorPayload {
+    pub code: String,
+    pub args: Vec<(String, TransArg)>,
+}
+
+impl ErrorPayload {
+    fn new(code: String, args: Vec<(String, TransArg)>) -> Self {
+        ErrorPayload { code, args }
+    }
+
+    /// The catalog key this error's message should be looked up under.
+    pub fn key(&self) -> String {
+        error_key(&self.code)
+    }
+
+    /// Arguments in the borrowed shape `Translator::translate` expects.
+    pub fn translator_args(&self) -> Vec<(&str, TransArg)> {
+        self.args
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.clone()))
+            .collect()
+    }
 }
 
 // ─── Option convenience ───────────────────────────────────────────────────────

@@ -27,7 +27,7 @@
         btn.remove();
       } else {
         btn.disabled = false;
-        Ferum.toast('Could not mark as read. Please try again.', true);
+        Ferum.toast(Ferum.t('js-could-not-mark-read'), true);
       }
     });
   });
@@ -40,7 +40,7 @@
       if (res.ok) window.location.reload();
       else {
         markAllBtn.disabled = false;
-        Ferum.toast('Could not mark all as read. Please try again.', true);
+        Ferum.toast(Ferum.t('js-could-not-mark-all-read'), true);
       }
     });
   }

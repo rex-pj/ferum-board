@@ -89,9 +89,7 @@ impl WebhookUseCase {
         validate_webhook_url(&url)?;
         self.assert_hostname_not_private(&url).await?;
         if events.is_empty() {
-            return Err(AppError::unprocessable(
-                "At least one event type is required",
-            ));
+            return Err(AppError::invalid("webhook_events_required"));
         }
         self.webhooks
             .create(NewWebhook {
@@ -170,29 +168,25 @@ pub(crate) fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppEr
     use crate::shared::AppError;
 
     if url.is_empty() {
-        return Err(AppError::unprocessable("Webhook URL is required"));
+        return Err(AppError::invalid("webhook_url_required"));
     }
 
     // Parse with the http crate's Uri to validate structure.
     let uri: http::Uri = url
         .parse()
-        .map_err(|_| AppError::unprocessable("Webhook URL is not a valid URI"))?;
+        .map_err(|_| AppError::invalid("webhook_url_invalid"))?;
 
     let scheme = uri.scheme_str().unwrap_or("");
     if scheme != "http" && scheme != "https" {
-        return Err(AppError::unprocessable(
-            "Webhook URL must use http or https",
-        ));
+        return Err(AppError::invalid("webhook_url_scheme"));
     }
 
     let host = uri
         .host()
-        .ok_or_else(|| AppError::unprocessable("Webhook URL must have a host"))?;
+        .ok_or_else(|| AppError::invalid("webhook_url_missing_host"))?;
 
     if ferum_domain::net::is_private_host_literal(host) {
-        return Err(AppError::unprocessable(
-            "Webhook URL must not target private, loopback, or link-local addresses",
-        ));
+        return Err(AppError::invalid("webhook_url_private_address"));
     }
 
     Ok(())

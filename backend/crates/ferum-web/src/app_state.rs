@@ -6,7 +6,7 @@ use sea_orm::DatabaseConnection;
 use crate::tera_engine::TeraEngine;
 use ferum_application::ports::{
     CacheService, NotificationSubscriber, PermissionResolver, PluginHookRuntime, PluginRpcRuntime,
-    PluginUiRuntime, RateLimiter, TokenService,
+    PluginUiRuntime, RateLimiter, TokenService, Translator,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
@@ -58,7 +58,13 @@ pub struct AppState {
     pub theme: Arc<ThemeUseCase>,
     pub tera: TeraEngine,
     pub themes_dir: String,
+    /// Absolute path to the translation catalog root, shown on the admin
+    /// languages page so a self-hoster knows where to drop a language pack.
+    pub locales_dir: String,
     pub static_dir: String,
+    /// Message catalogs. Backs the `t()` Tera function, the error-translation
+    /// middleware, and the admin language roster.
+    pub translator: Arc<dyn Translator>,
     /// Hook dispatch: used by plugin debug endpoint.
     pub plugin_hooks: Arc<dyn PluginHookRuntime>,
     /// UI slot registry: used by SSR layer for frontend hydration.

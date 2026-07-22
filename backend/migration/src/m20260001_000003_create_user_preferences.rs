@@ -19,6 +19,8 @@ pub enum UserPreferences {
     Layout,
     EmailNotifications,
     UpdatedAt,
+    /// Added by m20260001_000033. NULL = never chosen, so the site default applies.
+    Locale,
 }
 
 #[async_trait::async_trait]

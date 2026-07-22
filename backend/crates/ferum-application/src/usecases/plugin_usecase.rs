@@ -289,9 +289,7 @@ impl PluginUseCase {
         PermissionChecker::can_manage_plugins(actor)?;
 
         if slug != confirm_slug {
-            return Err(AppError::unprocessable(
-                "Confirmation slug does not match plugin slug",
-            ));
+            return Err(AppError::invalid("confirmation_slug_mismatch"));
         }
 
         let plugin = self
@@ -400,9 +398,7 @@ impl PluginUseCase {
         }
 
         if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
-            return Err(AppError::unprocessable(
-                "media must be jpeg, png, webp, or gif",
-            ));
+            return Err(AppError::invalid("media_invalid_type"));
         }
         if data.len() > MAX_PLUGIN_MEDIA_BYTES {
             return Err(AppError::unprocessable(&format!(
@@ -452,7 +448,7 @@ impl PluginUseCase {
             return Err(AppError::NotFound);
         }
         if slot_name.trim().is_empty() {
-            return Err(AppError::unprocessable("Slot name cannot be empty"));
+            return Err(AppError::invalid("slot_name_required"));
         }
 
         self.plugins.update_ui_slot(slot_id, slot_name, load_order).await

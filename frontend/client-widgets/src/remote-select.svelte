@@ -1,6 +1,7 @@
 <svelte:options customElement={{ tag: "ferum-remote-select", shadow: "none" }} />
 
 <script lang="ts">
+  import { t } from './lib/i18n';
   /**
    * Generic remote-data picker for filter bars. Backed by any endpoint that
    * returns `{ data: [{value,label,sublabel?,avatar_url?}], meta:{total,page,per_page} }`.
@@ -121,7 +122,7 @@
     {/if}
   </button>
   {#if selectedValue}
-    <button type="button" class="rs-clear" title="Clear" onclick={clear} aria-label="Clear selection">
+    <button type="button" class="rs-clear" title={t('js-clear')} onclick={clear} aria-label={t('js-clear-selection')}>
       <i class="fa-solid fa-xmark"></i>
     </button>
   {/if}
@@ -132,11 +133,11 @@
         <input
           type="search"
           class="form-control form-control-sm"
-          placeholder="Type to search…"
+          placeholder={t('js-type-to-search')}
           value={query}
           oninput={onInput}
           autocomplete="off"
-          aria-label="Search"
+          aria-label={t('js-search')}
         />
       </div>
       <div class="rs-list" bind:this={listEl} onscroll={onScroll}>
@@ -152,11 +153,11 @@
           </button>
         {/each}
         {#if loading}
-          <div class="rs-note text-muted">Loading…</div>
+          <div class="rs-note text-muted">{t('js-loading')}</div>
         {:else if options.length === 0}
-          <div class="rs-note text-muted">No matches</div>
+          <div class="rs-note text-muted">{t('js-no-matches')}</div>
         {:else if hasMore}
-          <div class="rs-note text-muted">Scroll for more…</div>
+          <div class="rs-note text-muted">{t('js-scroll-for-more')}</div>
         {/if}
       </div>
     </div>

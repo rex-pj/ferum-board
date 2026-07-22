@@ -1,7 +1,7 @@
 {# Shared user avatar dropdown — used in public nav, admin topbar, and mod topbar. #}
 <div class="dropdown">
   <button class="fr-avatar-btn" type="button"
-          data-bs-toggle="dropdown" aria-expanded="false" aria-label="User menu">
+          data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{ t(k='adm-user-menu') }}">
     {% if current_user.avatar_url %}
       <img src="{{ current_user.avatar_url }}"
            alt="{{ current_user.display_name | default(value=current_user.username) }}"
@@ -23,7 +23,7 @@
     {# Group 1: Personal — frequent actions first #}
     <li>
       <a class="dropdown-item" href="/u/{{ current_user.username }}">
-        <i class="fa-solid fa-user fa-fw me-2 text-muted" aria-hidden="true"></i>Profile
+        <i class="fa-solid fa-user fa-fw me-2 text-muted" aria-hidden="true"></i>{{ t(k="adm-profile") }}
       </a>
     </li>
     <li>
@@ -36,7 +36,7 @@
     </li>
     <li>
       <a class="dropdown-item" href="/bookmarks">
-        <i class="fa-solid fa-bookmark fa-fw me-2 text-muted" aria-hidden="true"></i>Bookmarks
+        <i class="fa-solid fa-bookmark fa-fw me-2 text-muted" aria-hidden="true"></i>{{ t(k="adm-bookmarks") }}
       </a>
     </li>
 
@@ -44,7 +44,7 @@
     <li><hr class="dropdown-divider"></li>
     <li>
       <a class="dropdown-item" href="/account">
-        <i class="fa-solid fa-sliders fa-fw me-2 text-muted" aria-hidden="true"></i>Account settings
+        <i class="fa-solid fa-sliders fa-fw me-2 text-muted" aria-hidden="true"></i>{{ t(k="adm-account-settings") }}
       </a>
     </li>
 
@@ -54,14 +54,14 @@
       {% if current_user.is_moderator or current_user.is_admin %}
         <li>
           <a class="dropdown-item" href="/mod/reports">
-            <i class="fa-solid fa-shield-halved fa-fw me-2 text-warning" aria-hidden="true"></i>Moderator panel
+            <i class="fa-solid fa-shield-halved fa-fw me-2 text-warning" aria-hidden="true"></i>{{ t(k="adm-moderator-panel") }}
           </a>
         </li>
       {% endif %}
       {% if current_user.is_admin %}
         <li>
           <a class="dropdown-item" href="/admin/dashboard">
-            <i class="fa-solid fa-gear fa-fw me-2 text-muted" aria-hidden="true"></i>Admin panel
+            <i class="fa-solid fa-gear fa-fw me-2 text-muted" aria-hidden="true"></i>{{ t(k="adm-admin-panel-2") }}
           </a>
         </li>
       {% endif %}
@@ -72,7 +72,7 @@
     <li>
       <button type="button" class="dropdown-item text-muted"
               data-action="logout">
-        <i class="fa-solid fa-right-from-bracket fa-fw me-2" aria-hidden="true"></i>Log out
+        <i class="fa-solid fa-right-from-bracket fa-fw me-2" aria-hidden="true"></i>{{ t(k="adm-log-out") }}
       </button>
     </li>
   </ul>

@@ -26,7 +26,7 @@
             <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
           </span>
           <input type="search" class="form-control border-start-0 ps-0"
-                 placeholder="Search by key or description…"
+                 placeholder="{{ t(k='adm-search-by-key-or-description') }}"
                  x-model="search"
                  autocomplete="off">
         </div>
@@ -36,7 +36,7 @@
           class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1"
           :class="activeGroup === 'all' ? 'btn-primary' : 'btn-outline-secondary'"
           @click="activeGroup = 'all'">
-          All
+          {{ t(k="adm-all") }}
           <span class="badge rounded-pill ms-1"
                 :class="activeGroup === 'all'
                   ? 'bg-white text-primary'
@@ -71,7 +71,7 @@
         <div class="ms-auto d-flex align-items-center gap-2">
           <small class="text-muted text-nowrap"><span x-text="filtered.length"></span> of <span x-text="totalCount"></span></small>
           <a href="/admin/roles" class="btn btn-sm btn-outline-secondary text-nowrap">
-            <i class="fa-solid fa-shield-halved me-1"></i>Manage Roles
+            <i class="fa-solid fa-shield-halved me-1"></i>{{ t(k="adm-manage-roles") }}
           </a>
         </div>
       </div>
@@ -82,9 +82,9 @@
         <thead class="table-active">
           <tr>
             {# IDENTITY: permission key + description #}
-            <th>Permission</th>
+            <th>{{ t(k="adm-permission") }}</th>
             {# CLASSIFICATION: min trust level + group #}
-            <th style="width:18%">Classification</th>
+            <th style="width:18%">{{ t(k="adm-classification") }}</th>
           </tr>
         </thead>
         <tbody>
@@ -100,7 +100,7 @@
               <td class="align-middle">
                 <div class="d-flex align-items-center gap-1 mb-1">
                   <span class="text-muted text-nowrap"
-                        style="font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;min-width:2.5rem">Trust</span>
+                        style="font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;min-width:2.5rem">{{ t(k="adm-trust") }}</span>
                   <span class="badge" :class="trustClass(p.min_trust)" x-text="trustLabel(p.min_trust)"
                         :title="p.min_trust === 'new'     ? 'New — any user; no activity required' :
                                 p.min_trust === 'basic'   ? 'Basic — email verified' :
@@ -110,7 +110,7 @@
                 </div>
                 <div class="d-flex align-items-center gap-1">
                   <span class="text-muted text-nowrap"
-                        style="font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;min-width:2.5rem">Group</span>
+                        style="font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;min-width:2.5rem">{{ t(k="adm-group") }}</span>
                   <span class="badge bg-secondary bg-opacity-50 text-body" style="font-size:.65rem"
                         :title="p.group === 'admin'      ? 'Admin-only actions — requires admin.* permissions' :
                                  p.group === 'content'    ? 'Content actions — creating threads, posts, reactions' :
@@ -126,7 +126,7 @@
           <tr x-show="filtered.length === 0">
             <td colspan="2" class="text-center text-muted py-5">
               <i class="fa-solid fa-magnifying-glass fa-2x d-block mb-2 opacity-25"></i>
-              No permissions match your search.
+              {{ t(k="adm-no-permissions-match-your-search") }}
             </td>
           </tr>
 

@@ -5,18 +5,18 @@
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
   <div class="fr-sort-tabs mb-0">
     <a href="/catalog" class="fr-sort-tab {% if catalog_tab == 'products' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-couch fa-xs" aria-hidden="true"></i>Products
+      <i class="fa-solid fa-couch fa-xs" aria-hidden="true"></i>{{ t(k="ui-products") }}
     </a>
     <a href="/materials" class="fr-sort-tab {% if catalog_tab == 'materials' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-swatchbook fa-xs" aria-hidden="true"></i>Materials
+      <i class="fa-solid fa-swatchbook fa-xs" aria-hidden="true"></i>{{ t(k="ui-materials") }}
     </a>
     <a href="/brands" class="fr-sort-tab {% if catalog_tab == 'brands' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-tag fa-xs" aria-hidden="true"></i>Brands
+      <i class="fa-solid fa-tag fa-xs" aria-hidden="true"></i>{{ t(k="ui-brands") }}
     </a>
   </div>
   {% if can_submit_product %}
   <a href="/new-thread?add_product=1" class="btn btn-primary btn-sm">
-    <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Suggest a product
+    <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>{{ t(k="ui-suggest-a-product") }}
   </a>
   {% endif %}
 </div>

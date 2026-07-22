@@ -30,13 +30,13 @@
 #}
 {% macro thread_status_icons(is_pinned=false, is_solved=false, is_locked=false) %}
 {% if is_pinned %}
-  <i class="fa-solid fa-thumbtack fr-status-icon fr-status-icon--pinned" title="Pinned"></i>
+  <i class="fa-solid fa-thumbtack fr-status-icon fr-status-icon--pinned" title="{{ t(k='ui-pinned') }}"></i>
 {% endif %}
 {% if is_solved %}
-  <i class="fa-solid fa-circle-check fr-status-icon fr-status-icon--solved" title="Solved"></i>
+  <i class="fa-solid fa-circle-check fr-status-icon fr-status-icon--solved" title="{{ t(k='ui-solved') }}"></i>
 {% endif %}
 {% if is_locked %}
-  <i class="fa-solid fa-lock fr-status-icon fr-status-icon--locked" title="Locked"></i>
+  <i class="fa-solid fa-lock fr-status-icon fr-status-icon--locked" title="{{ t(k='ui-locked') }}"></i>
 {% endif %}
 {% endmacro thread_status_icons %}
 
@@ -46,19 +46,19 @@
 #}
 {% macro thread_status_badges(is_pinned=false, is_solved=false, is_locked=false, best_answer_href="") %}
 {% if is_pinned %}
-  <span class="badge bg-primary me-1"><i class="fa-solid fa-thumbtack me-1"></i>Pinned</span>
+  <span class="badge bg-primary me-1"><i class="fa-solid fa-thumbtack me-1"></i>{{ t(k="ui-pinned") }}</span>
 {% endif %}
 {% if is_solved %}
   {% if best_answer_href %}
-    <a href="{{ best_answer_href }}" class="badge bg-success me-1 text-decoration-none" title="Jump to best answer">
-      <i class="fa-solid fa-circle-check me-1"></i>Solved
+    <a href="{{ best_answer_href }}" class="badge bg-success me-1 text-decoration-none" title="{{ t(k='ui-jump-to-best-answer') }}">
+      <i class="fa-solid fa-circle-check me-1"></i>{{ t(k="ui-solved") }}
     </a>
   {% else %}
-    <span class="badge bg-success me-1"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+    <span class="badge bg-success me-1"><i class="fa-solid fa-circle-check me-1"></i>{{ t(k="ui-solved") }}</span>
   {% endif %}
 {% endif %}
 {% if is_locked %}
-  <span class="badge bg-secondary me-1"><i class="fa-solid fa-lock me-1"></i>Locked</span>
+  <span class="badge bg-secondary me-1"><i class="fa-solid fa-lock me-1"></i>{{ t(k="ui-locked") }}</span>
 {% endif %}
 {% endmacro thread_status_badges %}
 
@@ -122,11 +122,11 @@
    Display label for a product_type enum value.
    furniture → Furniture | material → Material | room → Room
 #}
-{% macro product_type_label(t) %}
-{%- if t == "furniture" -%}Furniture
-{%- elif t == "material" -%}Material
-{%- elif t == "room" -%}Room
-{%- else -%}{{ t }}
+{% macro product_type_label(code) %}
+{%- if code == "furniture" -%}{{ t(k="ui-product-type-furniture") }}
+{%- elif code == "material" -%}{{ t(k="ui-product-type-material") }}
+{%- elif code == "room" -%}{{ t(k="ui-product-type-room") }}
+{%- else -%}{{ code }}
 {%- endif -%}
 {% endmacro product_type_label %}
 
@@ -135,16 +135,16 @@
    Display label for a material category code.
 #}
 {% macro material_category_label(c) %}
-{%- if c == "wood_natural" -%}Solid wood
-{%- elif c == "wood_engineered" -%}Engineered wood
-{%- elif c == "rattan_bamboo" -%}Rattan &amp; bamboo
-{%- elif c == "metal" -%}Metal
-{%- elif c == "fabric" -%}Fabric
-{%- elif c == "leather" -%}Leather
-{%- elif c == "stone" -%}Stone
-{%- elif c == "glass" -%}Glass
-{%- elif c == "plastic" -%}Plastic
-{%- elif c == "other" -%}Other
+{%- if c == "wood_natural" -%}{{ t(k="ui-material-wood-natural") }}
+{%- elif c == "wood_engineered" -%}{{ t(k="ui-material-wood-engineered") }}
+{%- elif c == "rattan_bamboo" -%}{{ t(k="ui-material-rattan-bamboo") }}
+{%- elif c == "metal" -%}{{ t(k="ui-material-metal") }}
+{%- elif c == "fabric" -%}{{ t(k="ui-material-fabric") }}
+{%- elif c == "leather" -%}{{ t(k="ui-material-leather") }}
+{%- elif c == "stone" -%}{{ t(k="ui-material-stone") }}
+{%- elif c == "glass" -%}{{ t(k="ui-material-glass") }}
+{%- elif c == "plastic" -%}{{ t(k="ui-material-plastic") }}
+{%- elif c == "other" -%}{{ t(k="ui-material-other") }}
 {%- else -%}{{ c | replace(from="_", to=" ") | title }}
 {%- endif -%}
 {% endmacro material_category_label %}
@@ -195,11 +195,15 @@
    One review sub-dimension as a labelled progress bar (value 1–5).
    Renders nothing when value is empty, so optional dimensions stay hidden.
    Meant to sit inside a Bootstrap .row (renders its own column).
+   label_key → a `ui-*` translation key (e.g. "ui-durability"), resolved here
+               rather than at the call site, so every caller is forced through
+               the catalog instead of passing raw English text.
    avg=true  → value is an average; show it rounded to 1 decimal.
    cols      → column classes (e.g. "col-6" for a 2-up layout).
 #}
-{% macro subscore_row(label, value, avg=false, cols="col-6 col-md-4", bar_class="bg-warning") %}
+{% macro subscore_row(label_key, value, avg=false, cols="col-6 col-md-4", bar_class="bg-warning") %}
 {% if value %}
+{% set label = t(k=label_key) %}
 <div class="{{ cols }}">
   <div class="small text-muted">{{ label }}</div>
   <div class="d-flex align-items-center gap-2">
@@ -220,9 +224,10 @@
    or two reviews every dimension tends to the same value, and five equal
    bars imply a comparison the data does not support. Renders nothing
    when value is empty, matching subscore_row.
+   label_key → same convention as subscore_row: a translation key, not text.
 #}
-{% macro subscore_chip(label, value) %}
-{%- if value %}<span class="fr-review-chip">{{ label }} <strong>{{ value | round(precision=1) }}</strong>/5</span>{% endif -%}
+{% macro subscore_chip(label_key, value) %}
+{%- if value %}<span class="fr-review-chip">{{ t(k=label_key) }} <strong>{{ value | round(precision=1) }}</strong>/5</span>{% endif -%}
 {% endmacro subscore_chip %}
 
 
@@ -238,7 +243,7 @@
 {# role="img" is required: aria-label on a bare <div> is ignored by most screen
    readers, so without it the stars, the score and the count are all hidden. #}
 <div class="fr-rating-headline" role="img"
-     aria-label="{{ value | round(precision=1) }} out of 5 stars, {{ count }} reviews">
+     aria-label="{{ t(k='ui-rating-headline-aria', score=value | round(precision=1), count=count) }}">
   <span aria-hidden="true">
     {% for i in range(end=5) %}
       {%- if value >= i + 1 -%}
@@ -254,7 +259,7 @@
     {{ value | round(precision=1) }}<span class="fr-rating-max">/5</span>
   </span>
 </div>
-<div class="text-muted small" aria-hidden="true">{{ count }} review{{ count | pluralize }}</div>
+<div class="text-muted small" aria-hidden="true">{{ count }} {{ t(k="ui-reviews-label", count=count) }}</div>
 {% endmacro rating_headline %}
 
 
@@ -287,12 +292,12 @@
     {{ self::rating_headline(value=stats.avg_overall, count=stats.review_count) }}
 
     {% if detailed %}
-      <div class="fr-subhead mt-3">Rating distribution</div>
+      <div class="fr-subhead mt-3">{{ t(k="ui-rating-distribution") }}</div>
       {% for row in distribution %}
         <div class="fr-histo-row">
           <span class="fr-histo-label">{{ row.star }} <i class="fa-solid fa-star text-warning" aria-hidden="true"></i></span>
           <div class="progress flex-grow-1" style="height:7px" role="progressbar"
-               aria-label="{{ row.star }} stars: {{ row.count }} reviews" aria-valuenow="{{ row.pct }}" aria-valuemin="0" aria-valuemax="100">
+               aria-label="{{ t(k='ui-rating-histogram-row-aria', star=row.star, count=row.count) }}" aria-valuenow="{{ row.pct }}" aria-valuemin="0" aria-valuemax="100">
             <div class="progress-bar bg-warning" style="width: {{ row.pct }}%"></div>
           </div>
           <span class="fr-histo-count">{{ row.count }}</span>
@@ -301,21 +306,21 @@
 
       {# bar_class differs from the histogram above on purpose: different scale,
          different colour, so the eye does not read the two blocks as one. #}
-      <div class="fr-subhead mt-3">Scores by dimension</div>
+      <div class="fr-subhead mt-3">{{ t(k="ui-scores-by-dimension") }}</div>
       <div class="row g-2">
-        {{ self::subscore_row(label="Durability", value=stats.avg_durability, avg=true, cols="col-6", bar_class="bg-primary") }}
-        {{ self::subscore_row(label="Materials", value=stats.avg_materials, avg=true, cols="col-6", bar_class="bg-primary") }}
-        {{ self::subscore_row(label="Comfort", value=stats.avg_comfort, avg=true, cols="col-6", bar_class="bg-primary") }}
-        {{ self::subscore_row(label="Aesthetics", value=stats.avg_aesthetics, avg=true, cols="col-6", bar_class="bg-primary") }}
-        {{ self::subscore_row(label="Value", value=stats.avg_value_for_money, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label_key="ui-durability", value=stats.avg_durability, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label_key="ui-materials", value=stats.avg_materials, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label_key="ui-comfort", value=stats.avg_comfort, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label_key="ui-aesthetics", value=stats.avg_aesthetics, avg=true, cols="col-6", bar_class="bg-primary") }}
+        {{ self::subscore_row(label_key="ui-value-for-money", value=stats.avg_value_for_money, avg=true, cols="col-6", bar_class="bg-primary") }}
       </div>
     {% else %}
       <div class="d-flex flex-wrap gap-1 mt-2 pt-2 border-top">
-        {{ self::subscore_chip(label="Durability", value=stats.avg_durability) }}
-        {{ self::subscore_chip(label="Materials", value=stats.avg_materials) }}
-        {{ self::subscore_chip(label="Comfort", value=stats.avg_comfort) }}
-        {{ self::subscore_chip(label="Aesthetics", value=stats.avg_aesthetics) }}
-        {{ self::subscore_chip(label="Value", value=stats.avg_value_for_money) }}
+        {{ self::subscore_chip(label_key="ui-durability", value=stats.avg_durability) }}
+        {{ self::subscore_chip(label_key="ui-materials", value=stats.avg_materials) }}
+        {{ self::subscore_chip(label_key="ui-comfort", value=stats.avg_comfort) }}
+        {{ self::subscore_chip(label_key="ui-aesthetics", value=stats.avg_aesthetics) }}
+        {{ self::subscore_chip(label_key="ui-value", value=stats.avg_value_for_money) }}
       </div>
     {% endif %}
   </div>
@@ -396,7 +401,7 @@
   <input type="password" class="form-control" id="{{ id }}" name="{{ name }}"
          {% if minlength %}minlength="{{ minlength }}"{% endif %}
          required autocomplete="{{ autocomplete }}">
-  <button type="button" class="fr-password-toggle" aria-label="Show password">
+  <button type="button" class="fr-password-toggle" aria-label="{{ t(k='ui-show-password') }}">
     <i class="fa-regular fa-eye"></i>
   </button>
 </div>
@@ -426,7 +431,7 @@
    query:       current search value (pre-fills the input)
    placeholder: input placeholder text
 #}
-{% macro search_form_header(action, query="", placeholder="Search…") %}
+{% macro search_form_header(action, query="", placeholder="") %}
 <div class="card-header p-0">
   <form method="get" action="{{ action }}"
         class="adm-filter-row px-3 py-2">
@@ -435,13 +440,14 @@
         <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
       </span>
       <input type="search" class="form-control border-start-0 ps-0" name="q"
-             value="{{ query }}" placeholder="{{ placeholder }}" autocomplete="off">
+             value="{{ query }}" autocomplete="off"
+             placeholder="{% if placeholder %}{{ placeholder }}{% else %}{{ t(k='ui-search') }}…{% endif %}">
     </div>
     <button type="submit" class="btn btn-sm btn-outline-success">
-      <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="ui-search") }}
     </button>
     {% if query %}
-      <a href="{{ action }}" class="btn btn-sm btn-outline-secondary" title="Clear">
+      <a href="{{ action }}" class="btn btn-sm btn-outline-secondary" title="{{ t(k='ui-clear') }}">
         <i class="fa-solid fa-xmark"></i>
       </a>
     {% endif %}
@@ -460,7 +466,7 @@
 <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
   <span class="text-muted small">
     {{ pagination.total }} {% if pagination.total == 1 %}{{ noun }}{% else %}{% if plural %}{{ plural }}{% else %}{{ noun }}s{% endif %}{% endif %}
-    {% if pagination.total_pages > 1 %}— page {{ pagination.page }} of {{ pagination.total_pages }}{% endif %}
+    {% if pagination.total_pages > 1 %}— {{ t(k="ui-page-x-of-y", page=pagination.page, total=pagination.total_pages) }}{% endif %}
   </span>
   {{ self::paginate(pagination=pagination, base_url=base_url, extra_params=extra_params) }}
 </div>
@@ -481,12 +487,12 @@
 #}
 {% macro paginate(pagination, base_url, extra_params="", nav_class="", list_class="pagination-sm mb-0 flex-wrap gap-0") %}
 {% if pagination.total_pages > 1 %}
-<nav aria-label="Page navigation" class="{{ nav_class }}">
+<nav aria-label="{{ t(k='ui-page-navigation') }}" class="{{ nav_class }}">
   <ul class="pagination {{ list_class }}">
 
     {# ← Prev #}
     <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-      <a class="page-link" href="{{ base_url }}?page={{ pagination.page - 1 }}{{ extra_params }}" aria-label="Previous">
+      <a class="page-link" href="{{ base_url }}?page={{ pagination.page - 1 }}{{ extra_params }}" aria-label="{{ t(k='ui-previous-2') }}">
         <i class="fa-solid fa-chevron-left" aria-hidden="true" style="font-size:.65rem"></i>
       </a>
     </li>
@@ -532,7 +538,7 @@
 
     {# Next → #}
     <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-      <a class="page-link" href="{{ base_url }}?page={{ pagination.page + 1 }}{{ extra_params }}" aria-label="Next">
+      <a class="page-link" href="{{ base_url }}?page={{ pagination.page + 1 }}{{ extra_params }}" aria-label="{{ t(k='ui-next-2') }}">
         <i class="fa-solid fa-chevron-right" aria-hidden="true" style="font-size:.65rem"></i>
       </a>
     </li>

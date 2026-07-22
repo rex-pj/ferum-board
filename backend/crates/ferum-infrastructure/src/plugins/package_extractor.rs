@@ -60,7 +60,7 @@ pub fn extract(
 
         let raw_path = file
             .enclosed_name()
-            .ok_or_else(|| AppError::unprocessable("Archive contains unsafe path (path traversal attempt)"))?;
+            .ok_or_else(|| AppError::invalid("archive_unsafe_path"))?;
 
         // Reject absolute paths and path traversal
         if raw_path.components().any(|c| {
@@ -69,18 +69,14 @@ pub fn extract(
                 std::path::Component::RootDir | std::path::Component::ParentDir
             )
         }) {
-            return Err(AppError::unprocessable(
-                "Archive contains path traversal (../) — rejected",
-            ));
+            return Err(AppError::invalid("archive_path_traversal"));
         }
 
         let target_path = plugin_dir.join(&raw_path);
 
         // Ensure the target path is still inside plugin_dir (double-check)
         if !target_path.starts_with(&plugin_dir) {
-            return Err(AppError::unprocessable(
-                "Archive entry escapes plugin directory",
-            ));
+            return Err(AppError::invalid("archive_entry_escapes_dir"));
         }
 
         if file.is_dir() {
@@ -120,9 +116,7 @@ pub fn extract(
     // Verify plugin.toml exists after extraction
     if !plugin_dir.join("plugin.toml").exists() {
         let _ = std::fs::remove_dir_all(&plugin_dir);
-        return Err(AppError::unprocessable(
-            "Archive does not contain plugin.toml at root level",
-        ));
+        return Err(AppError::invalid("archive_missing_manifest"));
     }
 
     Ok(plugin_dir)

@@ -64,14 +64,14 @@ pub async fn upload_plugin(
                 .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
 
             if data.len() > MAX_FPKG_SIZE {
-                return Err(AppError::unprocessable("Package too large (max 50MB)").into());
+                return Err(AppError::invalid_with("package_too_large", [("limit_mb", (MAX_FPKG_SIZE / (1024 * 1024)).into())]).into());
             }
             pkg_bytes = Some(data);
             break;
         }
     }
 
-    let pkg_bytes = pkg_bytes.ok_or_else(|| AppError::unprocessable("No file field in request"))?;
+    let pkg_bytes = pkg_bytes.ok_or_else(|| AppError::invalid("file_field_missing"))?;
 
     let plugins_dir = PathBuf::from(&state.plugins_dir);
     let tmp_slug = format!("__tmp_upload_{}", uuid::Uuid::new_v4().simple());
@@ -133,13 +133,13 @@ pub async fn install_plugin(
                     .await
                     .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
                 granted_capabilities = serde_json::from_str(&text)
-                    .map_err(|_| AppError::unprocessable("Invalid granted_capabilities JSON"))?;
+                    .map_err(|_| AppError::invalid("invalid_granted_capabilities"))?;
             }
             _ => {}
         }
     }
 
-    let pkg_bytes = pkg_bytes.ok_or_else(|| AppError::unprocessable("No file field"))?;
+    let pkg_bytes = pkg_bytes.ok_or_else(|| AppError::invalid("file_field_missing"))?;
 
     let plugins_dir = PathBuf::from(&state.plugins_dir);
 

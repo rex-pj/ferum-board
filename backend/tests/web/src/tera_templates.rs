@@ -25,13 +25,29 @@ fn frontend_dirs() -> (PathBuf, PathBuf, PathBuf) {
     )
 }
 
+fn locales_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("..")
+        .join("locales")
+}
+
+/// The real catalog, not a stub — so these tests also assert that the shipped
+/// `.ftl` files parse and that `t()` is wired end to end.
+async fn translator() -> std::sync::Arc<dyn ferum_application::ports::Translator> {
+    std::sync::Arc::new(
+        ferum_infrastructure::i18n::FluentTranslator::new(vec![locales_dir()]).await,
+    )
+}
+
 async fn engine() -> ferum_web::tera_engine::TeraEngine {
     let (themes, admin, static_dir) = frontend_dirs();
     assert!(
         admin.join("mod").join("log.html").is_file(),
         "fixture path wrong: no mod/log.html under {admin:?}"
     );
-    ferum_web::tera_engine::TeraEngine::new(themes, admin, static_dir)
+    ferum_web::tera_engine::TeraEngine::new(themes, admin, static_dir, translator().await)
         .expect("TeraEngine::new must succeed")
 }
 

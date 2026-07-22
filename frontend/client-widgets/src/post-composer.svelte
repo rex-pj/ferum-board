@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { previewMarkdown, uploadAttachment } from './lib/posts';
+  import { t } from './lib/i18n';
 
   let {
     'thread-id': threadId = '',
@@ -130,7 +131,7 @@
     uploading = false;
 
     if (!result.ok || !result.url) {
-      error = result.error || 'Failed to upload image.';
+      error = result.error || t('js-failed-upload-image');
       return;
     }
 
@@ -142,20 +143,20 @@
   }
 
   const tools: Array<{ icon: string; title: string; action: () => void } | 'sep'> = [
-    { icon: 'fa-solid fa-bold',          title: 'Bold (Ctrl+B)',  action: () => wrap('**', '**', 'bold text') },
-    { icon: 'fa-solid fa-italic',        title: 'Italic (Ctrl+I)', action: () => wrap('_', '_', 'italic text') },
-    { icon: 'fa-solid fa-strikethrough', title: 'Strikethrough',  action: () => wrap('~~', '~~', 'strikethrough') },
+    { icon: 'fa-solid fa-bold',          title: t('js-composer-bold'),  action: () => wrap('**', '**', 'bold text') },
+    { icon: 'fa-solid fa-italic',        title: t('js-composer-italic'), action: () => wrap('_', '_', 'italic text') },
+    { icon: 'fa-solid fa-strikethrough', title: t('js-composer-strikethrough'),  action: () => wrap('~~', '~~', 'strikethrough') },
     'sep',
-    { icon: 'H1', title: 'Heading 1',   action: () => insertLine('# ', 'Heading 1') },
-    { icon: 'H2', title: 'Heading 2',   action: () => insertLine('## ', 'Heading 2') },
+    { icon: 'H1', title: t('js-composer-heading-1'),   action: () => insertLine('# ', 'Heading 1') },
+    { icon: 'H2', title: t('js-composer-heading-2'),   action: () => insertLine('## ', 'Heading 2') },
     'sep',
-    { icon: 'fa-solid fa-quote-left',   title: 'Quote',           action: () => insertLine('> ', 'quoted text') },
-    { icon: 'fa-solid fa-code',         title: 'Code (inline)',   action: () => wrap('`', '`', 'code') },
-    { icon: 'fa-solid fa-terminal',     title: 'Code block',      action: () => insertCodeBlock() },
+    { icon: 'fa-solid fa-quote-left',   title: t('js-composer-quote'),           action: () => insertLine('> ', 'quoted text') },
+    { icon: 'fa-solid fa-code',         title: t('js-composer-code-inline'),   action: () => wrap('`', '`', 'code') },
+    { icon: 'fa-solid fa-terminal',     title: t('js-composer-code-block'),      action: () => insertCodeBlock() },
     'sep',
-    { icon: 'fa-solid fa-link',         title: 'Link (Ctrl+K)',   action: () => insertLink() },
-    { icon: 'fa-solid fa-list-ul',      title: 'Unordered list',  action: () => insertLine('- ', 'list item') },
-    { icon: 'fa-solid fa-list-ol',      title: 'Ordered list',    action: () => insertLine('1. ', 'list item') },
+    { icon: 'fa-solid fa-link',         title: t('js-composer-link'),   action: () => insertLink() },
+    { icon: 'fa-solid fa-list-ul',      title: t('js-composer-ul'),  action: () => insertLine('- ', 'list item') },
+    { icon: 'fa-solid fa-list-ol',      title: t('js-composer-ol'),    action: () => insertLine('1. ', 'list item') },
   ];
 
   function onKeydown(e: KeyboardEvent) {
@@ -171,12 +172,12 @@
   <!-- Tab bar + toolbar row -->
   <div class="composer-header">
     <div class="tab-bar">
-      <button type="button" class="tab {tab === 'write' ? 'active' : ''}" onclick={() => (tab = 'write')}>Write</button>
-      <button type="button" class="tab {tab === 'preview' ? 'active' : ''}" onclick={() => { tab = 'preview'; loadPreview(); }}>Preview</button>
+      <button type="button" class="tab {tab === 'write' ? 'active' : ''}" onclick={() => (tab = 'write')}>{t('js-composer-write')}</button>
+      <button type="button" class="tab {tab === 'preview' ? 'active' : ''}" onclick={() => { tab = 'preview'; loadPreview(); }}>{t('js-composer-preview')}</button>
     </div>
 
     {#if tab === 'write'}
-      <div class="toolbar" role="toolbar" aria-label="Formatting toolbar">
+      <div class="toolbar" role="toolbar" aria-label={t('js-composer-toolbar')}>
         {#each tools as tool}
           {#if tool === 'sep'}
             <span class="sep" role="separator"></span>
@@ -195,7 +196,7 @@
           <button
             type="button"
             class="tool-btn"
-            title="Attach image"
+            title={t('js-composer-attach-image')}
             onclick={triggerAttach}
             disabled={uploading}
             tabindex="-1"
@@ -216,7 +217,7 @@
     <textarea
       bind:this={textarea}
       class="editor"
-      placeholder="Write your reply in Markdown…"
+      placeholder={t('js-composer-placeholder')}
       bind:value={content}
       rows={8}
       onkeydown={onKeydown}
@@ -227,7 +228,7 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         {@html preview}
       {:else}
-        <span class="empty">Nothing to preview.</span>
+        <span class="empty">{t('js-composer-nothing-to-preview')}</span>
       {/if}
     </div>
   {/if}
@@ -237,7 +238,7 @@
   {/if}
 
   <div class="actions">
-    <span class="hint"><i class="fa-brands fa-markdown"></i> Markdown supported · Ctrl+B / Ctrl+I / Ctrl+K</span>
+    <span class="hint"><i class="fa-brands fa-markdown"></i> {t('js-composer-hint')}</span>
   </div>
 </div>
 

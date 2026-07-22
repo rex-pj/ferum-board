@@ -6,7 +6,7 @@
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb mb-0">
-    <li class="breadcrumb-item"><a href="/admin/roles">Roles</a></li>
+    <li class="breadcrumb-item"><a href="/admin/roles">{{ t(k="adm-roles") }}</a></li>
     <li class="breadcrumb-item active" aria-current="page">{{ role.name }}</li>
   </ol>
 </nav>
@@ -15,11 +15,11 @@
   <div class="d-flex align-items-center gap-2">
     <span class="badge fs-6" style="background-color:{{ role.color | default(value="#6c757d") }}">{{ role.name }}</span>
     {% if role.is_system %}
-      <span class="badge bg-warning text-dark">System Role</span>
+      <span class="badge bg-warning text-dark">{{ t(k="adm-system-role") }}</span>
     {% endif %}
   </div>
   <a href="/admin/permissions" class="text-muted small text-decoration-none">
-    <i class="fa-solid fa-circle-info me-1 opacity-50"></i>View permission descriptions
+    <i class="fa-solid fa-circle-info me-1 opacity-50"></i>{{ t(k="adm-view-permission-descriptions") }}
   </a>
 </div>
 
@@ -32,7 +32,7 @@
 
 <noscript>
   <div class="alert alert-warning mt-3">
-    JavaScript is required to manage permissions on this page.
+    {{ t(k="adm-javascript-is-required-to-manage-permissions") }}
   </div>
 </noscript>
 {% endblock %}

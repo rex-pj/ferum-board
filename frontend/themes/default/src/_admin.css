@@ -230,6 +230,34 @@ html, body { height: 100%; margin: 0; }
   letter-spacing: .06em;
 }
 
+/* ── Modal form sections ───────────────────────────────────── */
+
+.adm-form-section {
+  border: 0;
+  padding: 0;
+  margin: 0 0 1.5rem;
+  min-width: 0; /* fieldset defaults to min-content, which breaks flex/grid children */
+}
+
+.adm-form-section:last-child { margin-bottom: 0; }
+
+/* Deliberately not `.text-muted`: at this size on a dark surface the muted
+   token lands under the 4.5:1 contrast floor. Body colour at 85% keeps the
+   caption subordinate to the labels while staying legible. */
+.adm-form-legend {
+  float: none;      /* UA stylesheets float <legend>, which collapses the rule below */
+  width: auto;
+  margin-bottom: .75rem;
+  padding-bottom: .35rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--bs-body-color);
+  opacity: .85;
+}
+
 /* ── Audit log ──────────────────────────────────────────────── */
 .audit-group {
   border-left: 2px solid var(--audit-group-color, var(--bs-border-color));

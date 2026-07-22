@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Setup — Ferum Board</title>
+  <title>{{ t(k="adm-setup-ferum-board") }}</title>
   <link rel="icon" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/css/bootstrap.min.css">
   <link rel="stylesheet" href="/static/css/fontawesome/all.min.css">
@@ -16,34 +16,34 @@
   <aside class="setup-brand">
     <div class="brand-logo">
       <div class="logo-icon"><i class="fa-solid fa-layer-group"></i></div>
-      Ferum Board
+      {{ t(k="adm-ferum-board") }}
     </div>
 
     <div class="brand-headline">
-      <h2>Your community,<br>your control.</h2>
-      <p>A modern, self-hosted forum that gives you complete ownership of your community's data and experience.</p>
+      <h2>{{ t(k="adm-your-community") }}<br>{{ t(k="adm-your-control") }}</h2>
+      <p>{{ t(k="adm-a-modern-self-hosted-forum-that") }}</p>
     </div>
 
     <ul class="brand-features">
       <li>
         <span class="feat-icon"><i class="fa-solid fa-shield-halved"></i></span>
-        Full RBAC — roles &amp; permissions configured in the admin UI
+        {{ t(k="adm-full-rbac-roles-permissions-configured-in") }}
       </li>
       <li>
         <span class="feat-icon"><i class="fa-solid fa-bolt"></i></span>
-        Built on Rust + Axum — fast, memory-safe, low resource usage
+        {{ t(k="adm-built-on-rust-axum-fast-memory") }}
       </li>
       <li>
         <span class="feat-icon"><i class="fa-solid fa-bell"></i></span>
-        Real-time notifications via SSE
+        {{ t(k="adm-real-time-notifications-via-sse") }}
       </li>
       <li>
         <span class="feat-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
-        Full-text search — PostgreSQL FTS or Meilisearch
+        {{ t(k="adm-full-text-search-postgresql-fts-or") }}
       </li>
       <li>
         <span class="feat-icon"><i class="fa-solid fa-plug"></i></span>
-        Webhook integrations with HMAC signing
+        {{ t(k="adm-webhook-integrations-with-hmac-signing") }}
       </li>
     </ul>
   </aside>
@@ -53,32 +53,32 @@
     <form class="setup-form-inner" id="setup-form" onsubmit="return false;" novalidate>
 
       <!-- Step progress -->
-      <div class="step-progress" id="step-progress" role="list" aria-label="Setup steps">
+      <div class="step-progress" id="step-progress" role="list" aria-label="{{ t(k='adm-setup-steps') }}">
         <div class="step-item active" id="sp-1" role="listitem">
           <div class="step-dot" aria-hidden="true">1</div>
-          <span class="step-label">Admin</span>
+          <span class="step-label">{{ t(k="adm-admin") }}</span>
         </div>
         <div class="step-item" id="sp-2" role="listitem">
           <div class="step-dot" aria-hidden="true">2</div>
-          <span class="step-label">Site</span>
+          <span class="step-label">{{ t(k="adm-site") }}</span>
         </div>
         <div class="step-item" id="sp-3" role="listitem">
           <div class="step-dot" aria-hidden="true">3</div>
-          <span class="step-label">Review</span>
+          <span class="step-label">{{ t(k="adm-review") }}</span>
         </div>
       </div>
 
       <!-- ── Step 1: Admin account ────────────────────────────── -->
       <div class="step-panel active" id="panel-1">
         <div class="mb-4">
-          <h1 class="page-title">Create your admin account</h1>
-          <p class="page-subtitle">This account will have full control over your forum.</p>
+          <h1 class="page-title">{{ t(k="adm-create-your-admin-account") }}</h1>
+          <p class="page-subtitle">{{ t(k="adm-this-account-will-have-full-control") }}</p>
         </div>
 
-        <p class="section-heading">Credentials</p>
+        <p class="section-heading">{{ t(k="adm-credentials") }}</p>
 
         <div class="mb-3">
-          <label for="username" class="form-label fw-medium">Username</label>
+          <label for="username" class="form-label fw-medium">{{ t(k="adm-username") }}</label>
           <div class="input-group">
             <span class="input-group-text"><i class="fa-solid fa-at fa-sm"></i></span>
             <input type="text" class="form-control" id="username" name="username"
@@ -86,11 +86,11 @@
                    pattern="[a-zA-Z0-9_\-]+" autocomplete="username"
                    aria-describedby="username-hint">
           </div>
-          <div class="form-text" id="username-hint">Letters, numbers, underscores, and hyphens only.</div>
+          <div class="form-text" id="username-hint">{{ t(k="adm-letters-numbers-underscores-and-hyphens-only") }}</div>
         </div>
 
         <div class="mb-3">
-          <label for="email" class="form-label fw-medium">Email address</label>
+          <label for="email" class="form-label fw-medium">{{ t(k="adm-email-address") }}</label>
           <div class="input-group">
             <span class="input-group-text"><i class="fa-solid fa-envelope fa-sm"></i></span>
             <input type="email" class="form-control" id="email" name="email"
@@ -99,14 +99,14 @@
         </div>
 
         <div class="mb-4">
-          <label for="password" class="form-label fw-medium">Password</label>
+          <label for="password" class="form-label fw-medium">{{ t(k="adm-password") }}</label>
           <div class="input-group">
             <span class="input-group-text"><i class="fa-solid fa-lock fa-sm"></i></span>
             <input type="password" class="form-control" id="password" name="password"
                    minlength="8" autocomplete="new-password"
-                   aria-describedby="strength-text" placeholder="Min. 8 characters">
+                   aria-describedby="strength-text" placeholder="{{ t(k='adm-min-8-characters') }}">
             <button class="btn btn-outline-secondary" type="button" id="toggle-password"
-                    aria-label="Show password" tabindex="-1">
+                    aria-label="{{ t(k='adm-show-password') }}" tabindex="-1">
               <i class="fa-solid fa-eye fa-sm" id="eye-icon"></i>
             </button>
           </div>
@@ -117,7 +117,7 @@
         </div>
 
         <button type="button" class="btn btn-primary w-100" id="btn-next-1">
-          Continue <i class="fa-solid fa-arrow-right ms-1 fa-sm"></i>
+          {{ t(k="adm-continue") }} <i class="fa-solid fa-arrow-right ms-1 fa-sm"></i>
         </button>
       </div>
 
@@ -125,44 +125,44 @@
       <div class="step-panel" id="panel-2">
         <div class="mb-4">
           <button type="button" class="btn-nav-back mb-2" data-back="1">
-            <i class="fa-solid fa-arrow-left fa-sm me-1"></i> Back
+            <i class="fa-solid fa-arrow-left fa-sm me-1"></i> {{ t(k="adm-back") }}
           </button>
-          <h1 class="page-title">Name your forum</h1>
-          <p class="page-subtitle">You can change these settings later in the admin panel.</p>
+          <h1 class="page-title">{{ t(k="adm-name-your-forum") }}</h1>
+          <p class="page-subtitle">{{ t(k="adm-you-can-change-these-settings-later") }}</p>
         </div>
 
-        <p class="section-heading">Site details</p>
+        <p class="section-heading">{{ t(k="adm-site-details") }}</p>
 
         <div class="mb-3">
-          <label for="site_name" class="form-label fw-medium">Forum name</label>
+          <label for="site_name" class="form-label fw-medium">{{ t(k="adm-forum-name") }}</label>
           <input type="text" class="form-control" id="site_name" name="site_name"
-                 placeholder="My Community" value="Ferum Board" maxlength="80">
+                 placeholder="{{ t(k='adm-my-community') }}" value="Ferum Board" maxlength="80">
         </div>
 
         <div class="mb-4">
           <label for="site_tagline" class="form-label fw-medium">
-            Tagline
-            <span class="badge bg-secondary-subtle text-secondary fw-normal ms-1" style="font-size:.7rem">Optional</span>
+            {{ t(k="adm-tagline") }}
+            <span class="badge bg-secondary-subtle text-secondary fw-normal ms-1" style="font-size:.7rem">{{ t(k="adm-optional-2") }}</span>
           </label>
           <input type="text" class="form-control" id="site_tagline" name="site_tagline"
-                 placeholder="A place to discuss anything" maxlength="160">
+                 placeholder="{{ t(k='adm-a-place-to-discuss-anything') }}" maxlength="160">
         </div>
 
-        <p class="section-heading">Demo data</p>
+        <p class="section-heading">{{ t(k="adm-demo-data") }}</p>
 
         <label class="seed-toggle d-flex align-items-center gap-3 mb-4" id="seed-label" for="seed_example_data">
           <input type="checkbox" id="seed_example_data" name="seed_example_data">
           <div class="seed-toggle-indicator" aria-hidden="true"></div>
           <div>
-            <div class="fw-medium" style="font-size:.92rem">Seed example content</div>
+            <div class="fw-medium" style="font-size:.92rem">{{ t(k="adm-seed-example-content") }}</div>
             <div class="text-body-secondary" style="font-size:.8rem; line-height:1.4">
-              Adds sample categories, threads, and users so you can explore the interface right away.
+              {{ t(k="adm-adds-sample-categories-threads-and-users") }}
             </div>
           </div>
         </label>
 
         <button type="button" class="btn btn-primary w-100" id="btn-next-2">
-          Continue <i class="fa-solid fa-arrow-right ms-1 fa-sm"></i>
+          {{ t(k="adm-continue") }} <i class="fa-solid fa-arrow-right ms-1 fa-sm"></i>
         </button>
       </div>
 
@@ -170,41 +170,41 @@
       <div class="step-panel" id="panel-3">
         <div class="mb-4">
           <button type="button" class="btn-nav-back mb-2" data-back="2">
-            <i class="fa-solid fa-arrow-left fa-sm me-1"></i> Back
+            <i class="fa-solid fa-arrow-left fa-sm me-1"></i> {{ t(k="adm-back") }}
           </button>
-          <h1 class="page-title">Ready to launch</h1>
-          <p class="page-subtitle">Review your configuration before creating the forum.</p>
+          <h1 class="page-title">{{ t(k="adm-ready-to-launch") }}</h1>
+          <p class="page-subtitle">{{ t(k="adm-review-your-configuration-before-creating-the") }}</p>
         </div>
 
-        <p class="section-heading">Admin account</p>
+        <p class="section-heading">{{ t(k="adm-admin-account") }}</p>
         <div class="review-card mb-3">
           <div class="review-row">
-            <span class="label">Username</span>
+            <span class="label">{{ t(k="adm-username") }}</span>
             <span class="value" id="r-username">—</span>
           </div>
           <div class="review-row">
-            <span class="label">Email</span>
+            <span class="label">{{ t(k="adm-email") }}</span>
             <span class="value" id="r-email">—</span>
           </div>
           <div class="review-row">
-            <span class="label">Password</span>
+            <span class="label">{{ t(k="adm-password") }}</span>
             <span class="value text-body-secondary">••••••••</span>
           </div>
         </div>
 
-        <p class="section-heading">Forum</p>
+        <p class="section-heading">{{ t(k="adm-forum") }}</p>
         <div class="review-card mb-4">
           <div class="review-row">
-            <span class="label">Name</span>
+            <span class="label">{{ t(k="adm-name") }}</span>
             <span class="value" id="r-site-name">—</span>
           </div>
           <div class="review-row">
-            <span class="label">Tagline</span>
+            <span class="label">{{ t(k="adm-tagline") }}</span>
             <span class="value text-body-secondary" id="r-tagline">—</span>
           </div>
           <div class="review-row">
-            <span class="label">Seed data</span>
-            <span class="value" id="r-seed">No</span>
+            <span class="label">{{ t(k="adm-seed-data") }}</span>
+            <span class="value" id="r-seed">{{ t(k="adm-no") }}</span>
           </div>
         </div>
 
@@ -212,14 +212,14 @@
 
         <button type="button" class="btn btn-primary w-100 py-2" id="submit-btn">
           <span id="btn-text">
-            <i class="fa-solid fa-rocket me-2"></i>Launch Ferum Board
+            <i class="fa-solid fa-rocket me-2"></i>{{ t(k="adm-launch-ferum-board") }}
           </span>
           <span id="btn-spinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true"></span>
         </button>
 
         <p class="text-center text-body-secondary mt-3 mb-0" style="font-size:.8rem">
           <i class="fa-solid fa-circle-info me-1"></i>
-          This is a one-time setup. Your credentials are saved securely.
+          {{ t(k="adm-this-is-a-one-time-setup") }}
         </p>
       </div>
 

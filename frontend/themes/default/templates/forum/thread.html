@@ -2,7 +2,7 @@
 {% import "default/templates/macros.html" as m %}
 
 {% block title %}{{ thread.title }} — {{ site.name }}{% endblock %}
-{% block description %}{{ thread.title }} by {{ thread.author_display_name }}{% endblock %}
+{% block description %}{{ t(k="ui-desc-thread", title=thread.title, author=thread.author_display_name) }}{% endblock %}
 
 {% block meta_social %}
 <link rel="canonical" href="{{ site.url }}/forum/t/{{ thread.slug }}">
@@ -39,9 +39,9 @@
      hidden></div>
 
 {# ── Breadcrumb ─────────────────────────────────────────────────────── #}
-<nav aria-label="breadcrumb" class="mb-3">
+<nav aria-label="{{ t(k='ui-breadcrumb') }}" class="mb-3">
   <ol class="breadcrumb mb-0">
-    <li class="breadcrumb-item"><a href="/forum">Forum</a></li>
+    <li class="breadcrumb-item"><a href="/forum">{{ t(k="ui-forum") }}</a></li>
     <li class="breadcrumb-item"><a href="/forum/{{ thread.category_slug }}">{{ thread.category_name }}</a></li>
     <li class="breadcrumb-item active" aria-current="page">{{ thread.title | truncate(length=50) }}</li>
   </ol>
@@ -59,11 +59,11 @@
             style="width:56px;height:56px"><i class="fa-solid fa-couch text-muted" aria-hidden="true"></i></span>
     {% endif %}
     <div class="flex-grow-1 min-w-0">
-      <div class="text-muted small">Product review</div>
+      <div class="text-muted small">{{ t(k="ui-product-review") }}</div>
       <div class="fw-semibold text-truncate">
         {{ review_product.name }}
         {% if not review_product.is_published %}
-          <span class="badge text-bg-warning ms-1"><i class="fa-solid fa-clock me-1" aria-hidden="true"></i>Pending approval</span>
+          <span class="badge text-bg-warning ms-1"><i class="fa-solid fa-clock me-1" aria-hidden="true"></i>{{ t(k="ui-pending-approval") }}</span>
         {% endif %}
       </div>
       {% if review_product.review_count and review_product.review_count > 0 %}
@@ -71,9 +71,9 @@
       {% endif %}
     </div>
     {% if review_product.is_published %}
-      <a href="/catalog/{{ review_product.slug }}" class="btn btn-sm btn-outline-primary flex-shrink-0">View product</a>
+      <a href="/catalog/{{ review_product.slug }}" class="btn btn-sm btn-outline-primary flex-shrink-0">{{ t(k="ui-view-product") }}</a>
     {% else %}
-      <span class="text-muted small flex-shrink-0 text-end">Will be public<br>once approved</span>
+      <span class="text-muted small flex-shrink-0 text-end">{{ t(k="ui-public-once-approved") }}</span>
     {% endif %}
   </div>
 </div>
@@ -87,15 +87,15 @@
       <span class="display-6 fw-bold lh-1">{{ review_rating.overall }}<span class="fs-5 text-muted">/5</span></span>
       <span class="fs-4">{{ m::rating_stars(value=review_rating.overall) }}</span>
       {% if review_rating.verified_purchase %}
-        <span class="badge text-bg-success align-self-center"><i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>Verified purchase</span>
+        <span class="badge text-bg-success align-self-center"><i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>{{ t(k="ui-verified-purchase") }}</span>
       {% endif %}
     </div>
     <div class="row g-2">
-      {{ m::subscore_row(label="Durability", value=review_rating.durability) }}
-      {{ m::subscore_row(label="Materials", value=review_rating.materials) }}
-      {{ m::subscore_row(label="Comfort", value=review_rating.comfort) }}
-      {{ m::subscore_row(label="Aesthetics", value=review_rating.aesthetics) }}
-      {{ m::subscore_row(label="Value for money", value=review_rating.value_for_money) }}
+      {{ m::subscore_row(label_key="ui-durability", value=review_rating.durability) }}
+      {{ m::subscore_row(label_key="ui-materials", value=review_rating.materials) }}
+      {{ m::subscore_row(label_key="ui-comfort", value=review_rating.comfort) }}
+      {{ m::subscore_row(label_key="ui-aesthetics", value=review_rating.aesthetics) }}
+      {{ m::subscore_row(label_key="ui-value-for-money", value=review_rating.value_for_money) }}
     </div>
   </div>
 </div>
@@ -123,7 +123,7 @@
         <a href="/u/{{ thread.author_username }}" class="small text-white text-decoration-none fw-medium opacity-90">{{ thread.author_display_name }}</a>
         <span class="text-white-50 small">·</span>
         <time class="small text-white-50 fr-notif-time" data-rel datetime="{{ thread.created_at }}">
-          {{ thread.created_at | date(format="%b %d, %Y") }}
+          {{ thread.created_at | localdate }}
         </time>
       </div>
     </div>
@@ -141,7 +141,7 @@
     <a href="/u/{{ thread.author_username }}" class="small text-body text-decoration-none fw-medium">{{ thread.author_display_name }}</a>
     <span class="text-muted small">·</span>
     <time class="small text-muted fr-notif-time" data-rel datetime="{{ thread.created_at }}">
-      {{ thread.created_at | date(format="%b %d, %Y") }}
+      {{ thread.created_at | localdate }}
     </time>
   </div>
 </div>
@@ -170,23 +170,23 @@
   <div class="d-flex gap-1 flex-wrap align-items-center flex-shrink-0">
       {% if can_post %}
         <a href="#reply" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-reply me-1"></i>Reply
+          <i class="fa-solid fa-reply me-1"></i>{{ t(k="ui-reply") }}
         </a>
       {% endif %}
       {% if thread.can_edit %}
         <a href="/edit-thread/{{ thread.slug }}" class="btn btn-outline-secondary btn-sm">
-          <i class="fa-solid fa-pen me-1"></i>Edit
+          <i class="fa-solid fa-pen me-1"></i>{{ t(k="ui-edit") }}
         </a>
       {% endif %}
       {% if thread.can_delete %}
         <button type="button" class="btn btn-outline-danger btn-sm"
                 data-action="delete-thread" data-thread-slug="{{ thread.slug }}" data-category-slug="{{ thread.category_slug }}">
-          <i class="fa-solid fa-trash me-1"></i>Delete
+          <i class="fa-solid fa-trash me-1"></i>{{ t(k="ui-delete") }}
         </button>
       {% endif %}
       {% if thread.can_pin or thread.can_lock or thread.can_move %}
         <div class="dropdown">
-          <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-label="Moderator actions">
+          <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-label="{{ t(k='ui-moderator-actions') }}">
             <i class="fa-solid fa-shield-halved"></i>
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
@@ -195,9 +195,9 @@
               <button type="button" class="dropdown-item"
                       data-action="mod-thread" data-mod-action="pin" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_pinned }}">
                 {% if thread.is_pinned %}
-                  <i class="fa-solid fa-thumbtack-slash me-2"></i>Unpin
+                  <i class="fa-solid fa-thumbtack-slash me-2"></i>{{ t(k="ui-unpin") }}
                 {% else %}
-                  <i class="fa-solid fa-thumbtack me-2"></i>Pin
+                  <i class="fa-solid fa-thumbtack me-2"></i>{{ t(k="ui-pin") }}
                 {% endif %}
               </button>
             </li>
@@ -207,9 +207,9 @@
               <button type="button" class="dropdown-item"
                       data-action="mod-thread" data-mod-action="lock" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_locked }}">
                 {% if thread.is_locked %}
-                  <i class="fa-solid fa-lock-open me-2"></i>Unlock
+                  <i class="fa-solid fa-lock-open me-2"></i>{{ t(k="ui-unlock") }}
                 {% else %}
-                  <i class="fa-solid fa-lock me-2"></i>Lock
+                  <i class="fa-solid fa-lock me-2"></i>{{ t(k="ui-lock") }}
                 {% endif %}
               </button>
             </li>
@@ -219,7 +219,7 @@
               <li>
                 <button type="button" class="dropdown-item"
                         data-bs-toggle="modal" data-bs-target="#moveThreadModal">
-                  <i class="fa-solid fa-arrow-right-arrow-left me-2"></i>Move thread
+                  <i class="fa-solid fa-arrow-right-arrow-left me-2"></i>{{ t(k="ui-move-thread") }}
                 </button>
               </li>
             {% endif %}
@@ -236,7 +236,7 @@
   <div class="card mb-3 text-muted" id="post-{{ post.id }}">
     <div class="card-body py-3 d-flex align-items-center gap-2">
       <i class="fa-solid fa-trash-can opacity-50"></i>
-      <span class="fst-italic">This post has been deleted.</span>
+      <span class="fst-italic">{{ t(k="ui-this-post-has-been-deleted") }}</span>
       <a href="#post-{{ post.id }}" class="small text-muted text-decoration-none ms-auto fr-post-num">#{{ post_number }}</a>
     </div>
   </div>
@@ -247,12 +247,12 @@
     {# Best answer banner #}
     {% if post.is_best_answer %}
       <div class="card-header small py-1 fr-best-answer-header">
-        <i class="fa-solid fa-circle-check me-1"></i>Best Answer
+        <i class="fa-solid fa-circle-check me-1"></i>{{ t(k="ui-best-answer") }}
       </div>
     {% endif %}
     {% if post.is_pending %}
       <div class="card-header small py-1 text-warning-emphasis bg-warning-subtle">
-        <i class="fa-solid fa-clock me-1"></i>Awaiting moderator approval — only visible to you and staff
+        <i class="fa-solid fa-clock me-1"></i>{{ t(k="ui-awaiting-moderator-approval-only-visible-to") }}
       </div>
     {% endif %}
 
@@ -271,11 +271,11 @@
             </div>
             <div class="d-flex align-items-center gap-2 mt-1">
               <time class="small text-muted fr-notif-time" data-rel datetime="{{ post.created_at }}">
-                {{ post.created_at | date(format="%b %d, %Y") }}
+                {{ post.created_at | localdate }}
               </time>
               {% if post.edited_at %}
                 <span class="small text-muted">
-                  · <i class="fa-solid fa-pen fa-xs me-1 opacity-50"></i>edited
+                  · <i class="fa-solid fa-pen fa-xs me-1 opacity-50"></i>{{ t(k="thread-edited") }}
                 </span>
               {% endif %}
             </div>
@@ -289,21 +289,21 @@
           {% if current_user %}
             <div class="dropdown">
               <button class="fr-icon-btn" type="button"
-                      data-bs-toggle="dropdown" aria-label="Post actions">
+                      data-bs-toggle="dropdown" aria-label="{{ t(k='ui-post-actions') }}">
                 <i class="fa-solid fa-ellipsis"></i>
               </button>
               <ul class="dropdown-menu dropdown-menu-end">
                 {% if post.can_edit %}
                   <li>
                     <button type="button" class="dropdown-item" data-action="edit-post" data-post-id="{{ post.id }}">
-                      <i class="fa-solid fa-pen me-2"></i>Edit
+                      <i class="fa-solid fa-pen me-2"></i>{{ t(k="ui-edit") }}
                     </button>
                   </li>
                 {% endif %}
                 {% if post.can_delete %}
                   <li>
                     <button type="button" class="dropdown-item text-danger" data-action="delete-post" data-post-id="{{ post.id }}">
-                      <i class="fa-solid fa-trash me-2"></i>Delete
+                      <i class="fa-solid fa-trash me-2"></i>{{ t(k="ui-delete") }}
                     </button>
                   </li>
                 {% endif %}
@@ -312,7 +312,7 @@
                     <button type="button" class="dropdown-item text-warning"
                             data-bs-toggle="modal" data-bs-target="#reportModal"
                             data-post-id="{{ post.id }}" data-author="{{ post.author_display_name | escape }}">
-                      <i class="fa-solid fa-flag me-2"></i>Report
+                      <i class="fa-solid fa-flag me-2"></i>{{ t(k="ui-report") }}
                     </button>
                   </li>
                 {% endif %}
@@ -321,7 +321,7 @@
                   <li>
                     <button type="button" class="dropdown-item text-success"
                             data-action="best-answer" data-thread-id="{{ thread.id }}" data-post-id="{{ post.id }}">
-                      <i class="fa-solid fa-check-circle me-2"></i>Mark best answer
+                      <i class="fa-solid fa-check-circle me-2"></i>{{ t(k="ui-mark-best-answer") }}
                     </button>
                   </li>
                 {% endif %}
@@ -344,8 +344,8 @@
           can-upload="{{ can_upload_attachment }}">
         </ferum-post-composer>
         <div class="d-flex gap-2 mt-2">
-          <button type="button" class="btn btn-primary btn-sm" data-action="save-edit" data-post-id="{{ post.id }}">Save</button>
-          <button type="button" class="btn btn-secondary btn-sm" data-action="cancel-edit" data-post-id="{{ post.id }}">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" data-action="save-edit" data-post-id="{{ post.id }}">{{ t(k="ui-save") }}</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-action="cancel-edit" data-post-id="{{ post.id }}">{{ t(k="ui-cancel") }}</button>
         </div>
       </div>
 
@@ -372,13 +372,13 @@
 {% if thread.is_locked %}
   <div class="alert alert-secondary mt-4 d-flex align-items-center gap-2">
     <i class="fa-solid fa-lock fa-lg opacity-50"></i>
-    <span>This thread is locked and no longer accepts new replies.</span>
+    <span>{{ t(k="ui-this-thread-is-locked-and-no") }}</span>
   </div>
 {% elif can_post %}
   <div id="reply" class="mt-4">
     <div class="d-flex align-items-center gap-2 mb-3">
       {{ m::avatar(url=current_user.avatar_url, name=current_user.display_name, size=32) }}
-      <span class="fw-semibold">Leave a reply</span>
+      <span class="fw-semibold">{{ t(k="ui-leave-a-reply") }}</span>
     </div>
     <ferum-post-composer id="reply-composer" thread-id="{{ thread.id }}" mode="reply"
       can-upload="{{ can_upload_attachment }}"></ferum-post-composer>
@@ -386,28 +386,28 @@
     <div class="d-flex gap-2 mt-3">
       <button type="button" class="btn btn-primary px-4" id="reply-submit-btn" data-action="submit-reply">
         <span id="reply-spinner" class="spinner-border spinner-border-sm me-1 d-none" role="status"></span>
-        <i class="fa-solid fa-paper-plane me-1"></i>Post Reply
+        <i class="fa-solid fa-paper-plane me-1"></i>{{ t(k="ui-post-reply") }}
       </button>
       <button class="btn btn-outline-secondary" type="button" data-action="cancel-reply">
-        Cancel
+        {{ t(k="ui-cancel") }}
       </button>
     </div>
   </div>
 {% elif current_user %}
   <div class="alert alert-warning mt-4 d-flex align-items-center gap-2">
     <i class="fa-solid fa-triangle-exclamation fa-lg opacity-50"></i>
-    <span>Your account does not yet have permission to reply in this category. Verify your email or gain more activity to unlock posting.</span>
+    <span>{{ t(k="ui-your-account-does-not-yet-have") }}</span>
   </div>
 {% else %}
   <div class="alert alert-info mt-4 d-flex align-items-center gap-2">
     <i class="fa-solid fa-right-to-bracket fa-lg opacity-50"></i>
-    <span><a href="/login?next=/forum/t/{{ thread.slug }}" class="fw-semibold">Sign in</a> to join the conversation.</span>
+    <span><a href="/login?next=/forum/t/{{ thread.slug }}" class="fw-semibold">{{ t(k="ui-sign-in-to-join") }}</a></span>
   </div>
 {% endif %}
 
 {# ── Floating reply button (mobile, locked threads excluded) ─────────── #}
 {% if can_post %}
-  <a href="#reply" class="fr-fab d-lg-none" aria-label="Reply">
+  <a href="#reply" class="fr-fab d-lg-none" aria-label="{{ t(k='ui-reply') }}">
     <i class="fa-solid fa-reply"></i>
   </a>
 {% endif %}
@@ -417,13 +417,13 @@
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content">
       <div class="modal-header border-0 pb-1">
-        <h5 class="modal-title fs-6 fw-semibold" id="confirmModalTitle">Confirm</h5>
+        <h5 class="modal-title fs-6 fw-semibold" id="confirmModalTitle">{{ t(k="ui-confirm") }}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body pt-1 small text-muted" id="confirmModalBody"></div>
       <div class="modal-footer border-0 pt-1 gap-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-sm" id="confirmModalOk">Confirm</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
+        <button type="button" class="btn btn-sm" id="confirmModalOk">{{ t(k="ui-confirm") }}</button>
       </div>
     </div>
   </div>
@@ -434,26 +434,26 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="fa-solid fa-flag me-2 text-warning"></i>Report Post</h5>
+        <h5 class="modal-title"><i class="fa-solid fa-flag me-2 text-warning"></i>{{ t(k="ui-report-post") }}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <p class="text-muted small mb-3">
-          Reporting post by <strong id="report-author-name"></strong>.
+          {{ t(k="ui-reporting-post-by") }} <strong id="report-author-name"></strong>.
         </p>
         <input type="hidden" id="report-post-id">
         <div class="mb-3">
-          <label for="report-reason" class="form-label">Reason <span class="text-danger">*</span></label>
+          <label for="report-reason" class="form-label">{{ t(k="ui-reason") }} <span class="text-danger">*</span></label>
           <textarea class="form-control" id="report-reason" rows="3" maxlength="500"
-                    placeholder="Describe why this post violates the rules…" required></textarea>
-          <div class="form-text">Max 500 characters.</div>
+                    placeholder="{{ t(k='ui-describe-why-this-post-violates-the') }}" required></textarea>
+          <div class="form-text">{{ t(k="ui-max-500-characters") }}</div>
         </div>
         <div id="report-feedback" class="d-none"></div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
         <button type="button" class="btn btn-danger" id="report-submit-btn" data-action="submit-report">
-          <i id="report-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Submit Report
+          <i id="report-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-submit-report") }}
         </button>
       </div>
     </div>
@@ -466,13 +466,13 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="fa-solid fa-arrow-right-arrow-left me-2"></i>Move Thread</h5>
+        <h5 class="modal-title"><i class="fa-solid fa-arrow-right-arrow-left me-2"></i>{{ t(k="ui-move-thread-2") }}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">Select the target category for this thread.</p>
+        <p class="text-muted small mb-3">{{ t(k="ui-select-the-target-category-for-this") }}</p>
         <select class="form-select" id="move-category-id">
-          <option value="">Select a category…</option>
+          <option value="">{{ t(k="ui-select-a-category") }}</option>
           {% for cat in move_categories %}
             <option value="{{ cat.id }}">
               {% if cat.parent_id %}-- {% endif %}{{ cat.name }}
@@ -482,9 +482,9 @@
         <div id="move-feedback" class="d-none mt-2"></div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
         <button type="button" class="btn btn-primary" id="move-submit-btn" data-action="move-thread" data-thread-id="{{ thread.id }}">
-          <i id="move-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Move
+          <i id="move-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-move") }}
         </button>
       </div>
     </div>
@@ -500,14 +500,14 @@
 
   {# ── Thread Info ─────────────────────────────────────────── #}
   <div class="fr-panel">
-    <div class="fr-panel-header">Thread Info</div>
+    <div class="fr-panel-header">{{ t(k="ui-thread-info") }}</div>
     <div class="fr-panel-body">
 
       {# Author with avatar #}
       <div class="d-flex align-items-center gap-2 mb-3">
         {{ m::avatar(url=thread.author_avatar_url, name=thread.author_display_name, size=36) }}
         <div class="min-w-0">
-          <div class="small text-muted lh-1 mb-1">Author</div>
+          <div class="small text-muted lh-1 mb-1">{{ t(k="ui-author") }}</div>
           <a href="/u/{{ thread.author_username }}"
              class="fw-semibold text-body text-decoration-none small text-truncate d-block">
             {{ thread.author_display_name }}
@@ -519,9 +519,9 @@
         {# Posted date #}
         <div class="d-flex align-items-center gap-2">
           <i class="fa-regular fa-clock fa-xs text-muted fr-icon-col" aria-hidden="true"></i>
-          <span class="text-muted small">Posted</span>
+          <span class="text-muted small">{{ t(k="ui-posted") }}</span>
           <time class="small ms-auto fr-notif-time" data-rel datetime="{{ thread.created_at }}">
-            {{ thread.created_at | date(format="%b %d, %Y") }}
+            {{ thread.created_at | localdate }}
           </time>
         </div>
 
@@ -539,19 +539,19 @@
         {% if thread.is_pinned or show_solved or thread.is_locked %}
           <div class="d-flex flex-wrap gap-1 mt-1">
             {% if thread.is_pinned %}
-              <span class="badge bg-primary"><i class="fa-solid fa-thumbtack me-1"></i>Pinned</span>
+              <span class="badge bg-primary"><i class="fa-solid fa-thumbtack me-1"></i>{{ t(k="ui-pinned") }}</span>
             {% endif %}
             {% if show_solved %}
               {% if best_answer_href %}
-                <a href="{{ best_answer_href }}" class="badge bg-success text-decoration-none" title="Jump to best answer">
-                  <i class="fa-solid fa-circle-check me-1"></i>Solved
+                <a href="{{ best_answer_href }}" class="badge bg-success text-decoration-none" title="{{ t(k='ui-jump-to-best-answer') }}">
+                  <i class="fa-solid fa-circle-check me-1"></i>{{ t(k="ui-solved") }}
                 </a>
               {% else %}
-                <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Solved</span>
+                <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>{{ t(k="ui-solved") }}</span>
               {% endif %}
             {% endif %}
             {% if thread.is_locked %}
-              <span class="badge bg-warning text-dark"><i class="fa-solid fa-lock me-1"></i>Locked</span>
+              <span class="badge bg-warning text-dark"><i class="fa-solid fa-lock me-1"></i>{{ t(k="ui-locked") }}</span>
             {% endif %}
           </div>
         {% endif %}
@@ -560,11 +560,11 @@
 
     <div class="fr-panel-body border-top">
       <div class="fr-panel-stat-row">
-        <span><i class="fa-regular fa-eye fa-xs me-1" aria-hidden="true"></i>Views</span>
+        <span><i class="fa-regular fa-eye fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-views") }}</span>
         <span class="fr-panel-stat-val">{{ thread.view_count }}</span>
       </div>
       <div class="fr-panel-stat-row">
-        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Replies</span>
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-replies") }}</span>
         <span class="fr-panel-stat-val">{{ thread.reply_count }}</span>
       </div>
     </div>
@@ -573,28 +573,28 @@
   {# ── CTA ─────────────────────────────────────────────────── #}
   {% if current_user %}
     <div class="fr-panel">
-      <div class="fr-panel-header">Actions</div>
+      <div class="fr-panel-header">{{ t(k="ui-actions") }}</div>
       <div class="fr-panel-body d-grid gap-2">
         {% if can_post %}
           <a href="#reply" class="btn btn-primary btn-sm">
-            <i class="fa-solid fa-reply me-1"></i>Reply to thread
+            <i class="fa-solid fa-reply me-1"></i>{{ t(k="ui-reply-to-thread") }}
           </a>
         {% endif %}
         <ferum-bookmark-btn thread-id="{{ thread.id }}" user-id="{{ current_user.id }}" class="w-100">
         </ferum-bookmark-btn>
         <a href="/new-thread?category_id={{ thread.category_id }}" class="btn btn-outline-secondary btn-sm">
-          <i class="fa-solid fa-plus me-1"></i>New Thread
+          <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
         </a>
       </div>
     </div>
   {% else %}
     <div class="fr-panel">
-      <div class="fr-panel-header">Join the conversation</div>
+      <div class="fr-panel-header">{{ t(k="ui-join-the-conversation") }}</div>
       <div class="fr-panel-body d-grid gap-2">
         <a href="/register" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-user-plus me-1"></i>Create account
+          <i class="fa-solid fa-user-plus me-1"></i>{{ t(k="ui-create-account") }}
         </a>
-        <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+        <a href="/login" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-sign-in") }}</a>
       </div>
     </div>
   {% endif %}

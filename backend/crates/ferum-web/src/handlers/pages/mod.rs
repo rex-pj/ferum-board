@@ -149,19 +149,84 @@ pub(super) async fn plugin_ctx_data(
     (map, assets)
 }
 
-#[tracing::instrument(skip(state, ctx), fields(theme = active_theme, page_key))]
+/// Strings the browser renders itself, as `key → text` in the given locale.
+///
+/// Scoped to the `js-` namespace deliberately. Shipping the whole catalog would
+/// put every string — including admin copy a visitor can never see — into every
+/// page's HTML, and it would grow without bound as the site is translated.
+///
+/// Derived from the *default locale's* key set so the dictionary has the same
+/// shape in every language; a key the current locale hasn't translated resolves
+/// through the fallback chain, exactly as it would server-side.
+pub fn js_strings_for(
+    state: &AppState,
+    locale: &ferum_domain::Locale,
+) -> std::collections::BTreeMap<String, String> {
+    state
+        .translator
+        .default_locale_keys()
+        .into_iter()
+        .filter(|k| k.starts_with("js-"))
+        .map(|key| {
+            let text = state.translator.translate(locale, &key, &[]);
+            (key, text)
+        })
+        .collect()
+}
+
+/// Renders a themed page in the default locale.
+///
+/// Retained for callers that have no request locale to hand; prefer
+/// [`render_with_theme_in`] on any path that serves a visitor.
 pub async fn render_with_theme(
     state: &AppState,
     active_theme: &str,
     page_key: &str,
     ctx: &Context,
 ) -> Result<Html<String>, PageError> {
+    render_with_theme_in(
+        state,
+        &crate::middleware::locale::RequestLocale::default(),
+        active_theme,
+        page_key,
+        ctx,
+    )
+    .await
+}
+
+/// Renders a themed page in an explicit locale.
+///
+/// The locale does two things: it picks the compiled template set whose `t()`
+/// resolves against that language's catalog, and it is exposed to templates as
+/// `locale` so `base.html` can emit `<html lang="…">` and build `hreflang`
+/// alternates.
+#[tracing::instrument(skip(state, ctx, req_locale), fields(theme = active_theme, page_key, locale = %req_locale.locale))]
+pub async fn render_with_theme_in(
+    state: &AppState,
+    req_locale: &crate::middleware::locale::RequestLocale,
+    active_theme: &str,
+    page_key: &str,
+    ctx: &Context,
+) -> Result<Html<String>, PageError> {
+    let locale = &req_locale.locale;
     let (plugin_slots, plugin_assets) = plugin_ctx_data(state).await;
     let theme_bs_theme = state.active_theme_color_scheme_cache.read().await.clone();
     let mut ctx = ctx.clone();
     ctx.insert("plugin_slots", &plugin_slots);
     ctx.insert("plugin_assets", &plugin_assets);
     ctx.insert("theme_bs_theme", &theme_bs_theme);
+    ctx.insert("locale", locale.as_str());
+    ctx.insert("current_path", &req_locale.canonical_path);
+    ctx.insert("js_strings", &js_strings_for(state, locale));
+    ctx.insert(
+        "available_locales",
+        &state
+            .translator
+            .available_locales()
+            .iter()
+            .map(|l| l.to_string())
+            .collect::<Vec<_>>(),
+    );
 
     let chain = state.active_theme_chain_cache.read().await.clone();
     let candidates: Vec<String> = chain
@@ -174,7 +239,7 @@ pub async fn render_with_theme(
         .await
         .unwrap_or_else(|| format!("{}/templates/{}", DEFAULT_THEME_SLUG, page_key));
 
-    let html = state.tera.render(&template_name, &ctx).await?;
+    let html = state.tera.render(locale, &template_name, &ctx).await?;
     Ok(Html(html))
 }
 
@@ -291,25 +356,33 @@ static STATIC_ERROR_HTML: &str = include_str!("../../error_pages/error_static.ht
 
 // ─── Error page render helpers ────────────────────────────────────────────────
 
-pub async fn render_404_page(state: &AppState, auth_user: Option<&AuthUser>) -> Response {
+pub async fn render_404_page(
+    state: &AppState,
+    req_locale: &crate::middleware::locale::RequestLocale,
+    auth_user: Option<&AuthUser>,
+) -> Response {
     let active = active_theme(state).await;
     let mut ctx = Context::new();
     ctx.insert("site", &crate::handlers::admin::site_ctx(state).await);
     ctx.insert("active_theme", &active);
     ctx.insert("current_user", &user_ctx(state, auth_user).await);
-    match render_with_theme(state, &active, "errors/404.html", &ctx).await {
+    match render_with_theme_in(state, req_locale, &active, "errors/404.html", &ctx).await {
         Ok(html) => (StatusCode::NOT_FOUND, html).into_response(),
         Err(_) => (StatusCode::NOT_FOUND, Html(STATIC_404_HTML)).into_response(),
     }
 }
 
-pub async fn render_error_page(state: &AppState, auth_user: Option<&AuthUser>) -> Response {
+pub async fn render_error_page(
+    state: &AppState,
+    req_locale: &crate::middleware::locale::RequestLocale,
+    auth_user: Option<&AuthUser>,
+) -> Response {
     let active = active_theme(state).await;
     let mut ctx = Context::new();
     ctx.insert("site", &crate::handlers::admin::site_ctx(state).await);
     ctx.insert("active_theme", &active);
     ctx.insert("current_user", &user_ctx(state, auth_user).await);
-    match render_with_theme(state, &active, "errors/error.html", &ctx).await {
+    match render_with_theme_in(state, req_locale, &active, "errors/error.html", &ctx).await {
         Ok(html) => (StatusCode::INTERNAL_SERVER_ERROR, html).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Html(STATIC_ERROR_HTML)).into_response(),
     }

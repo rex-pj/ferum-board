@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { getUnreadCount, openNotificationStream } from './lib/notifications';
+  import { t } from './lib/i18n';
 
   let {
     'user-id': userId = '',
@@ -39,10 +40,10 @@
   }
 </script>
 
-<a href="/notifications" class="bell-link" title="Notifications" aria-label="Notifications">
+<a href="/notifications" class="bell-link" title={t('js-notifications')} aria-label={t('js-notifications')}>
   <i class="fa-solid fa-bell bell-icon" aria-hidden="true"></i>
   {#if count > 0}
-    <span class="badge" aria-label="{count} unread">{count > 99 ? '99+' : count}</span>
+    <span class="badge" aria-label={t('js-unread-count', { count })}>{count > 99 ? '99+' : count}</span>
   {/if}
 </a>
 

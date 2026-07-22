@@ -214,7 +214,8 @@ async fn create_post_empty_content_returns_unprocessable() {
         parent_id: None,
         content_md: "   ".to_string(),
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "post_content_empty"),
+        "expected post_content_empty, got {result:?}");
 }
 
 #[tokio::test]
@@ -233,7 +234,8 @@ async fn create_post_content_too_large_returns_unprocessable() {
         parent_id: None,
         content_md: huge,
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "post_content_too_long"),
+        "expected post_content_too_long, got {result:?}");
 }
 
 // ─── delete ───────────────────────────────────────────────────────────────────
@@ -332,7 +334,8 @@ async fn edit_empty_content_returns_unprocessable() {
     let actor = member_with_post_perm();
     let b = PostUseCaseBuilder::new();
     let result = b.build().edit(&actor, ids::post_a(), "  ".to_string()).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "post_content_empty"),
+        "expected post_content_empty, got {result:?}");
 }
 
 #[tokio::test]

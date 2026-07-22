@@ -1,0 +1,31 @@
+{# ── Product page: management notices ────────────────────────────────────────
+   Included by both catalog/product.html templates (default and ferum-review) so
+   the two cannot drift. The Edit/Delete trigger itself lives in
+   product_curator_menu.html, included inline next to the <h1> instead — this
+   file is only the full-width status banner below it.
+
+   `can_edit_product` mirrors `ProductUseCase::authorize_product_edit`: curators
+   anywhere, contributors only on their own still-unapproved draft. The note is
+   the other half of the job — a contributor whose entry has been approved has
+   lost the controls, and silence there just reads as a broken page.
+
+   Single-line icon+sentence, matching the alert convention used for every other
+   contextual note on this site (e.g. the locked-thread / sign-in-to-reply notes
+   in forum/thread.html) — not a two-line title+body block. This banner sits
+   directly under the H1 and repeats on every visit, so it has to lose the
+   argument for visual attention against the price, rating and brand that follow
+   it, not win it. #}
+{% if can_edit_product %}
+  {% if is_own_submission %}
+    <div class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-2 small" role="status">
+      <i class="fa-solid fa-circle-info flex-shrink-0" aria-hidden="true"></i>
+      <span>{{ t(k="ui-your-submission-pending") }}</span>
+    </div>
+  {% endif %}
+{% elif is_own_submission %}
+  {# Submitted by this reader, but approved — now shared catalogue content. #}
+  <div class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-2 small" role="status">
+    <i class="fa-solid fa-circle-info flex-shrink-0" aria-hidden="true"></i>
+    <span>{{ t(k="ui-your-submission-published") }}</span>
+  </div>
+{% endif %}

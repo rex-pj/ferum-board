@@ -13,6 +13,7 @@ use crate::view_models::page_context::CurrentUserCtx;
 pub async fn settings(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
@@ -24,5 +25,5 @@ pub async fn settings(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("config", &configs);
 
-    render_admin(&state, "admin/settings.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/settings.html", &ctx).await
 }

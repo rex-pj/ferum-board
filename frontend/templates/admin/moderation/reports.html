@@ -17,14 +17,14 @@
           <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
         </span>
         <input type="search" name="q" class="form-control border-start-0 ps-0"
-               placeholder="Search reason…" value="{{ search_query }}" autocomplete="off">
+               placeholder="{{ t(k='adm-search-reason') }}" value="{{ search_query }}" autocomplete="off">
       </div>
       <button type="submit" class="btn btn-sm btn-outline-success">
-        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+        <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="adm-search") }}
       </button>
       {% if search_query %}
         <a href="/admin/reports{% if filter %}?status={{ filter }}{% endif %}"
-           class="btn btn-sm btn-outline-secondary" title="Clear search">
+           class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-clear-search') }}">
           <i class="fa-solid fa-xmark"></i>
         </a>
       {% endif %}
@@ -35,7 +35,7 @@
       <a href="/admin/reports{% if search_query %}?q={{ search_query }}{% endif %}"
          class="btn btn-sm rounded-pill d-inline-flex align-items-center gap-1
                 {% if filter == '' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
-        All
+        {{ t(k="adm-all") }}
         <span class="badge rounded-pill ms-1
                      {% if filter == '' %}bg-white text-primary{% else %}bg-secondary bg-opacity-25 text-body{% endif %}"
               style="font-size:.65rem;font-weight:600;padding:.2em .5em">
@@ -48,7 +48,7 @@
                 {% if filter == 'pending' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
         <span class="rounded-circle flex-shrink-0"
               style="width:.55rem;height:.55rem;background:var(--bs-warning)"></span>
-        Pending
+        {{ t(k="adm-pending") }}
         <span class="badge rounded-pill ms-1
                      {% if filter == 'pending' %}bg-white text-primary{% else %}bg-warning bg-opacity-25 text-warning-emphasis{% endif %}"
               style="font-size:.65rem;font-weight:600;padding:.2em .5em">
@@ -60,7 +60,7 @@
                 {% if filter == 'resolved' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
         <span class="rounded-circle flex-shrink-0"
               style="width:.55rem;height:.55rem;background:var(--bs-success)"></span>
-        Resolved
+        {{ t(k="adm-resolved") }}
         <span class="badge rounded-pill ms-1
                      {% if filter == 'resolved' %}bg-white text-primary{% else %}bg-success bg-opacity-25 text-success-emphasis{% endif %}"
               style="font-size:.65rem;font-weight:600;padding:.2em .5em">
@@ -72,7 +72,7 @@
                 {% if filter == 'dismissed' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
         <span class="rounded-circle flex-shrink-0"
               style="width:.55rem;height:.55rem;background:var(--bs-secondary)"></span>
-        Dismissed
+        {{ t(k="adm-dismissed") }}
         <span class="badge rounded-pill ms-1
                      {% if filter == 'dismissed' %}bg-white text-primary{% else %}bg-secondary bg-opacity-25 text-body{% endif %}"
               style="font-size:.65rem;font-weight:600;padding:.2em .5em">
@@ -87,11 +87,11 @@
       <thead class="table-active">
         <tr>
           {# SUBJECT: target type + reason + thread context #}
-          <th>Report</th>
+          <th>{{ t(k="adm-report") }}</th>
           {# SOURCE: reporter + date #}
-          <th style="width:18%">Reporter</th>
+          <th style="width:18%">{{ t(k="adm-reporter") }}</th>
           {# STATE #}
-          <th style="width:9%">Status</th>
+          <th style="width:9%">{{ t(k="adm-status") }}</th>
           {# ACTIONS #}
           <th style="width:14%"></th>
         </tr>
@@ -103,11 +103,11 @@
           <td class="align-middle">
             <div class="d-flex align-items-center gap-2 mb-1">
               {% if report.post_id %}
-                <span class="badge bg-secondary flex-shrink-0">Post</span>
+                <span class="badge bg-secondary flex-shrink-0">{{ t(k="adm-post") }}</span>
               {% elif report.thread_id %}
-                <span class="badge bg-secondary flex-shrink-0">Thread</span>
+                <span class="badge bg-secondary flex-shrink-0">{{ t(k="adm-thread") }}</span>
               {% else %}
-                <span class="badge bg-danger-subtle text-danger-emphasis flex-shrink-0">Deleted</span>
+                <span class="badge bg-danger-subtle text-danger-emphasis flex-shrink-0">{{ t(k="adm-deleted") }}</span>
               {% endif %}
               <span class="text-truncate fw-semibold" style="max-width:400px" title="{{ report.reason }}">
                 {{ report.reason }}
@@ -115,14 +115,14 @@
             </div>
             {% if report.post_id and report.thread_slug %}
               <div class="text-muted small">
-                Post in thread:
+                {{ t(k="adm-post-in-thread") }}
                 <a href="/forum/t/{{ report.thread_slug }}#post-{{ report.post_id }}" target="_blank" class="text-decoration-none">
                   {{ report.thread_title }}
                 </a>
               </div>
             {% elif report.thread_slug %}
               <div class="text-muted small">
-                Thread:
+                {{ t(k="adm-thread-2") }}
                 <a href="/forum/t/{{ report.thread_slug }}" target="_blank" class="text-decoration-none">
                   {{ report.thread_title }}
                 </a>
@@ -133,30 +133,30 @@
           <td class="align-middle">
             <div class="fw-semibold small">@{{ report.reporter_username }}</div>
             <div class="text-muted small text-nowrap">
-              <time data-rel datetime="{{ report.created_at }}">{{ report.created_at | date(format="%b %d, %Y") }}</time>
+              <time data-rel datetime="{{ report.created_at }}">{{ report.created_at | localdate }}</time>
             </div>
           </td>
           {# STATUS cell #}
           <td class="align-middle">
             {% if report.status == "pending" %}
-              <span class="badge bg-warning text-dark">Pending</span>
+              <span class="badge bg-warning text-dark">{{ t(k="adm-pending") }}</span>
             {% elif report.status == "resolved" %}
-              <span class="badge bg-success">Resolved</span>
+              <span class="badge bg-success">{{ t(k="adm-resolved") }}</span>
             {% else %}
-              <span class="badge bg-secondary">Dismissed</span>
+              <span class="badge bg-secondary">{{ t(k="adm-dismissed") }}</span>
             {% endif %}
           </td>
           {# ACTIONS cell #}
           <td class="align-middle">
             {% if report.status == "pending" %}
             <div class="d-flex gap-1">
-              <button class="btn btn-sm btn-success" title="Mark as resolved"
+              <button class="btn btn-sm btn-success" title="{{ t(k='adm-mark-as-resolved') }}"
                       data-admin-action="resolve-report" data-report-id="{{ report.id }}">
-                <i class="fa-solid fa-check me-1"></i>Resolve
+                <i class="fa-solid fa-check me-1"></i>{{ t(k="adm-resolve") }}
               </button>
-              <button class="btn btn-sm btn-outline-secondary" title="Dismiss without action"
+              <button class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-dismiss-without-action') }}"
                       data-admin-action="dismiss-report" data-report-id="{{ report.id }}">
-                <i class="fa-solid fa-xmark me-1"></i>Dismiss
+                <i class="fa-solid fa-xmark me-1"></i>{{ t(k="adm-dismiss") }}
               </button>
             </div>
             {% endif %}
@@ -167,8 +167,8 @@
           <td colspan="4">
             <div class="text-center py-5 text-secondary">
               <i class="fa-solid fa-inbox fa-3x mb-3 d-block opacity-25"></i>
-              <div class="fw-semibold mb-1">All clear!</div>
-              <div class="small">No reports for the current filter.</div>
+              <div class="fw-semibold mb-1">{{ t(k="adm-all-clear") }}</div>
+              <div class="small">{{ t(k="adm-no-reports-for-the-current-filter") }}</div>
             </div>
           </td>
         </tr>

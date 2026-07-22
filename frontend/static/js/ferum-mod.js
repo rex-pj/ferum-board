@@ -16,7 +16,7 @@
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
-      Ferum.showToast('queue-toast', 'Network error.', true);
+      Ferum.showToast('queue-toast', Ferum.t('js-network-error'), true);
       if (triggerBtn) triggerBtn.disabled = false;
     }
   }
@@ -37,7 +37,7 @@
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
-      Ferum.showToast('queue-toast', 'Network error.', true);
+      Ferum.showToast('queue-toast', Ferum.t('js-network-error'), true);
       if (triggerBtn) triggerBtn.disabled = false;
     }
   }
@@ -56,7 +56,7 @@
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
-      Ferum.showToast('report-toast', 'Network error.', true);
+      Ferum.showToast('report-toast', Ferum.t('js-network-error'), true);
       if (triggerBtn) triggerBtn.disabled = false;
     }
   }
@@ -75,7 +75,7 @@
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
-      Ferum.toast('Network error.', true);
+      Ferum.toast(Ferum.t('js-network-error'), true);
       if (triggerBtn) triggerBtn.disabled = false;
     }
   }
@@ -95,7 +95,7 @@
         var b = await res.json().catch(function () { return {}; });
         Ferum.showFeedback('warn-feedback-' + userId, 'danger', (b.error && b.error.message) || 'Failed to warn user.');
       }
-    } catch (_) { Ferum.showFeedback('warn-feedback-' + userId, 'danger', 'Network error.'); }
+    } catch (_) { Ferum.showFeedback('warn-feedback-' + userId, 'danger', Ferum.t('js-network-error')); }
     if (triggerBtn) triggerBtn.disabled = false;
   }
 
@@ -117,7 +117,7 @@
         var b = await res.json().catch(function () { return {}; });
         Ferum.showFeedback('ban-feedback-' + userId, 'danger', (b.error && b.error.message) || 'Failed to ban user.');
       }
-    } catch (_) { Ferum.showFeedback('ban-feedback-' + userId, 'danger', 'Network error.'); }
+    } catch (_) { Ferum.showFeedback('ban-feedback-' + userId, 'danger', Ferum.t('js-network-error')); }
     if (triggerBtn) triggerBtn.disabled = false;
   }
 

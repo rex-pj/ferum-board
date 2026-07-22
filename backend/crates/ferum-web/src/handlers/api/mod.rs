@@ -6,6 +6,7 @@ pub mod categories;
 pub mod dev;
 pub mod follows;
 pub mod health;
+pub mod locale;
 pub mod notifications;
 pub mod plugin_rpc;
 pub mod posts;

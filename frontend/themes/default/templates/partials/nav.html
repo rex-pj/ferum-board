@@ -4,7 +4,7 @@
     {# Mobile hamburger — toggles sidebar drawer #}
     <button class="fr-topbar-menu-btn d-lg-none" type="button"
             data-action="toggle-sidebar"
-            aria-label="Open menu" aria-controls="mobileSidebar" aria-expanded="false" id="sidebarToggleBtn">
+            aria-label="{{ t(k='ui-open-menu') }}" aria-controls="mobileSidebar" aria-expanded="false" id="sidebarToggleBtn">
       <i class="fa-solid fa-bars" aria-hidden="true"></i>
     </button>
 
@@ -13,7 +13,7 @@
       {% if site.logo_url %}
         <img src="{{ site.logo_url }}" alt="{{ site.name }}" class="fr-brand-img">
       {% else %}
-        <span class="fr-brand-mark" aria-hidden="true">F</span>
+        <span class="fr-brand-mark" aria-hidden="true">{{ site.name | truncate(length=1, end="") | upper }}</span>
       {% endif %}
       <span class="fr-brand-text">
         <span class="fr-brand-name">{{ site.name }}</span>
@@ -25,18 +25,48 @@
 
     {# Search bar #}
     <form class="fr-topbar-search" action="/search" method="get" role="search">
-      <button type="submit" class="fr-topbar-search-btn" aria-label="Search">
+      <button type="submit" class="fr-topbar-search-btn" aria-label="{{ t(k='ui-search') }}">
         <i class="fa-solid fa-magnifying-glass fr-topbar-search-icon" aria-hidden="true"></i>
       </button>
-      <input type="search" name="q" placeholder="Search discussions…" autocomplete="off"
-             aria-label="Search">
+      <input type="search" name="q" placeholder="{{ t(k='ui-search-discussions') }}" autocomplete="off"
+             aria-label="{{ t(k='ui-search') }}">
     </form>
 
     {# Right actions #}
     <div class="fr-topbar-actions">
 
+      {# Language switcher sits to the LEFT of the theme toggle: both are
+         display preferences, and the language choice is the more consequential
+         of the two, so it reads first.
+         Only rendered when the site actually speaks more than one language, so a
+         single-language forum gets no dead control. Works for guests too —
+         PUT /api/locale sets the cookie without an account. #}
+      {% if available_locales and available_locales | length > 1 %}
+      <div class="dropdown">
+        <button type="button" class="fr-icon-btn" data-bs-toggle="dropdown" data-bs-display="static"
+                aria-expanded="false"
+                aria-label="{{ t(k='nav-change-language') }}"
+                title="{{ t(k='nav-change-language') }}">
+          <i class="fa-solid fa-language" aria-hidden="true"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><h6 class="dropdown-header">{{ t(k="nav-language") }}</h6></li>
+          {% for alt in available_locales %}
+          <li>
+            <button type="button"
+                    class="dropdown-item d-flex align-items-center gap-2{% if alt == locale %} active{% endif %}"
+                    data-ferum-locale="{{ alt }}">
+              <i class="fa-solid fa-check{% if alt != locale %} invisible{% endif %}" aria-hidden="true"></i>
+              {{ t(k="language-name-" ~ alt) }}
+            </button>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
       {# Theme toggle — wired up by ferum-utils.js via [data-ferum-theme-btn] #}
-      <button type="button" class="fr-icon-btn" data-ferum-theme-btn aria-label="Toggle theme" title="Toggle dark/light mode">
+      <button type="button" class="fr-icon-btn" data-ferum-theme-btn aria-label="{{ t(k='ui-toggle-theme') }}" title="{{ t(k='ui-toggle-dark-light-mode') }}">
         <i class="fa-solid fa-moon" aria-hidden="true"></i>
       </button>
 
@@ -55,8 +85,8 @@
 
       {% else %}
         {# Hidden below lg — the mobile bottom nav already has Login/Register. #}
-        <a href="/login" class="btn btn-outline-primary btn-sm d-none d-lg-inline-flex">Log in</a>
-        <a href="/register" class="btn btn-primary btn-sm d-none d-lg-inline-flex">Register</a>
+        <a href="/login" class="btn btn-outline-primary btn-sm d-none d-lg-inline-flex">{{ t(k="ui-log-in") }}</a>
+        <a href="/register" class="btn btn-primary btn-sm d-none d-lg-inline-flex">{{ t(k="ui-register") }}</a>
       {% endif %}
 
       {# Plugin slot: navbar_end — plugins inject Web Components here #}
@@ -71,7 +101,7 @@
 {# Mobile sidebar drawer #}
 <div id="mobileSidebar"
      style="display:none;position:fixed;inset:var(--fr-topbar-height) 0 0 0;z-index:1040;flex-direction:row;"
-     role="dialog" aria-modal="true" aria-label="Navigation menu">
+     role="dialog" aria-modal="true" aria-label="{{ t(k='ui-navigation-menu') }}">
   <div class="fr-sidebar-left"
        style="box-shadow:4px 0 24px rgba(0,0,0,0.18);">
     {% include "default/templates/partials/sidebar_left.html" %}

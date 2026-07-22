@@ -5,6 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use uuid::Uuid;
 
+use ferum_domain::Locale;
+/// Re-exported so port consumers get the argument type alongside the trait.
+/// It lives in the domain because `AppError` carries translation arguments and
+/// the domain cannot depend on this crate.
+pub use ferum_domain::TransArg;
+
 use crate::shared::AppError;
 
 // ─── PasswordHasher ───────────────────────────────────────────────────────────
@@ -99,15 +105,25 @@ pub enum ForumJob {
         user_id: Uuid,
         email: String,
         token: String,
+        /// Language to write the email in.
+        ///
+        /// **Resolved at enqueue time and carried here on purpose.** The worker
+        /// runs detached from the request, so by the time it executes there is no
+        /// request locale to consult — and even if there were, it would be the
+        /// *actor's*, not the recipient's. A Vietnamese member replying to an
+        /// English member's thread must produce an English notification.
+        locale: Locale,
     },
     SendPasswordResetEmail {
         email: String,
         token: String,
+        locale: Locale,
     },
     SendNotificationEmail {
         user_id: Uuid,
         subject: String,
         body: String,
+        locale: Locale,
     },
     /// Decrement ref_count for a CAS key; delete from storage + DB if it hits 0.
     GcStorageKey {
@@ -366,3 +382,49 @@ pub trait NotificationSubscriber: Send + Sync {
     fn active_connection_count(&self) -> usize;
 }
 
+
+// ─── Translator ───────────────────────────────────────────────────────────────
+
+
+/// Resolves a message key to text in a given locale.
+///
+/// DIP: abstracts the Fluent catalog behind an application-layer port, so use
+/// cases and the web layer never name a `fluent-bundle` type. The argument type
+/// is deliberately `TransArg` rather than Fluent's own `FluentArgs` — leaking
+/// that type upward would make `ferum-application` depend on the very crate the
+/// port exists to hide.
+///
+/// `translate` is **synchronous by contract**. It is called from inside Tera's
+/// `register_function` closure, which is sync, so an async lookup here would be
+/// unimplementable without blocking. Implementations must therefore keep the
+/// catalog in memory and never perform I/O on this path — refreshing from disk
+/// belongs in `reload`.
+#[async_trait]
+pub trait Translator: Send + Sync {
+    /// Resolves `key` in `locale`, interpolating `args`.
+    ///
+    /// **Never fails.** A missing key walks the locale's fallback chain, then
+    /// the default locale, and finally renders the key itself. A template or an
+    /// error path must not be able to take down a page because a translation is
+    /// absent — a visibly untranslated string is a far better failure mode than
+    /// a 500, and it is self-diagnosing in a way an empty string is not.
+    fn translate(&self, locale: &Locale, key: &str, args: &[(&str, TransArg)]) -> String;
+
+    /// Whether `key` resolves in `locale` *without* falling back to another
+    /// locale. Backs the admin coverage report, which is only meaningful if a
+    /// key inherited from the default locale counts as missing.
+    fn has_key(&self, locale: &Locale, key: &str) -> bool;
+
+    /// Every locale with a loaded catalog, default first. This is the installed
+    /// roster, not the admin-enabled one — enabling is site config layered on top.
+    fn available_locales(&self) -> Vec<Locale>;
+
+    /// Every key defined in the default locale. The canonical key set that
+    /// coverage percentages are computed against.
+    fn default_locale_keys(&self) -> Vec<String>;
+
+    /// Re-reads catalogs from disk and atomically swaps them in. Called after a
+    /// language pack upload or an admin string override, mirroring
+    /// `PermissionResolver::reload` and `TeraEngine::reload_themes`.
+    async fn reload(&self) -> Result<(), AppError>;
+}

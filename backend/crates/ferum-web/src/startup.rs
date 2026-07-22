@@ -208,6 +208,89 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     #[cfg(not(feature = "meilisearch"))]
     let search_svc: Arc<dyn SearchService> = Arc::new(PostgresFtsService::new(pg_read.clone()));
 
+    // Site name is interpolated into transactional email copy. Read once here
+    // rather than per-send: the job worker runs detached from any request and has
+    // no access to the live config cache, and a site rename is rare enough that
+    // picking it up on the next restart is acceptable.
+    let site_name = PgSiteConfigRepository::new(pg_write.clone())
+        .get("site_name")
+        .await
+        .ok()
+        .flatten()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| ferum_application::constants::DEFAULT_SITE_NAME.to_string());
+
+    // ─── Translation catalogs ─────────────────────────────────────────────────
+    // Built early because the job executor below needs it: transactional emails
+    // are written in the recipient's language, and the executor is constructed
+    // as part of the Redis/in-memory branch.
+    //
+    // Roots are listed in ascending precedence: a theme's catalog shadows core,
+    // the same direction the theme template chain resolves.
+    //
+    // Both candidate paths are tried because the app is normally run from
+    // `backend/` (so `../locales`) but the compiled binary may be run from the
+    // repository root (so `./locales`) — the same split THEMES_DIR has.
+    let locales_dir = {
+        let configured = std::path::PathBuf::from(&config.locales_dir);
+        let candidates = [
+            configured.clone(),
+            std::path::PathBuf::from("./locales"),
+            std::path::PathBuf::from("../locales"),
+        ];
+        match candidates.iter().find(|p| p.is_dir()) {
+            Some(found) => {
+                if found != &configured {
+                    tracing::warn!(
+                        configured = %configured.display(),
+                        using = %found.display(),
+                        "LOCALES_DIR not found; using a fallback path"
+                    );
+                }
+                found.clone()
+            }
+            None => anyhow::bail!(
+                "translation catalogs not found (tried {}). Every page renders its \
+                 message keys without them — set LOCALES_DIR.",
+                candidates
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    };
+    // Themes contribute their own catalogs from their own tree, listed after core
+    // so a theme can override a core string as well as add its own — the same
+    // precedence direction the theme template chain resolves in.
+    let mut catalog_roots = vec![locales_dir];
+    catalog_roots.extend(theme_locale_roots(&config.themes_dir));
+
+    let translator: Arc<dyn ferum_application::ports::Translator> =
+        Arc::new(ferum_infrastructure::i18n::FluentTranslator::new(catalog_roots).await);
+
+    // Fail closed on an empty catalog, the same policy first-party templates get.
+    //
+    // This was originally a warning, on the reasoning that rendering keys is
+    // "ugly but still serves pages". That was wrong: it shipped a forum whose
+    // navigation read `ui-home` / `ui-categories`, and nothing surfaced it until
+    // someone looked at a screenshot. A site in that state is broken, not degraded.
+    let key_count = translator.default_locale_keys().len();
+    anyhow::ensure!(
+        key_count > 0,
+        "translation catalog at {} loaded zero messages for the default locale — \
+         every page would render raw message keys. Check that the directory \
+         contains a `{}/` subdirectory with .ftl files.",
+        config.locales_dir,
+        ferum_domain::Locale::DEFAULT_TAG,
+    );
+
+    tracing::info!(
+        locales = ?translator.available_locales().iter().map(|l| l.to_string()).collect::<Vec<_>>(),
+        messages = key_count,
+        "translation catalogs ready"
+    );
+
     // ─── Redis or in-memory fallbacks ────────────────────────────────────────
     let (cache, rate_limiter_raw, job_queue, notification_bus): (
         Arc<dyn CacheService>,
@@ -223,7 +306,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 storage.clone(),
                 stored_file_repo.clone(),
                 webhook_repo.clone(),
-            ));
+            )
+            .with_translator(Arc::clone(&translator), site_name.clone()));
             let cache = RedisCacheService::new(url)
                 .await
                 .map(|s| -> Arc<dyn CacheService> { Arc::new(s) })
@@ -248,7 +332,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 storage.clone(),
                 stored_file_repo.clone(),
                 webhook_repo.clone(),
-            ));
+            )
+            .with_translator(Arc::clone(&translator), site_name.clone()));
             (
                 Arc::new(InMemoryCacheService::new()),
                 Arc::new(InMemoryRateLimiter::new()),
@@ -567,8 +652,13 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     );
     // Propagates on a broken first-party template — refusing to boot beats booting
     // into a forum whose admin panel 500s. User themes still fail open inside.
-    let tera = TeraEngine::new(themes_dir, admin_templates_dir, static_dir)
-        .map_err(|e| anyhow::anyhow!("template load failed: {e}"))?;
+    let tera = TeraEngine::new(
+        themes_dir,
+        admin_templates_dir,
+        static_dir,
+        Arc::clone(&translator),
+    )
+    .map_err(|e| anyhow::anyhow!("template load failed: {e}"))?;
 
     // ─── Background: flush daily stats every 5 minutes ─────────────────────────
     // One-time backfill: populate daily_stats for all past dates from source tables.
@@ -652,7 +742,9 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         theme,
         tera,
         themes_dir: config.themes_dir.clone(),
+        locales_dir: config.locales_dir.clone(),
         static_dir: config.static_dir.clone(),
+        translator,
         cookies_secure,
         app_url: config.app_url.trim_end_matches('/').to_string(),
         trusted_proxy_count: config.trusted_proxy_count,
@@ -720,4 +812,25 @@ pub fn read_theme_color_scheme(themes_dir: &str, slug: &str) -> String {
                 .map(|s| s.to_string())
         })
         .unwrap_or_else(|| "auto".to_string())
+}
+
+/// Every installed theme's `locales/` directory, sorted for a deterministic
+/// merge order.
+///
+/// Themes are catalog contributors on the same footing as core: a theme that
+/// introduces its own copy ships the strings next to the templates that use
+/// them, rather than requiring an edit to the core catalog it does not own.
+/// Sorting matters because two themes could define the same key and directory
+/// iteration order is not stable across filesystems.
+fn theme_locale_roots(themes_dir: &str) -> Vec<std::path::PathBuf> {
+    let Ok(entries) = std::fs::read_dir(themes_dir) else {
+        return Vec::new();
+    };
+    let mut roots: Vec<std::path::PathBuf> = entries
+        .flatten()
+        .map(|e| e.path().join("locales"))
+        .filter(|p| p.is_dir())
+        .collect();
+    roots.sort();
+    roots
 }

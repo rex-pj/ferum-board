@@ -15,6 +15,7 @@ use super::super::{require_moderator, ModPageQuery};
 pub async fn reports(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ModPageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -66,5 +67,5 @@ pub async fn reports(
     ctx.insert("count_resolved",  &counts.resolved);
     ctx.insert("count_dismissed", &counts.dismissed);
 
-    render_admin(&state, "mod/reports.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/reports.html", &ctx).await
 }

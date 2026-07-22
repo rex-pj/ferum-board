@@ -72,6 +72,12 @@ pub struct Config {
     #[serde(default = "default_static_dir")]
     pub static_dir: String,
 
+    // Internationalization
+    /// Root holding one subdirectory per locale, each with `.ftl` catalogs.
+    /// Themes and plugins contribute their own catalogs from their own trees.
+    #[serde(default = "default_locales_dir")]
+    pub locales_dir: String,
+
     // Plugin system
     #[serde(default = "default_plugins_dir")]
     pub plugins_dir: String,
@@ -222,6 +228,9 @@ fn default_admin_templates_dir() -> String {
 }
 fn default_static_dir() -> String {
     "./frontend/static".to_string()
+}
+fn default_locales_dir() -> String {
+    "./locales".to_string()
 }
 fn default_plugins_dir() -> String {
     "./plugins".to_string()

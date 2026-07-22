@@ -1,14 +1,14 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Forum — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-forum") }} — {{ site.name }}{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="fs-5 fw-bold mb-0">All Categories</h1>
+  <h1 class="fs-5 fw-bold mb-0">{{ t(k="ui-all-categories") }}</h1>
   {% if current_user %}
     <a href="/new-thread" class="btn btn-primary btn-sm">
-      <i class="fa-solid fa-plus me-1"></i>New Thread
+      <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
     </a>
   {% endif %}
 </div>
@@ -90,7 +90,7 @@
             {% include "default/templates/partials/thread_card.html" %}
           {% endfor %}
         {% else %}
-          <p class="text-muted small px-3 py-3 mb-0">No threads yet.</p>
+          <p class="text-muted small px-3 py-3 mb-0">{{ t(k="ui-no-threads-yet") }}</p>
         {% endif %}
 
       </div>
@@ -99,7 +99,7 @@
 {% else %}
   <div class="text-center py-5 text-muted">
     <i class="fa-solid fa-comments fa-3x mb-3 d-block"></i>
-    No categories yet. An admin needs to create some first.
+    {{ t(k="ui-no-categories-yet-an-admin-needs") }}
   </div>
 {% endif %}
 {% endblock %}
@@ -109,35 +109,35 @@
 
   {% if not current_user %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Get Involved</div>
+    <div class="fr-panel-header">{{ t(k="ui-get-involved") }}</div>
     <div class="fr-panel-body">
       <p class="small text-secondary mb-3">
-        {% if site.tagline %}{{ site.tagline }}{% else %}Join the community and start discussing.{% endif %}
+        {% if site.tagline %}{{ site.tagline }}{% else %}{{ t(k="ui-join-the-community-and-start") }}{% endif %}
       </p>
       <div class="d-grid gap-2">
         <a href="/register" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-user-plus me-1"></i>Create account
+          <i class="fa-solid fa-user-plus me-1"></i>{{ t(k="ui-create-account") }}
         </a>
-        <a href="/login" class="btn btn-outline-secondary btn-sm">Sign in</a>
+        <a href="/login" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-sign-in") }}</a>
       </div>
     </div>
   </div>
   {% else %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Community</div>
+    <div class="fr-panel-header">{{ t(k="ui-community") }}</div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Threads</span>
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-threads") }}</span>
         <span class="fr-panel-stat-val">{{ total_threads }}</span>
       </div>
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>Categories</span>
+        <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-categories") }}</span>
         <span class="fr-panel-stat-val">{{ total_categories }}</span>
       </div>
     </div>
     <div class="fr-panel-body border-top" style="padding-top:.5rem;padding-bottom:.5rem">
       <a href="/new-thread" class="btn btn-primary btn-sm w-100">
-        <i class="fa-solid fa-plus me-1"></i>New Thread
+        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
       </a>
     </div>
   </div>
@@ -147,7 +147,7 @@
      This is distinct from: left sidebar (nav only) and main column (organized by category). #}
   {% if groups %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Recent Discussions</div>
+    <div class="fr-panel-header">{{ t(k="ui-recent-discussions") }}</div>
     {% for group in groups %}
       {% if group.recent_threads %}
         {% set t = group.recent_threads | first %}

@@ -1,9 +1,38 @@
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 
+use axum::extract::Multipart;
 use axum::http::HeaderMap;
+use ferum_application::shared::AppError;
 
 use crate::app_state::AppState;
+
+/// Pull a single image part out of a multipart body, returning its bytes and
+/// declared content type. Size and magic-byte validation belong to the use case,
+/// which owns the per-feature limits.
+pub async fn read_image_field(
+    multipart: &mut Multipart,
+    field_name: &str,
+) -> Result<(bytes::Bytes, String), AppError> {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
+    {
+        if field.name() == Some(field_name) {
+            let content_type = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            let data = field
+                .bytes()
+                .await
+                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+            return Ok((data, content_type));
+        }
+    }
+    Err(AppError::invalid("image_field_missing"))
+}
 
 // ─── Auth cookies ─────────────────────────────────────────────────────────────
 // Single source for the auth Set-Cookie strings. Max-Age comes from the
@@ -73,4 +102,30 @@ pub fn guest_fingerprint(headers: &HeaderMap) -> Option<String> {
     ip.hash(&mut hasher);
     ua.hash(&mut hasher);
     Some(format!("{:016x}", hasher.finish()))
+}
+
+/// `ferum_locale=…` cookie carrying the visitor's chosen language.
+///
+/// Deliberately **not** `HttpOnly`: unlike the auth token this is not a secret,
+/// and the client-side switcher needs to read it to show which language is
+/// active before any JS state exists.
+///
+/// For a signed-in user this cookie is a *cache* of `user_preferences.locale`,
+/// refreshed at login and whenever the preference changes. Keeping the durable
+/// copy in the database is what makes the choice follow the account to a new
+/// device; keeping the request-time copy in a cookie is what avoids a database
+/// lookup on every single page render just to know which language to draw.
+pub fn locale_cookie(state: &AppState, locale: &str) -> String {
+    let secure = if state.cookies_secure { "; Secure" } else { "" };
+    // One year: a language choice is not session state, and re-picking it on
+    // every visit would be worse than the marginal privacy cost.
+    format!("{}={locale}; SameSite=Lax; Path=/; Max-Age=31536000{secure}",
+        crate::middleware::locale::LOCALE_COOKIE)
+}
+
+/// Expired `ferum_locale=` cookie — returns the visitor to negotiated default.
+pub fn clear_locale_cookie(state: &AppState) -> String {
+    let secure = if state.cookies_secure { "; Secure" } else { "" };
+    format!("{}=; SameSite=Lax; Path=/; Max-Age=0{secure}",
+        crate::middleware::locale::LOCALE_COOKIE)
 }

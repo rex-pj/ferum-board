@@ -8,7 +8,7 @@ use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CategoryCtx, PaginationCtx, SearchHitCtx};
 
-use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
+use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme_in, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct SearchQuery {
@@ -33,6 +33,7 @@ where
 pub async fn search(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<SearchQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let active = active_theme(&state).await;
@@ -137,5 +138,5 @@ pub async fn search(
     ctx.insert("search_categories", &all_categories);
     ctx.insert("active_category_id", &q.category_id.map(|id| id.to_string()));
 
-    render_with_theme(&state, &active, "search.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "search.html", &ctx).await
 }

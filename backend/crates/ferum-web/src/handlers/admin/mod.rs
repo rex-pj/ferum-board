@@ -57,14 +57,45 @@ pub fn require_admin(auth_user: &AuthUser) -> Result<(), PageError> {
 }
 
 #[tracing::instrument(skip(state, ctx), fields(template))]
+/// Renders an admin or moderator page in the request's locale.
+///
+/// This used to pin the default locale, on the reasoning that admin copy ships
+/// English-only. But that made the panels the one place where a user's chosen
+/// language was ignored, and it would have made a language switcher in the admin
+/// header a dead control.
+///
+/// Rendering in the request locale costs nothing while `adm-*` strings are
+/// untranslated — they resolve through the fallback chain to English exactly as
+/// before — and the panels start speaking the user's language the moment someone
+/// adds those translations, with no further code change.
 pub async fn render_admin(
     state: &AppState,
+    req_locale: &crate::middleware::locale::RequestLocale,
     template: &str,
     ctx: &Context,
 ) -> Result<Html<String>, PageError> {
+    let locale = &req_locale.locale;
     let mut ctx = ctx.clone();
     ctx.insert("default_theme_slug", DEFAULT_THEME_SLUG);
-    let html = state.tera.render(template, &ctx).await?;
+    ctx.insert("locale", locale.as_str());
+    ctx.insert("current_path", &req_locale.canonical_path);
+    // Drives the header's language switcher; the template hides it entirely when
+    // only one language is installed, so a single-language site sees no control.
+    ctx.insert(
+        "available_locales",
+        &state
+            .translator
+            .available_locales()
+            .iter()
+            .map(|l| l.to_string())
+            .collect::<Vec<_>>(),
+    );
+    // Admin page scripts call `Ferum.t()` from the same shared `ferum-utils.js`
+    // the public pages use, so the dictionary has to be present here too —
+    // otherwise every client-rendered admin message would show a raw key.
+    ctx.insert("js_strings", &crate::handlers::pages::js_strings_for(state, locale));
+
+    let html = state.tera.render(locale, template, &ctx).await?;
     Ok(Html(html))
 }
 

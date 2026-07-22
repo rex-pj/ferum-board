@@ -19,10 +19,10 @@
             <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
           </span>
           <input type="search" class="form-control border-start-0 ps-0" id="audit-q" name="q"
-                 value="{{ search_query }}" placeholder="Filter by action…" autocomplete="off">
+                 value="{{ search_query }}" placeholder="{{ t(k='adm-filter-by-action') }}" autocomplete="off">
         </div>
         <button class="btn btn-sm btn-outline-success" type="submit">
-          <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+          <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="adm-search") }}
         </button>
         <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
                 data-bs-toggle="collapse" data-bs-target="#auditAdvFilters"
@@ -36,12 +36,12 @@
           {% endif %}
         </button>
         <button type="button" id="audit-ref-btn" class="btn btn-sm btn-outline-secondary"
-                title="Browse available actions" aria-label="Browse available actions">
+                title="{{ t(k='adm-browse-available-actions') }}" aria-label="{{ t(k='adm-browse-available-actions') }}">
           <i class="fa-solid fa-circle-question"></i>
         </button>
         {% if search_query or has_filters %}
-          <a href="/mod/log" class="btn btn-sm btn-outline-secondary ms-auto" title="Clear all">
-            <i class="fa-solid fa-xmark me-1"></i>Clear
+          <a href="/mod/log" class="btn btn-sm btn-outline-secondary ms-auto" title="{{ t(k='adm-clear-all') }}">
+            <i class="fa-solid fa-xmark me-1"></i>{{ t(k="adm-clear") }}
           </a>
         {% endif %}
       </div>
@@ -55,31 +55,31 @@
           {% if can_filter_by_actor %}
             <ferum-remote-select name="actor_id" endpoint="/api/mod/lookups/users"
                                  value="{{ actor_id_filter }}" label="{{ actor_label }}"
-                                 placeholder="Any actor"></ferum-remote-select>
+                                 placeholder="{{ t(k='adm-any-actor') }}"></ferum-remote-select>
 
             <div class="vr opacity-25 align-self-stretch"></div>
           {% endif %}
 
           <select name="target_type" class="form-select form-select-sm" style="width:auto">
-            <option value="">All targets</option>
-            <option value="thread"   {% if target_type_filter == "thread" %}selected{% endif %}>Thread</option>
-            <option value="post"     {% if target_type_filter == "post" %}selected{% endif %}>Post</option>
-            <option value="user"     {% if target_type_filter == "user" %}selected{% endif %}>User</option>
-            <option value="report"   {% if target_type_filter == "report" %}selected{% endif %}>Report</option>
-            <option value="category" {% if target_type_filter == "category" %}selected{% endif %}>Category</option>
+            <option value="">{{ t(k="adm-all-targets") }}</option>
+            <option value="thread"   {% if target_type_filter == "thread" %}selected{% endif %}>{{ t(k="adm-thread") }}</option>
+            <option value="post"     {% if target_type_filter == "post" %}selected{% endif %}>{{ t(k="adm-post") }}</option>
+            <option value="user"     {% if target_type_filter == "user" %}selected{% endif %}>{{ t(k="adm-user") }}</option>
+            <option value="report"   {% if target_type_filter == "report" %}selected{% endif %}>{{ t(k="adm-report") }}</option>
+            <option value="category" {% if target_type_filter == "category" %}selected{% endif %}>{{ t(k="adm-category") }}</option>
           </select>
 
           <div class="vr opacity-25 align-self-stretch"></div>
 
           <div class="d-flex align-items-center gap-1">
-            <span class="text-muted small text-nowrap">From</span>
+            <span class="text-muted small text-nowrap">{{ t(k="adm-from") }}</span>
             <input type="date" class="form-control form-control-sm" style="max-width:145px"
-                   name="date_from" value="{{ date_from_filter }}" aria-label="From date">
+                   name="date_from" value="{{ date_from_filter }}" aria-label="{{ t(k='adm-from-date') }}">
           </div>
           <div class="d-flex align-items-center gap-1">
             <span class="text-muted small text-nowrap">to</span>
             <input type="date" class="form-control form-control-sm" style="max-width:145px"
-                   name="date_to" value="{{ date_to_filter }}" aria-label="To date">
+                   name="date_to" value="{{ date_to_filter }}" aria-label="{{ t(k='adm-to-date') }}">
           </div>
         </div>
       </div>
@@ -91,10 +91,10 @@
     <table class="table table-hover align-middle mb-0">
       <thead class="table-active">
         <tr>
-          <th style="width:14%">Actor</th>
-          <th style="width:20%">Action</th>
-          <th>Target</th>
-          <th style="width:10%" class="text-end pe-3">Time</th>
+          <th style="width:14%">{{ t(k="adm-actor") }}</th>
+          <th style="width:20%">{{ t(k="adm-action") }}</th>
+          <th>{{ t(k="adm-target") }}</th>
+          <th style="width:10%" class="text-end pe-3">{{ t(k="adm-time") }}</th>
         </tr>
       </thead>
       <tbody>
@@ -155,7 +155,7 @@
           </td>
           <td class="text-end pe-3 text-muted small text-nowrap">
             <time data-rel datetime="{{ entry.created_at }}">
-              {{ entry.created_at | date(format="%b %d, %H:%M") }}
+              {{ entry.created_at | localdate(style="daymonth") }}
             </time>
           </td>
         </tr>
@@ -198,7 +198,7 @@
   <div class="d-flex flex-column gap-3">
     <div class="audit-group audit-group--content">
       <p class="text-muted fw-bold mb-2 audit-group-label">
-        <i class="fa-regular fa-comments me-1"></i>Content
+        <i class="fa-regular fa-comments me-1"></i>{{ t(k="adm-content") }}
       </p>
       <div class="d-flex flex-wrap gap-1">
         <button class="audit-chip" data-action="post.deleted">post.deleted</button>
@@ -209,7 +209,7 @@
     </div>
     <div class="audit-group audit-group--user">
       <p class="text-muted fw-bold mb-2 audit-group-label">
-        <i class="fa-solid fa-user me-1"></i>User
+        <i class="fa-solid fa-user me-1"></i>{{ t(k="adm-user") }}
       </p>
       <div class="d-flex flex-wrap gap-1">
         <button class="audit-chip" data-action="user.banned">user.banned</button>
@@ -220,7 +220,7 @@
     </div>
     <div class="audit-group audit-group--mod">
       <p class="text-muted fw-bold mb-2 audit-group-label">
-        <i class="fa-solid fa-shield-halved me-1"></i>Moderation
+        <i class="fa-solid fa-shield-halved me-1"></i>{{ t(k="adm-moderation") }}
       </p>
       <div class="d-flex flex-wrap gap-1">
         <button class="audit-chip" data-action="report.resolved">report.resolved</button>
@@ -228,7 +228,7 @@
       </div>
     </div>
     <p class="audit-ref-hint text-muted mb-0">
-      <i class="fa-solid fa-arrow-pointer me-1"></i>Click any action to filter
+      <i class="fa-solid fa-arrow-pointer me-1"></i>{{ t(k="adm-click-any-action-to-filter") }}
     </p>
   </div>
 </div>

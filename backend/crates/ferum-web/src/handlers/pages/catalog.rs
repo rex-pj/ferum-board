@@ -6,7 +6,7 @@ use serde::Deserialize;
 use tera::Context;
 use uuid::Uuid;
 
-use super::{active_theme, nav_categories_ctx, render_with_theme, user_ctx, PageError};
+use super::{active_theme, nav_categories_ctx, render_with_theme_in, user_ctx, PageError};
 use crate::app_state::AppState;
 use crate::handlers::admin::site_ctx;
 use crate::middleware::AuthUser;
@@ -40,6 +40,7 @@ pub struct CatalogQuery {
 pub async fn catalog_index(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<CatalogQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let page = q.page.unwrap_or(1).max(1);
@@ -93,7 +94,7 @@ pub async fn catalog_index(
         &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
     );
 
-    render_with_theme(&state, &active, "catalog/index.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/index.html", &ctx).await
 }
 
 /// GET /materials — public reference list of materials, grouped by category,
@@ -101,6 +102,7 @@ pub async fn catalog_index(
 pub async fn materials_index(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let materials = state.product.list_materials(None).await?;
 
@@ -132,7 +134,7 @@ pub async fn materials_index(
         &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
     );
 
-    render_with_theme(&state, &active, "catalog/materials.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/materials.html", &ctx).await
 }
 
 /// GET /brands — public brand directory; each entry links into the catalog
@@ -140,6 +142,7 @@ pub async fn materials_index(
 pub async fn brands_index(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let brands: Vec<BrandResponse> = state
         .product
@@ -164,7 +167,7 @@ pub async fn brands_index(
         &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
     );
 
-    render_with_theme(&state, &active, "catalog/brands.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/brands.html", &ctx).await
 }
 
 /// Sort/filter controls for the review list on a product page.
@@ -178,6 +181,7 @@ pub struct ReviewSortQuery {
 pub async fn catalog_detail(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(slug): Path<String>,
     Query(rq): Query<ReviewSortQuery>,
 ) -> Result<impl IntoResponse, PageError> {
@@ -295,6 +299,11 @@ pub async fn catalog_detail(
         None => None,
     };
 
+    // Captured before `product` is consumed below; `ProductResponse` does not
+    // carry the submitter, and it should not — it is serialised to the public API.
+    let product_created_by = product.created_by_id;
+    let product_is_draft = product.status == ferum_domain::models::product::ProductStatus::Draft;
+
     let detail = ProductDetailResponse {
         product: product.into(),
         brand,
@@ -335,6 +344,27 @@ pub async fn catalog_detail(
     ctx.insert("my_review_slug", &my_review_slug);
     ctx.insert("active_rsort", &rsort);
     ctx.insert("verified_only", &verified_only);
+    // Curators get an edit affordance on the product itself, rather than having
+    // to find it again in the admin catalogue.
+    let can_manage =
+        auth_user.as_ref().map_or(false, |u| PermissionChecker::can_manage_products(u).is_ok());
+    ctx.insert("can_manage_product", &can_manage);
+    // Whoever submitted this product, excluding curators (who already have the
+    // controls and need no notice). Drives the explanatory note: once an entry is
+    // approved it stops being theirs, and showing nothing at all reads as a bug.
+    let is_own_submission = !can_manage
+        && match (&auth_user, product_created_by) {
+            (Some(u), Some(creator)) => u.id == creator,
+            _ => false,
+        };
+    ctx.insert("is_own_submission", &is_own_submission);
+    // Mirrors `ProductUseCase::authorize_product_edit`. Kept in step with it
+    // deliberately: this only decides whether to draw the controls, and drawing
+    // them when the use case would refuse is how you build a button that 403s.
+    ctx.insert(
+        "can_edit_product",
+        &(can_manage || (is_own_submission && product_is_draft)),
+    );
 
-    render_with_theme(&state, &active, "catalog/product.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/product.html", &ctx).await
 }

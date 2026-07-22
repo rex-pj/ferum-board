@@ -18,6 +18,7 @@ use ferum_application::usecases::auth_usecase::{
 
 pub async fn register(
     State(state): State<AppState>,
+    Extension(locale): Extension<ferum_domain::Locale>,
     Json(body): Json<RegisterRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     body.validate()
@@ -29,6 +30,10 @@ pub async fn register(
             username: body.username,
             email: body.email,
             password: body.password,
+            // The language they were reading the site in when they signed up —
+            // the only signal available for a brand-new account with no stored
+            // preference, and the verification email is the first thing they get.
+            locale,
         })
         .await?;
 
@@ -66,6 +71,23 @@ pub async fn login(
             .parse()
             .unwrap(),
     );
+
+    // Refresh the locale cookie from the account's stored preference, so signing
+    // in on a new device brings the chosen language with it. A user who has never
+    // chosen gets the cookie cleared rather than pinned, leaving them on
+    // Accept-Language negotiation.
+    match state.user.get_preferences_by_id(result.user.id).await {
+        Ok(prefs) => {
+            let cookie = match prefs.locale {
+                Some(locale) => crate::utils::locale_cookie(&state, locale.as_str()),
+                None => crate::utils::clear_locale_cookie(&state),
+            };
+            headers.append(header::SET_COOKIE, cookie.parse().unwrap());
+        }
+        // A preferences read failure must not block a valid login; the user just
+        // keeps whatever language the cookie already said.
+        Err(e) => tracing::warn!(error = %e, "could not load locale preference at login"),
+    }
 
     Ok((
         StatusCode::OK,

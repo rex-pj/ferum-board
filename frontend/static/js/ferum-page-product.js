@@ -45,3 +45,19 @@
     match.setAttribute('aria-current', 'true');
   }
 }());
+
+// Review sort/filter bar — resubmit on change instead of requiring a separate
+// "Apply" click. The button stays in the markup and keeps working (GET form,
+// no inline handlers) for the no-JS case; here we just hide it and fire the
+// submit ourselves the moment a select or checkbox changes.
+(function () {
+  'use strict';
+
+  var form = document.querySelector('.fr-filter-bar');
+  if (!form) return;
+
+  form.classList.add('fr-filter-bar--auto');
+  form.addEventListener('change', function (e) {
+    if (e.target.matches('select, input[type="checkbox"]')) form.submit();
+  });
+}());

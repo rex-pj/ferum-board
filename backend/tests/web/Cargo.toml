@@ -20,3 +20,6 @@ bytes = "1"
 validator = { version = "0.19", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4" }
+ferum-infrastructure = { version = "0.1.0", path = "../../crates/ferum-infrastructure" }
+ferum-application = { version = "0.1.0", path = "../../crates/ferum-application" }
+tera = "1"

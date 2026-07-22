@@ -173,5 +173,45 @@
 }
 .list-group-item-action:hover { background: var(--fr-nav-hover-bg); color: var(--bs-body-color); }
 
+/* ── Chip + typeahead combobox ──────────────────────────────────
+   One control that holds selected chips and a search field. Used by both the
+   admin catalogue modal and the public add-product dialog — the two must pick
+   materials the same way. */
+
+.fr-chip-input {
+  min-height: calc(1.5em + .75rem + 2px);
+  cursor: text;
+}
+
+.fr-chip-input:focus-within {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 .25rem rgba(var(--bs-primary-rgb), .25);
+}
+
+/* Result menu for the chip typeahead. The background is explicit and opaque on
+   purpose: `.list-group` itself paints nothing, so any part of the menu not
+   covered by a row — the strip above the first item, the gap left when the rows
+   are shorter than the menu — lets the helper text underneath show through.
+   No border here: `.list-group-item` already draws one on every edge, so adding
+   another would double the outline. */
+.fr-typeahead-menu {
+  position: absolute;
+  z-index: 1060;
+  width: 100%;
+  top: calc(100% + 2px);
+  max-height: 220px;
+  overflow-y: auto;
+  background-color: var(--bs-body-bg);
+  border-radius: var(--bs-border-radius);
+  box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .175);
+}
+
+/* Flipped above the field when there is not enough room below it. Inside a
+   modal the menu would otherwise hang over the footer's own buttons. */
+.fr-typeahead-menu.fr-typeahead-up {
+  top: auto;
+  bottom: calc(100% + 2px);
+}
+
 /* Alerts */
 .alert { border-radius: var(--bs-border-radius); }

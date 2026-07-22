@@ -15,13 +15,13 @@
         try {
           await FerumApi.auth.resendVerification(email);
           if (resendFeedback) {
-            resendFeedback.textContent = 'If that address needs verifying, a new link is on its way.';
+            resendFeedback.textContent = Ferum.t('js-verify-link-sent');
             resendFeedback.classList.remove('d-none', 'alert-danger');
             resendFeedback.classList.add('alert-success');
           }
         } catch (_) {
           if (resendFeedback) {
-            resendFeedback.textContent = 'Network error. Please try again.';
+            resendFeedback.textContent = Ferum.t('js-network-error');
             resendFeedback.classList.remove('d-none');
           }
           resendBtn.disabled = false;
@@ -62,7 +62,7 @@
           window.location.href = next;
         } else {
           var body = await res.json().catch(function () { return {}; });
-          errorEl.textContent = (body.error && body.error.message) || 'Invalid email or password.';
+          errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-invalid-credentials');
           errorEl.classList.remove('d-none');
           if (resendBtn && body.error && body.error.code === 'email_not_verified') {
             resendBtn.classList.remove('d-none');
@@ -72,7 +72,7 @@
           spinner.classList.add('d-none');
         }
       } catch (_) {
-        errorEl.textContent = 'Network error. Please try again.';
+        errorEl.textContent = Ferum.t('js-network-error');
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
@@ -100,7 +100,7 @@
       var password = document.getElementById('password').value;
 
       if (!passwordIsStrong(password)) {
-        errorEl.textContent = 'Password must be at least 8 characters and include a digit and a special character.';
+        errorEl.textContent = Ferum.t('js-password-requirements');
         errorEl.classList.remove('d-none');
         return;
       }
@@ -118,19 +118,19 @@
         });
         if (res.ok) {
           if (successEl) {
-            successEl.textContent = 'Account created! Redirecting to sign in…';
+            successEl.textContent = Ferum.t('js-account-created');
             successEl.classList.remove('d-none');
           }
           setTimeout(function () { window.location.href = '/login'; }, 1500);
         } else {
           var body = await res.json().catch(function () { return {}; });
-          errorEl.textContent = (body.error && body.error.message) || 'Registration failed. Please try again.';
+          errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-registration-failed');
           errorEl.classList.remove('d-none');
           btn.disabled = false;
           spinner.classList.add('d-none');
         }
       } catch (_) {
-        errorEl.textContent = 'Network error. Please try again.';
+        errorEl.textContent = Ferum.t('js-network-error');
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
@@ -156,24 +156,24 @@
       try {
         await FerumApi.auth.forgotPassword(document.getElementById('email').value);
         if (successEl) {
-          successEl.textContent = 'If an account with that email exists, a reset link has been sent.';
+          successEl.textContent = Ferum.t('js-reset-link-sent');
           successEl.classList.remove('d-none');
         }
         spinner.classList.add('d-none');
         var secs = 30;
-        btn.textContent = 'Resend in ' + secs + 's';
+        btn.textContent = Ferum.t('js-resend-in', { seconds: secs });
         var iv = setInterval(function () {
           secs--;
           if (secs <= 0) {
             clearInterval(iv);
             btn.disabled = false;
-            btn.textContent = 'Resend email';
+            btn.textContent = Ferum.t('js-resend-email');
           } else {
-            btn.textContent = 'Resend in ' + secs + 's';
+            btn.textContent = Ferum.t('js-resend-in', { seconds: secs });
           }
         }, 1000);
       } catch (_) {
-        errorEl.textContent = 'Network error. Please try again.';
+        errorEl.textContent = Ferum.t('js-network-error');
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
@@ -215,12 +215,12 @@
       var confirm = document.getElementById('password_confirm').value;
 
       if (password !== confirm) {
-        errorEl.textContent = 'Passwords do not match.';
+        errorEl.textContent = Ferum.t('js-passwords-do-not-match');
         errorEl.classList.remove('d-none');
         return;
       }
       if (!passwordIsStrongReset(password)) {
-        errorEl.textContent = 'Password must be at least 8 characters and include a digit and a special character.';
+        errorEl.textContent = Ferum.t('js-password-requirements');
         errorEl.classList.remove('d-none');
         return;
       }
@@ -234,19 +234,19 @@
         var res = await FerumApi.auth.resetPassword(token, password);
         if (res.ok) {
           if (successEl) {
-            successEl.textContent = 'Password updated! Redirecting to sign in…';
+            successEl.textContent = Ferum.t('js-password-updated');
             successEl.classList.remove('d-none');
           }
           setTimeout(function () { window.location.href = '/login'; }, 1500);
         } else {
           var body = await res.json().catch(function () { return {}; });
-          errorEl.textContent = (body.error && body.error.message) || 'Reset failed. The link may have expired.';
+          errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-reset-failed');
           errorEl.classList.remove('d-none');
           btn.disabled = false;
           spinner.classList.add('d-none');
         }
       } catch (_) {
-        errorEl.textContent = 'Network error. Please try again.';
+        errorEl.textContent = Ferum.t('js-network-error');
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');

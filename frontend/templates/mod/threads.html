@@ -16,20 +16,20 @@
           <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
         </span>
         <input type="search" name="q" class="form-control border-start-0 ps-0"
-               placeholder="Search threads…" value="{% if q %}{{ q }}{% endif %}"
+               placeholder="{{ t(k='adm-search-threads') }}" value="{% if q %}{{ q }}{% endif %}"
                autocomplete="off">
       </div>
       <select name="status" class="form-select form-select-sm" style="width:auto">
-        <option value="">All statuses</option>
-        <option value="open"   {% if status == "open" %}selected{% endif %}>Open</option>
-        <option value="locked" {% if status == "locked" %}selected{% endif %}>Locked</option>
-        <option value="deleted"{% if status == "deleted" %}selected{% endif %}>Deleted</option>
+        <option value="">{{ t(k="adm-all-statuses") }}</option>
+        <option value="open"   {% if status == "open" %}selected{% endif %}>{{ t(k="adm-open") }}</option>
+        <option value="locked" {% if status == "locked" %}selected{% endif %}>{{ t(k="adm-locked") }}</option>
+        <option value="deleted"{% if status == "deleted" %}selected{% endif %}>{{ t(k="adm-deleted") }}</option>
       </select>
       <button type="submit" class="btn btn-sm btn-outline-success">
-        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+        <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="adm-search") }}
       </button>
       {% if q or status %}
-        <a href="/mod/threads" class="btn btn-sm btn-outline-secondary" title="Clear">
+        <a href="/mod/threads" class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-clear') }}">
           <i class="fa-solid fa-xmark"></i>
         </a>
       {% endif %}
@@ -41,11 +41,11 @@
       <thead class="table-active">
         <tr>
           {# CONTENT: title + category #}
-          <th>Thread</th>
+          <th>{{ t(k="adm-thread") }}</th>
           {# AUTHORSHIP: author + created date #}
-          <th style="width:16%">Author</th>
+          <th style="width:16%">{{ t(k="adm-author") }}</th>
           {# STATE: status + flags + reply count #}
-          <th style="width:14%">Status</th>
+          <th style="width:14%">{{ t(k="adm-status") }}</th>
           {# ACTIONS #}
           <th style="width:7%"></th>
         </tr>
@@ -59,7 +59,7 @@
                class="fw-semibold text-body text-decoration-none d-block text-truncate"
                style="max-width:360px">
               {% if thread.is_pinned %}
-                <i class="fa-solid fa-thumbtack text-primary me-1" style="font-size:.75rem" title="Pinned"></i>
+                <i class="fa-solid fa-thumbtack text-primary me-1" style="font-size:.75rem" title="{{ t(k='adm-pinned') }}"></i>
               {% endif %}
               {{ thread.title }}
             </a>
@@ -118,7 +118,7 @@
   {% else %}
   <div class="text-center py-5 text-secondary">
     <i class="fa-solid fa-comments fa-3x mb-3 d-block opacity-25"></i>
-    <div class="fw-semibold mb-1">No threads found</div>
+    <div class="fw-semibold mb-1">{{ t(k="adm-no-threads-found") }}</div>
     <div class="small">{% if q %}No threads match "{{ q }}".{% else %}Thread list will appear here.{% endif %}</div>
   </div>
   {% endif %}

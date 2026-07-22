@@ -10,7 +10,7 @@ use crate::view_models::page_context::{CategoryCtx, TagCtx};
 use ferum_application::permission::PermissionChecker;
 use ferum_domain::models::product::ProductStatus;
 
-use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme, user_ctx, PageError};
+use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme_in, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct NewThreadQuery {
@@ -24,6 +24,7 @@ pub struct NewThreadQuery {
 pub async fn new_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<NewThreadQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
@@ -82,7 +83,7 @@ pub async fn new_thread(
     ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
     ctx.insert("can_submit_product", &can_submit_product);
 
-    render_with_theme(&state, &active, "app/new_thread.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/new_thread.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -90,6 +91,7 @@ pub async fn new_thread(
 pub async fn edit_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(slug): Path<String>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
@@ -161,7 +163,7 @@ pub async fn edit_thread(
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
 
-    render_with_theme(&state, &active, "app/edit_thread.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/edit_thread.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }

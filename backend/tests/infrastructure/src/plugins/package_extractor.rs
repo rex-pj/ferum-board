@@ -1,6 +1,7 @@
 use std::io::Write as _;
 
 use bytes::Bytes;
+use ferum_domain::AppError;
 use ferum_infrastructure::plugins::package_extractor::{extract, sanitize_slug};
 
 fn temp_plugins_dir() -> std::path::PathBuf {
@@ -68,9 +69,11 @@ fn extract_zip_without_plugin_toml_returns_error() {
     let dir = temp_plugins_dir();
     let result = extract(&pkg, &dir, "test-plugin");
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(result.is_err());
-    let msg = format!("{:?}", result.unwrap_err());
-    assert!(msg.contains("plugin.toml"));
+    // Assert the machine code rather than the prose: the human text now lives in
+    // the translation catalog and is free to change per language.
+    assert!(
+        matches!(result.unwrap_err(), AppError::Invalid { code, .. } if code == "archive_missing_manifest")
+    );
 }
 
 #[test]

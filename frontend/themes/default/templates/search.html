@@ -1,30 +1,30 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Search{% if query %}: {{ query }}{% endif %} — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-search") }}{% if query %}: {{ query }}{% endif %} — {{ site.name }}{% endblock %}
 
 {% block content %}
 <h1 class="h4 fw-bold mb-3">
-  Search{% if query %}<span class="fw-normal text-body-secondary"> — {{ query }}</span>{% endif %}
+  {{ t(k="ui-search") }}{% if query %}<span class="fw-normal text-body-secondary"> — {{ query }}</span>{% endif %}
 </h1>
 
 <form class="mb-4" action="/search" method="get">
   <div class="d-flex flex-column gap-2">
     <div class="input-group">
       <input type="search" class="form-control" name="q" value="{{ query }}"
-             placeholder="Search threads and posts…" autofocus>
+             placeholder="{{ t(k='ui-search-threads-and-posts') }}" autofocus>
       <button class="btn btn-primary" type="submit">
-        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+        <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="ui-search") }}
       </button>
     </div>
 
     {# Category filter dropdown — only shown when categories are available #}
     {% if search_categories %}
     <div class="d-flex align-items-center gap-2 flex-wrap" x-data>
-      <label class="form-label mb-0 text-muted small" style="white-space:nowrap">Filter by category:</label>
+      <label class="form-label mb-0 text-muted small" style="white-space:nowrap">{{ t(k="ui-filter-by-category") }}</label>
       <select name="category_id" class="form-select form-select-sm" style="max-width:260px"
               @change="$el.form.submit()">
-        <option value="">All categories</option>
+        <option value="">{{ t(k="ui-all-categories-2") }}</option>
         {% for cat in search_categories %}
           <option value="{{ cat.id }}"
             {% if active_category_id and active_category_id == cat.id %}selected{% endif %}>
@@ -34,7 +34,7 @@
       </select>
       {% if active_category_id %}
         <a href="/search?q={{ query }}" class="btn btn-sm btn-outline-secondary">
-          <i class="fa-solid fa-xmark me-1"></i>Clear filter
+          <i class="fa-solid fa-xmark me-1"></i>{{ t(k="ui-clear-filter") }}
         </a>
       {% endif %}
     </div>
@@ -45,7 +45,7 @@
 {% if query %}
   {% if results %}
     <p class="mb-3" style="font-size:0.875rem;color:var(--bs-secondary-color)">
-      <strong>{{ pagination.total }}</strong> result{% if pagination.total != 1 %}s{% endif %} for
+      <strong>{{ pagination.total }}</strong> {{ t(k="ui-results-label", count=pagination.total) }}
       "<strong>{{ query }}</strong>"
       {% if active_category_id %}
         {% for cat in search_categories %}
@@ -63,8 +63,8 @@
               {# "reviews" is the canonical Reviews category slug (see REVIEWS_CATEGORY_SLUG). #}
               {% if result.category_slug == "reviews" %}
                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle flex-shrink-0"
-                      style="font-size:.62rem" title="Product review">
-                  <i class="fa-solid fa-star me-1" aria-hidden="true"></i>Review
+                      style="font-size:.62rem" title="{{ t(k='ui-product-review') }}">
+                  <i class="fa-solid fa-star me-1" aria-hidden="true"></i>{{ t(k="ui-review") }}
                 </span>
               {% endif %}
               <a href="/forum/t/{{ result.thread_slug }}" class="fr-thread-title stretched-link">
@@ -85,7 +85,7 @@
               {% endif %}
               {% if result.created_at %}
                 <span aria-hidden="true">·</span>
-                <time class="fr-notif-time" data-rel datetime="{{ result.created_at }}">{{ result.created_at | date(format="%b %d, %Y") }}</time>
+                <time class="fr-notif-time" data-rel datetime="{{ result.created_at }}">{{ result.created_at | localdate }}</time>
               {% endif %}
               <span aria-hidden="true">·</span>
               <span class="fr-notif-time"><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>{{ result.reply_count }}</span>
@@ -98,17 +98,17 @@
   {% elif search_error %}
     <div class="text-center py-5" style="color:var(--bs-secondary-color)">
       <i class="fa-solid fa-triangle-exclamation fa-3x mb-3 d-block text-warning opacity-50" aria-hidden="true"></i>
-      Search is temporarily unavailable. Please try again in a moment.
+      {{ t(k="ui-search-is-temporarily-unavailable-please-try") }}
     </div>
   {% else %}
     <div class="text-center py-5" style="color:var(--bs-secondary-color)">
       <i class="fa-solid fa-magnifying-glass fa-3x mb-3 d-block opacity-25" aria-hidden="true"></i>
-      No results found for "<strong>{{ query }}</strong>"
-      {% if active_category_id %} in this category{% endif %}.
+      {{ t(k="ui-no-results-found-for") }}<strong>{{ query }}</strong>"
+      {% if active_category_id %} {{ t(k="ui-in-this-category") }}{% endif %}.
       {% if active_category_id %}
         <div class="mt-2">
           <a href="/search?q={{ query }}" class="btn btn-sm btn-outline-secondary">
-            Search all categories
+            {{ t(k="ui-search-all-categories") }}
           </a>
         </div>
       {% endif %}
@@ -121,27 +121,27 @@
 <aside class="fr-right-col">
 
   <div class="fr-panel">
-    <div class="fr-panel-section">Search Tips</div>
+    <div class="fr-panel-section">{{ t(k="ui-search-tips") }}</div>
     <div class="fr-panel-body">
       <ul class="small text-muted ps-3 mb-0" style="line-height:2">
-        <li>Use specific keywords</li>
-        <li>Search is case-insensitive</li>
-        <li>Searches thread titles and post content</li>
-        <li>Use the category filter to narrow results</li>
-        <li>Shorter queries return more results</li>
+        <li>{{ t(k="ui-use-specific-keywords") }}</li>
+        <li>{{ t(k="ui-search-is-case-insensitive") }}</li>
+        <li>{{ t(k="ui-searches-thread-titles-and-post-content") }}</li>
+        <li>{{ t(k="ui-use-the-category-filter-to-narrow") }}</li>
+        <li>{{ t(k="ui-shorter-queries-return-more-results") }}</li>
       </ul>
     </div>
   </div>
 
   <div class="fr-panel">
-    <div class="fr-panel-header">Browse</div>
+    <div class="fr-panel-header">{{ t(k="ui-browse") }}</div>
     <a href="/forum" class="fr-panel-row">
       <i class="fa-regular fa-folder fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>All Categories</span>
+      <span>{{ t(k="ui-all-categories") }}</span>
     </a>
     <a href="/" class="fr-panel-row">
       <i class="fa-solid fa-house fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Home Feed</span>
+      <span>{{ t(k="ui-home-feed") }}</span>
     </a>
   </div>
 

@@ -63,12 +63,10 @@ impl SetupUseCase {
         }
 
         if !crate::validators::validate_username(&cmd.admin_username) {
-            return Err(AppError::unprocessable(
-                "Username must be 3–30 chars, alphanumeric/underscore/hyphen",
-            ));
+            return Err(AppError::invalid("invalid_username_format"));
         }
         if !crate::validators::validate_password(&cmd.admin_password) {
-            return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
+            return Err(AppError::invalid("password_requirements"));
         }
         let admin_email = cmd.admin_email.to_lowercase();
 

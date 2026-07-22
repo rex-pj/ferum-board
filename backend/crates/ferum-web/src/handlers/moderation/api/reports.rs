@@ -23,7 +23,7 @@ pub async fn create_report(
     body.validate()
         .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
     if body.post_id.is_none() && body.thread_id.is_none() {
-        return Err(AppError::unprocessable("post_id or thread_id is required").into());
+        return Err(AppError::invalid("report_target_required").into());
     }
     let actor = auth_user.require_auth()?;
     let report = state

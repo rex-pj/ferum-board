@@ -11,6 +11,9 @@ pub struct Model {
     pub font_size: String,
     pub layout: String,
     pub email_notifications: Value,
+    /// `None` means the user has never picked a language, which is distinct from
+    /// having picked the default one — only the former follows the site default.
+    pub locale: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

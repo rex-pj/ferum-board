@@ -1,7 +1,7 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Account Settings — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-account-settings") }} — {{ site.name }}{% endblock %}
 
 {# Cap the settings form column for readable form width, keep the right rail #}
 {% block page_inner_class %}fr-page-inner--reading{% endblock %}
@@ -10,15 +10,15 @@
 <div x-data="accountTabState({% if profile %}{{ profile.display_name | length }}{% else %}0{% endif %}, {% if profile and profile.bio %}{{ profile.bio | length }}{% else %}0{% endif %})"
      x-init="init()">
 
-  <h1 class="h4 fw-bold mb-3">Account Settings</h1>
+  <h1 class="h4 fw-bold mb-3">{{ t(k="ui-account-settings") }}</h1>
 
   {% if account_status and account_status.is_banned %}
   <div class="alert alert-danger d-flex gap-2 mb-4" role="alert">
     <i class="fa-solid fa-ban flex-shrink-0 mt-1"></i>
     <div>
-      <strong>Your account is suspended{% if account_status.banned_until %} until {{ account_status.banned_until | date(format="%b %d, %Y") }}{% endif %}.</strong>
+      <strong>{% if account_status.banned_until %}{{ t(k="ui-account-suspended-until", date=account_status.banned_until | localdate) }}{% else %}{{ t(k="ui-account-suspended") }}{% endif %}</strong>
       {% if account_status.ban_reason %}
-        <div class="mt-1">Reason: {{ account_status.ban_reason }}</div>
+        <div class="mt-1">{{ t(k="ui-reason") }}: {{ account_status.ban_reason }}</div>
       {% endif %}
     </div>
   </div>
@@ -27,22 +27,22 @@
   <ul class="nav nav-tabs mb-4">
     <li class="nav-item">
       <button type="button" class="nav-link" :class="active==='profile'?'active':''" @click="setTab('profile')">
-        <i class="fa-solid fa-user fa-sm me-1"></i>Profile
+        <i class="fa-solid fa-user fa-sm me-1"></i>{{ t(k="ui-profile") }}
       </button>
     </li>
     <li class="nav-item">
       <button type="button" class="nav-link" :class="active==='security'?'active':''" @click="setTab('security')">
-        <i class="fa-solid fa-lock fa-sm me-1"></i>Security
+        <i class="fa-solid fa-lock fa-sm me-1"></i>{{ t(k="ui-security") }}
       </button>
     </li>
     <li class="nav-item">
       <button type="button" class="nav-link" :class="active==='preferences'?'active':''" @click="setTab('preferences')">
-        <i class="fa-solid fa-sliders fa-sm me-1"></i>Preferences
+        <i class="fa-solid fa-sliders fa-sm me-1"></i>{{ t(k="ui-preferences") }}
       </button>
     </li>
     <li class="nav-item">
       <button type="button" class="nav-link" :class="active==='reports'?'active':''" @click="setTab('reports')">
-        <i class="fa-solid fa-flag fa-sm me-1"></i>My Reports
+        <i class="fa-solid fa-flag fa-sm me-1"></i>{{ t(k="ui-my-reports") }}
       </button>
     </li>
   </ul>
@@ -54,29 +54,29 @@
 
         {# Cover image #}
         <div class="mb-4 pb-4 border-bottom">
-          <label class="form-label fw-semibold">Cover Image</label>
+          <label class="form-label fw-semibold">{{ t(k="ui-cover-image") }}</label>
           <div class="fr-cover-preview mb-3 rounded overflow-hidden">
             {% if profile and profile.cover_url %}
-              <img src="{{ profile.cover_url }}" alt="Cover" class="fr-cover-preview-img">
+              <img src="{{ profile.cover_url }}" alt="{{ t(k='ui-cover') }}" class="fr-cover-preview-img">
             {% else %}
               <div class="fr-cover-placeholder d-flex align-items-center justify-content-center">
-                <span class="small text-white opacity-75">No cover image — a gradient is shown on your profile</span>
+                <span class="small text-white opacity-75">{{ t(k="ui-no-cover-image-a-gradient-is") }}</span>
               </div>
             {% endif %}
           </div>
           <div class="d-flex align-items-center gap-2 flex-wrap">
             <label class="btn btn-outline-secondary btn-sm" style="min-height:44px;display:inline-flex;align-items:center">
-              <i class="fa-solid fa-image me-1"></i>{% if profile and profile.cover_url %}Change cover{% else %}Upload cover{% endif %}
+              <i class="fa-solid fa-image me-1"></i>{% if profile and profile.cover_url %}{{ t(k="ui-change-cover") }}{% else %}{{ t(k="ui-upload-cover") }}{% endif %}
               <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="d-none" id="cover-upload">
             </label>
             <span id="cover-upload-status" class="small text-muted"></span>
             {% if profile and profile.cover_url %}
               <button type="button" class="btn btn-outline-danger btn-sm" style="min-height:44px" data-account-action="remove-cover">
-                <i class="fa-solid fa-trash me-1"></i>Remove
+                <i class="fa-solid fa-trash me-1"></i>{{ t(k="ui-remove") }}
               </button>
             {% endif %}
           </div>
-          <div class="form-text mt-1">Recommended: 1200×400 px, JPEG/PNG/WebP, max 8 MB.</div>
+          <div class="form-text mt-1">{{ t(k="ui-recommended-1200-400-px-jpeg-png") }}</div>
         </div>
 
         {# Avatar #}
@@ -96,18 +96,18 @@
             <div class="small text-muted">{% if profile %}@{{ profile.username }}{% endif %}</div>
             {% if profile %}
             <a href="/u/{{ profile.username }}" class="small mb-2 d-inline-block">
-              <i class="fa-solid fa-arrow-up-right-from-square fa-xs me-1"></i>View public profile
+              <i class="fa-solid fa-arrow-up-right-from-square fa-xs me-1"></i>{{ t(k="ui-view-public-profile") }}
             </a>
             {% endif %}
             <div class="d-flex align-items-center gap-2 flex-wrap">
               <label class="btn btn-outline-secondary btn-sm" style="min-height:44px;display:inline-flex;align-items:center">
-                <i class="fa-solid fa-camera me-1"></i>{% if profile and profile.avatar_url %}Change photo{% else %}Upload photo{% endif %}
+                <i class="fa-solid fa-camera me-1"></i>{% if profile and profile.avatar_url %}{{ t(k="ui-change-photo") }}{% else %}{{ t(k="ui-upload-photo") }}{% endif %}
                 <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="d-none" id="avatar-upload">
               </label>
               <span id="avatar-upload-status" class="small text-muted"></span>
               {% if profile and profile.avatar_url %}
                 <button type="button" class="btn btn-outline-danger btn-sm" style="min-height:44px" data-account-action="remove-avatar">
-                  <i class="fa-solid fa-trash me-1"></i>Remove
+                  <i class="fa-solid fa-trash me-1"></i>{{ t(k="ui-remove") }}
                 </button>
               {% endif %}
             </div>
@@ -118,17 +118,17 @@
         <form id="profile-form" method="post">
           <div class="mb-3">
             <label for="display_name" class="form-label d-flex justify-content-between">
-              <span><i class="fa-solid fa-id-card fa-sm me-1 text-muted"></i>Display name</span>
+              <span><i class="fa-solid fa-id-card fa-sm me-1 text-muted"></i>{{ t(k="ui-display-name") }}</span>
               <span class="small fw-normal" :class="dnLen > 57 ? 'text-danger' : dnLen > 48 ? 'text-warning' : 'text-muted'" x-text="dnLen + '/60'"></span>
             </label>
             <input type="text" class="form-control" id="display_name" name="display_name"
                    maxlength="60" value="{% if profile %}{{ profile.display_name }}{% endif %}"
-                   placeholder="Leave blank to use username"
+                   placeholder="{{ t(k='ui-leave-blank-to-use-username') }}"
                    @input="dnLen = $el.value.length">
           </div>
           <div class="mb-3">
             <label for="bio" class="form-label d-flex justify-content-between">
-              <span><i class="fa-solid fa-align-left fa-sm me-1 text-muted"></i>Bio</span>
+              <span><i class="fa-solid fa-align-left fa-sm me-1 text-muted"></i>{{ t(k="ui-bio") }}</span>
               <span class="small fw-normal" :class="bioLen > 475 ? 'text-danger' : bioLen > 400 ? 'text-warning' : 'text-muted'" x-text="bioLen + '/500'"></span>
             </label>
             <textarea class="form-control" id="bio" name="bio" rows="3" maxlength="500"
@@ -136,19 +136,19 @@
             >{% if profile and profile.bio %}{{ profile.bio }}{% endif %}</textarea>
           </div>
           <div class="mb-4">
-            <label for="website" class="form-label">Website</label>
+            <label for="website" class="form-label">{{ t(k="ui-website") }}</label>
             <div class="input-group has-validation">
               <span class="input-group-text"><i class="fa-solid fa-link fa-sm"></i></span>
               <input type="url" class="form-control" id="website" name="website"
                      maxlength="255" value="{% if profile and profile.website %}{{ profile.website }}{% endif %}"
                      placeholder="https://example.com"
                      pattern="https?://.+">
-              <div class="invalid-feedback" id="website-error">Please enter a valid URL starting with http:// or https://</div>
+              <div class="invalid-feedback" id="website-error">{{ t(k="ui-please-enter-a-valid-url-starting") }}</div>
             </div>
           </div>
           <div id="profile-feedback" class="d-none mb-3"></div>
           <button type="submit" class="btn btn-primary" id="profile-submit-btn" style="min-height:44px">
-            <i id="profile-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Save Profile
+            <i id="profile-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-save-profile") }}
           </button>
         </form>
 
@@ -159,20 +159,20 @@
   {# ── Security tab ── #}
   <div x-show="active==='security'">
     <div class="card mb-3">
-      <div class="card-header fw-semibold"><i class="fa-solid fa-key fa-sm me-2 text-warning"></i>Change Password</div>
+      <div class="card-header fw-semibold"><i class="fa-solid fa-key fa-sm me-2 text-warning"></i>{{ t(k="ui-change-password") }}</div>
       <div class="card-body">
         <form id="password-form" method="post">
           <input type="text" name="username" value="{% if profile %}{{ profile.username }}{% endif %}"
                  autocomplete="username" aria-hidden="true" style="display:none">
           <div class="mb-3">
-            <label for="current_password" class="form-label">Current password</label>
+            <label for="current_password" class="form-label">{{ t(k="ui-current-password") }}</label>
             <div class="input-group">
               <span class="input-group-text"><i class="fa-solid fa-lock fa-sm"></i></span>
               <input type="password" class="form-control" id="current_password" required autocomplete="current-password">
             </div>
           </div>
           <div class="mb-3">
-            <label for="new_password" class="form-label">New password</label>
+            <label for="new_password" class="form-label">{{ t(k="ui-new-password") }}</label>
             <div class="input-group">
               <span class="input-group-text"><i class="fa-solid fa-lock-open fa-sm"></i></span>
               <input type="password" class="form-control" id="new_password" minlength="8" required
@@ -182,20 +182,20 @@
               <div id="new-pw-strength-fill" style="height:100%;width:0;transition:width .25s,background-color .25s"></div>
             </div>
             <div id="new-pw-strength-text" class="form-text" style="min-height:1.2em"></div>
-            <div class="form-text"><i class="fa-solid fa-circle-info fa-xs me-1"></i>Minimum 8 characters, including a digit and a special character.</div>
+            <div class="form-text"><i class="fa-solid fa-circle-info fa-xs me-1"></i>{{ t(k="ui-minimum-8-characters-including-a-digit") }}</div>
           </div>
           <div class="mb-4">
-            <label for="confirm_password" class="form-label">Confirm new password</label>
+            <label for="confirm_password" class="form-label">{{ t(k="ui-confirm-new-password") }}</label>
             <div class="input-group has-validation">
               <span class="input-group-text"><i class="fa-solid fa-lock-open fa-sm"></i></span>
               <input type="password" class="form-control" id="confirm_password" minlength="8" required
                      autocomplete="new-password">
-              <div class="invalid-feedback" id="pw-mismatch">Passwords do not match.</div>
+              <div class="invalid-feedback" id="pw-mismatch">{{ t(k="ui-passwords-do-not-match") }}</div>
             </div>
           </div>
           <div id="password-feedback" class="d-none mb-3"></div>
           <button type="submit" class="btn btn-primary" id="pw-submit-btn" style="min-height:44px">
-            <i id="pw-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Change Password
+            <i id="pw-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-change-password") }}
           </button>
         </form>
       </div>
@@ -204,12 +204,12 @@
     <div class="card bg-body-tertiary">
       <div class="card-body py-3">
         <p class="small fw-semibold text-muted text-uppercase mb-2" style="letter-spacing:.05em">
-          <i class="fa-solid fa-lightbulb fa-xs text-warning me-1"></i>Tips for a strong password
+          <i class="fa-solid fa-lightbulb fa-xs text-warning me-1"></i>{{ t(k="ui-tips-for-a-strong-password") }}
         </p>
         <ul class="list-unstyled small mb-0 text-muted" style="line-height:2">
-          <li><i class="fa-solid fa-ruler-horizontal fa-xs me-2 text-muted opacity-75"></i>Use at least 8 characters</li>
-          <li><i class="fa-solid fa-shuffle fa-xs me-2 text-muted opacity-75"></i>Mix letters, numbers &amp; symbols</li>
-          <li><i class="fa-solid fa-ban fa-xs me-2 text-muted opacity-75"></i>Don't reuse passwords from other sites</li>
+          <li><i class="fa-solid fa-ruler-horizontal fa-xs me-2 text-muted opacity-75"></i>{{ t(k="ui-use-at-least-8-characters") }}</li>
+          <li><i class="fa-solid fa-shuffle fa-xs me-2 text-muted opacity-75"></i>{{ t(k="ui-mix-letters-numbers-symbols") }}</li>
+          <li><i class="fa-solid fa-ban fa-xs me-2 text-muted opacity-75"></i>{{ t(k="ui-don-t-reuse-passwords-from-other") }}</li>
         </ul>
       </div>
     </div>
@@ -223,22 +223,22 @@
 
           {# Theme #}
           <div class="mb-4">
-            <label class="form-label fw-semibold d-block mb-2">Theme</label>
+            <label class="form-label fw-semibold d-block mb-2">{{ t(k="ui-theme") }}</label>
             <div class="d-flex gap-2 flex-wrap" id="theme-btns">
               <button type="button" data-account-action="set-theme" data-value="auto"
                       class="btn {% if preferences and preferences.theme == 'auto' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
                       style="min-width:80px;min-height:70px">
-                <i class="fa-solid fa-circle-half-stroke"></i><span class="small">Auto</span>
+                <i class="fa-solid fa-circle-half-stroke"></i><span class="small">{{ t(k="ui-auto") }}</span>
               </button>
               <button type="button" data-account-action="set-theme" data-value="light"
                       class="btn {% if preferences and preferences.theme == 'light' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
                       style="min-width:80px;min-height:70px">
-                <i class="fa-solid fa-sun"></i><span class="small">Light</span>
+                <i class="fa-solid fa-sun"></i><span class="small">{{ t(k="ui-light") }}</span>
               </button>
               <button type="button" data-account-action="set-theme" data-value="dark"
                       class="btn {% if preferences and preferences.theme == 'dark' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
                       style="min-width:80px;min-height:70px">
-                <i class="fa-solid fa-moon"></i><span class="small">Dark</span>
+                <i class="fa-solid fa-moon"></i><span class="small">{{ t(k="ui-dark") }}</span>
               </button>
             </div>
             <input type="hidden" id="theme-val" value="{% if preferences and preferences.theme %}{{ preferences.theme }}{% else %}auto{% endif %}">
@@ -246,46 +246,71 @@
 
           {# Font size #}
           <div class="mb-4">
-            <label class="form-label fw-semibold d-block mb-2">Font Size</label>
+            <label class="form-label fw-semibold d-block mb-2">{{ t(k="ui-font-size") }}</label>
             <div class="btn-group" id="font-btns" role="group">
               <button type="button" data-account-action="set-font-size" data-value="small"
                       class="btn {% if preferences and preferences.font_size == 'small' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-                      style="min-height:44px;min-width:90px">Small</button>
+                      style="min-height:44px;min-width:90px">{{ t(k="ui-small") }}</button>
               <button type="button" data-account-action="set-font-size" data-value="medium"
                       class="btn {% if not preferences or not preferences.font_size or preferences.font_size == 'medium' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-                      style="min-height:44px;min-width:90px">Medium</button>
+                      style="min-height:44px;min-width:90px">{{ t(k="ui-medium") }}</button>
               <button type="button" data-account-action="set-font-size" data-value="large"
                       class="btn {% if preferences and preferences.font_size == 'large' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-                      style="min-height:44px;min-width:90px">Large</button>
+                      style="min-height:44px;min-width:90px">{{ t(k="ui-large") }}</button>
             </div>
             <input type="hidden" id="font-size-val" value="{% if preferences and preferences.font_size %}{{ preferences.font_size }}{% else %}medium{% endif %}">
           </div>
 
           {# Layout #}
           <div class="mb-4">
-            <label class="form-label fw-semibold d-block mb-2">Post Layout</label>
+            <label class="form-label fw-semibold d-block mb-2">{{ t(k="ui-post-layout") }}</label>
             <div class="d-flex gap-2 flex-wrap" id="layout-btns">
               <button type="button" data-account-action="set-layout" data-value="comfortable"
                       class="btn {% if not preferences or not preferences.layout or preferences.layout == 'comfortable' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
                       style="min-width:110px;min-height:80px">
                 <i class="fa-solid fa-align-justify"></i>
-                <span class="small fw-semibold">Comfortable</span>
-                <span style="font-size:.7rem;opacity:.75">More spacing</span>
+                <span class="small fw-semibold">{{ t(k="ui-comfortable") }}</span>
+                <span style="font-size:.7rem;opacity:.75">{{ t(k="ui-more-spacing") }}</span>
               </button>
               <button type="button" data-account-action="set-layout" data-value="compact"
                       class="btn {% if preferences and preferences.layout == 'compact' %}btn-primary{% else %}btn-outline-secondary{% endif %} d-flex flex-column align-items-center justify-content-center gap-1"
                       style="min-width:110px;min-height:80px">
                 <i class="fa-solid fa-bars"></i>
-                <span class="small fw-semibold">Compact</span>
-                <span style="font-size:.7rem;opacity:.75">Denser list</span>
+                <span class="small fw-semibold">{{ t(k="ui-compact") }}</span>
+                <span style="font-size:.7rem;opacity:.75">{{ t(k="ui-denser-list") }}</span>
               </button>
             </div>
             <input type="hidden" id="layout-val" value="{% if preferences and preferences.layout %}{{ preferences.layout }}{% else %}comfortable{% endif %}">
           </div>
 
+          {# Language — only shown when the site has more than one installed, so a
+             single-language forum doesn't present a choice that isn't one. #}
+          {% if available_locales and available_locales | length > 1 %}
+          <div class="mb-4">
+            <label class="form-label fw-semibold d-block mb-1" for="locale-val">{{ t(k="prefs-language") }}</label>
+            <p class="text-muted small mb-2">{{ t(k="prefs-language-help") }}</p>
+            {# data-initial lets the submit handler tell whether the language
+               actually changed, so it only forces a reload when it has to. #}
+            <select class="form-select" id="locale-val" name="locale"
+                    data-initial="{% if preferences and preferences.locale %}{{ preferences.locale }}{% endif %}"
+                    style="max-width:320px;min-height:44px">
+              {# Empty value = never chosen, which is different from choosing the
+                 default language: it keeps following the browser and the site default. #}
+              <option value=""{% if not preferences or not preferences.locale %} selected{% endif %}>
+                {{ t(k="prefs-language-auto") }}
+              </option>
+              {% for alt in available_locales %}
+              <option value="{{ alt }}"{% if preferences and preferences.locale == alt %} selected{% endif %}>
+                {{ t(k="language-name-" ~ alt) }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+
           <div id="prefs-feedback" class="d-none mb-3"></div>
           <button type="submit" class="btn btn-primary" id="prefs-submit-btn" style="min-height:44px">
-            <i id="prefs-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>Save Preferences
+            <i id="prefs-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-save-preferences") }}
           </button>
         </form>
       </div>
@@ -294,14 +319,14 @@
     {# Watching & Muted #}
     <div class="card" x-data="watchedMuted()">
       <div class="card-body">
-        <h2 class="h6 fw-semibold mb-3">Watching &amp; Muted</h2>
+        <h2 class="h6 fw-semibold mb-3">{{ t(k="ui-watching-muted") }}</h2>
 
         <div class="mb-3">
           <label class="form-label fw-semibold d-block mb-2 small text-muted text-uppercase" style="letter-spacing:.05em">
-            <i class="fa-solid fa-eye me-1"></i>Watching
+            <i class="fa-solid fa-eye me-1"></i>{{ t(k="ui-watching") }}
           </label>
           <p class="small text-muted mb-0" x-show="watched.length===0">
-            Not watching any categories. Visit a category page and click <strong>Watch</strong> to follow it.
+            {{ t(k="ui-watching-empty") }}
           </p>
           <div class="d-flex flex-wrap gap-2" x-show="watched.length>0">
             <template x-for="cat in watched" :key="cat.id">
@@ -318,10 +343,10 @@
 
         <div>
           <label class="form-label fw-semibold d-block mb-2 small text-muted text-uppercase" style="letter-spacing:.05em">
-            <i class="fa-solid fa-eye-slash me-1"></i>Muted
+            <i class="fa-solid fa-eye-slash me-1"></i>{{ t(k="ui-muted") }}
           </label>
           <p class="small text-muted mb-0" x-show="muted.length===0">
-            Not muting any categories. Visit a category page and click <strong>Mute</strong> to hide it.
+            {{ t(k="ui-muting-empty") }}
           </p>
           <div class="d-flex flex-wrap gap-2" x-show="muted.length>0">
             <template x-for="cat in muted" :key="cat.id">
@@ -343,11 +368,11 @@
   <div x-show="active==='reports'" x-data="myReportsState()" x-init="load()">
     <div class="card">
       <div class="card-body">
-        <h2 class="h6 fw-semibold mb-3">Reports You've Filed</h2>
+        <h2 class="h6 fw-semibold mb-3">{{ t(k="ui-reports-you-ve-filed") }}</h2>
         <p class="small text-muted mb-3" x-show="!loading && reports.length===0">
-          You haven't reported anything yet.
+          {{ t(k="ui-you-haven-t-reported-anything-yet") }}
         </p>
-        <div class="small text-muted" x-show="loading">Loading…</div>
+        <div class="small text-muted" x-show="loading">{{ t(k="ui-loading") }}</div>
         <div class="list-group list-group-flush" x-show="!loading && reports.length>0">
           <template x-for="r in reports" :key="r.id">
             <div class="list-group-item px-0">
@@ -381,37 +406,37 @@
   {% if profile %}
   {# Account Status — consistent fr-panel-stat-row system, no Bootstrap .small override #}
   <div class="fr-panel">
-    <div class="fr-panel-header">Account Status</div>
+    <div class="fr-panel-header">{{ t(k="ui-account-status") }}</div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-shield-halved fa-xs me-1 text-info" aria-hidden="true"></i>Trust level</span>
+        <span><i class="fa-solid fa-shield-halved fa-xs me-1 text-info" aria-hidden="true"></i>{{ t(k="ui-trust-level") }}</span>
         {{ m::trust_badge(level=profile.trust_level) }}
       </div>
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>Posts</span>
+        <span><i class="fa-solid fa-pen-to-square fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-posts") }}</span>
         <span class="fr-panel-stat-val">{{ profile.post_count }}</span>
       </div>
       {% if profile.trust_score %}
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-star fa-xs text-warning me-1" aria-hidden="true"></i>Trust score</span>
+        <span><i class="fa-solid fa-star fa-xs text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-trust-score") }}</span>
         <span class="fr-panel-stat-val">{{ profile.trust_score }}<span class="fw-normal text-muted" style="font-size:.75em"> / 100</span></span>
       </div>
       {% endif %}
       {% if account_status and account_status.warn_count > 0 %}
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-triangle-exclamation fa-xs text-warning me-1" aria-hidden="true"></i>Warnings</span>
-        <a href="/notifications" class="fr-panel-stat-val text-decoration-none" title="See warning details in your notifications">
+        <span><i class="fa-solid fa-triangle-exclamation fa-xs text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-warnings") }}</span>
+        <a href="/notifications" class="fr-panel-stat-val text-decoration-none" title="{{ t(k='ui-see-warning-details-in-your-notifications') }}">
           {{ account_status.warn_count }}
         </a>
       </div>
       {% endif %}
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-calendar-days fa-xs me-1" aria-hidden="true"></i>Member since</span>
-        <time class="fr-panel-stat-val" datetime="{{ profile.created_at }}">{{ profile.created_at | date(format="%b %Y") }}</time>
+        <span><i class="fa-solid fa-calendar-days fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-member-since") }}</span>
+        <time class="fr-panel-stat-val" datetime="{{ profile.created_at }}">{{ profile.created_at | localdate(style="monthyear") }}</time>
       </div>
       {% if profile.primary_role_name %}
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-id-badge fa-xs me-1" aria-hidden="true"></i>Role</span>
+        <span><i class="fa-solid fa-id-badge fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-role") }}</span>
         {% if profile.primary_role_color %}
           <span class="badge" style="background:{{ profile.primary_role_color }}">{{ profile.primary_role_name }}</span>
         {% else %}
@@ -424,15 +449,15 @@
 
   {# Profile navigation — unique links not duplicated in left sidebar nav #}
   <div class="fr-panel">
-    <div class="fr-panel-header">Profile</div>
+    <div class="fr-panel-header">{{ t(k="ui-profile") }}</div>
     <a href="/u/{{ profile.username }}" class="fr-panel-row">
       <i class="fa-solid fa-user fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>View public profile</span>
+      <span>{{ t(k="ui-view-public-profile") }}</span>
     </a>
     {% if current_user %}
     <a href="/notifications" class="fr-panel-row">
       <i class="fa-solid fa-bell fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Notifications</span>
+      <span>{{ t(k="ui-notifications") }}</span>
       {% if current_user.unread_count > 0 %}
         <span class="badge bg-danger rounded-pill ms-auto">{{ current_user.unread_count }}</span>
       {% endif %}

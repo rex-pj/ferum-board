@@ -1,4 +1,5 @@
 import { api } from './api';
+import { t } from './i18n';
 
 export async function previewMarkdown(content: string): Promise<string> {
   const res = await api.post('/api/preview-markdown', { content });
@@ -16,7 +17,7 @@ export async function uploadAttachment(file: File): Promise<{ ok: boolean; url?:
     return { ok: true, url: data?.data?.url };
   }
   const body = await res.json().catch(() => ({})) as { error?: { message?: string } };
-  return { ok: false, error: body?.error?.message ?? 'Failed to upload image.' };
+  return { ok: false, error: body?.error?.message ?? t('js-failed-upload-image') };
 }
 
 export async function createPost(

@@ -38,7 +38,8 @@ async fn update_profile_display_name_too_long_returns_422() {
         display_name: Some("a".repeat(61)),
         ..Default::default()
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "display_name_length"),
+        "expected display_name_length, got {result:?}");
 }
 
 #[tokio::test]
@@ -49,7 +50,8 @@ async fn update_profile_bio_too_long_returns_422() {
         bio: Some("x".repeat(501)),
         ..Default::default()
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "bio_too_long"),
+        "expected bio_too_long, got {result:?}");
 }
 
 #[tokio::test]
@@ -60,7 +62,8 @@ async fn update_profile_invalid_website_returns_422() {
         website: Some("not-a-url".to_string()),
         ..Default::default()
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "invalid_website_url"),
+        "expected invalid_website_url, got {result:?}");
 }
 
 #[tokio::test]
@@ -87,7 +90,8 @@ async fn change_password_weak_new_password_returns_422() {
     let actor = AuthUserBuilder::member().build();
     let uc = build_uc(MockUserRepository::new(), MockPasswordHasher::new());
     let result = uc.change_password(&actor, "current_pass", "weak").await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "password_requirements"),
+        "expected password_requirements, got {result:?}");
 }
 
 #[tokio::test]

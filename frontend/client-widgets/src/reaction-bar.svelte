@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { toggleReaction } from "./lib/reactions";
+  import { t } from "./lib/i18n";
 
   const KINDS = ["like", "helpful", "insightful", "funny"] as const;
   const ICONS: Record<string, string> = {
@@ -63,7 +64,7 @@
       return;
     }
     if (isOwn) {
-      showError("You can't react to your own post.");
+      showError(t("js-cannot-react-own-post"));
       return;
     }
     const item = state[kind];
@@ -75,9 +76,9 @@
       };
     } else {
       const MESSAGES: Record<string, string> = {
-        cannot_react_to_own_post: "You can't react to your own post.",
-        trust_level_insufficient: "Your account needs to be verified to react.",
-        account_suspended:        "Your account is suspended.",
+        cannot_react_to_own_post: t("js-cannot-react-own-post"),
+        trust_level_insufficient: t("js-react-trust-insufficient"),
+        account_suspended:        t("js-account-suspended"),
       };
       showError(MESSAGES[result.code] ?? result.message);
     }
@@ -89,7 +90,7 @@
     <button
       class="reaction-btn {state[kind].reacted ? 'reacted' : ''}"
       onclick={() => toggle(kind)}
-      title={isOwn ? "You can't react to your own post" : kind}
+      title={isOwn ? t("js-cannot-react-own-post") : kind}
       disabled={isOwn}
       aria-pressed={state[kind].reacted}
       aria-label="{kind}{state[kind].count > 0 ? ` (${state[kind].count})` : ''}"

@@ -39,6 +39,7 @@ fn default_version() -> String {
 pub async fn themes(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(flash): Query<ThemeFlash>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -57,7 +58,7 @@ pub async fn themes(
         ctx.insert("flash_error", &msg);
     }
 
-    render_admin(&state, "admin/themes.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/themes.html", &ctx).await
 }
 
 pub async fn upload_theme(

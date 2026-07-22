@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use axum::extract::{Extension, Path, Query, State};
+use axum::extract::{Extension, Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::product::{
     parse_product_sort, parse_product_type, BrandResponse, MaterialResponse, ProductDetailResponse,
-    ProductListQuery, ProductResponse, SubmitProductRequest,
+    ProductListQuery, ProductMediaResponse, ProductResponse, SubmitProductRequest,
 };
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
 use ferum_application::shared::AppError;
@@ -63,7 +63,7 @@ pub async fn submit_product(
     let user = auth_user.require_auth()?;
 
     let product_type = parse_product_type(&body.product_type)
-        .ok_or_else(|| AppError::unprocessable("Invalid product type."))?;
+        .ok_or_else(|| AppError::invalid("invalid_product_type"))?;
 
     let input = NewProduct {
         id: Uuid::new_v4(),
@@ -88,6 +88,37 @@ pub async fn submit_product(
         StatusCode::CREATED,
         Json(DataResponse::new(ProductResponse::from(product))),
     ))
+}
+
+/// POST /api/products/:id/media — attach a photo to a product.
+///
+/// A contributor may only upload to their own still-unapproved submission; the
+/// use case enforces that. Curators may upload to anything, which keeps this the
+/// single upload path for both the member form and the admin panel.
+pub async fn upload_media(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+    mut multipart: Multipart,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    let (data, content_type) = crate::utils::read_image_field(&mut multipart, "image").await?;
+    let media = state.product.upload_media(user, id, data, content_type).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(DataResponse::new(ProductMediaResponse::from(media))),
+    ))
+}
+
+/// DELETE /api/products/:id/media/:media_id — detach a photo the caller attached.
+pub async fn delete_media(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path((_product_id, media_id)): Path<(Uuid, Uuid)>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    state.product.delete_media(user, media_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// GET /api/products/:slug — full public product view (materials + media + stats).

@@ -66,6 +66,19 @@
   color: var(--bs-secondary-color);
 }
 
+/* Most `.fr-review-chip` instances are inert (the product-type badge, a
+   review card's per-dimension scores) — this modifier is for the few that are
+   genuinely links (a product's material chips, into /catalog?material_id=),
+   so a clickable chip gives the same hover feedback as `.fr-category-pill`
+   elsewhere instead of looking identical to its non-clickable neighbours. */
+.fr-review-chip--link {
+  transition: background 0.1s, color 0.1s;
+}
+.fr-review-chip--link:hover {
+  background: var(--fr-nav-hover-bg);
+  color: var(--bs-body-color);
+}
+
 /* ── Filter bar inside a panel (catalog) ──────────────────────────── */
 .fr-filter-bar {
   display: flex;
@@ -77,6 +90,36 @@
    submit button line up as one even row. */
 .fr-filter-bar .form-control,
 .fr-filter-bar .form-select { min-height: 36px; }
+
+/* Added by ferum-page-product.js once it confirms it can auto-submit the
+   sort/filter form on change — keeps the button (and full no-JS fallback)
+   in the markup while removing the redundant extra click for JS users. */
+.fr-filter-bar--auto button[type="submit"] { display: none; }
+
+/* Product-page management menu trigger (Edit/Delete) — a quiet secondary
+   control, not a competing button next to the H1. "Quiet" still needs a
+   visible resting affordance, though: fully transparent-until-hover reads as
+   invisible rather than subtle, especially for a 3-dot glyph with almost no
+   ink of its own. A faint permanent circle gives it a discoverable shape at
+   rest; hover/focus only deepens the same fill. */
+.btn-icon-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-secondary-color);
+  background: var(--bs-tertiary-bg);
+}
+.btn-icon-ghost:hover,
+.btn-icon-ghost:focus-visible {
+  color: var(--bs-body-color);
+  background: var(--bs-secondary-bg);
+  border-color: var(--bs-border-color);
+}
 
 /* ── Star distribution histogram ──────────────────────────────────── */
 .fr-histo-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; }
@@ -157,11 +200,70 @@
 .fr-rate-row .fr-rate-label { flex-shrink: 0; }
 .fr-rate-hint { min-width: 6.5rem; }
 
-/* ── Material toggle chips (new-product form) ─────────────────────── */
-.fr-mat-chip {
-  min-height: 2.75rem;       /* 44px — meets the mobile tap-target minimum */
-  font-size: 0.8125rem;
-  white-space: nowrap;
+/* ── Staged photo thumbnails (product forms) ──────────────────────── */
+/* Used by the public add-product dialog and the admin catalogue modal for
+   photos picked but not yet uploaded, and for a saved product's gallery. */
+.fr-thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 auto;
+}
+
+.fr-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+}
+
+/* Deliberately not a `.btn`: the theme floors every button at a 36–44px
+   min-height, which an inline `height` cannot override — that is what turned
+   this control into a tall red pill hanging off the corner of the image. As
+   its own element it can be the small round badge it should be. */
+.fr-thumb-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  transition: background-color 0.12s ease, transform 0.12s ease;
+}
+
+.fr-thumb-remove:hover { background: var(--bs-danger); transform: scale(1.1); }
+
+.fr-thumb-remove:focus-visible {
+  background: var(--bs-danger);
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: 1px;
+}
+
+/* A 44px tap target without a 44px dot: the visible badge stays small and an
+   invisible pseudo-element carries the touch area. */
+@media (pointer: coarse) {
+  .fr-thumb-remove::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--fr-tap-target);
+    height: var(--fr-tap-target);
+    transform: translate(-50%, -50%);
+  }
 }
 
 /* ── Home: horizontal product shelf ("top rated") ─────────────────── */

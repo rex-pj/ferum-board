@@ -7,9 +7,9 @@
 <div id="catalogStatus" class="alert d-none" role="alert"></div>
 
 <ul class="nav nav-tabs mb-3" id="catalogTabs">
-  <li class="nav-item"><button type="button" class="nav-link active" data-tab="products">Products</button></li>
-  <li class="nav-item"><button type="button" class="nav-link" data-tab="materials">Materials</button></li>
-  <li class="nav-item"><button type="button" class="nav-link" data-tab="brands">Brands</button></li>
+  <li class="nav-item"><button type="button" class="nav-link active" data-tab="products">{{ t(k="adm-products") }}</button></li>
+  <li class="nav-item"><button type="button" class="nav-link" data-tab="materials">{{ t(k="adm-materials") }}</button></li>
+  <li class="nav-item"><button type="button" class="nav-link" data-tab="brands">{{ t(k="adm-brands") }}</button></li>
 </ul>
 
 <!-- ═══ Tab: Products ══════════════════════════════════════════════ -->
@@ -19,23 +19,23 @@
       <div class="adm-filter-row px-3 py-2">
         <div class="input-group input-group-sm flex-grow-1" style="max-width:280px">
           <span class="input-group-text bg-transparent"><i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i></span>
-          <input type="search" id="filterQuery" class="form-control border-start-0 ps-0" placeholder="Search by name…" autocomplete="off">
+          <input type="search" id="filterQuery" class="form-control border-start-0 ps-0" placeholder="{{ t(k='adm-search-by-name') }}" aria-label="{{ t(k='adm-search-by-name') }}" autocomplete="off">
         </div>
-        <select id="filterType" class="form-select form-select-sm" style="max-width:140px">
-          <option value="">All types</option>
-          <option value="furniture">Furniture</option>
-          <option value="material">Material</option>
-          <option value="room">Room</option>
+        <select id="filterType" class="form-select form-select-sm" style="max-width:140px" aria-label="{{ t(k='adm-type') }}">
+          <option value="">{{ t(k="adm-all-types") }}</option>
+          <option value="furniture">{{ t(k="adm-furniture") }}</option>
+          <option value="material">{{ t(k="adm-material") }}</option>
+          <option value="room">{{ t(k="adm-room") }}</option>
         </select>
-        <select id="filterStatus" class="form-select form-select-sm" style="max-width:150px">
-          <option value="">All statuses</option>
-          <option value="draft">Draft / pending</option>
-          <option value="published">Published</option>
-          <option value="archived">Archived</option>
+        <select id="filterStatus" class="form-select form-select-sm" style="max-width:150px" aria-label="{{ t(k='adm-status') }}">
+          <option value="">{{ t(k="adm-all-statuses") }}</option>
+          <option value="draft">{{ t(k="adm-draft-pending") }}</option>
+          <option value="published">{{ t(k="adm-published") }}</option>
+          <option value="archived">{{ t(k="adm-archived") }}</option>
         </select>
-        <button type="button" id="applyFilters" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>Filter</button>
+        <button type="button" id="applyFilters" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>{{ t(k="adm-filter") }}</button>
         <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewProduct" data-bs-toggle="modal" data-bs-target="#productModal">
-          <i class="fa-solid fa-plus me-1"></i>New product
+          <i class="fa-solid fa-plus me-1"></i>{{ t(k="adm-new-product") }}
         </button>
       </div>
     </div>
@@ -43,19 +43,19 @@
       <table class="table table-hover mb-0 align-middle">
         <thead class="table-active">
           <tr>
-            <th>Product</th>
-            <th style="width:18%">Price (₫)</th>
-            <th style="width:12%">Brand</th>
-            <th style="width:12%">Status</th>
+            <th>{{ t(k="adm-product") }}</th>
+            <th style="width:18%">{{ t(k="adm-price") }}</th>
+            <th style="width:12%">{{ t(k="adm-brand") }}</th>
+            <th style="width:12%">{{ t(k="adm-status") }}</th>
             <th style="width:14%" class="text-end"></th>
           </tr>
         </thead>
-        <tbody id="productRows"><tr><td colspan="5" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+        <tbody id="productRows"><tr><td colspan="5" class="text-center text-muted py-4">{{ t(k="adm-loading") }}</td></tr></tbody>
       </table>
     </div>
     <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
       <span class="text-muted small" id="catalogMeta"></span>
-      <nav aria-label="Product pagination">
+      <nav aria-label="{{ t(k='adm-product-pagination') }}">
         <ul class="pagination pagination-sm mb-0 flex-wrap gap-0" id="catalogPager"></ul>
       </nav>
     </div>
@@ -69,29 +69,29 @@
       <div class="adm-filter-row px-3 py-2">
         <div class="input-group input-group-sm flex-grow-1" style="max-width:280px">
           <span class="input-group-text bg-transparent"><i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i></span>
-          <input type="search" id="matFilterQuery" class="form-control border-start-0 ps-0" placeholder="Search materials…" autocomplete="off">
+          <input type="search" id="matFilterQuery" class="form-control border-start-0 ps-0" placeholder="{{ t(k='adm-search-materials') }}" aria-label="{{ t(k='adm-search-materials') }}" autocomplete="off">
         </div>
-        <select id="matFilterCategory" class="form-select form-select-sm" style="max-width:180px">
-          <option value="">All categories</option>
-          <option value="wood_natural">Solid wood</option>
-          <option value="wood_engineered">Engineered wood</option>
-          <option value="rattan_bamboo">Rattan &amp; bamboo</option>
-          <option value="metal">Metal</option>
-          <option value="fabric">Fabric</option>
-          <option value="leather">Leather</option>
-          <option value="stone">Stone</option>
-          <option value="glass">Glass</option>
-          <option value="plastic">Plastic</option>
-          <option value="other">Other</option>
+        <select id="matFilterCategory" class="form-select form-select-sm" style="max-width:180px" aria-label="{{ t(k='adm-category') }}">
+          <option value="">{{ t(k="adm-all-categories") }}</option>
+          <option value="wood_natural">{{ t(k="adm-solid-wood") }}</option>
+          <option value="wood_engineered">{{ t(k="adm-engineered-wood") }}</option>
+          <option value="rattan_bamboo">{{ t(k="adm-rattan-bamboo") }}</option>
+          <option value="metal">{{ t(k="adm-metal") }}</option>
+          <option value="fabric">{{ t(k="adm-fabric") }}</option>
+          <option value="leather">{{ t(k="adm-leather") }}</option>
+          <option value="stone">{{ t(k="adm-stone") }}</option>
+          <option value="glass">{{ t(k="adm-glass") }}</option>
+          <option value="plastic">{{ t(k="adm-plastic") }}</option>
+          <option value="other">{{ t(k="adm-other") }}</option>
         </select>
-        <button type="button" id="matApply" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>Filter</button>
-        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewMaterial"><i class="fa-solid fa-plus me-1"></i>New material</button>
+        <button type="button" id="matApply" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>{{ t(k="adm-filter") }}</button>
+        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewMaterial"><i class="fa-solid fa-plus me-1"></i>{{ t(k="adm-new-material") }}</button>
       </div>
     </div>
     <div class="table-responsive">
       <table class="table table-hover mb-0 align-middle">
-        <thead class="table-active"><tr><th>Name</th><th style="width:20%">Category</th><th style="width:14%" class="text-end"></th></tr></thead>
-        <tbody id="materialRows"><tr><td colspan="3" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+        <thead class="table-active"><tr><th>{{ t(k="adm-name") }}</th><th style="width:20%">{{ t(k="adm-category") }}</th><th style="width:14%" class="text-end"></th></tr></thead>
+        <tbody id="materialRows"><tr><td colspan="3" class="text-center text-muted py-4">{{ t(k="adm-loading") }}</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -104,106 +104,173 @@
       <div class="adm-filter-row px-3 py-2">
         <div class="input-group input-group-sm flex-grow-1" style="max-width:280px">
           <span class="input-group-text bg-transparent"><i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i></span>
-          <input type="search" id="brandFilterQuery" class="form-control border-start-0 ps-0" placeholder="Search name / country…" autocomplete="off">
+          <input type="search" id="brandFilterQuery" class="form-control border-start-0 ps-0" placeholder="{{ t(k='adm-search-name-country') }}" aria-label="{{ t(k='adm-search-name-country') }}" autocomplete="off">
         </div>
-        <select id="brandFilterVerified" class="form-select form-select-sm" style="max-width:170px">
-          <option value="">All</option>
-          <option value="1">Verified</option>
-          <option value="0">Not verified</option>
+        <select id="brandFilterVerified" class="form-select form-select-sm" style="max-width:170px" aria-label="{{ t(k='adm-verified') }}">
+          <option value="">{{ t(k="adm-all") }}</option>
+          <option value="1">{{ t(k="adm-verified") }}</option>
+          <option value="0">{{ t(k="adm-not-verified") }}</option>
         </select>
-        <button type="button" id="brandApply" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>Filter</button>
-        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewBrand"><i class="fa-solid fa-plus me-1"></i>New brand</button>
+        <button type="button" id="brandApply" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>{{ t(k="adm-filter") }}</button>
+        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewBrand"><i class="fa-solid fa-plus me-1"></i>{{ t(k="adm-new-brand") }}</button>
       </div>
     </div>
     <div class="table-responsive">
       <table class="table table-hover mb-0 align-middle">
-        <thead class="table-active"><tr><th>Name</th><th style="width:16%">Country</th><th style="width:12%">Verified</th><th style="width:14%" class="text-end"></th></tr></thead>
-        <tbody id="brandRows"><tr><td colspan="4" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+        <thead class="table-active"><tr><th>{{ t(k="adm-name") }}</th><th style="width:16%">{{ t(k="adm-country") }}</th><th style="width:12%">{{ t(k="adm-verified") }}</th><th style="width:14%" class="text-end"></th></tr></thead>
+        <tbody id="brandRows"><tr><td colspan="4" class="text-center text-muted py-4">{{ t(k="adm-loading") }}</td></tr></tbody>
       </table>
     </div>
   </div>
 </div>
 
 <!-- ═══ Modal: Product (create / edit) ═════════════════════════════ -->
-<div class="modal fade" id="productModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+<!-- Deliberately NOT `modal-dialog-scrollable`: the materials combobox drops an
+     absolutely positioned result list, and a scrollable modal-body would clip it
+     at its own boundary. Letting the whole dialog scroll keeps the list visible. -->
+<div class="modal fade" id="productModal" tabindex="-1" aria-labelledby="productModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <form id="productForm">
+      <!-- novalidate: field errors are rendered inline instead of through the
+           browser's native bubbles, which cannot be styled, translated, or
+           pointed at a field the admin cannot currently see. -->
+      <form id="productForm" novalidate>
         <div class="modal-header">
-          <h5 class="modal-title" id="productModalTitle">New product</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="productModalTitle">{{ t(k="adm-new-product") }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='adm-close') }}"></button>
         </div>
         <div class="modal-body">
+          <!-- Save errors belong inside the dialog. The page-level #catalogStatus
+               alert sits behind the backdrop while the modal is open, so routing
+               a failed save there makes it invisible. -->
+          <div class="alert alert-danger d-none" id="productFormError" role="alert"></div>
           <input type="hidden" id="productId">
 
-          <div class="text-uppercase small fw-semibold text-muted mb-2">Basics</div>
-          <div class="row g-3 mb-3">
-            <div class="col-md-8">
-              <label class="form-label">Name <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="pName" required maxlength="200">
+          <fieldset class="adm-form-section">
+            <legend class="adm-form-legend">{{ t(k="adm-basics") }}</legend>
+            <div class="row g-3">
+              <div class="col-12">
+                <label for="pName" class="form-label">{{ t(k="adm-name") }} <span class="text-danger" aria-hidden="true">*</span></label>
+                <input type="text" class="form-control" id="pName" required maxlength="200" aria-describedby="pSlugLine">
+                <div class="invalid-feedback" id="pNameFeedback"></div>
+
+                <!-- Slug is a URL detail, not a peer of Name. It rides along as
+                     helper text and only becomes an editable field when asked for. -->
+                <div class="form-text d-flex align-items-center gap-2 flex-wrap" id="pSlugLine">
+                  <span>{{ t(k="adm-url") }}: <code id="pSlugPreview">—</code></span>
+                  <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="pSlugEdit">{{ t(k="adm-edit") }}</button>
+                </div>
+                <div class="mt-2 d-none" id="pSlugEditWrap">
+                  <label for="pSlug" class="form-label small mb-1">{{ t(k="adm-slug") }} <span class="text-danger" aria-hidden="true">*</span></label>
+                  <input type="text" class="form-control form-control-sm" id="pSlug" maxlength="200"
+                         pattern="[a-z0-9\-]+" aria-describedby="pSlugHelp">
+                  <div class="invalid-feedback" id="pSlugFeedback"></div>
+                  <div class="form-text" id="pSlugHelp">{{ t(k="adm-lowercase-letters-numbers-hyphens") }}</div>
+                </div>
+              </div>
+
+              <!-- Three options each: a segmented control shows the whole choice
+                   set at a glance and costs one click instead of two. -->
+              <div class="col-md-6">
+                <span class="form-label d-block" id="pTypeLabel">{{ t(k="adm-type") }}</span>
+                <div class="btn-group w-100" role="group" aria-labelledby="pTypeLabel">
+                  <input type="radio" class="btn-check" name="pType" id="pType-furniture" value="furniture" checked>
+                  <label class="btn btn-outline-secondary" for="pType-furniture">{{ t(k="adm-furniture") }}</label>
+                  <input type="radio" class="btn-check" name="pType" id="pType-material" value="material">
+                  <label class="btn btn-outline-secondary" for="pType-material">{{ t(k="adm-material") }}</label>
+                  <input type="radio" class="btn-check" name="pType" id="pType-room" value="room">
+                  <label class="btn btn-outline-secondary" for="pType-room">{{ t(k="adm-room") }}</label>
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <span class="form-label d-block" id="pStatusLabel">{{ t(k="adm-status") }}</span>
+                <div class="btn-group w-100" role="group" aria-labelledby="pStatusLabel">
+                  <input type="radio" class="btn-check" name="pStatus" id="pStatus-draft" value="draft">
+                  <label class="btn btn-outline-secondary" for="pStatus-draft">{{ t(k="adm-draft-pending") }}</label>
+                  <input type="radio" class="btn-check" name="pStatus" id="pStatus-published" value="published" checked>
+                  <label class="btn btn-outline-secondary" for="pStatus-published">{{ t(k="adm-published") }}</label>
+                  <input type="radio" class="btn-check" name="pStatus" id="pStatus-archived" value="archived">
+                  <label class="btn btn-outline-secondary" for="pStatus-archived">{{ t(k="adm-archived") }}</label>
+                </div>
+              </div>
             </div>
-            <div class="col-md-4">
-              <label class="form-label d-flex justify-content-between align-items-center">
-                <span>Slug</span>
-                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="pSlugEdit">Edit</button>
+          </fieldset>
+
+          <fieldset class="adm-form-section">
+            <legend class="adm-form-legend">{{ t(k="adm-details") }}</legend>
+            <div class="row g-3">
+              <!-- One range control rather than two unrelated number fields, so
+                   the pair reads as the single value it is. Typed as text with a
+                   numeric keypad: `type=number` rejects the grouped digits
+                   ("1.500.000") that anyone entering VND actually types. -->
+              <div class="col-md-6">
+                <span class="form-label d-block" id="pPriceLabel">{{ t(k="adm-price-range") }}</span>
+                {# `has-validation` + the feedback nested INSIDE the group is
+                   Bootstrap's required shape here: `.invalid-feedback` is shown
+                   by an `.is-invalid ~` sibling selector, so placed outside the
+                   group it would never match the input that went invalid. #}
+                <div class="input-group has-validation" role="group" aria-labelledby="pPriceLabel">
+                  <span class="input-group-text">₫</span>
+                  <input type="text" inputmode="numeric" autocomplete="off" class="form-control" id="pPriceMin"
+                         aria-label="{{ t(k='adm-price-from') }}" placeholder="{{ t(k='adm-from') }}">
+                  <span class="input-group-text">–</span>
+                  <input type="text" inputmode="numeric" autocomplete="off" class="form-control" id="pPriceMax"
+                         aria-label="{{ t(k='adm-price-to') }}" placeholder="{{ t(k='adm-to') }}">
+                  <div class="invalid-feedback" id="pPriceFeedback"></div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <label for="pOrigin" class="form-label">{{ t(k="adm-origin") }}</label>
+                <input type="text" class="form-control" id="pOrigin" placeholder="{{ t(k='adm-vietnam') }}">
+              </div>
+              <div class="col-md-3">
+                <label for="pStyle" class="form-label">{{ t(k="adm-style") }}</label>
+                <input type="text" class="form-control" id="pStyle" placeholder="{{ t(k='adm-scandinavian') }}">
+              </div>
+              <div class="col-md-6">
+                <label for="pBrand" class="form-label">{{ t(k="adm-brand") }}</label>
+                <select class="form-select" id="pBrand"><option value="">{{ t(k="adm-none") }}</option></select>
+              </div>
+              <div class="col-md-6">
+                <label for="pMatSearch" class="form-label">{{ t(k="adm-materials") }}</label>
+                <div class="position-relative">
+                  <div class="form-control h-auto d-flex flex-wrap gap-1 align-items-center fr-chip-input" id="pMatWrap">
+                    <div id="pMatChips" class="d-flex flex-wrap gap-1"></div>
+                    <input type="text" id="pMatSearch" class="border-0 flex-grow-1 bg-transparent p-0"
+                           style="outline:none;min-width:120px" autocomplete="off"
+                           placeholder="{{ t(k='adm-type-to-search-add-materials') }}" aria-describedby="pMaterialsHint">
+                  </div>
+                  <div id="pMatResults" class="list-group fr-typeahead-menu d-none"></div>
+                </div>
+                <div class="form-text" id="pMaterialsHint">{{ t(k="adm-type-a-material-name-then-pick") }}</div>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="adm-form-section">
+            <legend class="adm-form-legend">{{ t(k="adm-content") }}</legend>
+            <div class="mb-3">
+              <label for="pDescription" class="form-label">{{ t(k="adm-description") }}</label>
+              <textarea class="form-control" id="pDescription" rows="3" placeholder="{{ t(k='adm-description-markdown') }}"></textarea>
+            </div>
+            <div id="imagesSection">
+              <label for="pImageInput" class="form-label">
+                {{ t(k="adm-images") }}
+                <span class="text-body-secondary fw-normal">{{ t(k="adm-the-first-image-is-the-cover") }}</span>
               </label>
-              <input type="text" class="form-control" id="pSlug" required maxlength="200"
-                     pattern="[a-z0-9\-]+" title="lowercase letters, numbers, hyphens" readonly>
+              <input type="file" class="form-control" id="pImageInput"
+                     accept="image/jpeg,image/png,image/webp,image/gif" multiple aria-describedby="pImagePending">
+              <!-- On create there is no product id to upload against yet, so picked
+                   files are staged here and sent once the product exists. -->
+              <div class="form-text d-none" id="pImagePending">{{ t(k="adm-images-upload-after-save") }}</div>
+              <div class="d-flex flex-wrap gap-2 mt-2" id="pGallery"></div>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">Type</label>
-              <select class="form-select" id="pType">
-                <option value="furniture">Furniture</option>
-                <option value="material">Material</option>
-                <option value="room">Room</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Status</label>
-              <select class="form-select" id="pStatus">
-                <option value="draft">Draft / pending</option>
-                <option value="published">Published</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Brand</label>
-              <select class="form-select" id="pBrand"><option value="">— None —</option></select>
-            </div>
-          </div>
-
-          <div class="text-uppercase small fw-semibold text-muted mb-2">Price &amp; origin</div>
-          <div class="row g-3 mb-3">
-            <div class="col-md-4"><label class="form-label">Price from (₫)</label><input type="number" min="0" class="form-control" id="pPriceMin"></div>
-            <div class="col-md-4"><label class="form-label">Price to (₫)</label><input type="number" min="0" class="form-control" id="pPriceMax"></div>
-            <div class="col-md-4"><label class="form-label">Origin</label><input type="text" class="form-control" id="pOrigin" placeholder="Vietnam"></div>
-            <div class="col-md-4"><label class="form-label">Style</label><input type="text" class="form-control" id="pStyle" placeholder="Scandinavian…"></div>
-          </div>
-
-          <div class="text-uppercase small fw-semibold text-muted mb-2">Materials</div>
-          <div class="mb-3 position-relative" style="z-index:5">
-            <div class="d-flex flex-wrap gap-1 align-items-center border rounded p-2" id="pMatWrap">
-              <div id="pMatChips" class="d-flex flex-wrap gap-1"></div>
-              <input type="text" id="pMatSearch" class="border-0 flex-grow-1 bg-transparent" style="outline:none;min-width:120px" placeholder="Type to search &amp; add materials…" autocomplete="off">
-            </div>
-            <div id="pMatResults" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1060;max-height:200px;overflow:auto"></div>
-            <div class="form-text" id="pMaterialsHint">Type a material name, then pick it to add.</div>
-          </div>
-
-          <div class="text-uppercase small fw-semibold text-muted mb-2">Description</div>
-          <div class="mb-3">
-            <textarea class="form-control" id="pDescription" rows="2" placeholder="Description (Markdown)"></textarea>
-          </div>
-
-          <div id="imagesSection" style="display:none">
-            <div class="text-uppercase small fw-semibold text-muted mb-2">Images <span class="text-lowercase fw-normal">(the first image is the cover)</span></div>
-            <input type="file" class="form-control form-control-sm mb-2" id="pImageInput" accept="image/jpeg,image/png,image/webp,image/gif">
-            <div class="d-flex flex-wrap gap-2" id="pGallery"></div>
-          </div>
+          </fieldset>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="productSubmit">Save</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="adm-cancel") }}</button>
+          <button type="submit" class="btn btn-primary" id="productSubmit">{{ t(k="adm-save") }}</button>
         </div>
       </form>
     </div>
@@ -211,40 +278,52 @@
 </div>
 
 <!-- ═══ Modal: Material (create / edit) ════════════════════════════ -->
-<div class="modal fade" id="materialModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="materialModal" tabindex="-1" aria-labelledby="materialModalTitle" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form id="materialForm">
+      <form id="materialForm" novalidate>
         <div class="modal-header">
-          <h5 class="modal-title" id="materialModalTitle">New material</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="materialModalTitle">{{ t(k="adm-new-material") }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='adm-close') }}"></button>
         </div>
         <div class="modal-body">
+          <div class="alert alert-danger d-none" id="materialFormError" role="alert"></div>
           <input type="hidden" id="mId">
           <div class="row g-3">
-            <div class="col-md-7"><label class="form-label">Name</label><input type="text" class="form-control" id="mName" required maxlength="120" placeholder="Solid oak"></div>
-            <div class="col-md-5"><label class="form-label">Slug</label><input type="text" class="form-control" id="mSlug" required maxlength="120" pattern="[a-z0-9\-]+" placeholder="go-soi"></div>
+            <div class="col-md-7">
+              <label for="mName" class="form-label">{{ t(k="adm-name") }} <span class="text-danger" aria-hidden="true">*</span></label>
+              <input type="text" class="form-control" id="mName" required maxlength="120" placeholder="{{ t(k='adm-solid-oak') }}">
+              <div class="invalid-feedback" id="mNameFeedback"></div>
+            </div>
+            <div class="col-md-5">
+              <label for="mSlug" class="form-label">{{ t(k="adm-slug") }} <span class="text-danger" aria-hidden="true">*</span></label>
+              <input type="text" class="form-control" id="mSlug" required maxlength="120" pattern="[a-z0-9\-]+" placeholder="go-soi">
+              <div class="invalid-feedback" id="mSlugFeedback"></div>
+            </div>
             <div class="col-12">
-              <label class="form-label">Category</label>
+              <label for="mCategory" class="form-label">{{ t(k="adm-category") }}</label>
               <select class="form-select" id="mCategory">
-                <option value="wood_natural">Solid wood</option>
-                <option value="wood_engineered">Engineered wood</option>
-                <option value="rattan_bamboo">Rattan &amp; bamboo</option>
-                <option value="metal">Metal</option>
-                <option value="fabric">Fabric</option>
-                <option value="leather">Leather</option>
-                <option value="stone">Stone</option>
-                <option value="glass">Glass</option>
-                <option value="plastic">Plastic</option>
-                <option value="other">Other</option>
+                <option value="wood_natural">{{ t(k="adm-solid-wood") }}</option>
+                <option value="wood_engineered">{{ t(k="adm-engineered-wood") }}</option>
+                <option value="rattan_bamboo">{{ t(k="adm-rattan-bamboo") }}</option>
+                <option value="metal">{{ t(k="adm-metal") }}</option>
+                <option value="fabric">{{ t(k="adm-fabric") }}</option>
+                <option value="leather">{{ t(k="adm-leather") }}</option>
+                <option value="stone">{{ t(k="adm-stone") }}</option>
+                <option value="glass">{{ t(k="adm-glass") }}</option>
+                <option value="plastic">{{ t(k="adm-plastic") }}</option>
+                <option value="other">{{ t(k="adm-other") }}</option>
               </select>
             </div>
-            <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" id="mDescription" rows="2"></textarea></div>
+            <div class="col-12">
+              <label for="mDescription" class="form-label">{{ t(k="adm-description") }}</label>
+              <textarea class="form-control" id="mDescription" rows="2"></textarea>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="adm-cancel") }}</button>
+          <button type="submit" class="btn btn-primary">{{ t(k="adm-save") }}</button>
         </div>
       </form>
     </div>
@@ -252,33 +331,83 @@
 </div>
 
 <!-- ═══ Modal: Brand (create / edit) ═══════════════════════════════ -->
-<div class="modal fade" id="brandModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="brandModal" tabindex="-1" aria-labelledby="brandModalTitle" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form id="brandForm">
+      <form id="brandForm" novalidate>
         <div class="modal-header">
-          <h5 class="modal-title" id="brandModalTitle">New brand</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="brandModalTitle">{{ t(k="adm-new-brand") }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='adm-close') }}"></button>
         </div>
         <div class="modal-body">
+          <div class="alert alert-danger d-none" id="brandFormError" role="alert"></div>
           <input type="hidden" id="bId">
           <div class="row g-3">
-            <div class="col-md-7"><label class="form-label">Name</label><input type="text" class="form-control" id="bName" required maxlength="200" placeholder="Acme Furniture"></div>
-            <div class="col-md-5"><label class="form-label">Slug</label><input type="text" class="form-control" id="bSlug" required maxlength="200" pattern="[a-z0-9\-]+" placeholder="nha-xinh"></div>
-            <div class="col-md-7"><label class="form-label">Website</label><input type="url" class="form-control" id="bWebsite" placeholder="https://…"></div>
-            <div class="col-md-5"><label class="form-label">Country</label><input type="text" class="form-control" id="bCountry" placeholder="Vietnam"></div>
-            <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" id="bDescription" rows="2"></textarea></div>
+            <div class="col-md-7">
+              <label for="bName" class="form-label">{{ t(k="adm-name") }} <span class="text-danger" aria-hidden="true">*</span></label>
+              <input type="text" class="form-control" id="bName" required maxlength="200" placeholder="{{ t(k='adm-acme-furniture') }}">
+              <div class="invalid-feedback" id="bNameFeedback"></div>
+            </div>
+            <div class="col-md-5">
+              <label for="bSlug" class="form-label">{{ t(k="adm-slug") }} <span class="text-danger" aria-hidden="true">*</span></label>
+              <input type="text" class="form-control" id="bSlug" required maxlength="200" pattern="[a-z0-9\-]+" placeholder="nha-xinh">
+              <div class="invalid-feedback" id="bSlugFeedback"></div>
+            </div>
+            <div class="col-md-7">
+              <label for="bWebsite" class="form-label">{{ t(k="adm-website") }}</label>
+              <input type="url" class="form-control" id="bWebsite" placeholder="https://…">
+              <div class="invalid-feedback" id="bWebsiteFeedback"></div>
+            </div>
+            <div class="col-md-5">
+              <label for="bCountry" class="form-label">{{ t(k="adm-country") }}</label>
+              <input type="text" class="form-control" id="bCountry" placeholder="{{ t(k='adm-vietnam') }}">
+            </div>
+            <div class="col-12">
+              <label for="bDescription" class="form-label">{{ t(k="adm-description") }}</label>
+              <textarea class="form-control" id="bDescription" rows="2"></textarea>
+            </div>
             <div class="col-12 form-check ms-2">
               <input class="form-check-input" type="checkbox" id="bVerified">
-              <label class="form-check-label" for="bVerified">Verified</label>
+              <label class="form-check-label" for="bVerified">{{ t(k="adm-verified") }}</label>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="adm-cancel") }}</button>
+          <button type="submit" class="btn btn-primary">{{ t(k="adm-save") }}</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Delete product ══════════════════════════════════════ -->
+<!-- Deleting is guarded rather than blind: the dialog first reports what the
+     product would take with it. Reviews block a permanent delete outright
+     (threads.product_id is ON DELETE SET NULL, so deleting would leave reviews
+     pointing at nothing), leaving Archive as the safe way out. -->
+<div class="modal fade" id="deleteProductModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ t(k="adm-delete-product") }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='adm-close') }}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3" id="delProductName"></p>
+        <ul class="list-group list-group-flush mb-3" id="delDependents"></ul>
+        <div class="alert alert-warning mb-0 d-none" id="delBlocked"></div>
+        <div class="alert alert-secondary mb-0 d-none" id="delSafe">{{ t(k="adm-delete-product-permanent-warning") }}</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="adm-cancel") }}</button>
+        <button type="button" class="btn btn-warning" id="delArchiveBtn">
+          <i class="fa-solid fa-box-archive me-1"></i>{{ t(k="adm-archive") }}
+        </button>
+        <button type="button" class="btn btn-danger" id="delConfirmBtn">
+          <i class="fa-solid fa-trash me-1"></i>{{ t(k="adm-delete-permanently") }}
+        </button>
+      </div>
     </div>
   </div>
 </div>

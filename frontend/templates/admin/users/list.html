@@ -17,11 +17,11 @@
           <th>
             {% if sort_by == "username" %}
               <a href="?q={{ search_query }}&sort_by=username&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
-                User <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+                {{ t(k="adm-user") }} <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
               </a>
             {% else %}
               <a href="?q={{ search_query }}&sort_by=username&sort_dir=asc" class="text-body text-decoration-none">
-                User <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+                {{ t(k="adm-user") }} <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
               </a>
             {% endif %}
           </th>
@@ -29,11 +29,11 @@
           <th>
             {% if sort_by == "trust_level" %}
               <a href="?q={{ search_query }}&sort_by=trust_level&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
-                Access <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+                {{ t(k="adm-access") }} <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
               </a>
             {% else %}
               <a href="?q={{ search_query }}&sort_by=trust_level&sort_dir=desc" class="text-body text-decoration-none">
-                Access <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+                {{ t(k="adm-access") }} <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
               </a>
             {% endif %}
           </th>
@@ -41,11 +41,11 @@
           <th>
             {% if sort_by == "created_at" or sort_by == "" %}
               <a href="?q={{ search_query }}&sort_by=created_at&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
-                Joined <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+                {{ t(k="adm-joined") }} <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
               </a>
             {% else %}
               <a href="?q={{ search_query }}&sort_by=created_at&sort_dir=desc" class="text-body text-decoration-none">
-                Joined <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+                {{ t(k="adm-joined") }} <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
               </a>
             {% endif %}
           </th>
@@ -53,11 +53,11 @@
           <th>
             {% if sort_by == "is_banned" %}
               <a href="?q={{ search_query }}&sort_by=is_banned&sort_dir={% if sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-body text-decoration-none">
-                Status <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
+                {{ t(k="adm-status") }} <i class="fa-solid fa-sort-{% if sort_dir == 'asc' %}up{% else %}down{% endif %} ms-1 opacity-50" style="font-size:.7rem"></i>
               </a>
             {% else %}
               <a href="?q={{ search_query }}&sort_by=is_banned&sort_dir=desc" class="text-body text-decoration-none">
-                Status <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
+                {{ t(k="adm-status") }} <i class="fa-solid fa-sort ms-1 opacity-25" style="font-size:.7rem"></i>
               </a>
             {% endif %}
           </th>
@@ -82,25 +82,25 @@
           <td class="align-middle">
             {# Trust level — uses text treatment (no colored badge) to visually distinguish from role badges #}
             <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="text-muted" style="font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;min-width:2rem">Trust</span>
+              <span class="text-muted" style="font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;min-width:2rem">{{ t(k="adm-trust") }}</span>
               <span class="fw-semibold small">
                 {% if user.trust_level == "leader" %}
-                  <i class="fa-solid fa-crown fa-xs text-warning me-1" title="Leader — manually assigned by admin"></i>
+                  <i class="fa-solid fa-crown fa-xs text-warning me-1" title="{{ t(k='adm-leader-manually-assigned-by-admin') }}"></i>
                 {% elif user.trust_level == "regular" %}
-                  <i class="fa-solid fa-star fa-xs text-info me-1" title="Regular — ≥500 posts, ≥100 days, trust score ≥80"></i>
+                  <i class="fa-solid fa-star fa-xs text-info me-1" title="{{ t(k='adm-regular-500-posts-100-days-trust') }}"></i>
                 {% elif user.trust_level == "member" %}
-                  <i class="fa-solid fa-circle-check fa-xs text-success me-1" title="Member — ≥30 posts, ≥15 days; can upload files and create tags"></i>
+                  <i class="fa-solid fa-circle-check fa-xs text-success me-1" title="{{ t(k='adm-member-30-posts-15-days-can') }}"></i>
                 {% elif user.trust_level == "basic" %}
-                  <i class="fa-solid fa-circle fa-xs text-primary me-1" title="Basic — email verified; can post and react"></i>
+                  <i class="fa-solid fa-circle fa-xs text-primary me-1" title="{{ t(k='adm-basic-email-verified-can-post-and') }}"></i>
                 {% else %}
-                  <i class="fa-regular fa-circle fa-xs text-muted me-1" title="New — default level; cannot post until email is verified"></i>
+                  <i class="fa-regular fa-circle fa-xs text-muted me-1" title="{{ t(k='adm-new-default-level-cannot-post-until') }}"></i>
                 {% endif %}
                 {{ user.trust_level }}
               </span>
             </div>
             {# Role badges — colored pills, clearly separate from trust level above #}
             <div class="d-flex align-items-center gap-1 flex-wrap">
-              <span class="text-muted" style="font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;min-width:2rem">Roles</span>
+              <span class="text-muted" style="font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;min-width:2rem">{{ t(k="adm-roles") }}</span>
               {% for role in user.roles %}
                 <span class="badge" style="background-color:{{ role.color | default(value="#6c757d") }}">
                   {{ role.name }}
@@ -110,18 +110,18 @@
           </td>
           {# JOINED cell #}
           <td class="align-middle text-muted small text-nowrap">
-            <time data-rel datetime="{{ user.created_at }}">{{ user.created_at | date(format="%b %d, %Y") }}</time>
+            <time data-rel datetime="{{ user.created_at }}">{{ user.created_at | localdate }}</time>
           </td>
           {# STATE cell #}
           <td class="align-middle">
             {% if user.is_banned %}
-              <span class="badge bg-danger">Banned</span>
+              <span class="badge bg-danger">{{ t(k="adm-banned") }}</span>
             {% else %}
-              <span class="badge bg-success">Active</span>
+              <span class="badge bg-success">{{ t(k="adm-active") }}</span>
             {% endif %}
           </td>
           <td class="align-middle">
-            <a href="/admin/users/{{ user.id }}" class="btn btn-sm btn-outline-secondary" title="Edit user">
+            <a href="/admin/users/{{ user.id }}" class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-edit-user') }}">
               <i class="fa-solid fa-pen"></i>
             </a>
           </td>

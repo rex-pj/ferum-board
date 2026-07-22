@@ -599,9 +599,7 @@ impl ThreadUseCase {
         PermissionChecker::can_create_post(actor, &category)?;
 
         if !validate_thread_title(&cmd.title) {
-            return Err(AppError::unprocessable(
-                "Thread title must be 5–255 characters",
-            ));
+            return Err(AppError::invalid("thread_title_length"));
         }
 
         // One review per author per product. `uq_threads_product_author` is the
@@ -750,9 +748,7 @@ impl ThreadUseCase {
         }
 
         if !validate_thread_title(&title) {
-            return Err(AppError::unprocessable(
-                "Thread title must be 5–255 characters",
-            ));
+            return Err(AppError::invalid("thread_title_length"));
         }
 
         self.threads
@@ -1028,9 +1024,7 @@ impl ThreadUseCase {
             .await?
             .or_not_found()?;
         if best_post.thread_id != id {
-            return Err(AppError::unprocessable(
-                "best_answer must belong to this thread",
-            ));
+            return Err(AppError::invalid("best_answer_wrong_thread"));
         }
 
         // Idempotent no-op if this exact answer is already marked as best — avoids
@@ -1108,14 +1102,10 @@ impl ThreadUseCase {
         PermissionChecker::can_upload(actor)?;
 
         if !validate_image_content_type(&content_type) || !validate_image_magic(&data) {
-            return Err(AppError::unprocessable(
-                "thumbnail must be jpeg, png, webp, or gif",
-            ));
+            return Err(AppError::invalid("thumbnail_invalid_type"));
         }
         if data.len() > MAX_THUMBNAIL_BYTES {
-            return Err(AppError::unprocessable(
-                "thumbnail exceeds 10 MB size limit",
-            ));
+            return Err(AppError::invalid_with("thumbnail_too_large", [("limit_mb", (MAX_THUMBNAIL_BYTES / (1024 * 1024)).into())]));
         }
 
         let thread = self.find_live_thread(thread_id).await?;

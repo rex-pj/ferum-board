@@ -29,11 +29,18 @@ pub struct NewReviewRating {
     pub verified_purchase: bool,
 }
 
+/// Lowest score a reviewer can give. Exposed so the validation error can report
+/// the bound instead of restating it as a literal in each translation.
+pub const MIN_RATING: i16 = 1;
+/// Highest score a reviewer can give.
+pub const MAX_RATING: i16 = 5;
+
 impl NewReviewRating {
-    /// Every provided score must fall within 1..=5.
+    /// Every provided score must fall within `MIN_RATING..=MAX_RATING`.
     pub fn scores_in_range(&self) -> bool {
-        let ok = |v: Option<i16>| v.map(|n| (1..=5).contains(&n)).unwrap_or(true);
-        (1..=5).contains(&self.overall)
+        let range = MIN_RATING..=MAX_RATING;
+        let ok = |v: Option<i16>| v.map(|n| range.contains(&n)).unwrap_or(true);
+        range.contains(&self.overall)
             && ok(self.durability)
             && ok(self.materials)
             && ok(self.comfort)

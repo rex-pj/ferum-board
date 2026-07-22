@@ -55,9 +55,16 @@ pub fn admin_api_routes() -> Router<AppState> {
         )
         .route(
             "/{id}",
-            patch(admin::api::products::update_product).delete(admin::api::products::delete_product),
+            get(admin::api::products::get_product)
+                .patch(admin::api::products::update_product)
+                .delete(admin::api::products::delete_product),
         )
-        .route("/{id}/materials", post(admin::api::products::set_materials))
+        .route(
+            "/{id}/materials",
+            get(admin::api::products::list_product_materials)
+                .post(admin::api::products::set_materials),
+        )
+        .route("/{id}/dependents", get(admin::api::products::product_dependents))
         .route(
             "/{id}/media",
             get(admin::api::products::list_media).post(admin::api::products::upload_media),
@@ -113,6 +120,9 @@ pub fn admin_api_routes() -> Router<AppState> {
         .route("/plugins/{slug}/logs", get(admin::api::plugins::get_logs))
         .route("/plugins/{slug}/ui-slots", get(admin::api::plugins::list_ui_slots))
         .route("/plugins/{slug}/ui-slots/{slot_id}", patch(admin::api::plugins::update_ui_slot))
+        // Locale roster. The handler lives with the page it backs rather than in
+        // api/, since the two share the enabled-locales helpers.
+        .route("/languages/{tag}", patch(admin::pages::languages::update_locale))
         .nest("/categories", admin_category_routes)
         .nest("/products", admin_product_routes)
         .nest("/users", admin_user_routes)
@@ -150,6 +160,7 @@ pub fn admin_page_routes() -> Router<AppState> {
         .route("/plugins/{slug}/config", post(admin::pages::plugins::save_config))
         .route("/settings", get(admin::pages::settings::settings))
         .route("/themes", get(admin::pages::themes::themes))
+        .route("/languages", get(admin::pages::languages::languages))
         .route("/themes/upload", post(admin::pages::themes::upload_theme))
         .route("/themes/{slug}/activate", post(admin::pages::themes::activate_theme))
         .route("/themes/{slug}/preview", post(admin::pages::themes::upload_theme_preview))

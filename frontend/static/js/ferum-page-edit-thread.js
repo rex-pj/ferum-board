@@ -13,8 +13,8 @@
       handleFile: function (file) {
         var ACCEPTED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         this.uploadError = '';
-        if (!ACCEPTED.includes(file.type)) { this.uploadError = 'Thumbnail must be a JPEG, PNG, GIF, or WebP image.'; return; }
-        if (file.size > 10 * 1024 * 1024) { this.uploadError = 'Thumbnail must be under 10 MB.'; return; }
+        if (!ACCEPTED.includes(file.type)) { this.uploadError = Ferum.t('js-thumbnail-invalid-type'); return; }
+        if (file.size > 10 * 1024 * 1024) { this.uploadError = Ferum.t('js-thumbnail-too-large'); return; }
         var reader = new FileReader();
         var self = this;
         reader.onload = function (ev) { self.preview = ev.target.result; };
@@ -29,11 +29,11 @@
           var res = await FerumApi.threads.uploadThumbnail(this.threadId, fd);
           if (!res.ok) {
             var body = await res.json().catch(function () { return {}; });
-            this.uploadError = (body.error && body.error.message) || 'Upload failed.';
+            this.uploadError = (body.error && body.error.message) || Ferum.t('js-upload-failed');
             this.preview = null;
           }
         } catch (_) {
-          this.uploadError = 'Network error. Please try again.';
+          this.uploadError = Ferum.t('js-network-error');
           this.preview = null;
         } finally {
           this.uploading = false;
@@ -101,14 +101,14 @@
         window.location.href = '/forum/t/' + threadSlug;
       } else {
         var body = await res.json().catch(function () { return {}; });
-        errorEl.textContent = (body.error && body.error.message) || 'Failed to save changes.';
+        errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-failed-save-changes');
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
         _editThreadSubmitting = false;
       }
     } catch (_) {
-      errorEl.textContent = 'Network error. Please try again.';
+      errorEl.textContent = Ferum.t('js-network-error');
       errorEl.classList.remove('d-none');
       btn.disabled = false;
       spinner.classList.add('d-none');

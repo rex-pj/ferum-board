@@ -14,8 +14,8 @@
       handleFile: function (f) {
         var ACCEPTED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         this.thumbError = '';
-        if (!ACCEPTED.includes(f.type)) { this.thumbError = 'Thumbnail must be a JPEG, PNG, GIF, or WebP image.'; return; }
-        if (f.size > 10 * 1024 * 1024) { this.thumbError = 'Thumbnail must be under 10 MB.'; return; }
+        if (!ACCEPTED.includes(f.type)) { this.thumbError = Ferum.t('js-thumbnail-invalid-type'); return; }
+        if (f.size > 10 * 1024 * 1024) { this.thumbError = Ferum.t('js-thumbnail-too-large'); return; }
         this.file = f;
         var reader = new FileReader();
         var self = this;
@@ -56,12 +56,23 @@
   // ── Product review: searchable typeahead + rating block orchestration ──
   var _ratingDims = ['overall', 'durability', 'materials', 'comfort', 'aesthetics', 'value_for_money'];
   var _productSearchTimer = null;
-  var _typeLabels = { furniture: 'Furniture', material: 'Material', room: 'Room' };
+  var _typeLabels = {
+    furniture: Ferum.t('js-product-type-furniture'),
+    material: Ferum.t('js-product-type-material'),
+    room: Ferum.t('js-product-type-room'),
+  };
   // Mirrors the material_category_label macro in macros.html.
   var _matCatLabels = {
-    wood_natural: 'Solid wood', wood_engineered: 'Engineered wood', rattan_bamboo: 'Rattan & bamboo',
-    metal: 'Metal', fabric: 'Fabric', leather: 'Leather', stone: 'Stone', glass: 'Glass',
-    plastic: 'Plastic', other: 'Other',
+    wood_natural: Ferum.t('js-material-wood-natural'),
+    wood_engineered: Ferum.t('js-material-wood-engineered'),
+    rattan_bamboo: Ferum.t('js-material-rattan-bamboo'),
+    metal: Ferum.t('js-material-metal'),
+    fabric: Ferum.t('js-material-fabric'),
+    leather: Ferum.t('js-material-leather'),
+    stone: Ferum.t('js-material-stone'),
+    glass: Ferum.t('js-material-glass'),
+    plastic: Ferum.t('js-material-plastic'),
+    other: Ferum.t('js-material-other'),
   };
   // Set by initProductReview so the "add product" flow can select what it created.
   var _selectProduct = null;
@@ -102,10 +113,10 @@
     var heading = document.getElementById('compose-heading');
     var submitBtn = document.getElementById('submit-btn');
     function setReviewFraming(on) {
-      if (heading) heading.textContent = on ? 'Write a review' : 'New post';
+      if (heading) heading.textContent = on ? Ferum.t('js-write-a-review') : Ferum.t('js-new-post');
       // The submit button's first child is its text node (spinner span follows).
       if (submitBtn && submitBtn.childNodes[0]) {
-        submitBtn.childNodes[0].nodeValue = on ? 'Publish review' : 'Publish';
+        submitBtn.childNodes[0].nodeValue = on ? Ferum.t('js-publish-review') : Ferum.t('js-publish');
       }
     }
 
@@ -163,7 +174,7 @@
       if (!items.length) {
         var empty = document.createElement('div');
         empty.className = 'list-group-item text-muted small';
-        empty.textContent = 'No products found.';
+        empty.textContent = Ferum.t('js-no-products-found');
         resultsEl.appendChild(empty);
         setAddVisible(true); // no matches → keep "add product" reachable below
         showResults(true);
@@ -183,7 +194,7 @@
         if (p.status && p.status !== 'published') {
           var pend = document.createElement('span');
           pend.className = 'badge text-bg-warning ms-2';
-          pend.textContent = 'Pending approval';
+          pend.textContent = Ferum.t('js-pending-approval');
           left.appendChild(pend);
         }
         var right = document.createElement('span');
@@ -237,16 +248,68 @@
   function initProductSubmit() {
     var toggle = document.getElementById('product-add-toggle');
     if (!toggle) return; // user not eligible to submit
-    var form = document.getElementById('product-add-form');
+    var modalEl = document.getElementById('productAddModal');
+    var form = document.getElementById('np-form');
     var brandSel = document.getElementById('np-brand');
     var errEl = document.getElementById('np-error');
     var submitBtn = document.getElementById('np-submit');
-    var matPicker = document.getElementById('np-mat-picker');
+    var nameEl = document.getElementById('np-name');
+    var imageInput = document.getElementById('np-images');
+    var imagePreview = document.getElementById('np-image-preview');
+    var matSearch = document.getElementById('np-mat-search');
+    var matChips = document.getElementById('np-mat-chips');
+    var matResults = document.getElementById('np-mat-results');
+    var matWrap = document.getElementById('np-mat-wrap');
+    var dupesBox = document.getElementById('np-dupes');
+    var dupeList = document.getElementById('np-dupe-list');
     var refsLoaded = false;
-    var pickedMaterials = []; // material ids, in the order the user tapped them
+    var allMaterials = [];
+    var pickedMaterials = []; // material ids, in the order the user picked them
+    // Photos wait here until the product row exists — the upload endpoint is
+    // keyed by product id, which we only get back from the create call.
+    var pendingImages = [];
+    var _dupeTimer = null;
+
+    function bsModal() { return bootstrap.Modal.getOrCreateInstance(modalEl); }
+
+    // ── Field-level validation feedback ────────────────────────────────────
+    function setFieldError(el, feedbackId, msg) {
+      el.classList.add('is-invalid');
+      var fb = document.getElementById(feedbackId);
+      if (fb) fb.textContent = msg;
+    }
+    function clearErrors() {
+      errEl.textContent = '';
+      errEl.classList.add('d-none');
+      Array.prototype.forEach.call(form.querySelectorAll('.is-invalid'), function (el) {
+        el.classList.remove('is-invalid');
+      });
+      Array.prototype.forEach.call(form.querySelectorAll('.invalid-feedback'), function (el) {
+        el.textContent = '';
+      });
+    }
+    function showError(msg) {
+      errEl.textContent = msg;
+      errEl.classList.remove('d-none');
+      errEl.scrollIntoView({ block: 'nearest' });
+    }
+
+    // Prices are typed with whatever grouping the user is used to; strip it on
+    // read, re-apply it on blur.
+    function parsePrice(id) {
+      var digits = (document.getElementById(id).value || '').replace(/\D/g, '');
+      return digits === '' ? null : parseInt(digits, 10);
+    }
+    ['np-price-min', 'np-price-max'].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.addEventListener('blur', function () {
+        var digits = el.value.replace(/\D/g, '');
+        el.value = digits === '' ? '' : new Intl.NumberFormat('vi-VN').format(parseInt(digits, 10));
+      });
+    });
 
     // Brands and materials are both small reference lists — fetch once, on the
-    // first time the form is opened.
+    // first time the dialog is opened.
     function loadRefs() {
       if (refsLoaded) return;
       refsLoaded = true;
@@ -262,88 +325,220 @@
         .catch(function () {});
       fetch('/api/materials', { headers: { Accept: 'application/json' } })
         .then(function (r) { return r.ok ? r.json() : { data: [] }; })
-        .then(function (body) { renderMatPicker(body.data || []); })
-        .catch(function () { setMatMessage('Could not load the material list.'); });
+        .then(function (body) { allMaterials = body.data || []; })
+        .catch(function () { showError(Ferum.t('js-could-not-load-materials')); });
     }
 
-    function setMatMessage(text) {
-      matPicker.innerHTML = '';
-      var p = document.createElement('div');
-      p.className = 'text-muted small';
-      p.textContent = text;
-      matPicker.appendChild(p);
+    // ── Materials: chip + typeahead, same interaction as the admin catalogue ─
+    function renderMatChips() {
+      matChips.innerHTML = '';
+      pickedMaterials.forEach(function (id) {
+        var m = allMaterials.find(function (x) { return x.id === id; });
+        var chip = document.createElement('span');
+        chip.className = 'badge text-bg-secondary d-inline-flex align-items-center gap-1';
+        chip.appendChild(document.createTextNode(m ? m.name : id));
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'btn-close btn-close-white';
+        rm.style.fontSize = '.5rem';
+        rm.setAttribute('aria-label', Ferum.t('js-remove-material'));
+        rm.addEventListener('click', function () {
+          pickedMaterials = pickedMaterials.filter(function (x) { return x !== id; });
+          renderMatChips();
+        });
+        chip.appendChild(rm);
+        matChips.appendChild(chip);
+      });
     }
 
-    // Every material rendered up-front as a toggle chip, grouped by category —
-    // the reference table is short, so browsing beats typing here.
-    function renderMatPicker(materials) {
-      if (!materials.length) {
-        setMatMessage('No materials in the catalog yet.');
+    /// Drop the menu upwards when the field is too close to the bottom of the
+    /// viewport, so it never lands on top of the dialog's own buttons.
+    function placeMatResults() {
+      var below = window.innerHeight - matWrap.getBoundingClientRect().bottom;
+      matResults.classList.toggle('fr-typeahead-up', below < 240);
+    }
+
+    function showMatResults(term) {
+      var matches = allMaterials.filter(function (m) {
+        return pickedMaterials.indexOf(m.id) === -1 &&
+          (!term || m.name.toLowerCase().indexOf(term.toLowerCase()) !== -1);
+      }).slice(0, 12);
+      matResults.innerHTML = '';
+      placeMatResults();
+      if (!matches.length) {
+        // Silence here reads as a broken control, so say which kind of empty
+        // this is: nothing typed matches, or the catalogue has nothing at all.
+        var note = document.createElement('div');
+        note.className = 'list-group-item text-muted small';
+        note.textContent = allMaterials.length
+          ? Ferum.t('js-no-materials-found')
+          : Ferum.t('js-no-materials-in-catalog');
+        matResults.appendChild(note);
+        matResults.classList.remove('d-none');
         return;
       }
-      matPicker.innerHTML = '';
-      var order = [];
-      var byCat = {};
-      materials.forEach(function (m) {
-        var c = m.category || 'other';
-        if (!byCat[c]) { byCat[c] = []; order.push(c); }
-        byCat[c].push(m);
-      });
-      order.forEach(function (cat, idx) {
-        var head = document.createElement('div');
-        head.className = 'text-muted small text-uppercase' + (idx ? ' mt-2' : '');
-        head.textContent = _matCatLabels[cat] || cat;
-        matPicker.appendChild(head);
-
-        var row = document.createElement('div');
-        row.className = 'd-flex flex-wrap gap-1 mt-1';
-        byCat[cat].forEach(function (m) {
-          var chip = document.createElement('button');
-          chip.type = 'button';
-          chip.className = 'btn btn-sm btn-outline-secondary fr-mat-chip';
-          chip.textContent = m.name;
-          chip.setAttribute('aria-pressed', 'false');
-          chip.addEventListener('click', function () {
-            var i = pickedMaterials.indexOf(m.id);
-            if (i === -1) pickedMaterials.push(m.id); else pickedMaterials.splice(i, 1);
-            var on = i === -1;
-            chip.classList.toggle('btn-secondary', on);
-            chip.classList.toggle('btn-outline-secondary', !on);
-            chip.setAttribute('aria-pressed', on ? 'true' : 'false');
-          });
-          row.appendChild(chip);
+      matches.forEach(function (m) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action';
+        btn.appendChild(document.createTextNode(m.name));
+        var cat = document.createElement('span');
+        cat.className = 'text-muted small ms-1';
+        cat.textContent = '(' + (_matCatLabels[m.category] || m.category || '') + ')';
+        btn.appendChild(cat);
+        btn.addEventListener('click', function () {
+          pickedMaterials.push(m.id);
+          renderMatChips();
+          matSearch.value = '';
+          matResults.classList.add('d-none');
+          matSearch.focus();
         });
-        matPicker.appendChild(row);
+        matResults.appendChild(btn);
+      });
+      matResults.classList.remove('d-none');
+    }
+
+    matSearch.addEventListener('input', function () { showMatResults(matSearch.value.trim()); });
+    matSearch.addEventListener('focus', function () { showMatResults(matSearch.value.trim()); });
+    matWrap.addEventListener('click', function () { matSearch.focus(); });
+    document.addEventListener('click', function (e) {
+      if (!matWrap.contains(e.target) && !matResults.contains(e.target)) matResults.classList.add('d-none');
+    });
+
+    // ── Duplicate guard ────────────────────────────────────────────────────
+    // The catalogue search that led here matched nothing, but people rarely type
+    // the same name twice the same way. Re-query as they type and offer the near
+    // matches, so an existing product gets reused instead of re-created.
+    function renderDupes(items) {
+      dupeList.innerHTML = '';
+      if (!items.length) { dupesBox.classList.add('d-none'); return; }
+      items.slice(0, 4).forEach(function (p) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2';
+        var left = document.createElement('span');
+        left.className = 'text-truncate';
+        left.textContent = p.name;
+        var right = document.createElement('span');
+        right.className = 'badge text-bg-primary flex-shrink-0';
+        right.textContent = Ferum.t('js-use-this-product');
+        btn.appendChild(left);
+        btn.appendChild(right);
+        btn.addEventListener('click', function () {
+          bsModal().hide();
+          if (_selectProduct) _selectProduct(p.id, p.name);
+        });
+        dupeList.appendChild(btn);
+      });
+      dupesBox.classList.remove('d-none');
+    }
+
+    nameEl.addEventListener('input', function () {
+      nameEl.classList.remove('is-invalid');
+      clearTimeout(_dupeTimer);
+      var term = nameEl.value.trim();
+      if (term.length < 3) { dupesBox.classList.add('d-none'); return; }
+      _dupeTimer = setTimeout(function () {
+        fetch('/api/products?per_page=4&q=' + encodeURIComponent(term), { headers: { Accept: 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : { data: [] }; })
+          .then(function (body) { renderDupes(body.data || []); })
+          .catch(function () { dupesBox.classList.add('d-none'); });
+      }, 300);
+    });
+
+    function renderImagePreview() {
+      imagePreview.innerHTML = '';
+      pendingImages.forEach(function (p, i) {
+        var wrap = document.createElement('div');
+        wrap.className = 'fr-thumb';
+
+        var img = document.createElement('img');
+        img.src = p.url;
+        img.alt = '';
+        wrap.appendChild(img);
+
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'fr-thumb-remove';
+        rm.textContent = '×';
+        rm.title = Ferum.t('js-remove-photo');
+        rm.setAttribute('aria-label', Ferum.t('js-remove-photo'));
+        rm.addEventListener('click', function () {
+          URL.revokeObjectURL(pendingImages[i].url);
+          pendingImages.splice(i, 1);
+          renderImagePreview();
+        });
+        wrap.appendChild(rm);
+
+        imagePreview.appendChild(wrap);
       });
     }
 
-    function numOrNull(id) {
-      var v = (document.getElementById(id).value || '').trim();
-      return v === '' ? null : parseInt(v, 10);
+    if (imageInput) {
+      imageInput.addEventListener('change', function () {
+        Array.prototype.slice.call(imageInput.files || []).forEach(function (f) {
+          pendingImages.push({ file: f, url: URL.createObjectURL(f) });
+        });
+        imageInput.value = '';
+        renderImagePreview();
+      });
     }
 
-    toggle.addEventListener('click', function () {
-      form.classList.toggle('d-none');
-      if (!form.classList.contains('d-none')) {
-        loadRefs();
-        document.getElementById('np-name').focus();
+    /// Upload the staged photos to a freshly created product. Returns how many
+    /// failed — the product itself is already saved either way.
+    async function uploadPendingImages(productId) {
+      var failed = 0;
+      for (var i = 0; i < pendingImages.length; i++) {
+        var fd = new FormData();
+        fd.append('image', pendingImages[i].file);
+        try {
+          var res = await fetch('/api/products/' + productId + '/media', {
+            method: 'POST',
+            body: fd,
+          });
+          if (!res.ok) failed++;
+        } catch (_) {
+          failed++;
+        }
       }
-    });
-    document.getElementById('np-cancel').addEventListener('click', function () {
-      form.classList.add('d-none');
-    });
+      pendingImages.forEach(function (p) { URL.revokeObjectURL(p.url); });
+      pendingImages = [];
+      renderImagePreview();
+      return failed;
+    }
 
-    submitBtn.addEventListener('click', async function () {
-      errEl.classList.add('d-none');
-      var name = (document.getElementById('np-name').value || '').trim();
-      if (name.length < 1) { errEl.textContent = 'Please enter a product name.'; errEl.classList.remove('d-none'); return; }
+    toggle.addEventListener('click', function () { openAddProduct(); });
+
+    function openAddProduct(presetName) {
+      loadRefs();
+      if (presetName) nameEl.value = presetName;
+      bsModal().show();
+    }
+
+    modalEl.addEventListener('shown.bs.modal', function () { nameEl.focus(); });
+
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      clearErrors();
+
+      var name = nameEl.value.trim();
+      if (!name) setFieldError(nameEl, 'np-name-feedback', Ferum.t('js-enter-product-name'));
+
+      var min = parsePrice('np-price-min'), max = parsePrice('np-price-max');
+      if (min != null && max != null && min > max) {
+        setFieldError(document.getElementById('np-price-min'), 'np-price-feedback', Ferum.t('js-price-from-exceeds-to'));
+        document.getElementById('np-price-max').classList.add('is-invalid');
+      }
+
+      var firstBad = form.querySelector('.is-invalid');
+      if (firstBad) { firstBad.focus(); firstBad.scrollIntoView({ block: 'center' }); return; }
 
       var payload = {
         name: name,
         product_type: document.getElementById('np-type').value,
         brand_id: brandSel.value || null,
-        price_min: numOrNull('np-price-min'),
-        price_max: numOrNull('np-price-max'),
+        price_min: min,
+        price_max: max,
         material_ids: pickedMaterials.slice(),
       };
       submitBtn.disabled = true;
@@ -355,33 +550,31 @@
         });
         var body = await res.json().catch(function () { return {}; });
         if (!res.ok) {
-          errEl.textContent = (body.error && body.error.message) || 'Could not add the product.';
-          errEl.classList.remove('d-none');
+          showError((body.error && body.error.message) || Ferum.t('js-could-not-add-product'));
           submitBtn.disabled = false;
           return;
         }
         var p = body.data || {};
-        form.classList.add('d-none');
+        if (pendingImages.length) {
+          var failed = await uploadPendingImages(p.id);
+          // The product itself is saved either way, so report the photo failure
+          // and still carry on into the review rather than blocking here.
+          if (failed) showError(Ferum.t('js-product-added-photos-failed'));
+        }
+        bsModal().hide();
         if (_selectProduct) _selectProduct(p.id, p.name);
       } catch (_) {
-        errEl.textContent = 'Network error. Please try again.';
-        errEl.classList.remove('d-none');
+        showError(Ferum.t('js-network-error'));
+      } finally {
         submitBtn.disabled = false;
       }
     });
 
     // Deep-link from the catalog "Suggest a product" CTA:
-    // /new-thread?add_product=1[&name=…] opens the add-product form straight
+    // /new-thread?add_product=1[&name=…] opens the add-product dialog straight
     // away, optionally pre-filling the name from the failed catalog search.
     var params = new URLSearchParams(window.location.search);
-    if (params.get('add_product')) {
-      form.classList.remove('d-none');
-      loadRefs();
-      var presetName = params.get('name');
-      var nameEl = document.getElementById('np-name');
-      if (presetName) nameEl.value = presetName;
-      nameEl.focus();
-    }
+    if (params.get('add_product')) openAddProduct(params.get('name'));
   }
 
   function selectedProductId() {
@@ -473,7 +666,7 @@
 
     // A product is attached but no overall score → block before submitting.
     if (productId && !rating) {
-      fail('Please give the product at least an Overall score.');
+      fail(Ferum.t('js-give-overall-score'));
       return;
     }
 
@@ -514,14 +707,14 @@
       var res = await FerumApi.threads.create(fd);
       if (!res.ok) {
         var body = await res.json().catch(function () { return {}; });
-        fail((body.error && body.error.message) || 'Could not publish. Please try again.');
+        fail((body.error && body.error.message) || Ferum.t('js-could-not-publish'));
         return;
       }
       var data = await res.json();
       var slug = (data.data && data.data.thread && data.data.thread.slug) || '';
       window.location.href = '/forum/t/' + slug;
     } catch (_) {
-      fail('Network error. Please try again.');
+      fail(Ferum.t('js-network-error'));
     }
   });
 }());

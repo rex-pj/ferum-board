@@ -14,6 +14,7 @@ use super::super::require_moderator;
 pub async fn users(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ModPageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -77,5 +78,5 @@ pub async fn users(
     ctx.insert("q", &search.unwrap_or_default());
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
 
-    render_admin(&state, "mod/users.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/users.html", &ctx).await
 }

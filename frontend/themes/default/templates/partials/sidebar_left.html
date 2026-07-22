@@ -1,22 +1,22 @@
-<nav id="sidebar-nav" aria-label="Site navigation" class="fr-sidebar-nav">
+<nav id="sidebar-nav" aria-label="{{ t(k='ui-site-navigation') }}" class="fr-sidebar-nav">
   {% if plugin_slots.sidebar_left_top %}
     {% for slot in plugin_slots.sidebar_left_top %}{{ slot.html | safe }}{% endfor %}
   {% endif %}
   <a href="/" class="fr-nav-link" data-nav-exact="true">
     <i class="fa-solid fa-house fa-fw" aria-hidden="true"></i>
-    Home
+    {{ t(k="ui-home") }}
   </a>
   <a href="/forum" class="fr-nav-link" data-nav-prefix="/forum">
     <i class="fa-solid fa-layer-group fa-fw" aria-hidden="true"></i>
-    Categories
+    {{ t(k="ui-categories") }}
   </a>
   <a href="/catalog" class="fr-nav-link" data-nav-prefix="/catalog">
     <i class="fa-solid fa-couch fa-fw" aria-hidden="true"></i>
-    Products
+    {{ t(k="ui-products") }}
   </a>
 
   {% if nav_categories is defined and nav_categories %}
-    <div class="fr-nav-section">Categories</div>
+    <div class="fr-nav-section">{{ t(k="ui-categories") }}</div>
     {% for cat in nav_categories %}
       <a href="/forum/{{ cat.slug }}"
          class="fr-nav-link {% if active_category_slug is defined and active_category_slug == cat.slug %}active{% endif %}"
@@ -38,10 +38,10 @@
   {% endif %}
 
   {% if current_user is defined and current_user %}
-    <div class="fr-nav-section">Account</div>
+    <div class="fr-nav-section">{{ t(k="ui-account") }}</div>
     <a href="/notifications" class="fr-nav-link" data-nav-prefix="/notifications">
       <i class="fa-solid fa-bell fa-fw" aria-hidden="true"></i>
-      Notifications
+      {{ t(k="ui-notifications") }}
       {% if current_user.unread_count > 0 %}
         <span class="badge bg-danger rounded-pill ms-auto fr-nav-link-badge">
           {{ current_user.unread_count }}
@@ -50,7 +50,7 @@
     </a>
     <a href="/bookmarks" class="fr-nav-link" data-nav-prefix="/bookmarks">
       <i class="fa-solid fa-bookmark fa-fw" aria-hidden="true"></i>
-      Saved
+      {{ t(k="ui-saved") }}
     </a>
   {% endif %}
 </nav>

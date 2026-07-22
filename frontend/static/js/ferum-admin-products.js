@@ -9,6 +9,11 @@
   var state = {
     materials: [], brands: [], selectedMaterials: [],
     page: 1, perPage: 20, total: 0, editing: null,
+    // Images picked while creating a product. There is no id to upload against
+    // until the product exists, so they wait here and are sent after the POST.
+    pendingFiles: [],
+    // Product currently shown in the delete dialog.
+    deleting: null,
   };
   var vnd = new Intl.NumberFormat('vi-VN');
 
@@ -50,8 +55,73 @@
     });
   }
   function strOrNull(id) { var v = $(id).value.trim(); return v === '' ? null : v; }
-  function numOrNull(id) { var v = $(id).value.trim(); return v === '' ? null : parseInt(v, 10); }
   function modal(id) { return bootstrap.Modal.getOrCreateInstance($(id)); }
+
+  // ── Segmented controls (radio button groups) ─────────────────────────────
+  function radioValue(name) {
+    var el = document.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value : '';
+  }
+  function setRadio(name, value) {
+    var el = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
+    if (el) el.checked = true;
+  }
+
+  // ── Prices ───────────────────────────────────────────────────────────────
+  // Typed as free text so "1.500.000", "1 500 000" and "1500000" all work.
+  // Separators are stripped on read and re-applied on blur.
+  function parsePrice(id) {
+    var digits = $(id).value.replace(/\D/g, '');
+    return digits === '' ? null : parseInt(digits, 10);
+  }
+  function formatPriceField(el) {
+    var digits = el.value.replace(/\D/g, '');
+    el.value = digits === '' ? '' : vnd.format(parseInt(digits, 10));
+  }
+
+  // ── Modal-scoped feedback ────────────────────────────────────────────────
+  // A failed save has to report inside the dialog it happened in. The page-level
+  // #catalogStatus alert is behind the backdrop whenever a modal is open, so
+  // anything routed there while saving is simply never seen.
+  function showFormError(id, msg) {
+    var el = $(id);
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove('d-none');
+    el.scrollIntoView({ block: 'nearest' });
+  }
+  function hideFormError(id) {
+    var el = $(id);
+    if (el) { el.textContent = ''; el.classList.add('d-none'); }
+  }
+
+  /// Mark one field invalid and write its message into the paired feedback node.
+  function setFieldError(inputId, feedbackId, msg) {
+    var input = $(inputId), fb = $(feedbackId);
+    if (input) input.classList.add('is-invalid');
+    if (fb) fb.textContent = msg;
+  }
+
+  /// Wipe every field-level error inside a form, plus its dialog-level alert.
+  function clearErrors(formId, alertId) {
+    var form = $(formId);
+    if (form) {
+      form.querySelectorAll('.is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+      form.querySelectorAll('.invalid-feedback').forEach(function (el) { el.textContent = ''; });
+    }
+    hideFormError(alertId);
+  }
+
+  /// Focus the first field carrying an error so the fix starts where it should,
+  /// revealing it first if it lives in a collapsed disclosure.
+  function focusFirstInvalid(formId) {
+    var el = $(formId).querySelector('.is-invalid');
+    if (!el) return false;
+    if (el.closest('.d-none')) el.closest('.d-none').classList.remove('d-none');
+    el.focus();
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return true;
+  }
 
   // ── Tabs ─────────────────────────────────────────────────────────────────
   function initTabs() {
@@ -143,7 +213,7 @@
     }
     if (page < totalPages - 3) html += pagerItem('&hellip;', 0, { disabled: true });
     html += pagerItem(String(totalPages), totalPages, { active: page === totalPages });
-    html += page < totalPages ? pagerItem(chevR, page + 1, { ariaLabel: 'Trang sau' })
+    html += page < totalPages ? pagerItem(chevR, page + 1, { ariaLabel: 'Next page' })
                               : pagerItem(chevR, 0, { disabled: true });
     ul.innerHTML = html;
   }
@@ -184,8 +254,17 @@
       });
     });
   }
+  /// Drop the menu upwards when the field is too close to the bottom of the
+  /// viewport, so it never lands on top of the dialog's own buttons.
+  function placeMatResults() {
+    var box = $('pMatResults');
+    var below = window.innerHeight - $('pMatWrap').getBoundingClientRect().bottom;
+    box.classList.toggle('fr-typeahead-up', below < 240);
+  }
+
   function matResults(term) {
     var box = $('pMatResults');
+    placeMatResults();
     var picked = state.selectedMaterials;
     var matches = state.materials.filter(function (m) {
       return picked.indexOf(m.id) === -1 && (!term || m.name.toLowerCase().indexOf(term.toLowerCase()) !== -1);
@@ -216,26 +295,43 @@
   }
 
   // ── Product modal open/reset/submit ───────────────────────────────────────
+  function clearPendingFiles() {
+    state.pendingFiles.forEach(function (p) { URL.revokeObjectURL(p.url); });
+    state.pendingFiles = [];
+  }
+
+  /// Repaint the `/p/<slug>` helper line under the Name field.
+  function renderSlugPreview() {
+    var slug = $('pSlug').value;
+    $('pSlugPreview').textContent = slug ? '/p/' + slug : '—';
+  }
+
   function resetProductForm() {
     state.editing = null;
     state.selectedMaterials = [];
     $('productModalTitle').textContent = 'New product';
     $('productId').value = '';
     ['pName', 'pSlug', 'pStyle', 'pPriceMin', 'pPriceMax', 'pOrigin', 'pDescription', 'pMatSearch'].forEach(function (id) { $(id).value = ''; });
-    $('pType').value = 'furniture';
-    $('pStatus').value = 'published';
+    setRadio('pType', 'furniture');
+    setRadio('pStatus', 'published');
     $('pBrand').value = '';
-    $('pSlug').readOnly = true;
+    // Slug starts collapsed behind the helper line and only opens on request.
+    $('pSlugEditWrap').classList.add('d-none');
     $('pSlugEdit').classList.remove('d-none');
     _slugManual = false;
-    $('pMaterialsHint').textContent = 'Type a material name, then pick it to add.';
+    renderSlugPreview();
+    clearErrors('productForm', 'productFormError');
     renderMatChips();
-    $('imagesSection').style.display = 'none';
+    clearPendingFiles();
     $('pGallery').innerHTML = '';
     $('pImageInput').value = '';
+    renderPendingGallery();
   }
 
   var _slugManual = false;
+  // Set by any edit to the product form, cleared on open and on a successful
+  // save. Drives the discard confirmation when the dialog is dismissed.
+  var _productDirty = false;
 
   function openProduct(p) {
     resetProductForm();
@@ -244,62 +340,202 @@
     $('productId').value = p.id;
     $('pName').value = p.name || '';
     $('pSlug').value = p.slug || '';
-    $('pSlug').readOnly = true;
-    $('pSlugEdit').classList.add('d-none'); // slug immutable on edit
-    $('pType').value = p.product_type || 'furniture';
-    $('pStatus').value = p.status || 'draft';
+    // Slug is immutable once the product exists — show it, offer no way in.
+    $('pSlugEdit').classList.add('d-none');
+    $('pSlugEditWrap').classList.add('d-none');
+    renderSlugPreview();
+    setRadio('pType', p.product_type || 'furniture');
+    setRadio('pStatus', p.status || 'draft');
     $('pBrand').value = p.brand_id || '';
     $('pStyle').value = p.style || '';
-    $('pPriceMin').value = p.price_min != null ? p.price_min : '';
-    $('pPriceMax').value = p.price_max != null ? p.price_max : '';
+    $('pPriceMin').value = p.price_min != null ? vnd.format(p.price_min) : '';
+    $('pPriceMax').value = p.price_max != null ? vnd.format(p.price_max) : '';
     $('pOrigin').value = p.origin || '';
     $('pDescription').value = p.description_md || '';
-    $('pMaterialsHint').textContent = 'Leave empty to keep the current materials.';
-    $('imagesSection').style.display = '';
+    loadProductMaterials(p.id);
     loadMedia(p.id);
     modal('productModal').show();
   }
 
+  /// Validate the product form in place. Returns false and marks the offending
+  /// fields rather than relying on native bubbles, which cannot point at a field
+  /// hidden inside the collapsed slug disclosure.
+  function validateProduct() {
+    clearErrors('productForm', 'productFormError');
+    var name = $('pName').value.trim();
+    if (!name) setFieldError('pName', 'pNameFeedback', 'Enter a product name.');
+
+    // Only meaningful on create — on edit the slug is immutable and not sent.
+    if (!state.editing) {
+      var slug = $('pSlug').value.trim();
+      if (!slug) {
+        setFieldError('pSlug', 'pSlugFeedback', 'A URL slug is required. It is filled in from the name automatically.');
+      } else if (!/^[a-z0-9-]+$/.test(slug)) {
+        setFieldError('pSlug', 'pSlugFeedback', 'Use lowercase letters, numbers and hyphens only.');
+      }
+    }
+
+    var min = parsePrice('pPriceMin'), max = parsePrice('pPriceMax');
+    if (min != null && max != null && min > max) {
+      setFieldError('pPriceMin', 'pPriceFeedback', '"Price from" cannot be greater than "price to".');
+      $('pPriceMax').classList.add('is-invalid');
+    }
+
+    return !focusFirstInvalid('productForm');
+  }
+
   async function submitProduct(ev) {
     ev.preventDefault();
+    if (!validateProduct()) return;
     var editing = state.editing;
     var mats = state.selectedMaterials.slice();
+    var submitBtn = $('productSubmit');
+    submitBtn.disabled = true;
     try {
       if (editing) {
         var patch = {
-          name: $('pName').value.trim(), status: $('pStatus').value,
+          name: $('pName').value.trim(), status: radioValue('pStatus'),
           brand_id: $('pBrand').value || null, style: strOrNull('pStyle'),
-          price_min: numOrNull('pPriceMin'), price_max: numOrNull('pPriceMax'),
+          price_min: parsePrice('pPriceMin'), price_max: parsePrice('pPriceMax'),
           origin: strOrNull('pOrigin'), description_md: strOrNull('pDescription'),
         };
         var res = await sendJSON('PATCH', '/api/admin/products/' + editing, patch);
-        if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
-        if (mats.length) await sendJSON('POST', '/api/admin/products/' + editing + '/materials', { material_ids: mats });
+        if (!res.ok) { showFormError('productFormError', await readError(res)); return; }
+        // Always sent — the picker was pre-filled with the current set, so an
+        // empty list is a deliberate "remove all", not "leave alone".
+        await sendJSON('POST', '/api/admin/products/' + editing + '/materials', { material_ids: mats });
       } else {
         var create = {
-          name: $('pName').value.trim(), slug: $('pSlug').value.trim(), product_type: $('pType').value,
+          name: $('pName').value.trim(), slug: $('pSlug').value.trim(), product_type: radioValue('pType'),
           brand_id: $('pBrand').value || null, style: strOrNull('pStyle'),
-          price_min: numOrNull('pPriceMin'), price_max: numOrNull('pPriceMax'),
+          price_min: parsePrice('pPriceMin'), price_max: parsePrice('pPriceMax'),
           origin: strOrNull('pOrigin'), description_md: strOrNull('pDescription'), material_ids: mats,
         };
         var cres = await sendJSON('POST', '/api/admin/products', create);
-        if (!cres.ok) { showStatus(await readError(cres), 'danger'); return; }
+        if (!cres.ok) { showFormError('productFormError', await readError(cres)); return; }
         var created = await cres.json().catch(function () { return {}; });
         var newId = created.data && created.data.id;
-        var want = $('pStatus').value;
+        var want = radioValue('pStatus');
         if (newId && want && want !== 'draft') await sendJSON('PATCH', '/api/admin/products/' + newId, { status: want });
+        // The product exists now, so the staged images finally have somewhere to
+        // go. A failure here leaves the product itself created — say so rather
+        // than implying the whole save failed.
+        if (newId && state.pendingFiles.length) {
+          var failed = await uploadPendingFiles(newId);
+          if (failed) {
+            closeProductModal();
+            showStatus('Product created, but ' + failed + ' image(s) failed to upload. Edit the product to retry.', 'warning');
+            loadProducts();
+            return;
+          }
+        }
       }
-      modal('productModal').hide();
+      closeProductModal();
       showStatus(editing ? 'Product updated.' : 'Product created.', 'success');
       loadProducts();
-    } catch (e) { showStatus('Error: ' + e.message, 'danger'); }
+    } catch (e) {
+      showFormError('productFormError', 'Error: ' + e.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  /// Hide the dialog without tripping the unsaved-changes guard — a successful
+  /// save is exactly the case where the pending edits are no longer pending.
+  function closeProductModal() {
+    _productDirty = false;
+    modal('productModal').hide();
+  }
+
+  // The picker has to start from what the product actually has, otherwise an
+  // empty picker is ambiguous — it can't tell "keep them" from "remove them all".
+  // With the current set loaded, an empty picker unambiguously means "none".
+  async function loadProductMaterials(productId) {
+    var res = await getJSON('/api/admin/products/' + productId + '/materials');
+    if (!res.ok) return;
+    var ids = (await res.json()).data || [];
+    // Ignore a late response for a product the admin has already navigated away from.
+    if (state.editing !== productId) return;
+    state.selectedMaterials = ids;
+    renderMatChips();
+  }
+
+  /// Upload every staged image in order (position follows upload order).
+  /// Returns the number that failed.
+  async function uploadPendingFiles(productId) {
+    var failed = 0;
+    for (var i = 0; i < state.pendingFiles.length; i++) {
+      var fd = new FormData();
+      fd.append('image', state.pendingFiles[i].file);
+      var res = await fetch('/api/admin/products/' + productId + '/media', { method: 'POST', body: fd });
+      if (!res.ok) failed++;
+    }
+    clearPendingFiles();
+    return failed;
+  }
+
+  // ── Delete (dependency-aware) ─────────────────────────────────────────────
+  function depRow(label, count, muted) {
+    return '<li class="list-group-item d-flex justify-content-between px-0' +
+      (muted ? ' text-muted' : '') + '"><span>' + label + '</span>' +
+      '<span class="fw-semibold">' + count + '</span></li>';
   }
 
   async function deleteProduct(id, name) {
-    if (!confirm('Delete product "' + name + '"? This cannot be undone.')) return;
+    state.deleting = id;
+    $('delProductName').innerHTML = 'Delete <strong>' + escapeHtml(name) + '</strong>?';
+    $('delDependents').innerHTML = '<li class="list-group-item px-0 text-muted">Checking…</li>';
+    $('delBlocked').classList.add('d-none');
+    $('delSafe').classList.add('d-none');
+    $('delConfirmBtn').disabled = true;
+    modal('deleteProductModal').show();
+
+    var res = await getJSON('/api/admin/products/' + id + '/dependents');
+    if (!res.ok) {
+      $('delDependents').innerHTML = '';
+      $('delBlocked').textContent = await readError(res);
+      $('delBlocked').classList.remove('d-none');
+      return;
+    }
+    var d = (await res.json()).data || {};
+    if (state.deleting !== id) return; // dialog moved on while we were waiting
+
+    $('delDependents').innerHTML =
+      depRow('Reviews', d.reviews, d.reviews === 0) +
+      depRow('Images', d.media, d.media === 0) +
+      depRow('Material links', d.materials, d.materials === 0);
+
+    if (d.can_hard_delete) {
+      $('delSafe').classList.remove('d-none');
+      $('delConfirmBtn').disabled = false;
+    } else {
+      $('delBlocked').textContent =
+        'This product has ' + d.reviews + ' review(s). Deleting it would leave them ' +
+        'reviewing nothing, so permanent deletion is blocked. Archive it instead — ' +
+        'it disappears from the catalogue and every review stays intact.';
+      $('delBlocked').classList.remove('d-none');
+      $('delConfirmBtn').disabled = true;
+    }
+  }
+
+  async function confirmDeleteProduct() {
+    var id = state.deleting;
+    if (!id) return;
     var res = await fetch('/api/admin/products/' + id, { method: 'DELETE' });
     if (!res.ok && res.status !== 204) { showStatus(await readError(res), 'danger'); return; }
-    showStatus('Product deleted.', 'success'); loadProducts();
+    modal('deleteProductModal').hide();
+    showStatus('Product deleted.', 'success');
+    loadProducts();
+  }
+
+  async function archiveDeletingProduct() {
+    var id = state.deleting;
+    if (!id) return;
+    var res = await sendJSON('PATCH', '/api/admin/products/' + id, { status: 'archived' });
+    if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
+    modal('deleteProductModal').hide();
+    showStatus('Product archived — its reviews were kept.', 'success');
+    loadProducts();
   }
 
   // ── Product media ─────────────────────────────────────────────────────────
@@ -311,19 +547,58 @@
     var items = (await res.json()).data || [];
     if (!items.length) { g.innerHTML = '<span class="text-muted small">No images yet.</span>'; return; }
     g.innerHTML = items.map(function (md) {
-      return '<div class="position-relative" style="width:72px;height:72px">' +
-        '<img src="/files/' + escapeHtml(md.storage_key) + '" class="rounded border w-100 h-100" style="object-fit:cover">' +
-        '<button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 p-0 lh-1" style="width:18px;height:18px" data-media="' + md.id + '">&times;</button></div>';
+      return '<div class="fr-thumb">' +
+        '<img src="/files/' + escapeHtml(md.storage_key) + '" alt="">' +
+        '<button type="button" class="fr-thumb-remove" data-media="' + md.id + '" ' +
+        'title="Remove image" aria-label="Remove image">&times;</button></div>';
     }).join('');
     g.querySelectorAll('[data-media]').forEach(function (b) { b.addEventListener('click', function () { deleteMedia(productId, b.getAttribute('data-media')); }); });
   }
   async function uploadMedia(productId, fileEl) {
-    var f = fileEl.files && fileEl.files[0]; if (!f) return;
-    var fd = new FormData(); fd.append('image', f);
-    var res = await fetch('/api/admin/products/' + productId + '/media', { method: 'POST', body: fd });
+    var files = Array.prototype.slice.call(fileEl.files || []);
+    if (!files.length) return;
     fileEl.value = '';
-    if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
+    for (var i = 0; i < files.length; i++) {
+      var fd = new FormData(); fd.append('image', files[i]);
+      var res = await fetch('/api/admin/products/' + productId + '/media', { method: 'POST', body: fd });
+      if (!res.ok) { showStatus(await readError(res), 'danger'); break; }
+    }
     loadMedia(productId); loadProducts();
+  }
+
+  // ── Staged images (create only) ───────────────────────────────────────────
+  function stagePendingFiles(fileEl) {
+    var files = Array.prototype.slice.call(fileEl.files || []);
+    fileEl.value = '';
+    files.forEach(function (f) {
+      state.pendingFiles.push({ file: f, url: URL.createObjectURL(f) });
+    });
+    renderPendingGallery();
+  }
+
+  function renderPendingGallery() {
+    var hint = $('pImagePending');
+    var g = $('pGallery');
+    if (!state.pendingFiles.length) {
+      hint.classList.add('d-none');
+      if (!state.editing) g.innerHTML = '';
+      return;
+    }
+    hint.classList.remove('d-none');
+    g.innerHTML = state.pendingFiles.map(function (p, i) {
+      return '<div class="fr-thumb">' +
+        '<img src="' + p.url + '" alt="">' +
+        '<button type="button" class="fr-thumb-remove" data-pending="' + i + '" ' +
+        'title="Remove image" aria-label="Remove image">&times;</button></div>';
+    }).join('');
+    g.querySelectorAll('[data-pending]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = parseInt(b.getAttribute('data-pending'), 10);
+        URL.revokeObjectURL(state.pendingFiles[i].url);
+        state.pendingFiles.splice(i, 1);
+        renderPendingGallery();
+      });
+    });
   }
   async function deleteMedia(productId, mediaId) {
     var res = await fetch('/api/admin/products/' + productId + '/media/' + mediaId, { method: 'DELETE' });
@@ -370,6 +645,7 @@
     }));
   }
   function openMaterial(m) {
+    clearErrors('materialForm', 'materialFormError');
     $('materialModalTitle').textContent = m ? 'Edit material' : 'New material';
     $('mId').value = m ? m.id : '';
     $('mName').value = m ? m.name : '';
@@ -381,12 +657,22 @@
   }
   async function submitMaterial(ev) {
     ev.preventDefault();
+    clearErrors('materialForm', 'materialFormError');
     var id = $('mId').value;
+    if (!$('mName').value.trim()) setFieldError('mName', 'mNameFeedback', 'Enter a material name.');
+    // Slug is set once at creation; on edit it is read-only and not resubmitted.
+    if (!id) {
+      var mslug = $('mSlug').value.trim();
+      if (!mslug) setFieldError('mSlug', 'mSlugFeedback', 'A URL slug is required.');
+      else if (!/^[a-z0-9-]+$/.test(mslug)) setFieldError('mSlug', 'mSlugFeedback', 'Use lowercase letters, numbers and hyphens only.');
+    }
+    if (focusFirstInvalid('materialForm')) return;
+
     var body = { name: $('mName').value.trim(), category: $('mCategory').value, description: strOrNull('mDescription') };
     var res = id
       ? await sendJSON('PATCH', '/api/admin/materials/' + id, body)
       : await sendJSON('POST', '/api/admin/materials', { name: body.name, slug: $('mSlug').value.trim(), category: body.category, description: body.description });
-    if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
+    if (!res.ok) { showFormError('materialFormError', await readError(res)); return; }
     modal('materialModal').hide();
     showStatus(id ? 'Material updated.' : 'Material created.', 'success');
     loadMaterials();
@@ -437,6 +723,7 @@
     }));
   }
   function openBrand(b) {
+    clearErrors('brandForm', 'brandFormError');
     $('brandModalTitle').textContent = b ? 'Edit brand' : 'New brand';
     $('bId').value = b ? b.id : '';
     $('bName').value = b ? b.name : '';
@@ -450,12 +737,25 @@
   }
   async function submitBrand(ev) {
     ev.preventDefault();
+    clearErrors('brandForm', 'brandFormError');
     var id = $('bId').value;
+    if (!$('bName').value.trim()) setFieldError('bName', 'bNameFeedback', 'Enter a brand name.');
+    if (!id) {
+      var bslug = $('bSlug').value.trim();
+      if (!bslug) setFieldError('bSlug', 'bSlugFeedback', 'A URL slug is required.');
+      else if (!/^[a-z0-9-]+$/.test(bslug)) setFieldError('bSlug', 'bSlugFeedback', 'Use lowercase letters, numbers and hyphens only.');
+    }
+    var site = $('bWebsite').value.trim();
+    if (site && !/^https?:\/\/.+/i.test(site)) {
+      setFieldError('bWebsite', 'bWebsiteFeedback', 'Enter a full URL starting with http:// or https://');
+    }
+    if (focusFirstInvalid('brandForm')) return;
+
     var body = { name: $('bName').value.trim(), website: strOrNull('bWebsite'), country: strOrNull('bCountry'), description: strOrNull('bDescription'), is_verified: $('bVerified').checked };
     var res = id
       ? await sendJSON('PATCH', '/api/admin/brands/' + id, body)
       : await sendJSON('POST', '/api/admin/brands', { name: body.name, slug: $('bSlug').value.trim(), website: body.website, country: body.country, description: body.description });
-    if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
+    if (!res.ok) { showFormError('brandFormError', await readError(res)); return; }
     modal('brandModal').hide();
     showStatus(id ? 'Brand updated.' : 'Brand created.', 'success');
     loadBrands();
@@ -474,17 +774,60 @@
 
     // Auto-slug from name (create only), until admin edits slug manually.
     $('pName').addEventListener('input', function () {
-      if (!state.editing && !_slugManual) $('pSlug').value = slugify($('pName').value);
+      if (!state.editing && !_slugManual) {
+        $('pSlug').value = slugify($('pName').value);
+        renderSlugPreview();
+      }
     });
+    // The slug field is a disclosure, not a permanently visible control: it opens
+    // on demand and stays open once the admin has taken manual control of it.
     $('pSlugEdit').addEventListener('click', function () {
-      _slugManual = true; $('pSlug').readOnly = false; $('pSlug').focus();
+      _slugManual = true;
+      $('pSlugEditWrap').classList.remove('d-none');
+      $('pSlug').focus();
+      $('pSlug').select();
     });
+    $('pSlug').addEventListener('input', renderSlugPreview);
+
+    // Re-group the digits once the field loses focus, so a saved product reads
+    // back the same way the catalogue renders it.
+    ['pPriceMin', 'pPriceMax'].forEach(function (id) {
+      $(id).addEventListener('blur', function () { formatPriceField($(id)); });
+    });
+
+    // Clearing a field's error as soon as it is touched keeps the red state from
+    // outliving the problem it described.
+    $('productForm').addEventListener('input', function (e) {
+      if (e.target.classList && e.target.classList.contains('is-invalid')) {
+        e.target.classList.remove('is-invalid');
+      }
+      _productDirty = true;
+    });
+
     $('mName').addEventListener('input', function () { if (!$('mId').value) $('mSlug').value = slugify($('mName').value); });
     $('bName').addEventListener('input', function () { if (!$('bId').value) $('bSlug').value = slugify($('bName').value); });
 
     $('btnNewProduct').addEventListener('click', resetProductForm);
     $('productForm').addEventListener('submit', submitProduct);
-    $('pImageInput').addEventListener('change', function () { if (state.editing) uploadMedia(state.editing, $('pImageInput')); });
+
+    // Guard against losing a half-filled form to a stray backdrop click or Esc.
+    // `hide.bs.modal` is cancellable; `hidden` is not, so the check has to run here.
+    $('productModal').addEventListener('hide.bs.modal', function (e) {
+      if (!_productDirty) return;
+      if (!confirm('Discard your unsaved changes to this product?')) e.preventDefault();
+      else _productDirty = false;
+    });
+    $('productModal').addEventListener('shown.bs.modal', function () {
+      _productDirty = false;
+      $('pName').focus();
+    });
+    // Editing uploads straight away; creating stages until the product exists.
+    $('pImageInput').addEventListener('change', function () {
+      if (state.editing) uploadMedia(state.editing, $('pImageInput'));
+      else stagePendingFiles($('pImageInput'));
+    });
+    $('delConfirmBtn').addEventListener('click', confirmDeleteProduct);
+    $('delArchiveBtn').addEventListener('click', archiveDeletingProduct);
 
     $('btnNewMaterial').addEventListener('click', function () { openMaterial(null); });
     $('materialForm').addEventListener('submit', submitMaterial);
@@ -510,6 +853,24 @@
     // Reference data feeds the product modal too — load all up front. Use
     // allSettled so a failure in one loader never blocks the others (the product
     // table must render even if materials/brands can't load).
-    Promise.allSettled([loadBrands(), loadMaterials()]).then(loadProducts);
+    Promise.allSettled([loadBrands(), loadMaterials()])
+      .then(loadProducts)
+      .then(openDeepLinkedProduct);
   });
+
+  // Deep link into a product's full record: /admin/products?edit=<id>. Everyday
+  // corrections now happen on the product page itself; this remains the way into
+  // the fields that page deliberately omits (slug, status).
+  async function openDeepLinkedProduct() {
+    var id = new URLSearchParams(window.location.search).get('edit');
+    if (!id) return;
+    var res = await getJSON('/api/admin/products/' + encodeURIComponent(id));
+    if (res.ok) {
+      openProduct((await res.json()).data);
+    } else {
+      showStatus(await readError(res), 'warning');
+    }
+    // Drop the parameter so a refresh doesn't reopen the modal.
+    window.history.replaceState({}, '', window.location.pathname);
+  }
 }());

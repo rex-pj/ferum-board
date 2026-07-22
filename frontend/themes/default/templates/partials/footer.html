@@ -19,24 +19,24 @@
        plus the header's avatar dropdown (Account/Bookmarks/Mod/Admin/Log out) and
        the always-visible header search bar already cover every link here — showing
        them a third time in the footer just crowds the space above the fixed bottom nav. #}
-    <nav class="d-none d-lg-flex flex-wrap gap-3 small" aria-label="Footer navigation">
-      <a href="/forum"  class="fr-footer-link">Forum</a>
-      <a href="/search" class="fr-footer-link">Search</a>
+    <nav class="d-none d-lg-flex flex-wrap gap-3 small" aria-label="{{ t(k='ui-footer-navigation') }}">
+      <a href="/forum"  class="fr-footer-link">{{ t(k="ui-forum") }}</a>
+      <a href="/search" class="fr-footer-link">{{ t(k="ui-search") }}</a>
       {% if current_user %}
-        <a href="/account"       class="fr-footer-link">Account</a>
-        <a href="/notifications" class="fr-footer-link">Notifications</a>
-        <a href="/bookmarks"     class="fr-footer-link">Bookmarks</a>
+        <a href="/account"       class="fr-footer-link">{{ t(k="ui-account") }}</a>
+        <a href="/notifications" class="fr-footer-link">{{ t(k="ui-notifications") }}</a>
+        <a href="/bookmarks"     class="fr-footer-link">{{ t(k="ui-bookmarks") }}</a>
       {% else %}
-        <a href="/login"    class="fr-footer-link">Log in</a>
-        <a href="/register" class="fr-footer-link">Register</a>
+        <a href="/login"    class="fr-footer-link">{{ t(k="ui-log-in") }}</a>
+        <a href="/register" class="fr-footer-link">{{ t(k="ui-register") }}</a>
       {% endif %}
       {% if current_user and current_user.is_moderator and not current_user.is_admin %}
-        <a href="/mod/reports" class="fr-footer-link">Mod</a>
+        <a href="/mod/reports" class="fr-footer-link">{{ t(k="ui-mod") }}</a>
       {% endif %}
       {% if current_user and current_user.is_admin %}
-        <a href="/admin/dashboard" class="fr-footer-link">Admin</a>
+        <a href="/admin/dashboard" class="fr-footer-link">{{ t(k="ui-admin") }}</a>
       {% endif %}
-      <span class="fr-footer-copy">Powered by <strong>Ferum Board</strong></span>
+      <span class="fr-footer-copy">{{ t(k="ui-powered-by") }} <strong>{{ t(k="ui-ferum-board") }}</strong></span>
     </nav>
   </div>
 </footer>

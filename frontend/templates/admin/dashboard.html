@@ -8,8 +8,8 @@
 {% if stats.oldest_pending_report_hours and stats.oldest_pending_report_hours > 24 %}
 <div class="alert alert-danger d-flex align-items-center gap-2 mb-3 py-2">
   <i class="fa-solid fa-triangle-exclamation fa-fw flex-shrink-0"></i>
-  <span>Oldest report has been waiting <strong>{{ stats.oldest_pending_report_hours }} hours</strong> — needs immediate attention.</span>
-  <a href="/admin/reports" class="btn btn-danger btn-sm ms-auto flex-shrink-0">View Reports</a>
+  <span>{{ t(k="adm-oldest-report-has-been-waiting") }} <strong>{{ stats.oldest_pending_report_hours }} hours</strong> {{ t(k="adm-needs-immediate-attention") }}</span>
+  <a href="/admin/reports" class="btn btn-danger btn-sm ms-auto flex-shrink-0">{{ t(k="adm-view-reports") }}</a>
 </div>
 {% endif %}
 
@@ -23,7 +23,7 @@
         </div>
         <div class="min-w-0">
           <div class="fs-4 fw-bold lh-1">{{ stats.total_users }}</div>
-          <div class="text-muted small text-truncate">Total Users</div>
+          <div class="text-muted small text-truncate">{{ t(k="adm-total-users") }}</div>
         </div>
         <i class="fa-solid fa-arrow-right text-muted ms-auto small flex-shrink-0"></i>
       </div>
@@ -37,7 +37,7 @@
         </div>
         <div class="min-w-0">
           <div class="fs-4 fw-bold lh-1">{{ stats.total_threads }}</div>
-          <div class="text-muted small text-truncate">Total Threads</div>
+          <div class="text-muted small text-truncate">{{ t(k="adm-total-threads") }}</div>
         </div>
         <i class="fa-solid fa-arrow-right text-muted ms-auto small flex-shrink-0"></i>
       </div>
@@ -51,7 +51,7 @@
         </div>
         <div class="min-w-0">
           <div class="fs-4 fw-bold lh-1">{{ stats.total_posts }}</div>
-          <div class="text-muted small text-truncate">Total Posts</div>
+          <div class="text-muted small text-truncate">{{ t(k="adm-total-posts") }}</div>
         </div>
         <i class="fa-solid fa-arrow-right text-muted ms-auto small flex-shrink-0"></i>
       </div>
@@ -67,7 +67,7 @@
           <div class="fs-4 fw-bold lh-1 {% if stats.pending_reports > 0 %}text-danger{% endif %}">
             {{ stats.pending_reports }}
           </div>
-          <div class="text-muted small text-truncate">Pending Reports</div>
+          <div class="text-muted small text-truncate">{{ t(k="adm-pending-reports") }}</div>
         </div>
         {% if stats.pending_reports > 0 %}
           <span class="badge bg-danger ms-auto flex-shrink-0">!</span>
@@ -83,48 +83,48 @@
 <div class="row g-3 mb-4">
   <div class="col-lg-6">
     <div class="card h-100">
-      <div class="card-header fw-semibold">Today</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-today") }}</div>
       <div class="card-body p-0">
         <table class="table table-hover mb-0 adm-today-table">
           <tbody>
             <tr>
-              <td class="text-muted">New registrations</td>
+              <td class="text-muted">{{ t(k="adm-new-registrations") }}</td>
               <td class="text-end fw-bold">{{ stats.new_users_today }}</td>
             </tr>
             <tr>
-              <td class="text-muted">New threads</td>
+              <td class="text-muted">{{ t(k="adm-new-threads") }}</td>
               <td class="text-end fw-bold">{{ stats.new_threads_today }}</td>
             </tr>
             <tr>
-              <td class="text-muted">New posts</td>
+              <td class="text-muted">{{ t(k="adm-new-posts") }}</td>
               <td class="text-end fw-bold">{{ stats.new_posts_today }}</td>
             </tr>
             <tr>
-              <td class="text-muted">New reactions</td>
+              <td class="text-muted">{{ t(k="adm-new-reactions") }}</td>
               <td class="text-end fw-bold">{{ stats.new_reactions_today }}</td>
             </tr>
             <tr>
-              <td class="text-muted">New views</td>
+              <td class="text-muted">{{ t(k="adm-new-views") }}</td>
               <td class="text-end fw-bold">{{ stats.new_views_today }}</td>
             </tr>
             <tr class="table-divider">
               <td class="text-muted">
-                Daily active users
+                {{ t(k="adm-daily-active-users") }}
                 <span class="badge bg-secondary ms-1" style="font-size:.6rem;font-weight:500">DAU</span>
               </td>
               <td class="text-end fw-bold">{{ stats.dau }}</td>
             </tr>
             <tr>
               <td class="text-muted">
-                Monthly active users
+                {{ t(k="adm-monthly-active-users") }}
                 <span class="badge bg-secondary ms-1" style="font-size:.6rem;font-weight:500">MAU</span>
               </td>
               <td class="text-end fw-bold">{{ stats.mau }}</td>
             </tr>
             <tr>
               <td class="text-muted">
-                Engagement ratio
-                <span class="text-muted" style="font-size:.7rem" title="DAU / MAU × 100 — % of monthly users who returned today. Reddit ~25–30%.">ⓘ</span>
+                {{ t(k="adm-engagement-ratio") }}
+                <span class="text-muted" style="font-size:.7rem" title="{{ t(k='adm-dau-mau-100-of-monthly-users') }}">ⓘ</span>
               </td>
               <td class="text-end fw-bold
                 {% if stats.dau_mau_ratio >= 25 %}text-success
@@ -135,14 +135,14 @@
             </tr>
             <tr>
               <td class="text-muted">
-                Activation rate
-                <span class="text-muted" style="font-size:.7rem" title="% of yesterday's registrations who posted at least once today.">ⓘ</span>
+                {{ t(k="adm-activation-rate") }}
+                <span class="text-muted" style="font-size:.7rem" title="{{ t(k='adm-of-yesterday-s-registrations-who-posted') }}">ⓘ</span>
               </td>
               <td class="text-end fw-bold">{{ stats.activation_rate_pct }}%</td>
             </tr>
             {% if stats.oldest_pending_report_hours and stats.oldest_pending_report_hours <= 24 %}
             <tr>
-              <td class="text-muted text-warning">Oldest pending report</td>
+              <td class="text-muted text-warning">{{ t(k="adm-oldest-pending-report") }}</td>
               <td class="text-end fw-bold text-warning">{{ stats.oldest_pending_report_hours }}h</td>
             </tr>
             {% endif %}
@@ -154,22 +154,22 @@
 
   <div class="col-lg-6">
     <div class="card h-100">
-      <div class="card-header fw-semibold">Quick Actions</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-quick-actions") }}</div>
       <div class="card-body p-0">
         <a href="/admin/users"
            class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
           <i class="fa-solid fa-users fa-fw text-muted flex-shrink-0"></i>
-          <span>Manage Users</span>
+          <span>{{ t(k="adm-manage-users") }}</span>
         </a>
         <a href="/admin/categories"
            class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
           <i class="fa-regular fa-folder fa-fw text-muted flex-shrink-0"></i>
-          <span>Manage Categories</span>
+          <span>{{ t(k="adm-manage-categories") }}</span>
         </a>
         <a href="/admin/reports"
            class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
           <i class="fa-solid fa-flag fa-fw text-muted flex-shrink-0"></i>
-          <span>Review Reports</span>
+          <span>{{ t(k="adm-review-reports") }}</span>
           {% if stats.pending_reports > 0 %}
             <span class="badge bg-danger ms-auto">{{ stats.pending_reports }}</span>
           {% endif %}
@@ -177,22 +177,22 @@
         <a href="/admin/roles"
            class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
           <i class="fa-solid fa-shield-halved fa-fw text-muted flex-shrink-0"></i>
-          <span>Roles &amp; Permissions</span>
+          <span>{{ t(k="adm-roles-permissions") }}</span>
         </a>
         <a href="/admin/log"
            class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
           <i class="fa-solid fa-scroll fa-fw text-muted flex-shrink-0"></i>
-          <span>Audit Log</span>
+          <span>{{ t(k="adm-audit-log") }}</span>
         </a>
         <a href="/admin/settings"
            class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body border-bottom hover-bg">
           <i class="fa-solid fa-gear fa-fw text-muted flex-shrink-0"></i>
-          <span>Site Settings</span>
+          <span>{{ t(k="adm-site-settings") }}</span>
         </a>
         <a href="/admin/themes"
            class="d-flex align-items-center gap-2 px-3 py-2 text-decoration-none text-body hover-bg">
           <i class="fa-solid fa-palette fa-fw text-muted flex-shrink-0"></i>
-          <span>Themes &amp; Appearance</span>
+          <span>{{ t(k="adm-themes-appearance") }}</span>
         </a>
       </div>
     </div>
@@ -201,7 +201,7 @@
 
 {# ── Activity trend chart ─────────────────────────────────────────────────── #}
 <div class="card mb-4">
-  <div class="card-header fw-semibold">Activity Trend</div>
+  <div class="card-header fw-semibold">{{ t(k="adm-activity-trend") }}</div>
   <div class="card-body">
     <admin-stats-chart
       dau="{{ stats.dau }}"

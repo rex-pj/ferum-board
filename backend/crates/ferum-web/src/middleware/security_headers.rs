@@ -33,7 +33,11 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
         HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
     );
     // CSP: restrict scripts to same origin; allow inline styles for Bootstrap/theme tokens.
-    // `img-src` includes `data:` for base64 avatar placeholders.
+    // `img-src` includes `data:` for base64 avatar placeholders and `blob:` for
+    // local previews of files the user has just picked but not yet uploaded
+    // (`URL.createObjectURL`), used by the product photo and thumbnail pickers.
+    // Both schemes only ever reference bytes the page already holds — neither
+    // can pull in a remote origin.
     // `connect-src` covers SSE (/api/notifications/stream) and fetch() calls.
     headers.insert(
         axum::http::header::HeaderName::from_static("content-security-policy"),
@@ -41,7 +45,7 @@ pub async fn security_headers(req: Request, next: Next) -> Response {
             "default-src 'self'; \
              script-src 'self' 'unsafe-eval'; \
              style-src 'self' 'unsafe-inline'; \
-             img-src 'self' data:; \
+             img-src 'self' data: blob:; \
              connect-src 'self'; \
              font-src 'self' data:; \
              frame-ancestors 'none'; \

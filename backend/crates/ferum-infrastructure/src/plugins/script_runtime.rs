@@ -877,7 +877,7 @@ var __ferum_rpc = {};
                 .get("script")
                 .and_then(|s| s.get("bundle_file"))
                 .and_then(|f| f.as_str())
-                .ok_or_else(|| AppError::unprocessable("Script plugin manifest missing script.bundle_file"))?;
+                .ok_or_else(|| AppError::invalid("plugin_manifest_missing_bundle_file"))?;
 
             let path = PathBuf::from(install_path).join(bundle_file);
             std::fs::read_to_string(&path).map_err(|e| {

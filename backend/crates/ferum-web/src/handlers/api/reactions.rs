@@ -17,7 +17,7 @@ pub async fn add_reaction(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
     let kind = body.kind.parse().map_err(|_| {
-        AppError::unprocessable("Invalid reaction kind. Use: like, helpful, insightful, funny")
+        AppError::invalid("invalid_reaction_kind")
     })?;
 
     let counts = state.reaction.add(actor, post_id, kind).await?;
@@ -32,7 +32,7 @@ pub async fn remove_reaction(
     let actor = auth_user.require_auth()?;
     let kind = kind_str
         .parse()
-        .map_err(|_| AppError::unprocessable("Invalid reaction kind"))?;
+        .map_err(|_| AppError::invalid("invalid_reaction_kind"))?;
 
     let counts = state.reaction.remove(actor, post_id, kind).await?;
     Ok(Json(DataResponse::new(counts_to_response(counts))))

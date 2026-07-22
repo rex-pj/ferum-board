@@ -73,7 +73,7 @@ impl AdminUseCase {
         PermissionChecker::can_manage_categories(actor)?;
 
         if crate::validators::is_reserved_slug(&cmd.slug) {
-            return Err(AppError::unprocessable("slug_reserved"));
+            return Err(AppError::invalid("slug_reserved"));
         }
         if self.categories.find_by_slug(&cmd.slug).await?.is_some() {
             return Err(AppError::Conflict("slug_taken".to_string()));
@@ -82,7 +82,10 @@ impl AdminUseCase {
         if let Some(parent_id) = cmd.parent_id {
             let parent = self.categories.find_by_id(parent_id).await?.or_not_found()?;
             if parent.parent_id.is_some() {
-                return Err(AppError::unprocessable("Max 2 levels of category nesting"));
+                return Err(AppError::invalid_with(
+                    "category_nesting_too_deep",
+                    [("max_depth", crate::constants::MAX_CATEGORY_DEPTH.into())],
+                ));
             }
         }
 
@@ -127,7 +130,7 @@ impl AdminUseCase {
 
         if let Some(ref slug) = cmd.slug {
             if crate::validators::is_reserved_slug(slug) {
-                return Err(AppError::unprocessable("slug_reserved"));
+                return Err(AppError::invalid("slug_reserved"));
             }
             if let Some(existing) = self.categories.find_by_slug(slug).await? {
                 if existing.id != id {

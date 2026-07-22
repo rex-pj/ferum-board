@@ -1,6 +1,6 @@
 {% set user_theme = current_user.theme | default(value="auto") %}
 <!DOCTYPE html>
-<html lang="en"
+<html lang="{{ locale | default(value='en') }}"
       {% if current_user %}data-prefs-ssr="1"{% endif %}
       data-bs-theme="{% if user_theme == 'auto' %}{{ theme_bs_theme | default(value='auto') }}{% else %}{{ user_theme }}{% endif %}"
       {% if current_user and current_user.font_size and current_user.font_size != "medium" %}data-font-size="{{ current_user.font_size }}"{% endif %}
@@ -23,6 +23,26 @@
   <meta name="twitter:title" content="{{ site.name }}">
   <meta name="twitter:description" content="{{ site.tagline }}">
   {% endblock %}
+
+  {# hreflang alternates — only emitted when the site actually speaks more than
+     one language, so a single-language forum keeps a clean head. The default
+     locale is served unprefixed and is also the x-default target. #}
+  {% if available_locales and available_locales | length > 1 %}
+    {% for alt in available_locales %}
+      <link rel="alternate" hreflang="{{ alt }}"
+            href="{{ site.url | default(value='') }}{% if alt != 'en' %}/{{ alt }}{% endif %}{{ current_path | default(value='/') }}">
+    {% endfor %}
+    <link rel="alternate" hreflang="x-default"
+          href="{{ site.url | default(value='') }}{{ current_path | default(value='/') }}">
+  {% endif %}
+
+  {# Strings the client renders itself. Only the `js-*` namespace is shipped —
+     sending the whole catalog would mean every visitor downloads every string on
+     every page, including admin copy they can never see.
+
+     Emitted as JSON in a meta attribute rather than an inline <script>, which
+     the CSP forbids. #}
+  {% if js_strings %}<meta name="ferum-i18n" content="{{ js_strings | json_encode() }}">{% endif %}
 
   {# Apply user preferences from localStorage before CSS renders — prevents flash #}
   <script src="/static/js/ferum-preload.js"></script>
@@ -110,32 +130,32 @@
 
   {# Mobile bottom navigation #}
   {% block bottom_nav %}
-  <nav class="fr-bottom-nav d-lg-none" aria-label="Mobile navigation">
-    <a href="/" class="fr-bn-item" aria-label="Home">
-      <i class="fa-solid fa-house"></i><span>Home</span>
+  <nav class="fr-bottom-nav d-lg-none" aria-label="{{ t(k='ui-mobile-navigation') }}">
+    <a href="/" class="fr-bn-item" aria-label="{{ t(k='ui-home') }}">
+      <i class="fa-solid fa-house"></i><span>{{ t(k="ui-home") }}</span>
     </a>
-    <a href="/forum" class="fr-bn-item" aria-label="Categories">
-      <i class="fa-solid fa-comments"></i><span>Categories</span>
+    <a href="/forum" class="fr-bn-item" aria-label="{{ t(k='ui-categories') }}">
+      <i class="fa-solid fa-comments"></i><span>{{ t(k="ui-categories") }}</span>
     </a>
     {% if current_user %}
-      <a href="/new-thread" class="fr-bn-item" aria-label="New thread">
-        <span class="fr-bn-cta"><i class="fa-solid fa-plus"></i></span><span>New</span>
+      <a href="/new-thread" class="fr-bn-item" aria-label="{{ t(k='ui-new-thread') }}">
+        <span class="fr-bn-cta"><i class="fa-solid fa-plus"></i></span><span>{{ t(k="ui-new") }}</span>
       </a>
       <a href="/notifications" class="fr-bn-item" aria-label="Notifications{% if current_user.unread_count > 0 %}, {{ current_user.unread_count }} unread{% endif %}">
-        <i class="fa-solid fa-bell"></i><span>Inbox</span>
+        <i class="fa-solid fa-bell"></i><span>{{ t(k="ui-inbox") }}</span>
         {% if current_user.unread_count > 0 %}
           <span class="fr-bn-badge">{% if current_user.unread_count > 99 %}99+{% else %}{{ current_user.unread_count }}{% endif %}</span>
         {% endif %}
       </a>
-      <a href="/u/{{ current_user.username }}" class="fr-bn-item" aria-label="Profile">
-        <i class="fa-solid fa-user"></i><span>Profile</span>
+      <a href="/u/{{ current_user.username }}" class="fr-bn-item" aria-label="{{ t(k='ui-profile') }}">
+        <i class="fa-solid fa-user"></i><span>{{ t(k="ui-profile") }}</span>
       </a>
     {% else %}
-      <a href="/register" class="fr-bn-item" aria-label="Register">
-        <i class="fa-solid fa-user-plus"></i><span>Register</span>
+      <a href="/register" class="fr-bn-item" aria-label="{{ t(k='ui-register') }}">
+        <i class="fa-solid fa-user-plus"></i><span>{{ t(k="ui-register") }}</span>
       </a>
-      <a href="/login" class="fr-bn-item" aria-label="Log in">
-        <i class="fa-solid fa-right-to-bracket"></i><span>Login</span>
+      <a href="/login" class="fr-bn-item" aria-label="{{ t(k='ui-log-in') }}">
+        <i class="fa-solid fa-right-to-bracket"></i><span>{{ t(k="ui-login") }}</span>
       </a>
     {% endif %}
   </nav>

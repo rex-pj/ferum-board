@@ -116,7 +116,7 @@
   }
 
   function showConfirm(title, body, okLabel, okVariant, opts) {
-    okLabel   = okLabel   || 'Confirm';
+    okLabel   = okLabel   || Ferum.t('js-confirm');
     okVariant = okVariant || 'danger';
     opts      = opts      || {};
 
@@ -134,7 +134,7 @@
     var typeInput = document.getElementById('fr-confirm-type-input');
 
     if (opts.typeToConfirm) {
-      typeLabel.innerHTML  = 'Type <code class="user-select-all">' + escapeHtml(opts.typeToConfirm) + '</code> to confirm:';
+      typeLabel.innerHTML  = Ferum.t('js-type-to-confirm', { code: '<code class="user-select-all">' + escapeHtml(opts.typeToConfirm) + '</code>' });
       typeInput.value      = '';
       typeInput.placeholder = opts.typeToConfirm;
       typeWrap.classList.remove('d-none');
@@ -356,11 +356,11 @@
       if (/[0-9]/.test(val)) score++;
       if (/[^A-Za-z0-9]/.test(val)) score++;
       var levels = [
-        { pct: '20%', color: '#ef4444', label: 'Very weak'   },
-        { pct: '40%', color: '#f97316', label: 'Weak'        },
-        { pct: '60%', color: '#eab308', label: 'Fair'        },
-        { pct: '80%', color: '#22c55e', label: 'Strong'      },
-        { pct: '100%',color: '#10b981', label: 'Very strong' },
+        { pct: '20%', color: '#ef4444', label: Ferum.t('js-pw-very-weak')   },
+        { pct: '40%', color: '#f97316', label: Ferum.t('js-pw-weak')        },
+        { pct: '60%', color: '#eab308', label: Ferum.t('js-pw-fair')        },
+        { pct: '80%', color: '#22c55e', label: Ferum.t('js-pw-strong')      },
+        { pct: '100%',color: '#10b981', label: Ferum.t('js-pw-very-strong') },
       ];
       var lvl = levels[Math.min(score, levels.length) - 1] || levels[0];
       fill.style.width      = lvl.pct;
@@ -410,3 +410,74 @@
     if (active) a.classList.add('active');
   });
 }());
+
+// ── Language switcher ───────────────────────────────────────────────────────
+// Posts the choice to the server rather than storing it client-side. Unlike the
+// theme toggle (which localStorage can apply after paint), the language is baked
+// into the server-rendered HTML, so switching necessarily means a round trip and
+// a reload. The server sets the `ferum_locale` cookie; for signed-in users it
+// also persists the choice to their account.
+(function () {
+  var buttons = document.querySelectorAll('[data-ferum-locale]');
+  if (!buttons.length) return;
+
+  buttons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var locale = btn.getAttribute('data-ferum-locale');
+      btn.disabled = true;
+
+      fetch('/api/locale', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale: locale }),
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error('locale switch failed: ' + res.status);
+          // Full reload rather than a re-render: every string on the page came
+          // from the server in the old language.
+          window.location.reload();
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          if (window.Ferum && window.Ferum.toast) {
+            window.Ferum.toast(Ferum.t('js-could-not-change-language'), true);
+          } else {
+            console.error(err);
+          }
+        });
+    });
+  });
+}());
+
+// ── Client-side translation lookup ──────────────────────────────────────────
+// The server puts a `js-*`-scoped dictionary into <meta name="ferum-i18n">
+// (a data attribute rather than an inline <script>, because the CSP forbids
+// inline scripts). Everything the browser renders itself goes through this.
+//
+// Falls back to the key so a missing string is visible and greppable rather
+// than rendering as an empty label.
+(function (w) {
+  var dict = {};
+  try {
+    var meta = document.querySelector('meta[name="ferum-i18n"]');
+    if (meta) dict = JSON.parse(meta.getAttribute('content') || '{}');
+  } catch (_) {
+    // A malformed dictionary must not stop the page's scripts from running.
+  }
+
+  w.Ferum = w.Ferum || {};
+  w.Ferum.i18n = dict;
+
+  /**
+   * t('js-network-error') -> Ferum.t('js-network-error')
+   * Optional `args` interpolate { $name } placeables client-side.
+   */
+  w.Ferum.t = function (key, args) {
+    var text = dict[key];
+    if (text === undefined) return key;
+    if (!args) return text;
+    return text.replace(/\{\s*\$(\w+)\s*\}/g, function (m, name) {
+      return Object.prototype.hasOwnProperty.call(args, name) ? args[name] : m;
+    });
+  };
+}(window));

@@ -168,6 +168,14 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .layer(axum::Extension(write_rl.clone()));
 
+    // Language switching. Rate-limited as a write because it touches the DB for
+    // signed-in users, but deliberately open to guests — they are the majority of
+    // readers and have no account to hold a preference.
+    let locale_routes = Router::new()
+        .route("/locale", axum::routing::put(api::locale::set_locale))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
+        .layer(axum::Extension(write_rl.clone()));
+
     // Public catalog reads (no auth, no rate limit — same class as category/thread reads).
     let catalog_routes = Router::new()
         .route("/products", get(api::products::list_products))
@@ -179,6 +187,11 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
     // public writes; the handler enforces `product.submit` + email-verified.
     let catalog_write_routes = Router::new()
         .route("/products", post(api::products::submit_product))
+        .route("/products/{id}/media", post(api::products::upload_media))
+        .route(
+            "/products/{id}/media/{media_id}",
+            axum::routing::delete(api::products::delete_media),
+        )
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .layer(axum::Extension(write_rl.clone()));
 
@@ -192,6 +205,7 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .merge(search_routes)
         .merge(tag_routes)
         .merge(preview_routes)
+        .merge(locale_routes)
         .merge(catalog_routes)
         .merge(catalog_write_routes)
         .nest("/categories", category_routes)

@@ -28,6 +28,14 @@ pub const APP_URL_DEFAULT: &str = "http://localhost:5173";
 
 pub const DEFAULT_THEME_SLUG: &str = "default";
 
+/// Site name used before an admin sets one, e.g. in transactional email copy.
+pub const DEFAULT_SITE_NAME: &str = "Ferum Board";
+
+/// Categories are a two-level hierarchy: a top-level category and its children.
+/// The check itself is structural (a parent may not already have a parent); this
+/// names the resulting depth so the error message can state it without a literal.
+pub const MAX_CATEGORY_DEPTH: usize = 2;
+
 pub const MAX_AVATAR_BYTES: usize = 5 * 1024 * 1024; // 5 MB
 pub const MAX_THUMBNAIL_BYTES: usize = 10 * 1024 * 1024; // 10 MB
 pub const MAX_COVER_BYTES: usize = 8 * 1024 * 1024; // 8 MB

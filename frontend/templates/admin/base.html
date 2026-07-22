@@ -3,12 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# Dictionary for `Ferum.t()` in the shared page scripts, which admin pages
+     load too. A meta attribute rather than an inline <script>, which the CSP
+     forbids. Admin renders in the default locale by design. #}
+  {% if js_strings %}<meta name="ferum-i18n" content="{{ js_strings | json_encode() }}">{% endif %}
   <title>{% block title %}Admin{% endblock %} — {{ site.name }}</title>
   <script src="/static/js/ferum-preload.js"></script>
   <link rel="icon" href="{% if site.favicon_url %}{{ site.favicon_url }}{% else %}/static/favicon.svg{% endif %}">
   <link rel="stylesheet" href="/static/css/bootstrap.min.css">
   <link rel="stylesheet" href="/static/css/fontawesome/all.min.css">
-  <link rel="stylesheet" href="/themes/{{ default_theme_slug }}/assets/theme.css">
+  <link rel="stylesheet" href="/themes/{{ default_theme_slug }}/assets/theme.css?v={{ asset_version() }}">
   {# Primary color override — sets --ferum-primary only; all component hover/active
      states derive from it automatically via color-mix() in _tokens.css. #}
   {% if site.primary_color %}
@@ -31,9 +35,14 @@
     <!-- Brand -->
     <a href="/" class="adm-brand">
       {% if site.logo_url %}
-        <img src="{{ site.logo_url }}" alt="{{ site.name }}" class="adm-brand-logo-img">
+        <img src="{{ site.logo_url }}" alt="{{ site.name }}" class="fr-brand-img">
       {% else %}
-        <div class="adm-brand-logo">Fe</div>
+        {# Same mark as the public topbar: `fr-brand-mark`, not the admin-only
+           `adm-brand-logo`. The two had drifted — different size, radius, and
+           accent variable (`--ferum-primary` vs `--bs-primary`), so the badge
+           changed shape and colour when you crossed from the forum into admin.
+           The initial comes from the site name rather than a hardcoded "Fe". #}
+        <span class="fr-brand-mark" aria-hidden="true">{{ site.name | truncate(length=1, end="") | upper }}</span>
       {% endif %}
       <div class="adm-brand-text">
         <span class="adm-brand-name">{{ site.name }}</span>
@@ -45,54 +54,57 @@
     <div class="adm-nav">
 
       <!-- Overview -->
-      <span class="adm-nav-label">Overview</span>
+      <span class="adm-nav-label">{{ t(k="adm-overview") }}</span>
       <a href="/admin/dashboard" class="adm-nav-link {% block nav_dashboard %}{% endblock %}">
-        <i class="fa-solid fa-gauge adm-nav-icon"></i>Dashboard
+        <i class="fa-solid fa-gauge adm-nav-icon"></i>{{ t(k="adm-dashboard") }}
       </a>
 
       <!-- Content -->
-      <span class="adm-nav-label">Content</span>
+      <span class="adm-nav-label">{{ t(k="adm-content") }}</span>
       <a href="/admin/threads" class="adm-nav-link {% block nav_threads %}{% endblock %}">
-        <i class="fa-regular fa-comments adm-nav-icon"></i>Threads
+        <i class="fa-regular fa-comments adm-nav-icon"></i>{{ t(k="adm-threads") }}
       </a>
       <a href="/admin/categories" class="adm-nav-link {% block nav_categories %}{% endblock %}">
-        <i class="fa-regular fa-folder adm-nav-icon"></i>Categories
+        <i class="fa-regular fa-folder adm-nav-icon"></i>{{ t(k="adm-categories") }}
       </a>
       <a href="/admin/products" class="adm-nav-link {% block nav_products %}{% endblock %}">
-        <i class="fa-solid fa-couch adm-nav-icon"></i>Catalog
+        <i class="fa-solid fa-couch adm-nav-icon"></i>{{ t(k="adm-catalog") }}
       </a>
 
       <!-- Users & Access -->
-      <span class="adm-nav-label">Users &amp; Access</span>
+      <span class="adm-nav-label">{{ t(k="adm-users-access") }}</span>
       <a href="/admin/users" class="adm-nav-link {% block nav_users %}{% endblock %}">
-        <i class="fa-solid fa-users adm-nav-icon"></i>Users
+        <i class="fa-solid fa-users adm-nav-icon"></i>{{ t(k="adm-users") }}
       </a>
       <a href="/admin/roles" class="adm-nav-link {% block nav_roles %}{% endblock %}">
-        <i class="fa-solid fa-shield-halved adm-nav-icon"></i>Roles
+        <i class="fa-solid fa-shield-halved adm-nav-icon"></i>{{ t(k="adm-roles") }}
       </a>
       <a href="/admin/permissions" class="adm-nav-link {% block nav_permissions %}{% endblock %}">
-        <i class="fa-solid fa-key adm-nav-icon"></i>Permissions
+        <i class="fa-solid fa-key adm-nav-icon"></i>{{ t(k="adm-permissions") }}
       </a>
 
       <!-- Moderation -->
-      <span class="adm-nav-label">Moderation</span>
+      <span class="adm-nav-label">{{ t(k="adm-moderation") }}</span>
       <a href="/admin/reports" class="adm-nav-link {% block nav_reports %}{% endblock %}">
-        <i class="fa-solid fa-flag adm-nav-icon"></i>Reports
+        <i class="fa-solid fa-flag adm-nav-icon"></i>{{ t(k="adm-reports") }}
       </a>
       <a href="/admin/log" class="adm-nav-link {% block nav_log %}{% endblock %}">
-        <i class="fa-solid fa-scroll adm-nav-icon"></i>Audit Log
+        <i class="fa-solid fa-scroll adm-nav-icon"></i>{{ t(k="adm-audit-log") }}
       </a>
 
       <!-- System -->
-      <span class="adm-nav-label">System</span>
+      <span class="adm-nav-label">{{ t(k="adm-system") }}</span>
       <a href="/admin/plugins" class="adm-nav-link {% block nav_plugins %}{% endblock %}">
-        <i class="fa-solid fa-puzzle-piece adm-nav-icon"></i>Plugins
+        <i class="fa-solid fa-puzzle-piece adm-nav-icon"></i>{{ t(k="adm-plugins") }}
       </a>
       <a href="/admin/themes" class="adm-nav-link {% block nav_themes %}{% endblock %}">
-        <i class="fa-solid fa-palette adm-nav-icon"></i>Themes
+        <i class="fa-solid fa-palette adm-nav-icon"></i>{{ t(k="adm-themes") }}
+      </a>
+      <a href="/admin/languages" class="adm-nav-link {% block nav_languages %}{% endblock %}">
+        <i class="fa-solid fa-language adm-nav-icon"></i>{{ t(k="adm-languages") }}
       </a>
       <a href="/admin/settings" class="adm-nav-link {% block nav_settings %}{% endblock %}">
-        <i class="fa-solid fa-gear adm-nav-icon"></i>Settings
+        <i class="fa-solid fa-gear adm-nav-icon"></i>{{ t(k="adm-settings") }}
       </a>
 
     </div>
@@ -101,7 +113,7 @@
     <div class="adm-sidebar-footer">
       {% block sidebar_footer_links %}{% endblock %}
       <a href="/" class="adm-nav-link text-muted">
-        <i class="fa-solid fa-arrow-left adm-nav-icon"></i>Back to Forum
+        <i class="fa-solid fa-arrow-left adm-nav-icon"></i>{{ t(k="adm-back-to-forum") }}
       </a>
     </div>
   </nav>
@@ -120,8 +132,41 @@
       </div>
       <div class="d-flex align-items-center gap-2">
 
+        {# Language switcher — same control, same markup and same position as the
+           public topbar: to the LEFT of the theme toggle. Wired by the shared
+           ferum-utils.js, so it needs no admin-specific script. Hidden entirely
+           when only one language is installed.
+
+           A Tera comment, not an HTML one: `<!-- … -->` is emitted verbatim to
+           the browser, so rationale written that way ships on every admin page
+           — and any selector it names then appears in the output whether the
+           control rendered or not. #}
+        {% if available_locales and available_locales | length > 1 %}
+        <div class="dropdown">
+          <button type="button" class="fr-icon-btn" data-bs-toggle="dropdown" data-bs-display="static"
+                  aria-expanded="false"
+                  aria-label="{{ t(k='nav-change-language') }}"
+                  title="{{ t(k='nav-change-language') }}">
+            <i class="fa-solid fa-language" aria-hidden="true"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><h6 class="dropdown-header">{{ t(k="nav-language") }}</h6></li>
+            {% for alt in available_locales %}
+            <li>
+              <button type="button"
+                      class="dropdown-item d-flex align-items-center gap-2{% if alt == locale %} active{% endif %}"
+                      data-ferum-locale="{{ alt }}">
+                <i class="fa-solid fa-check{% if alt != locale %} invisible{% endif %}" aria-hidden="true"></i>
+                {{ t(k="language-name-" ~ alt) }}
+              </button>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
         <!-- Dark / light toggle -->
-        <button type="button" class="fr-icon-btn" data-ferum-theme-btn title="Toggle theme" aria-label="Toggle theme">
+        <button type="button" class="fr-icon-btn" data-ferum-theme-btn title="{{ t(k='adm-toggle-theme') }}" aria-label="{{ t(k='adm-toggle-theme') }}">
           <i class="fa-solid fa-moon"></i>
         </button>
 
@@ -142,7 +187,7 @@
     <!-- Footer -->
     <footer class="border-top d-flex align-items-center justify-content-between px-4 py-2 adm-footer">
       <span class="fw-medium text-body-secondary">{{ site.name }}</span>
-      <span>Powered by <strong class="text-body-secondary">Ferum Board</strong></span>
+      <span>{{ t(k="adm-powered-by") }} <strong class="text-body-secondary">{{ t(k="adm-ferum-board") }}</strong></span>
     </footer>
 
   </div>

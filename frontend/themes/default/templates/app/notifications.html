@@ -1,14 +1,14 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Notifications — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-notifications") }} — {{ site.name }}{% endblock %}
 
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-4">
-  <h1 class="h4 fw-bold mb-0">Notifications</h1>
+  <h1 class="h4 fw-bold mb-0">{{ t(k="ui-notifications") }}</h1>
   {% if notifications %}
   <button type="button" class="btn btn-sm btn-outline-secondary" id="mark-all-btn">
-    <i class="fa-solid fa-check-double me-1"></i>Mark all read
+    <i class="fa-solid fa-check-double me-1"></i>{{ t(k="ui-mark-all-read") }}
   </button>
   {% endif %}
 </div>
@@ -37,10 +37,10 @@
 
       {# ── Warn ── #}
       {% if n.kind == "warn" %}
-        <div class="fw-semibold text-body">You received a warning</div>
+        <div class="fw-semibold text-body">{{ t(k="ui-you-received-a-warning") }}</div>
         <div class="fr-notif-body mt-1">
-          {% if n.payload.actor_username %}<strong>{{ n.payload.actor_username }}</strong> issued a warning
-          {% else %}A moderator issued a warning{% endif %}
+          {% if n.payload.actor_username %}<strong>{{ n.payload.actor_username }}</strong> {{ t(k="ui-issued-a-warning") }}
+          {% else %}{{ t(k="ui-a-moderator-issued-a-warning") }}{% endif %}
           {% if n.payload.reason %}<span class="text-muted">· {{ n.payload.reason }}</span>{% endif %}
         </div>
 
@@ -51,14 +51,14 @@
         {% if n.payload.actor_username %}
           <a href="/u/{{ n.payload.actor_username }}"
              class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.actor_username }}</a>
-          <div class="fr-notif-body mt-1">started following you</div>
+          <div class="fr-notif-body mt-1">{{ t(k="ui-started-following-you") }}</div>
         {% elif n.payload.follower_username %}
           <a href="/u/{{ n.payload.follower_username }}"
              class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.follower_username }}</a>
-          <div class="fr-notif-body mt-1">started following you</div>
+          <div class="fr-notif-body mt-1">{{ t(k="ui-started-following-you") }}</div>
         {% else %}
-          <div class="fw-semibold text-body">New follower</div>
-          <div class="fr-notif-body mt-1">Someone started following you</div>
+          <div class="fw-semibold text-body">{{ t(k="ui-new-follower") }}</div>
+          <div class="fr-notif-body mt-1">{{ t(k="ui-someone-started-following-you") }}</div>
         {% endif %}
 
       {# ── Thread-linked: reply / mention / reaction / best_answer ── #}
@@ -80,14 +80,14 @@
              class="fw-semibold text-body text-decoration-none stretched-link">{{ n.payload.thread_title }}</a>
         {% elif notif_href %}
           <a href="{{ notif_href }}"
-             class="fw-semibold text-body text-decoration-none stretched-link">View thread</a>
+             class="fw-semibold text-body text-decoration-none stretched-link">{{ t(k="ui-view-thread") }}</a>
         {% else %}
           <div class="fw-semibold text-body">
-            {% if n.kind == "reply" %}New reply on your thread
-            {% elif n.kind == "mention" %}You were mentioned
-            {% elif n.kind == "reaction" %}Someone reacted to your post
-            {% elif n.kind == "best_answer" %}Best answer marked
-            {% else %}Notification{% endif %}
+            {% if n.kind == "reply" %}{{ t(k="ui-new-reply-on-your-thread") }}
+            {% elif n.kind == "mention" %}{{ t(k="ui-you-were-mentioned") }}
+            {% elif n.kind == "reaction" %}{{ t(k="ui-someone-reacted-to-your-post") }}
+            {% elif n.kind == "best_answer" %}{{ t(k="ui-best-answer-marked") }}
+            {% else %}{{ t(k="ui-notification") }}{% endif %}
           </div>
         {% endif %}
 
@@ -95,15 +95,15 @@
         <div class="fr-notif-body mt-1">
           {% if n.payload.actor_username %}<strong>{{ n.payload.actor_username }}</strong>{% endif %}
           {% if n.kind == "reply" %}
-            {% if n.payload.actor_username %}replied to your thread{% else %}Someone replied to your thread{% endif %}
+            {% if n.payload.actor_username %}{{ t(k="ui-replied-to-your-thread") }}{% else %}{{ t(k="ui-someone-replied-to-your-thread") }}{% endif %}
           {% elif n.kind == "mention" %}
-            {% if n.payload.actor_username %}mentioned you in a post{% else %}You were mentioned in a post{% endif %}
+            {% if n.payload.actor_username %}{{ t(k="ui-mentioned-you-in-a-post") }}{% else %}{{ t(k="ui-you-were-mentioned-in-a-post") }}{% endif %}
           {% elif n.kind == "reaction" %}
-            {% if n.payload.actor_username %}reacted{% else %}Someone reacted{% endif %}
+            {% if n.payload.actor_username %}{{ t(k="ui-reacted") }}{% else %}{{ t(k="ui-someone-reacted") }}{% endif %}
             {% if n.payload.reaction %}<span class="text-muted">({{ n.payload.reaction }})</span>{% endif %}
-            to your post
+            {{ t(k="ui-to-your-post") }}
           {% elif n.kind == "best_answer" %}
-            {% if n.payload.actor_username %}marked your post as best answer{% else %}Your post was marked as best answer{% endif %}
+            {% if n.payload.actor_username %}{{ t(k="ui-marked-your-post-as-best-answer") }}{% else %}{{ t(k="ui-your-post-was-marked-as-best-answer") }}{% endif %}
           {% endif %}
         </div>
       {% endif %}
@@ -112,7 +112,7 @@
     </div>
     {% if not n.is_read %}
     <div class="flex-shrink-0 d-flex align-items-center">
-      <button type="button" class="fr-icon-btn mark-read-btn" data-id="{{ n.id }}" title="Mark read">
+      <button type="button" class="fr-icon-btn mark-read-btn" data-id="{{ n.id }}" title="{{ t(k='ui-mark-read') }}">
         <i class="fa-solid fa-circle-dot fa-xs text-primary"></i>
       </button>
     </div>
@@ -126,7 +126,7 @@
 {% else %}
 <div class="text-center py-5 text-secondary">
   <i class="fa-solid fa-bell-slash fa-3x mb-3 opacity-25" aria-hidden="true"></i>
-  <p class="mb-0">You're all caught up — no notifications.</p>
+  <p class="mb-0">{{ t(k="ui-you-re-all-caught-up-no") }}</p>
 </div>
 {% endif %}
 {% endblock %}
@@ -135,10 +135,10 @@
 <aside class="fr-right-col">
 
   <div class="fr-panel">
-    <div class="fr-panel-header">Summary</div>
+    <div class="fr-panel-header">{{ t(k="ui-summary") }}</div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span class="text-muted small">Unread</span>
+        <span class="text-muted small">{{ t(k="ui-unread") }}</span>
         {% if current_user and current_user.unread_count > 0 %}
           <span class="badge rounded-pill bg-primary">{{ current_user.unread_count }}</span>
         {% else %}
@@ -146,25 +146,25 @@
         {% endif %}
       </div>
       <div class="fr-panel-stat-row">
-        <span class="text-muted small">Total shown</span>
+        <span class="text-muted small">{{ t(k="ui-total-shown") }}</span>
         <span class="fw-semibold small">{{ pagination.total | default(value=0) }}</span>
       </div>
     </div>
   </div>
 
   <div class="fr-panel">
-    <div class="fr-panel-header">Account</div>
+    <div class="fr-panel-header">{{ t(k="ui-account") }}</div>
     <a href="/account" class="fr-panel-row">
       <i class="fa-solid fa-user fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Profile settings</span>
+      <span>{{ t(k="ui-profile-settings") }}</span>
     </a>
     <a href="/bookmarks" class="fr-panel-row">
       <i class="fa-solid fa-bookmark fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Bookmarks</span>
+      <span>{{ t(k="ui-bookmarks") }}</span>
     </a>
     <a href="/" class="fr-panel-row">
       <i class="fa-solid fa-house fa-sm fr-icon-col" aria-hidden="true"></i>
-      <span>Back to feed</span>
+      <span>{{ t(k="ui-back-to-feed") }}</span>
     </a>
   </div>
 

@@ -1,7 +1,7 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Create account — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-create-account") }} — {{ site.name }}{% endblock %}
 
 {% block topbar %}{% endblock %}
 {% block bottom_nav %}{% endblock %}
@@ -16,35 +16,35 @@
       {% if not registration_open %}
       <div class="alert alert-warning">
         <i class="fa-solid fa-lock me-2"></i>
-        Registration is currently closed. Please contact an administrator.
+        {{ t(k="ui-registration-is-currently-closed-please-contact") }}
       </div>
       {% else %}
-      <h1 class="h5 fw-bold mb-1">Create your account</h1>
-      <p class="text-body-secondary small mb-4">Join {{ site.name }} today.</p>
+      <h1 class="h5 fw-bold mb-1">{{ t(k="ui-create-your-account") }}</h1>
+      <p class="text-body-secondary small mb-4">{{ t(k="ui-join-today", site=site.name) }}</p>
 
       <form id="register-form" method="post">
         <div class="mb-3">
-          <label for="username" class="form-label">Username</label>
+          <label for="username" class="form-label">{{ t(k="ui-username") }}</label>
           <input type="text" class="form-control" id="username" name="username"
                  minlength="3" maxlength="30" required autocomplete="username" autofocus
                  pattern="[a-zA-Z0-9_-]+">
-          <div class="form-text">Letters, numbers, underscores, hyphens. Cannot be changed later.</div>
+          <div class="form-text">{{ t(k="ui-letters-numbers-underscores-hyphens-cannot-be") }}</div>
         </div>
 
         <div class="mb-3">
-          <label for="email" class="form-label">Email address</label>
+          <label for="email" class="form-label">{{ t(k="ui-email-address") }}</label>
           <input type="email" class="form-control" id="email" name="email"
                  required autocomplete="email">
         </div>
 
         <div class="mb-4">
-          <label for="password" class="form-label">Password</label>
+          <label for="password" class="form-label">{{ t(k="ui-password") }}</label>
           {{ m::password_field(id="password", name="password", autocomplete="new-password", minlength="8") }}
           <div style="height:4px;border-radius:4px;background:var(--bs-border-color,#dee2e6);overflow:hidden;margin-top:6px">
             <div id="reg-strength-fill" style="height:100%;width:0;transition:width .25s,background-color .25s"></div>
           </div>
           <div id="reg-strength-text" class="form-text" style="min-height:1.2em"></div>
-          <div class="invalid-feedback d-block d-none" id="pw-strength-error">Must include a digit and a special character.</div>
+          <div class="invalid-feedback d-block d-none" id="pw-strength-error">{{ t(k="ui-must-include-a-digit-and-a") }}</div>
         </div>
 
         {{ m::feedback_alert(id="register-error") }}
@@ -56,7 +56,7 @@
       <div class="fr-auth-divider my-3">or</div>
 
       <div class="text-center small">
-        Already have an account? <a href="/login" class="text-decoration-none">Sign in</a>
+        {{ t(k="ui-already-have-an-account") }} <a href="/login" class="text-decoration-none">{{ t(k="ui-sign-in") }}</a>
       </div>
       {% endif %}
     </div>

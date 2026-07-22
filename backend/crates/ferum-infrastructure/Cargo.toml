@@ -50,4 +50,8 @@ boa_engine = { version = "0.19", optional = true }
 anyhow = "1.0.102"
 zip = "2.1"
 toml = "0.8"
+fluent-bundle = "0.16.0"
+fluent-syntax = "0.12.0"
+unic-langid = "0.9.6"
+intl-memoizer = "0.5.3"
 

@@ -1,12 +1,12 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Materials — {{ site.name }}{% endblock %}
-{% block description %}Look up furniture materials and browse products by material on {{ site.name }}.{% endblock %}
+{% block title %}{{ t(k="ui-materials") }} — {{ site.name }}{% endblock %}
+{% block description %}{{ t(k="ui-desc-materials", site=site.name) }}{% endblock %}
 
 {% block content %}
 {% include "default/templates/partials/catalog_nav.html" %}
-<p class="text-muted small mb-4">Pick a material to see every product that uses it.</p>
+<p class="text-muted small mb-4">{{ t(k="ui-pick-a-material-to-see-every") }}</p>
 
 {% if material_groups %}
   {% for group in material_groups %}
@@ -33,7 +33,7 @@
 {% else %}
 <div class="text-center text-muted py-5">
   <i class="fa-solid fa-swatchbook fa-2x mb-2 opacity-25 d-block" aria-hidden="true"></i>
-  No materials yet.
+  {{ t(k="ui-no-materials-yet") }}
 </div>
 {% endif %}
 {% endblock %}

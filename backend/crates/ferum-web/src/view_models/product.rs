@@ -361,6 +361,16 @@ impl From<ProductMedia> for ProductMediaResponse {
     }
 }
 
+/// Preflight for the admin delete dialog: what this product would take with it,
+/// and whether a permanent delete is allowed at all.
+#[derive(Serialize)]
+pub struct ProductDependentsResponse {
+    pub reviews: u64,
+    pub media: u64,
+    pub materials: u64,
+    pub can_hard_delete: bool,
+}
+
 #[derive(Serialize)]
 pub struct RatingStatsResponse {
     pub review_count: i32,

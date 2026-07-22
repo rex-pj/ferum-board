@@ -14,6 +14,7 @@ use super::super::{require_moderator, ModPageQuery};
 pub async fn threads(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ModPageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -76,5 +77,5 @@ pub async fn threads(
     ctx.insert("q", &search_query);
     ctx.insert("status", &status_filter);
 
-    render_admin(&state, "mod/threads.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/threads.html", &ctx).await
 }

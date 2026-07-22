@@ -70,7 +70,7 @@
       var el = document.getElementById(containerId);
       if (!el) return;
       el.innerHTML = '';
-      if (!users.length) { el.appendChild(buildEmptyState('fa-solid fa-users', 'Nobody here yet.')); return; }
+      if (!users.length) { el.appendChild(buildEmptyState('fa-solid fa-users', Ferum.t('js-nobody-here-yet'))); return; }
       var feed = document.createElement('div'); feed.className = 'fr-feed';
       var list = document.createElement('div'); list.className = 'list-group list-group-flush';
       users.forEach(function (item) {
@@ -93,7 +93,7 @@
       var el = document.getElementById(containerId);
       if (!el) return;
       el.innerHTML = '';
-      if (!posts.length) { el.appendChild(buildEmptyState('fa-regular fa-comment', 'No posts yet.')); return; }
+      if (!posts.length) { el.appendChild(buildEmptyState('fa-regular fa-comment', Ferum.t('js-no-posts-yet'))); return; }
       var feed = document.createElement('div'); feed.className = 'fr-feed';
       var col  = document.createElement('div'); col.className  = 'd-flex flex-column';
       posts.forEach(function (p) {
@@ -111,7 +111,7 @@
           var link = document.createElement('a');
           link.href = '/forum/t/' + encodeURIComponent(p.thread_slug);
           link.className = 'text-decoration-none fw-semibold small text-truncate';
-          link.textContent = p.thread_title || 'View thread';
+          link.textContent = p.thread_title || Ferum.t('js-view-thread');
           meta.appendChild(link);
         }
         var dateEl = document.createElement('span'); dateEl.className = 'text-muted ms-auto flex-shrink-0'; dateEl.style.fontSize = '.75rem'; dateEl.textContent = new Date(p.created_at).toLocaleDateString();
@@ -145,7 +145,7 @@
         if (errEl) {
           var msg = document.createElement('div');
           msg.className = 'text-center py-4 text-danger small';
-          msg.textContent = 'Failed to load.';
+          msg.textContent = Ferum.t('js-failed-to-load');
           errEl.innerHTML = ''; errEl.appendChild(msg);
         }
       }

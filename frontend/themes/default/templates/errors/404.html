@@ -1,23 +1,23 @@
 {% extends "default/templates/errors/base.html" %}
 
-{% block title %}Page Not Found — {{ site.name }}{% endblock %}
-{% block description %}The page you're looking for doesn't exist.{% endblock %}
+{% block title %}{{ t(k="error-page-404-title") }} — {{ site.name }}{% endblock %}
+{% block description %}{{ t(k="error-page-404-lead") }}{% endblock %}
 
 {% block content %}
 <div class="text-center py-5">
   <div class="mb-3" style="font-size:5rem;font-weight:700;color:var(--bs-secondary-color,#6c757d);line-height:1;opacity:.4">
     404
   </div>
-  <h1 class="h3 fw-bold mb-2">Page Not Found</h1>
+  <h1 class="h3 fw-bold mb-2">{{ t(k="error-page-404-title") }}</h1>
   <p class="text-body-secondary mb-4">
-    The page you're looking for doesn't exist or may have been moved.
+    {{ t(k="error-page-404-body") }}
   </p>
   <div class="d-flex justify-content-center gap-2 flex-wrap">
     <a href="/" class="btn btn-primary">
-      <i class="fa-solid fa-house me-1"></i>Go home
+      <i class="fa-solid fa-house me-1"></i>{{ t(k="action-go-home") }}
     </a>
     <a href="/search" class="btn btn-outline-secondary">
-      <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+      <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="nav-search") }}
     </a>
   </div>
 </div>

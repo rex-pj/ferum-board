@@ -40,7 +40,7 @@ impl ReviewUseCase {
 
         let product_id = reference
             .product_id
-            .ok_or_else(|| AppError::unprocessable("This thread is not a product review."))?;
+            .ok_or_else(|| AppError::invalid("thread_not_review"))?;
 
         if reference.author_id != actor.id {
             return Err(AppError::forbidden("not_author"));
@@ -48,7 +48,13 @@ impl ReviewUseCase {
 
         rating.thread_id = thread_id;
         if !rating.scores_in_range() {
-            return Err(AppError::unprocessable("Ratings must be between 1 and 5."));
+            return Err(AppError::invalid_with(
+                "rating_out_of_range",
+                [
+                    ("min", ferum_domain::models::review_rating::MIN_RATING.into()),
+                    ("max", ferum_domain::models::review_rating::MAX_RATING.into()),
+                ],
+            ));
         }
 
         let saved = self.reviews.upsert(rating).await?;

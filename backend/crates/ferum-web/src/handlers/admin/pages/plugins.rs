@@ -58,6 +58,7 @@ pub struct SavePluginConfigForm {
 pub async fn upload_plugin(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -174,9 +175,12 @@ pub async fn upload_plugin(
         wants_media,
         schema_tables,
     });
+    // Rendered in the request locale, matching `render_admin` — this partial is
+    // injected by HTMX into a page that was itself rendered that way, so pinning
+    // the default here would mix two languages on one screen.
     let html = state
         .tera
-        .render("admin/plugin_review_partial.html", &ctx)
+        .render(&req_locale.locale, "admin/plugin_review_partial.html", &ctx)
         .await
         .map_err(|e| PageError::Internal(anyhow::anyhow!("Render error: {:?}", e)))?;
     Ok(Html(html))
@@ -272,6 +276,7 @@ pub async fn install_plugin(
 pub async fn plugins(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(flash): Query<super::themes::ThemeFlash>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -317,7 +322,7 @@ pub async fn plugins(
         ctx.insert("flash_error", &msg);
     }
 
-    render_admin(&state, "admin/plugins.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/plugins.html", &ctx).await
 }
 
 pub async fn activate_plugin(
@@ -369,6 +374,7 @@ pub async fn uninstall_plugin(
 pub async fn plugin_detail(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(slug): Path<String>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> Result<impl IntoResponse, PageError> {
@@ -438,7 +444,7 @@ pub async fn plugin_detail(
     ctx.insert("flash_success", &flash_success);
     ctx.insert("flash_error", &flash_error);
 
-    render_admin(&state, "admin/plugins/detail.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/plugins/detail.html", &ctx).await
 }
 
 pub async fn save_config(

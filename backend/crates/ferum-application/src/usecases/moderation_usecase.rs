@@ -81,7 +81,7 @@ impl ModerationUseCase {
         }
 
         if cmd.post_id.is_none() && cmd.thread_id.is_none() {
-            return Err(AppError::unprocessable("post_id or thread_id is required"));
+            return Err(AppError::invalid("report_target_required"));
         }
 
         if let Some(post_id) = cmd.post_id {
@@ -252,7 +252,7 @@ impl ModerationUseCase {
         }
 
         if report.status != ferum_domain::models::report::ReportStatus::Pending {
-            return Err(AppError::unprocessable("Report has already been resolved"));
+            return Err(AppError::invalid("report_already_resolved"));
         }
         self.reports.update_status(report_id, status.clone(), actor.id, moderator_notes).await?;
 
@@ -282,7 +282,7 @@ impl ModerationUseCase {
         reason: String,
     ) -> Result<(), AppError> {
         if reason.len() > MAX_BAN_REASON_LEN {
-            return Err(AppError::unprocessable("Reason must be 1 000 characters or fewer"));
+            return Err(AppError::invalid_with("reason_too_long", [("limit", MAX_BAN_REASON_LEN.into())]));
         }
         PermissionChecker::can_warn(actor)?;
 
@@ -328,7 +328,7 @@ impl ModerationUseCase {
         until: DateTime<Utc>,
     ) -> Result<(), AppError> {
         if reason.len() > MAX_BAN_REASON_LEN {
-            return Err(AppError::unprocessable("Reason must be 1 000 characters or fewer"));
+            return Err(AppError::invalid_with("reason_too_long", [("limit", MAX_BAN_REASON_LEN.into())]));
         }
         PermissionChecker::can_ban_temp(actor)?;
 

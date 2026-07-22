@@ -13,7 +13,8 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::product::{NewProduct, Product, ProductStatus, ProductType};
 use ferum_domain::models::product_media::{NewProductMedia, ProductMedia};
 use ferum_domain::repositories::product_repository::{
-    ProductListFilter, ProductListItem, ProductRepository, ProductSort, UpdateProduct,
+    ProductDependents, ProductListFilter, ProductListItem, ProductRepository, ProductSort,
+    UpdateProduct,
 };
 
 pub struct PgProductRepository {
@@ -298,6 +299,26 @@ impl ProductRepository for PgProductRepository {
     async fn delete(&self, id: Uuid) -> Result<(), AppError> {
         products::Entity::delete_by_id(id).exec(&self.db).await?;
         Ok(())
+    }
+
+    async fn count_dependents(&self, product_id: Uuid) -> Result<ProductDependents, AppError> {
+        Ok(ProductDependents {
+            // Soft-deleted reviews carry nothing worth protecting, so they never
+            // block a hard delete.
+            reviews: threads::Entity::find()
+                .filter(threads::Column::ProductId.eq(product_id))
+                .filter(threads::Column::Status.ne(threads::ThreadStatus::Deleted))
+                .count(&self.db)
+                .await?,
+            media: product_media::Entity::find()
+                .filter(product_media::Column::ProductId.eq(product_id))
+                .count(&self.db)
+                .await?,
+            materials: product_materials::Entity::find()
+                .filter(product_materials::Column::ProductId.eq(product_id))
+                .count(&self.db)
+                .await?,
+        })
     }
 
     async fn set_materials(

@@ -1,0 +1,127 @@
+{% if can_edit_product %}
+{# ── Product edit / delete dialogs ──────────────────────────────────────────
+   Editing and deleting happen here rather than bouncing to /admin/products.
+   Both call the same permission-checked endpoints the admin catalogue uses, so
+   this changes where the controls live, not who may use them — every mutation
+   is gated by `authorize_product_edit` in ProductUseCase, never by this markup.
+
+   This is the reduced form: the fields a curator actually corrects while
+   reading a page. Slug and status stay in the admin catalogue, which remains
+   the place for the full record. #}
+<div class="modal fade" id="pdpEditModal" tabindex="-1" aria-labelledby="pdpEditTitle" aria-hidden="true">
+  {# Not scrollable: the materials typeahead drops an absolutely positioned
+     menu, which a scrollable modal body would clip. #}
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="pdp-edit-form" novalidate>
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="pdpEditTitle">{{ t(k="ui-edit-product") }}</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='ui-close') }}"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-danger d-none" id="pdp-edit-error" role="alert"></div>
+
+          <div class="mb-3">
+            <label class="form-label" for="pdp-name">{{ t(k="ui-product-name") }} <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="text" class="form-control" id="pdp-name" maxlength="200" autocomplete="off"
+                   value="{{ product.name }}">
+            <div class="invalid-feedback" id="pdp-name-feedback"></div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <span class="form-label d-block" id="pdp-price-label">{{ t(k="ui-price-range") }}</span>
+              <div class="input-group has-validation" role="group" aria-labelledby="pdp-price-label">
+                <span class="input-group-text">₫</span>
+                {# Raw digits here; the script regroups them on load and on blur. #}
+                <input type="text" inputmode="numeric" autocomplete="off" class="form-control" id="pdp-price-min"
+                       aria-label="{{ t(k='ui-price-from') }}" placeholder="{{ t(k='ui-from') }}"
+                       value="{% if product.price_min %}{{ product.price_min }}{% endif %}">
+                <span class="input-group-text">–</span>
+                <input type="text" inputmode="numeric" autocomplete="off" class="form-control" id="pdp-price-max"
+                       aria-label="{{ t(k='ui-price-to') }}" placeholder="{{ t(k='ui-to') }}"
+                       value="{% if product.price_max %}{{ product.price_max }}{% endif %}">
+                <div class="invalid-feedback" id="pdp-price-feedback"></div>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label" for="pdp-brand">{{ t(k="ui-brand") }}</label>
+              {# The options arrive from /api/brands; `data-current` tells the script
+                 which one to reselect once they exist. #}
+              <select class="form-select" id="pdp-brand"
+                      data-current="{% if product.brand %}{{ product.brand.id }}{% endif %}">
+                <option value="">{{ t(k="ui-none") }}</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset class="mt-3">
+            <legend class="form-label">{{ t(k="ui-materials") }}</legend>
+            <div class="position-relative">
+              <div class="form-control h-auto d-flex flex-wrap gap-1 align-items-center fr-chip-input" id="pdp-mat-wrap">
+                <div id="pdp-mat-chips" class="d-flex flex-wrap gap-1"></div>
+                <input type="text" id="pdp-mat-search" class="border-0 flex-grow-1 bg-transparent p-0"
+                       style="outline:none;min-width:140px" autocomplete="off"
+                       placeholder="{{ t(k='ui-type-to-search-materials') }}" aria-describedby="pdp-mat-hint">
+              </div>
+              <div id="pdp-mat-results" class="list-group fr-typeahead-menu d-none"></div>
+            </div>
+            <div class="form-text" id="pdp-mat-hint">{{ t(k="ui-type-a-material-name-then-pick") }}</div>
+          </fieldset>
+
+          <div class="mt-3">
+            <label class="form-label" for="pdp-description">{{ t(k="ui-description") }}</label>
+            <textarea class="form-control" id="pdp-description" rows="3">{{ product.description_md | default(value="") }}</textarea>
+          </div>
+
+          <fieldset class="mt-3">
+            <legend class="form-label">{{ t(k="ui-photos") }}</legend>
+            <input type="file" class="form-control" id="pdp-images"
+                   accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+            {# Existing images delete immediately; newly picked ones upload on save. #}
+            <div class="d-flex flex-wrap gap-2 mt-2" id="pdp-gallery"></div>
+          </fieldset>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
+          <button type="submit" class="btn btn-primary" id="pdp-save">{{ t(k="ui-save") }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# Delete is guarded rather than blind: the dialog first reports what the product
+   would take with it. Reviews block a permanent delete outright, leaving Archive
+   as the safe way out. Mirrors the admin catalogue's dialog. #}
+<div class="modal fade" id="pdpDeleteModal" tabindex="-1" aria-labelledby="pdpDeleteTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="pdpDeleteTitle">{{ t(k="ui-delete-product") }}</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='ui-close') }}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3" id="pdp-del-name"></p>
+        <ul class="list-group list-group-flush mb-3" id="pdp-del-dependents"></ul>
+        <div class="alert alert-warning mb-0 d-none" id="pdp-del-blocked"></div>
+        <div class="alert alert-secondary mb-0 d-none" id="pdp-del-safe"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
+        {# Archiving is a status change, which `reject_curator_only_fields`
+           refuses for contributors — so it is not offered to them. Their draft
+           has no reviews to protect anyway; plain delete is the honest option. #}
+        {% if can_manage_product %}
+        <button type="button" class="btn btn-warning" id="pdp-del-archive">
+          <i class="fa-solid fa-box-archive me-1" aria-hidden="true"></i>{{ t(k="ui-archive") }}
+        </button>
+        {% endif %}
+        <button type="button" class="btn btn-danger" id="pdp-del-confirm">
+          <i class="fa-solid fa-trash me-1" aria-hidden="true"></i>{{ t(k="ui-delete-permanently") }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}

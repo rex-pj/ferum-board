@@ -1,7 +1,7 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}Sign in — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-sign-in") }} — {{ site.name }}{% endblock %}
 
 {% block topbar %}{% endblock %}
 {% block bottom_nav %}{% endblock %}
@@ -13,41 +13,41 @@
 
   <div class="card fr-auth-card">
     <div class="card-body p-4 p-sm-5">
-      <h1 class="h5 fw-bold mb-1">Welcome back</h1>
-      <p class="text-body-secondary small mb-4">Sign in to your account to continue.</p>
+      <h1 class="h5 fw-bold mb-1">{{ t(k="ui-welcome-back") }}</h1>
+      <p class="text-body-secondary small mb-4">{{ t(k="ui-sign-in-to-your-account-to") }}</p>
 
       <form id="login-form" method="post">
         <div class="mb-3">
-          <label for="email" class="form-label">Email address</label>
+          <label for="email" class="form-label">{{ t(k="ui-email-address") }}</label>
           <input type="email" class="form-control" id="email" name="email"
                  required autocomplete="email" autofocus>
         </div>
 
         <div class="mb-3">
           <div class="d-flex justify-content-between align-items-center mb-1">
-            <label for="password" class="form-label mb-0">Password</label>
-            <a href="/forgot-password" class="text-decoration-none small">Forgot password?</a>
+            <label for="password" class="form-label mb-0">{{ t(k="ui-password") }}</label>
+            <a href="/forgot-password" class="text-decoration-none small">{{ t(k="ui-forgot-password") }}</a>
           </div>
           {{ m::password_field(id="password", name="password", autocomplete="current-password") }}
         </div>
 
         {% if verified %}
-        <div class="alert alert-success" role="alert" id="login-verified-alert">Your email has been verified. You can now sign in.</div>
+        <div class="alert alert-success" role="alert" id="login-verified-alert">{{ t(k="ui-your-email-has-been-verified-you") }}</div>
         {% endif %}
         {% if error == "verify_failed" %}
-        <div class="alert alert-danger" role="alert" id="login-server-error">That verification link is invalid or has expired.</div>
+        <div class="alert alert-danger" role="alert" id="login-server-error">{{ t(k="ui-that-verification-link-is-invalid-or") }}</div>
         {% elif error == "account_locked" %}
-        <div class="alert alert-danger" role="alert" id="login-server-error">Your account is temporarily locked due to failed login attempts. Try again later.</div>
+        <div class="alert alert-danger" role="alert" id="login-server-error">{{ t(k="ui-your-account-is-temporarily-locked-due") }}</div>
         {% elif error == "email_not_verified" %}
-        <div class="alert alert-danger" role="alert" id="login-server-error">Please verify your email address before continuing.</div>
+        <div class="alert alert-danger" role="alert" id="login-server-error">{{ t(k="ui-please-verify-your-email-address-before") }}</div>
         {% elif error == "account_suspended" %}
-        <div class="alert alert-danger" role="alert" id="login-server-error">Your account has been suspended.</div>
+        <div class="alert alert-danger" role="alert" id="login-server-error">{{ t(k="ui-your-account-has-been-suspended") }}</div>
         {% elif error %}
-        <div class="alert alert-danger" role="alert" id="login-server-error">Invalid email or password.</div>
+        <div class="alert alert-danger" role="alert" id="login-server-error">{{ t(k="ui-invalid-email-or-password") }}</div>
         {% endif %}
         {{ m::feedback_alert(id="login-error") }}
         <button type="button" id="resend-verification-btn" class="btn btn-link btn-sm px-0 mb-2 d-none">
-          Resend verification email
+          {{ t(k="ui-resend-verification-email") }}
         </button>
         {{ m::feedback_alert(id="resend-feedback") }}
 
@@ -57,7 +57,7 @@
       <div class="fr-auth-divider my-3">or</div>
 
       <div class="text-center small">
-        Don't have an account? <a href="/register" class="text-decoration-none">Create one</a>
+        {{ t(k="ui-don-t-have-an-account") }} <a href="/register" class="text-decoration-none">{{ t(k="ui-create-one") }}</a>
       </div>
     </div>
   </div>

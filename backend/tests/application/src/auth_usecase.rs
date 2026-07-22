@@ -47,8 +47,10 @@ async fn register_username_too_short_returns_422() {
         username: "ab".to_string(),
         email: "valid@example.com".to_string(),
         password: "Password1!".to_string(),
+        locale: Default::default(),
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "invalid_username_format"),
+        "expected invalid_username_format, got {result:?}");
 }
 
 #[tokio::test]
@@ -61,8 +63,10 @@ async fn register_password_too_weak_returns_422() {
         username: "validuser".to_string(),
         email: "valid@example.com".to_string(),
         password: "weak".to_string(),
+        locale: Default::default(),
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "password_requirements"),
+        "expected password_requirements, got {result:?}");
 }
 
 #[tokio::test]
@@ -80,6 +84,7 @@ async fn register_email_taken_returns_409() {
         username: "newuser123".to_string(),
         email: "taken@example.com".to_string(),
         password: "Password1!".to_string(),
+        locale: Default::default(),
     }).await;
     assert!(matches!(result, Err(AppError::Conflict(_))));
 }
@@ -127,6 +132,7 @@ async fn register_success_with_email_verification_enqueues_job() {
         username: "newuser123".to_string(),
         email: "new@example.com".to_string(),
         password: "Password1!".to_string(),
+        locale: Default::default(),
     }).await.is_ok());
 }
 
@@ -168,6 +174,7 @@ async fn register_auto_verify_does_not_enqueue_email_job() {
         username: "newuser123".to_string(),
         email: "new@example.com".to_string(),
         password: "Password1!".to_string(),
+        locale: Default::default(),
     }).await.is_ok());
 }
 
@@ -351,7 +358,8 @@ async fn reset_password_weak_new_password_returns_422() {
         token: "token".to_string(),
         new_password: "weak".to_string(),
     }).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "password_requirements"),
+        "expected password_requirements, got {result:?}");
 }
 
 #[tokio::test]

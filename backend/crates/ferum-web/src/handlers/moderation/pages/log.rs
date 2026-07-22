@@ -15,6 +15,7 @@ use super::super::{require_moderator, ModPageQuery};
 pub async fn log(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ModPageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -177,5 +178,5 @@ pub async fn log(
     ctx.insert("date_from_filter", &date_from_str);
     ctx.insert("date_to_filter", &date_to_str);
 
-    render_admin(&state, "mod/log.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/log.html", &ctx).await
 }

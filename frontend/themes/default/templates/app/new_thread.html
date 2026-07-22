@@ -1,19 +1,19 @@
 {% extends "default/templates/base.html" %}
 {% import "default/templates/macros.html" as m %}
 
-{% block title %}New post — {{ site.name }}{% endblock %}
+{% block title %}{{ t(k="ui-new-post") }} — {{ site.name }}{% endblock %}
 {% block main_class %}fr-page-reading{% endblock %}
 
 {% block content %}
-<h1 class="h4 fw-bold mb-4" id="compose-heading">New post</h1>
+<h1 class="h4 fw-bold mb-4" id="compose-heading">{{ t(k="ui-new-post") }}</h1>
 
     <div class="card">
       <div class="card-body p-4">
         <form id="new-thread-form" method="post">
           <div class="mb-3" id="category-field">
-            <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
+            <label for="category" class="form-label">{{ t(k="ui-category") }} <span class="text-danger">*</span></label>
             <select class="form-select" id="category" name="category_id" required>
-              <option value="">Choose a category…</option>
+              <option value="">{{ t(k="ui-choose-a-category") }}</option>
               {% for cat in categories %}
                 <option value="{{ cat.id }}" {% if cat.id == preselected_category %}selected{% endif %}>
                   {% if cat.parent_id %}-- {% endif %}{{ cat.name }}
@@ -28,8 +28,8 @@
           <div class="mb-3" id="product-field"
                {% if preselected_product %}data-preselect-id="{{ preselected_product.id }}" data-preselect-name="{{ preselected_product.name }}"{% endif %}>
             <label for="product-search" class="form-label">
-              Reviewing a product?
-              <span class="text-muted small fw-normal">(optional — turns this post into a scored review)</span>
+              {{ t(k="ui-reviewing-a-product") }}
+              <span class="text-muted small fw-normal">{{ t(k="ui-optional-turns-this-post-into-a") }}</span>
             </label>
 
             {# Locked/selected state #}
@@ -37,7 +37,7 @@
               <i class="fa-solid fa-couch text-muted" aria-hidden="true"></i>
               <span id="product-selected-name" class="fw-semibold flex-grow-1 text-truncate"></span>
               <button type="button" id="product-clear" class="btn btn-sm btn-outline-secondary">
-                <i class="fa-solid fa-xmark me-1" aria-hidden="true"></i>Change
+                <i class="fa-solid fa-xmark me-1" aria-hidden="true"></i>{{ t(k="ui-change") }}
               </button>
             </div>
 
@@ -45,7 +45,7 @@
                dropdown paints above the "add product" toggle that follows it. #}
             <div id="product-search-wrap" class="position-relative" style="z-index:30">
               <input type="text" id="product-search" class="form-control" autocomplete="off"
-                     placeholder="Search for a product to review… (leave empty for a regular post)">
+                     placeholder="{{ t(k='ui-search-for-a-product-to-review') }}">
               <div id="product-results"
                    class="list-group position-absolute w-100 shadow d-none border rounded overflow-hidden"
                    style="z-index:1056;max-height:260px;overflow-y:auto;top:calc(100% + 4px);background-color:var(--bs-body-bg)"></div>
@@ -54,61 +54,13 @@
             <input type="hidden" id="product-id" name="product_id" value="">
 
             {% if can_submit_product %}
-            {# Crowd-sourced: propose a product not yet in the catalog, then review it #}
+            {# Crowd-sourced: propose a product not yet in the catalog, then review
+               it. The form itself lives in #productAddModal, outside this <form>
+               — see the note there for why it is no longer an inline panel. #}
             <div id="product-add" class="mt-2">
               <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="product-add-toggle">
-                <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>Can’t find it? Add a new product
+                <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>{{ t(k="ui-can-t-find-it-add-a") }}
               </button>
-              <div id="product-add-form" class="border rounded p-3 mt-2 bg-body-tertiary d-none">
-                <div class="row g-2">
-                  <div class="col-12">
-                    <label class="form-label small mb-1" for="np-name">Product name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="np-name" maxlength="200">
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label small mb-1" for="np-type">Type</label>
-                    <select class="form-select form-select-sm" id="np-type">
-                      <option value="furniture">Furniture</option>
-                      <option value="material">Material</option>
-                      <option value="room">Room</option>
-                    </select>
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label small mb-1" for="np-brand">Brand</label>
-                    <select class="form-select form-select-sm" id="np-brand">
-                      <option value="">— None —</option>
-                    </select>
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label small mb-1" for="np-price-min">Price from (₫)</label>
-                    <input type="number" min="0" class="form-control form-control-sm" id="np-price-min">
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label small mb-1" for="np-price-max">Price to (₫)</label>
-                    <input type="number" min="0" class="form-control form-control-sm" id="np-price-max">
-                  </div>
-                  {# Materials the product is made of — distinct from "Type: Material"
-                     above, which classifies the product itself. Optional, and the
-                     reference list is small enough to show in full: tap to toggle,
-                     no typing. #}
-                  <div class="col-12">
-                    <div class="form-label small mb-1">Materials <span class="text-muted fw-normal">(select if known)</span></div>
-                    <div id="np-mat-picker" class="border rounded p-2 bg-body" style="max-height:190px;overflow-y:auto">
-                      <div class="text-muted small">Loading…</div>
-                    </div>
-                  </div>
-                  <div class="col-12">
-                    <div class="text-danger small d-none" id="np-error"></div>
-                    <div class="d-flex gap-2 mt-1">
-                      <button type="button" class="btn btn-primary btn-sm" id="np-submit">Add &amp; select for review</button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm" id="np-cancel">Cancel</button>
-                    </div>
-                    <div class="form-text">
-                      The product becomes public once an admin approves it. Your review is saved right away either way.
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
             {% endif %}
           </div>
@@ -118,17 +70,17 @@
              the live hint text are wired up by ferum-page-new-thread.js. #}
           <div class="mb-3 border rounded p-3 p-md-4 bg-body-tertiary" id="rating-block" style="display:none;">
             <div class="fw-semibold">
-              <i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>Your rating
+              <i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-your-rating") }}
             </div>
             <p class="text-muted small mb-3">
-              Tap the stars to score · only <span class="fw-semibold">Overall</span> is required.
+              {{ t(k="ui-rating-hint") }}
             </p>
 
             {# Overall — required, prominent, with live descriptive hint #}
             <div class="fr-rate-overall d-flex flex-wrap align-items-center gap-2 pb-3 mb-3 border-bottom">
-              <label class="fr-rate-label mb-0" for="rate-overall">Overall <span class="text-danger">*</span></label>
+              <label class="fr-rate-label mb-0" for="rate-overall">{{ t(k="ui-overall") }} <span class="text-danger">*</span></label>
               {{ m::star_input(dim="overall", large=true, required=true) }}
-              <span class="fr-rate-hint text-muted small" data-rate-hint data-empty="Not rated">Not rated</span>
+              <span class="fr-rate-hint text-muted small" data-rate-hint data-empty="Not rated">{{ t(k="ui-not-rated") }}</span>
             </div>
 
             {# Optional sub-dimensions — label left, stars right, aligned per column #}
@@ -137,11 +89,11 @@
               <div class="col-12 col-md-6">
                 <div class="fr-rate-row d-flex align-items-center justify-content-between gap-2">
                   <label class="fr-rate-label mb-0" for="rate-{{ d }}">
-                    {% if d == "durability" %}Durability
-                    {% elif d == "materials" %}Materials
-                    {% elif d == "comfort" %}Comfort
-                    {% elif d == "aesthetics" %}Aesthetics
-                    {% else %}Value for money{% endif %}
+                    {% if d == "durability" %}{{ t(k="ui-durability") }}
+                    {% elif d == "materials" %}{{ t(k="ui-materials") }}
+                    {% elif d == "comfort" %}{{ t(k="ui-comfort") }}
+                    {% elif d == "aesthetics" %}{{ t(k="ui-aesthetics") }}
+                    {% else %}{{ t(k="ui-value-for-money") }}{% endif %}
                   </label>
                   {{ m::star_input(dim=d) }}
                 </div>
@@ -151,21 +103,21 @@
 
             <div class="form-check mt-3">
               <input class="form-check-input" type="checkbox" id="rate-verified">
-              <label class="form-check-label small" for="rate-verified">I have actually bought or used this product</label>
+              <label class="form-check-label small" for="rate-verified">{{ t(k="ui-i-have-actually-bought-or-used") }}</label>
             </div>
           </div>
 
           <div class="mb-3">
-            <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
+            <label for="title" class="form-label">{{ t(k="ui-title") }} <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="title" name="title"
                    minlength="5" maxlength="255" required autofocus
-                   placeholder="Write a clear, specific title">
+                   placeholder="{{ t(k='ui-write-a-clear-specific-title') }}">
           </div>
 
           {% if can_upload_thumbnail %}
           {# Thumbnail upload — staged locally, uploaded after thread is created #}
           <div class="mb-3" x-data="newThreadThumbnail()">
-            <label class="form-label">Cover image <span class="text-muted small fw-normal">(optional)</span></label>
+            <label class="form-label">{{ t(k="ui-cover-image-2") }} <span class="text-muted small fw-normal">{{ t(k="ui-optional") }}</span></label>
             <div class="position-relative rounded overflow-hidden border"
                  style="aspect-ratio:16/9;cursor:pointer;max-height:160px;"
                  :class="isDragging ? 'border-primary border-2' : 'border-secondary-subtle'"
@@ -183,14 +135,14 @@
                    larger base font — the second line hugs the left edge. #}
                 <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted text-center px-2">
                   <i class="fa-solid fa-image fa-2x mb-2 opacity-50" aria-hidden="true"></i>
-                  <span class="small fw-medium">Drag and drop here, or <span class="text-primary">click to choose an image</span></span>
-                  <span class="small opacity-50 mt-1">JPEG · PNG · WebP · GIF · max 10 MB</span>
-                  <span class="small opacity-25 mt-1">1280 × 720 px (16:9) recommended</span>
+                  <span class="small fw-medium text-primary">{{ t(k="ui-drop-or-choose-image") }}</span>
+                  <span class="small opacity-50 mt-1">{{ t(k="ui-jpeg-png-webp-gif-max-10") }}</span>
+                  <span class="small opacity-25 mt-1">{{ t(k="ui-1280-720-px-16-9-recommended") }}</span>
                 </div>
               </div>
 
               {# Preview image #}
-              <img x-show="preview" :src="preview || ''" alt="Thumbnail preview"
+              <img x-show="preview" :src="preview || ''" alt="{{ t(k='ui-thumbnail-preview') }}"
                    class="position-absolute top-0 start-0 w-100 h-100"
                    style="object-fit:cover;display:none;">
 
@@ -201,7 +153,7 @@
                 <div class="d-flex align-items-center justify-content-center h-100"
                      style="background:rgba(var(--bs-primary-rgb),0.12);">
                   <span class="fw-semibold text-primary">
-                    <i class="fa-solid fa-circle-plus me-1"></i>Drop to set the cover image
+                    <i class="fa-solid fa-circle-plus me-1"></i>{{ t(k="ui-drop-to-set-the-cover-image") }}
                   </span>
                 </div>
               </div>
@@ -212,7 +164,7 @@
                       class="btn btn-sm position-absolute top-0 end-0 m-2"
                       style="background:rgba(0,0,0,0.55);color:#fff;backdrop-filter:blur(4px);display:none;"
                       @click.stop="remove()"
-                      title="Remove thumbnail">
+                      title="{{ t(k='ui-remove-thumbnail') }}">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
@@ -223,34 +175,34 @@
           </div>
           {% else %}
           <div class="mb-3">
-            <label class="form-label">Cover image <span class="text-muted small fw-normal">(optional)</span></label>
+            <label class="form-label">{{ t(k="ui-cover-image-2") }} <span class="text-muted small fw-normal">{{ t(k="ui-optional") }}</span></label>
             <div class="small text-muted border rounded p-2">
               <i class="fa-solid fa-lock me-1" aria-hidden="true"></i>
-              Reach Member trust level (or get verified) to attach a cover image.
+              {{ t(k="ui-reach-member-trust-level-or-get-2") }}
             </div>
           </div>
           {% endif %}
 
           <div class="mb-3">
-            <label class="form-label">Content <span class="text-danger">*</span></label>
+            <label class="form-label">{{ t(k="ui-content") }} <span class="text-danger">*</span></label>
             <ferum-post-composer id="composer" thread-id="" mode="new" can-upload="{{ can_upload_thumbnail }}"></ferum-post-composer>
             <noscript>
               <textarea class="form-control" id="content" name="content"
                         rows="12" minlength="10" required
-                        placeholder="Write your post in Markdown…"></textarea>
+                        placeholder="{{ t(k='ui-write-your-post-in-markdown') }}"></textarea>
             </noscript>
           </div>
 
           {# Tag chip input #}
           <div class="mb-4" x-data="tagChipInput()">
-            <label class="form-label">Tags</label>
+            <label class="form-label">{{ t(k="ui-tags") }}</label>
             <div class="d-flex flex-wrap gap-1 align-items-center border rounded p-2 fr-tag-input-wrap"
                  @click="$refs.tagField.focus()">
               <template x-for="(tag, idx) in tags" :key="idx">
                 <span class="fr-tag-chip fr-tag-chip--removable">
                   <span x-text="tag"></span>
                   <button type="button" class="fr-tag-chip-remove"
-                          @click.stop="remove(idx)" aria-label="Remove tag">×</button>
+                          @click.stop="remove(idx)" aria-label="{{ t(k='ui-remove-tag') }}">×</button>
                 </span>
               </template>
               <input type="text"
@@ -262,19 +214,133 @@
                      :placeholder="tags.length === 0 ? 'tag1, tag2…' : ''"
                      class="fr-tag-input-field border-0 bg-transparent">
             </div>
-            <div class="form-text">Press Enter or comma to add. Up to 5 tags.</div>
+            <div class="form-text">{{ t(k="ui-press-enter-or-comma-to-add-2") }}</div>
             <input type="hidden" id="tags-json" :value="JSON.stringify(tags)">
           </div>
 
           {{ m::feedback_alert(id="form-error") }}
 
           <div class="d-flex gap-2">
-            {{ m::btn_submit(text="Publish", btn_id="submit-btn", spinner_id="btn-spinner", class="") }}
-            <a href="/forum" class="btn btn-outline-secondary">Cancel</a>
+            {{ m::btn_submit(text=t(k="ui-publish"), btn_id="submit-btn", spinner_id="btn-spinner", class="") }}
+            <a href="/forum" class="btn btn-outline-secondary">{{ t(k="ui-cancel") }}</a>
           </div>
         </form>
       </div>
     </div>
+
+{% if can_submit_product %}
+{# ── Add-product dialog ──────────────────────────────────────────────────────
+   Deliberately outside #new-thread-form. Two reasons: a <form> inside another
+   <form> is invalid HTML, and as an inline panel its green primary button sat
+   directly above the review's own submit — people read the nearest primary
+   button as "post my review" and sent a half-written one. A modal gives the
+   sub-task its own surface with exactly one primary action visible.
+
+   Controls here are full size, not `-sm`: this is a public, mobile-first form
+   and NF-UX-02 puts the floor at 44px. #}
+<div class="modal fade" id="productAddModal" tabindex="-1" aria-labelledby="productAddTitle" aria-hidden="true">
+  {# Not `modal-dialog-scrollable`, for the same reason as the admin catalogue
+     modal: a scrollable body clips the materials typeahead dropdown. #}
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="np-form" novalidate>
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="productAddTitle">{{ t(k="ui-add-a-product") }}</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='ui-close') }}"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-danger d-none" id="np-error" role="alert"></div>
+
+          <div class="mb-3">
+            <label class="form-label" for="np-name">{{ t(k="ui-product-name") }} <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="text" class="form-control" id="np-name" maxlength="200" autocomplete="off">
+            <div class="invalid-feedback" id="np-name-feedback"></div>
+            {# This dialog opens precisely because the catalogue search came up
+               empty, so near matches are surfaced here as the name is typed —
+               the cheapest moment to stop a duplicate being created. #}
+            <div id="np-dupes" class="d-none mt-2">
+              <p class="form-text mb-1">{{ t(k="ui-did-you-mean-one-of-these") }}</p>
+              <div class="list-group" id="np-dupe-list"></div>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label" for="np-type">{{ t(k="ui-type") }}</label>
+              <select class="form-select" id="np-type">
+                <option value="furniture">{{ t(k="ui-furniture") }}</option>
+                <option value="material">{{ t(k="ui-material") }}</option>
+                <option value="room">{{ t(k="ui-room") }}</option>
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label" for="np-brand">{{ t(k="ui-brand") }}</label>
+              <select class="form-select" id="np-brand">
+                <option value="">{{ t(k="ui-none") }}</option>
+              </select>
+            </div>
+            {# One range control, and typed as text: `type=number` rejects the
+               grouped digits ("1.500.000") anyone entering VND actually types. #}
+            <div class="col-12">
+              <span class="form-label d-block" id="np-price-label">{{ t(k="ui-price-range") }}</span>
+              {# Feedback nested inside the group on purpose — Bootstrap reveals
+                 `.invalid-feedback` via an `.is-invalid ~` sibling selector. #}
+              <div class="input-group has-validation" role="group" aria-labelledby="np-price-label">
+                <span class="input-group-text">₫</span>
+                <input type="text" inputmode="numeric" autocomplete="off" class="form-control" id="np-price-min"
+                       aria-label="{{ t(k='ui-price-from') }}" placeholder="{{ t(k='ui-from') }}">
+                <span class="input-group-text">–</span>
+                <input type="text" inputmode="numeric" autocomplete="off" class="form-control" id="np-price-max"
+                       aria-label="{{ t(k='ui-price-to') }}" placeholder="{{ t(k='ui-to') }}">
+                <div class="invalid-feedback" id="np-price-feedback"></div>
+              </div>
+            </div>
+          </div>
+
+          {# Materials the product is made of — distinct from "Type: Material"
+             above, which classifies the product itself. Same typeahead as the
+             admin catalogue: the previous grouped list needed its own inner
+             scrollbar, which traps the page scroll on a touch screen. #}
+          <fieldset class="mt-3">
+            <legend class="form-label">
+              {{ t(k="ui-materials") }} <span class="text-muted fw-normal">{{ t(k="ui-select-if-known") }}</span>
+            </legend>
+            <div class="position-relative">
+              <div class="form-control h-auto d-flex flex-wrap gap-1 align-items-center fr-chip-input" id="np-mat-wrap">
+                <div id="np-mat-chips" class="d-flex flex-wrap gap-1"></div>
+                <input type="text" id="np-mat-search" class="border-0 flex-grow-1 bg-transparent p-0"
+                       style="outline:none;min-width:140px" autocomplete="off"
+                       placeholder="{{ t(k='ui-type-to-search-materials') }}" aria-describedby="np-mat-hint">
+              </div>
+              <div id="np-mat-results" class="list-group fr-typeahead-menu d-none"></div>
+            </div>
+            <div class="form-text" id="np-mat-hint">{{ t(k="ui-type-a-material-name-then-pick") }}</div>
+          </fieldset>
+
+          {# Photos are staged client-side and uploaded after the product row
+             exists, since the upload endpoint is keyed by product id. #}
+          <fieldset class="mt-3">
+            <legend class="form-label">
+              {{ t(k="ui-photos") }} <span class="text-muted fw-normal">{{ t(k="ui-optional") }}</span>
+            </legend>
+            <input type="file" class="form-control" id="np-images"
+                   accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+            <div class="d-flex flex-wrap gap-2 mt-2" id="np-image-preview"></div>
+          </fieldset>
+        </div>
+        <div class="modal-footer flex-column align-items-stretch gap-2">
+          {# Consequence stated before the commit, not underneath it. #}
+          <p class="form-text m-0">{{ t(k="ui-the-product-becomes-public-once-an") }}</p>
+          <div class="d-flex gap-2 justify-content-end">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
+            <button type="submit" class="btn btn-primary" id="np-submit">{{ t(k="ui-add-select-for-review") }}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

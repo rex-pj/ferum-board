@@ -72,6 +72,11 @@ pub struct UserPreferences {
     pub email_notifications: serde_json::Value,
     pub muted_categories: Vec<Uuid>,
     pub watched_categories: Vec<Uuid>,
+    /// Chosen display language. `None` = never chosen, so negotiation falls
+    /// through to the cookie, `Accept-Language`, and finally the site default.
+    /// Storing an explicit `Some("en")` is a real choice and pins the user to
+    /// English even if the admin later changes the site default.
+    pub locale: Option<crate::Locale>,
 }
 
 impl Default for UserPreferences {
@@ -84,6 +89,7 @@ impl Default for UserPreferences {
             email_notifications: serde_json::json!({}),
             muted_categories: vec![],
             watched_categories: vec![],
+            locale: None,
         }
     }
 }

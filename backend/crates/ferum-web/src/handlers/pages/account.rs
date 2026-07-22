@@ -10,11 +10,12 @@ use crate::view_models::page_context::{
 };
 use ferum_domain::models::ThreadStatus;
 
-use super::{active_theme, nav_categories_ctx, render_with_theme, user_ctx, PageError, PageQuery};
+use super::{active_theme, nav_categories_ctx, render_with_theme_in, user_ctx, PageError, PageQuery};
 
 pub async fn account(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
         Some(u) => u,
@@ -82,7 +83,7 @@ pub async fn account(
     ctx.insert("account_status", &account_status);
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme(&state, &active, "app/account.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/account.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -90,6 +91,7 @@ pub async fn account(
 pub async fn notifications(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<PageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
@@ -126,7 +128,7 @@ pub async fn notifications(
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme(&state, &active, "app/notifications.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/notifications.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -134,6 +136,7 @@ pub async fn notifications(
 pub async fn bookmarks(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<PageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
@@ -191,7 +194,7 @@ pub async fn bookmarks(
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme(&state, &active, "app/bookmarks.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/bookmarks.html", &ctx)
         .await
         .map(IntoResponse::into_response)
 }

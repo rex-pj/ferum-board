@@ -31,7 +31,7 @@ fn schema_name(slug: &str) -> String {
 fn validate_plugin_sql(sql: &str) -> Result<(), AppError> {
     let trimmed_end = sql.trim_end().trim_end_matches(';');
     if trimmed_end.contains(';') {
-        return Err(AppError::unprocessable("Multiple SQL statements are not allowed"));
+        return Err(AppError::invalid("multiple_sql_statements"));
     }
 
     let lower = sql.to_ascii_lowercase();

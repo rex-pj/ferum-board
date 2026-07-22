@@ -6,7 +6,7 @@
 
 {% block content %}
 <a href="/admin/users" class="btn btn-sm btn-outline-secondary mb-3">
-  <i class="fa-solid fa-arrow-left me-1"></i>Back to Users
+  <i class="fa-solid fa-arrow-left me-1"></i>{{ t(k="adm-back-to-users") }}
 </a>
 
 <div class="row g-4">
@@ -35,10 +35,10 @@
             <span class="badge bg-secondary">{{ profile.trust_level }}</span>
           {% endif %}
           {% if profile.is_banned %}
-            <span class="badge bg-danger">Banned</span>
+            <span class="badge bg-danger">{{ t(k="adm-banned") }}</span>
           {% endif %}
           {% if profile.locked_until %}
-            <span class="badge bg-warning text-dark">Locked</span>
+            <span class="badge bg-warning text-dark">{{ t(k="adm-locked") }}</span>
           {% endif %}
         </div>
         <hr class="my-2">
@@ -49,12 +49,12 @@
             Email {% if profile.email_verified %}verified{% else %}not verified{% endif %}
           </div>
           <div class="mb-1"><i class="fa-solid fa-calendar fa-fw me-1"></i>
-            Joined <time data-rel datetime="{{ profile.created_at }}">{{ profile.created_at | date(format="%b %d, %Y") }}</time>
+            {{ t(k="adm-joined") }} <time data-rel datetime="{{ profile.created_at }}">{{ profile.created_at | localdate }}</time>
           </div>
           <div><i class="fa-solid fa-clock fa-fw me-1"></i>
             Last seen:
             {% if profile.last_seen_at %}
-              <time data-rel datetime="{{ profile.last_seen_at }}">{{ profile.last_seen_at | date(format="%b %d, %Y") }}</time>
+              <time data-rel datetime="{{ profile.last_seen_at }}">{{ profile.last_seen_at | localdate }}</time>
             {% else %}
               Never
             {% endif %}
@@ -65,28 +65,28 @@
 
     {# Activity stats card #}
     <div class="card mb-3">
-      <div class="card-header fw-semibold">Activity</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-activity") }}</div>
       <div class="card-body p-0">
         <table class="table table-sm mb-0">
           <tbody>
             <tr>
-              <td class="text-muted">Posts</td>
+              <td class="text-muted">{{ t(k="adm-posts") }}</td>
               <td class="fw-semibold">{{ profile.post_count }}</td>
             </tr>
             <tr>
-              <td class="text-muted">Days visited</td>
+              <td class="text-muted">{{ t(k="adm-days-visited") }}</td>
               <td class="fw-semibold">{{ profile.days_visited }}</td>
             </tr>
             <tr>
-              <td class="text-muted">Trust score</td>
+              <td class="text-muted">{{ t(k="adm-trust-score") }}</td>
               <td class="fw-semibold">{{ profile.trust_score }}</td>
             </tr>
             <tr>
-              <td class="text-muted">Warnings</td>
+              <td class="text-muted">{{ t(k="adm-warnings") }}</td>
               <td class="fw-semibold {% if profile.warn_count > 0 %}text-warning{% endif %}">{{ profile.warn_count }}</td>
             </tr>
             <tr>
-              <td class="text-muted">Failed logins</td>
+              <td class="text-muted">{{ t(k="adm-failed-logins") }}</td>
               <td class="fw-semibold {% if profile.failed_login_count > 0 %}text-danger{% endif %}">{{ profile.failed_login_count }}</td>
             </tr>
           </tbody>
@@ -95,11 +95,11 @@
       {% if profile.locked_until %}
       <div class="card-footer py-2">
         <div class="text-danger small mb-2">
-          <i class="fa-solid fa-lock me-1"></i>Locked until <time data-rel datetime="{{ profile.locked_until }}">{{ profile.locked_until | date(format="%b %d, %Y %H:%M") }}</time>
+          <i class="fa-solid fa-lock me-1"></i>{{ t(k="adm-locked-until") }} <time data-rel datetime="{{ profile.locked_until }}">{{ profile.locked_until | localdate(style="datetime") }}</time>
         </div>
         <button class="btn btn-sm btn-outline-success w-100" type="button"
                 data-admin-action="unlock-user" data-user-id="{{ profile.id }}">
-          <i class="fa-solid fa-lock-open me-1"></i>Unlock Account
+          <i class="fa-solid fa-lock-open me-1"></i>{{ t(k="adm-unlock-account") }}
         </button>
       </div>
       {% endif %}
@@ -108,10 +108,10 @@
     {# Quick links #}
     <div class="d-grid gap-2">
       <a href="/u/{{ profile.username }}" target="_blank" class="btn btn-sm btn-outline-secondary">
-        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Public Profile
+        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>{{ t(k="adm-view-public-profile") }}
       </a>
       <a href="/admin/log?q={{ profile.id }}" class="btn btn-sm btn-outline-secondary">
-        <i class="fa-solid fa-scroll me-1"></i>Audit Log for User
+        <i class="fa-solid fa-scroll me-1"></i>{{ t(k="adm-audit-log-for-user") }}
       </a>
     </div>
   </div>
@@ -121,46 +121,46 @@
 
     {# Edit profile card #}
     <div class="card mb-3">
-      <div class="card-header fw-semibold">Edit Profile</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-edit-profile") }}</div>
       <div class="card-body">
         <div id="edit-profile-feedback" class="d-none mb-2"></div>
         <div class="mb-3">
-          <label class="form-label">Display Name</label>
+          <label class="form-label">{{ t(k="adm-display-name") }}</label>
           <input type="text" id="edit-display-name" class="form-control form-control-sm"
                  value="{{ profile.display_name }}" maxlength="64">
         </div>
         <div class="mb-3">
-          <label class="form-label">Bio</label>
+          <label class="form-label">{{ t(k="adm-bio") }}</label>
           <textarea id="edit-bio" class="form-control form-control-sm" rows="2" maxlength="300">{{ profile.bio | default(value="") }}</textarea>
         </div>
         <div class="mb-3">
-          <label class="form-label">Website</label>
+          <label class="form-label">{{ t(k="adm-website") }}</label>
           <input type="url" id="edit-website" class="form-control form-control-sm"
                  value="{{ profile.website | default(value="") }}" maxlength="255">
         </div>
         <button class="btn btn-sm btn-primary" type="button"
-                data-admin-action="edit-profile" data-user-id="{{ profile.id }}">Save Changes</button>
+                data-admin-action="edit-profile" data-user-id="{{ profile.id }}">{{ t(k="adm-save-changes") }}</button>
       </div>
     </div>
 
     {# Trust level card #}
     <div class="card mb-3">
-      <div class="card-header fw-semibold">Trust Level</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-trust-level") }}</div>
       <div class="card-body">
         <div id="trust-level-feedback" class="d-none mb-2"></div>
         <div class="d-flex align-items-center gap-3 flex-wrap">
           <select id="trust-level-select" class="form-select form-select-sm" style="max-width:200px">
-            <option value="new"     {% if profile.trust_level == "new"     %}selected{% endif %}>New</option>
-            <option value="basic"   {% if profile.trust_level == "basic"   %}selected{% endif %}>Basic</option>
-            <option value="member"  {% if profile.trust_level == "member"  %}selected{% endif %}>Member</option>
-            <option value="regular" {% if profile.trust_level == "regular" %}selected{% endif %}>Regular</option>
-            <option value="leader"  {% if profile.trust_level == "leader"  %}selected{% endif %}>Leader</option>
+            <option value="new"     {% if profile.trust_level == "new"     %}selected{% endif %}>{{ t(k="adm-new") }}</option>
+            <option value="basic"   {% if profile.trust_level == "basic"   %}selected{% endif %}>{{ t(k="adm-basic") }}</option>
+            <option value="member"  {% if profile.trust_level == "member"  %}selected{% endif %}>{{ t(k="adm-member") }}</option>
+            <option value="regular" {% if profile.trust_level == "regular" %}selected{% endif %}>{{ t(k="adm-regular") }}</option>
+            <option value="leader"  {% if profile.trust_level == "leader"  %}selected{% endif %}>{{ t(k="adm-leader") }}</option>
           </select>
           <button class="btn btn-sm btn-primary" type="button"
-                  data-admin-action="set-trust-level" data-user-id="{{ profile.id }}">Update Trust Level</button>
+                  data-admin-action="set-trust-level" data-user-id="{{ profile.id }}">{{ t(k="adm-update-trust-level") }}</button>
         </div>
         <div class="form-text mt-2">
-          Overrides the automatic trust calculation. Only use when promoting a Leader or manually correcting a level.
+          {{ t(k="adm-overrides-the-automatic-trust-calculation-only") }}
         </div>
       </div>
     </div>
@@ -168,12 +168,12 @@
     {# Email verification card (only if not yet verified) #}
     {% if not profile.email_verified %}
     <div class="card mb-3 border-warning">
-      <div class="card-header fw-semibold text-warning-emphasis bg-warning-subtle">Email Not Verified</div>
+      <div class="card-header fw-semibold text-warning-emphasis bg-warning-subtle">{{ t(k="adm-email-not-verified") }}</div>
       <div class="card-body">
-        <p class="text-muted small mb-2">This user has not verified their email address. You can manually verify it on their behalf.</p>
+        <p class="text-muted small mb-2">{{ t(k="adm-this-user-has-not-verified-their") }}</p>
         <button class="btn btn-sm btn-warning" type="button"
                 data-admin-action="verify-email" data-user-id="{{ profile.id }}">
-          <i class="fa-solid fa-circle-check me-1"></i>Mark Email as Verified
+          <i class="fa-solid fa-circle-check me-1"></i>{{ t(k="adm-mark-email-as-verified") }}
         </button>
       </div>
     </div>
@@ -181,54 +181,59 @@
 
     {# Roles card #}
     <div class="card mb-3">
-      <div class="card-header fw-semibold">Roles</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-roles") }}</div>
       <div class="card-body">
         <div class="d-flex flex-wrap gap-2 mb-3">
           {% for role in profile.roles %}
             <span class="badge d-flex align-items-center gap-1"
                   style="background-color:{{ role.color | default(value="#6c757d") }}">
               {{ role.name }}
-              <button type="button" class="btn-close btn-close-white" style="font-size:0.5rem;" aria-label="Remove"
+              <button type="button" class="btn-close btn-close-white" style="font-size:0.5rem;" aria-label="{{ t(k='adm-remove') }}"
                       data-admin-action="revoke-role"
                       data-user-id="{{ profile.id }}"
                       data-role-id="{{ role.id }}"
                       data-role-name="{{ role.name | escape }}"></button>
             </span>
           {% else %}
-            <span class="text-muted small">No roles assigned.</span>
+            <span class="text-muted small">{{ t(k="adm-no-roles-assigned") }}</span>
           {% endfor %}
         </div>
         <div class="d-flex gap-2">
+          {% set assigned_role_ids = profile.roles | map(attribute="id") %}
           <select id="role-select" class="form-select form-select-sm" style="max-width:200px">
-            <option value="" disabled selected>— Select a role —</option>
+            <option value="" disabled selected>{{ t(k="adm-select-a-role") }}</option>
             {% for role in all_roles %}
-              <option value="{{ role.id }}">{{ role.name }}</option>
+              {% if role.id in assigned_role_ids %}
+                <option value="{{ role.id }}" disabled>{{ role.name }} — {{ t(k="adm-role-already-assigned") }}</option>
+              {% else %}
+                <option value="{{ role.id }}">{{ role.name }}</option>
+              {% endif %}
             {% endfor %}
           </select>
           <button class="btn btn-sm btn-primary" type="button"
-                  data-admin-action="assign-role-by-id" data-user-id="{{ profile.id }}">Assign Role</button>
+                  data-admin-action="assign-role-by-id" data-user-id="{{ profile.id }}">{{ t(k="adm-assign-role") }}</button>
         </div>
       </div>
     </div>
 
     {# Moderation card #}
     <div class="card">
-      <div class="card-header fw-semibold">Moderation</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-moderation") }}</div>
       <div class="card-body">
         {% if profile.is_banned %}
           {% if profile.ban_reason %}
             <div class="alert alert-danger py-2 small mb-3">
-              <strong>Ban reason:</strong> {{ profile.ban_reason }}
+              <strong>{{ t(k="adm-ban-reason") }}</strong> {{ profile.ban_reason }}
               {% if profile.banned_until %}
-                <br><strong>Until:</strong> <time data-rel datetime="{{ profile.banned_until }}">{{ profile.banned_until | date(format="%b %d, %Y %H:%M") }}</time>
+                <br><strong>{{ t(k="adm-until") }}</strong> <time data-rel datetime="{{ profile.banned_until }}">{{ profile.banned_until | localdate(style="datetime") }}</time>
               {% else %}
-                <br><strong>Duration:</strong> Permanent
+                <br><strong>{{ t(k="adm-duration") }}</strong> Permanent
               {% endif %}
             </div>
           {% endif %}
           <button class="btn btn-success btn-sm" type="button"
                   data-admin-action="unban-user" data-user-id="{{ profile.id }}">
-            <i class="fa-solid fa-user-check me-1"></i>Unban User
+            <i class="fa-solid fa-user-check me-1"></i>{{ t(k="adm-unban-user") }}
           </button>
         {% else %}
           <form id="ban-form"
@@ -236,24 +241,24 @@
                 data-user-id="{{ profile.id }}"
                 data-username="{{ profile.username | escape }}">
             <button type="button" class="btn btn-danger btn-sm" @click="showForm = !showForm">
-              <i class="fa-solid fa-ban me-1"></i>Ban User
+              <i class="fa-solid fa-ban me-1"></i>{{ t(k="adm-ban-user") }}
             </button>
             <div x-show="showForm" class="mt-3">
               <div class="mb-2">
-                <label class="form-label small">Reason</label>
-                <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason for ban" maxlength="500">
+                <label class="form-label small">{{ t(k="adm-reason") }}</label>
+                <input type="text" name="reason" class="form-control form-control-sm" placeholder="{{ t(k='adm-reason-for-ban') }}" maxlength="500">
               </div>
               <div class="mb-2">
                 <label class="form-label small">
-                  Duration
-                  <span class="text-muted fw-normal">(leave empty for permanent)</span>
+                  {{ t(k="adm-duration-2") }}
+                  <span class="text-muted fw-normal">{{ t(k="adm-leave-empty-for-permanent") }}</span>
                 </label>
                 <input type="datetime-local" name="banned_until" class="form-control form-control-sm">
               </div>
               <div id="ban-feedback" class="d-none mb-2"></div>
               <button type="button" class="btn btn-danger btn-sm"
                       data-admin-action="confirm-ban">
-                <i class="fa-solid fa-ban me-1"></i>Confirm Ban
+                <i class="fa-solid fa-ban me-1"></i>{{ t(k="adm-confirm-ban") }}
               </button>
             </div>
           </form>

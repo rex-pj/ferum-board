@@ -11,6 +11,7 @@ use sea_orm::sea_query::{Alias, CaseStatement, Expr, Func, Order, PostgresQueryB
 use crate::entities::{roles, user_avatars, user_covers, user_muted_categories, user_preferences, user_roles, user_watched_categories, users};
 use ferum_application::shared::AppError;
 use ferum_domain::models::user::{TrustLevel, User, UserPreferences};
+use ferum_domain::Locale;
 use ferum_domain::repositories::user_repository::{NewUser, UpdateUser, UserRepository};
 
 use crate::observability::slow_query_threshold_ms;
@@ -454,11 +455,26 @@ impl UserRepository for PgUserRepository {
                 .all(&self.db),
         )?;
 
-        let (theme, font_size, layout, email_notifications) = match prefs_row {
-            Some(m) => (m.theme, m.font_size, m.layout, m.email_notifications),
+        let (theme, font_size, layout, email_notifications, locale) = match prefs_row {
+            Some(m) => (
+                m.theme,
+                m.font_size,
+                m.layout,
+                m.email_notifications,
+                // A tag that no longer parses — a locale removed from the roster,
+                // or a hand-edited row — reads as "never chosen" rather than
+                // failing the whole preferences load.
+                m.locale.as_deref().and_then(Locale::parse),
+            ),
             None => {
                 let d = UserPreferences::default();
-                (d.theme, d.font_size, d.layout, d.email_notifications)
+                (
+                    d.theme,
+                    d.font_size,
+                    d.layout,
+                    d.email_notifications,
+                    d.locale,
+                )
             }
         };
 
@@ -470,6 +486,7 @@ impl UserRepository for PgUserRepository {
             email_notifications,
             muted_categories: muted_rows.into_iter().map(|m| m.category_id).collect(),
             watched_categories: watched_rows.into_iter().map(|m| m.category_id).collect(),
+            locale,
         })
     }
 
@@ -482,6 +499,7 @@ impl UserRepository for PgUserRepository {
             email_notifications,
             muted_categories,
             watched_categories,
+            locale,
         } = prefs;
 
         let txn = self.db.begin().await?;
@@ -492,6 +510,7 @@ impl UserRepository for PgUserRepository {
             font_size: Set(font_size),
             layout: Set(layout),
             email_notifications: Set(email_notifications),
+            locale: Set(locale.map(|l| l.to_string())),
         })
         .on_conflict(
             OnConflict::column(user_preferences::Column::UserId)
@@ -500,6 +519,7 @@ impl UserRepository for PgUserRepository {
                     user_preferences::Column::FontSize,
                     user_preferences::Column::Layout,
                     user_preferences::Column::EmailNotifications,
+                    user_preferences::Column::Locale,
                 ])
                 .to_owned(),
         )

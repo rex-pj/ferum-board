@@ -14,14 +14,14 @@
           <i class="fa-solid fa-magnifying-glass text-muted" style="font-size:.75rem"></i>
         </span>
         <input type="search" name="q" class="form-control border-start-0 ps-0"
-               placeholder="Search by username or email…" value="{% if q %}{{ q }}{% endif %}"
+               placeholder="{{ t(k='adm-search-by-username-or-email') }}" value="{% if q %}{{ q }}{% endif %}"
                autocomplete="off">
       </div>
       <button type="submit" class="btn btn-sm btn-outline-success">
-        <i class="fa-solid fa-magnifying-glass me-1"></i>Search
+        <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="adm-search") }}
       </button>
       {% if q %}
-        <a href="/mod/users" class="btn btn-sm btn-outline-secondary" title="Clear">
+        <a href="/mod/users" class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-clear') }}">
           <i class="fa-solid fa-xmark"></i>
         </a>
       {% endif %}
@@ -33,9 +33,9 @@
     <table class="table table-hover align-middle mb-0">
       <thead class="table-active">
         <tr>
-          <th>User</th>
-          <th style="width:20%">Access</th>
-          <th style="width:8%">Status</th>
+          <th>{{ t(k="adm-user") }}</th>
+          <th style="width:20%">{{ t(k="adm-access") }}</th>
+          <th style="width:8%">{{ t(k="adm-status") }}</th>
           <th style="width:16%"></th>
         </tr>
       </thead>
@@ -57,15 +57,15 @@
           <td>
             <div class="d-flex flex-wrap align-items-center gap-1">
               {% if u.trust_level == "leader" %}
-                <i class="fa-solid fa-crown text-warning" title="Leader" aria-label="Leader"></i>
+                <i class="fa-solid fa-crown text-warning" title="{{ t(k='adm-leader') }}" aria-label="{{ t(k='adm-leader') }}"></i>
               {% elif u.trust_level == "regular" %}
-                <i class="fa-solid fa-star text-info" title="Regular" aria-label="Regular"></i>
+                <i class="fa-solid fa-star text-info" title="{{ t(k='adm-regular') }}" aria-label="{{ t(k='adm-regular') }}"></i>
               {% elif u.trust_level == "member" %}
-                <i class="fa-solid fa-circle-check text-success" title="Member" aria-label="Member"></i>
+                <i class="fa-solid fa-circle-check text-success" title="{{ t(k='adm-member') }}" aria-label="{{ t(k='adm-member') }}"></i>
               {% elif u.trust_level == "basic" %}
-                <i class="fa-solid fa-circle text-secondary" title="Basic" aria-label="Basic"></i>
+                <i class="fa-solid fa-circle text-secondary" title="{{ t(k='adm-basic') }}" aria-label="{{ t(k='adm-basic') }}"></i>
               {% else %}
-                <i class="fa-regular fa-circle text-secondary" title="New" aria-label="New"></i>
+                <i class="fa-regular fa-circle text-secondary" title="{{ t(k='adm-new') }}" aria-label="{{ t(k='adm-new') }}"></i>
               {% endif %}
               {% for role in u.roles %}
                 {% if role.color %}
@@ -80,9 +80,9 @@
           {# Ban status #}
           <td>
             {% if u.is_banned %}
-              <span class="badge bg-danger">Banned</span>
+              <span class="badge bg-danger">{{ t(k="adm-banned") }}</span>
             {% else %}
-              <span class="badge bg-success">Active</span>
+              <span class="badge bg-success">{{ t(k="adm-active") }}</span>
             {% endif %}
           </td>
 
@@ -90,35 +90,35 @@
           <td>
             <div class="d-flex flex-wrap gap-1 align-items-start">
               <a href="/u/{{ u.username }}" target="_blank"
-                 class="btn btn-sm btn-outline-secondary" title="View profile">
+                 class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-view-profile') }}">
                 <i class="fa-solid fa-arrow-up-right-from-square"></i>
               </a>
 
               {# Warn #}
               <div x-data="{ open: false }" class="position-relative">
                 <button type="button" class="btn btn-sm btn-outline-warning"
-                        @click="open = !open" title="Warn user">
-                  <i class="fa-solid fa-triangle-exclamation me-1"></i>Warn
+                        @click="open = !open" title="{{ t(k='adm-warn-user') }}">
+                  <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ t(k="adm-warn") }}
                 </button>
                 <div x-show="open" x-cloak
                      class="p-3 border rounded shadow-sm bg-body position-absolute z-3 mt-1"
                      style="min-width:260px;top:100%;left:0">
                   <div class="small fw-semibold mb-2">
                     <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>
-                    Warn <strong>{{ u.username }}</strong>
+                    {{ t(k="adm-warn") }} <strong>{{ u.username }}</strong>
                   </div>
                   <div id="warn-feedback-{{ u.id }}" class="d-none mb-2"></div>
                   <textarea class="form-control form-control-sm mb-2" rows="2" maxlength="500"
-                            id="warn-reason-{{ u.id }}" placeholder="Reason for warning…"></textarea>
+                            id="warn-reason-{{ u.id }}" placeholder="{{ t(k='adm-reason-for-warning') }}"></textarea>
                   <div class="d-flex gap-2">
                     <button class="btn btn-warning btn-sm"
                             data-mod-action="warn-user"
                             data-user-id="{{ u.id }}"
                             data-username="{{ u.username }}">
-                      <i class="fa-solid fa-triangle-exclamation me-1"></i>Issue Warning
+                      <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ t(k="adm-issue-warning") }}
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary"
-                            @click="open = false">Cancel</button>
+                            @click="open = false">{{ t(k="adm-cancel") }}</button>
                   </div>
                 </div>
               </div>
@@ -126,31 +126,31 @@
               {# Temp ban #}
               <div x-data="{ open: false }" class="position-relative">
                 <button type="button" class="btn btn-sm btn-outline-danger"
-                        @click="open = !open" title="Temp ban">
-                  <i class="fa-solid fa-ban me-1"></i>Ban
+                        @click="open = !open" title="{{ t(k='adm-temp-ban') }}">
+                  <i class="fa-solid fa-ban me-1"></i>{{ t(k="adm-ban") }}
                 </button>
                 <div x-show="open" x-cloak
                      class="p-3 border rounded shadow-sm bg-body position-absolute z-3 mt-1"
                      style="min-width:280px;top:100%;left:0">
                   <div class="small fw-semibold mb-2">
                     <i class="fa-solid fa-ban text-danger me-1"></i>
-                    Temp ban <strong>{{ u.username }}</strong>
+                    {{ t(k="adm-temp-ban") }} <strong>{{ u.username }}</strong>
                   </div>
                   <div id="ban-feedback-{{ u.id }}" class="d-none mb-2"></div>
                   <textarea class="form-control form-control-sm mb-2" rows="2" maxlength="500"
-                            id="ban-reason-{{ u.id }}" placeholder="Ban reason…"></textarea>
+                            id="ban-reason-{{ u.id }}" placeholder="{{ t(k='adm-ban-reason-2') }}"></textarea>
                   <input type="datetime-local" class="form-control form-control-sm mb-1"
                          id="ban-until-{{ u.id }}">
-                  <div class="form-text mb-2" style="font-size:.7rem">Time is interpreted as UTC.</div>
+                  <div class="form-text mb-2" style="font-size:.7rem">{{ t(k="adm-time-is-interpreted-as-utc") }}</div>
                   <div class="d-flex gap-2">
                     <button class="btn btn-danger btn-sm"
                             data-mod-action="ban-user"
                             data-user-id="{{ u.id }}"
                             data-username="{{ u.username }}">
-                      <i class="fa-solid fa-ban me-1"></i>Ban
+                      <i class="fa-solid fa-ban me-1"></i>{{ t(k="adm-ban") }}
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary"
-                            @click="open = false">Cancel</button>
+                            @click="open = false">{{ t(k="adm-cancel") }}</button>
                   </div>
                 </div>
               </div>
@@ -168,11 +168,11 @@
   <div class="text-center py-5 text-secondary">
     <i class="fa-solid fa-users fa-3x mb-3 d-block opacity-25"></i>
     {% if q %}
-      <div class="fw-semibold mb-1">No users found</div>
-      <div class="small">No results for "<strong>{{ q }}</strong>".</div>
+      <div class="fw-semibold mb-1">{{ t(k="adm-no-users-found") }}</div>
+      <div class="small">{{ t(k="adm-no-results-for") }}<strong>{{ q }}</strong>".</div>
     {% else %}
-      <div class="fw-semibold mb-1">Search for a user</div>
-      <div class="small">Enter a username or email above to look up and moderate a user.</div>
+      <div class="fw-semibold mb-1">{{ t(k="adm-search-for-a-user") }}</div>
+      <div class="small">{{ t(k="adm-enter-a-username-or-email-above") }}</div>
     {% endif %}
   </div>
   {% endif %}

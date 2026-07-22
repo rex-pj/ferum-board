@@ -47,7 +47,7 @@
   document.getElementById('profile-form')?.addEventListener('submit', async function (e) {
     e.preventDefault();
     if (!validateWebsite()) {
-      showFeedback('profile-feedback', 'danger', 'Please enter a valid URL starting with http:// or https://');
+      showFeedback('profile-feedback', 'danger', Ferum.t('js-invalid-website-url'));
       return;
     }
     setSpinner('profile-submit-btn', 'profile-spinner', true);
@@ -57,12 +57,12 @@
         bio:          document.getElementById('bio').value          || null,
         website:      document.getElementById('website').value      || null,
       });
-      if (res.ok) showFeedback('profile-feedback', 'success', 'Profile saved.');
+      if (res.ok) showFeedback('profile-feedback', 'success', Ferum.t('js-profile-saved'));
       else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || 'Failed to save.');
+        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-failed-to-save'));
       }
-    } catch (_) { showFeedback('profile-feedback', 'danger', 'Network error.'); }
+    } catch (_) { showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error')); }
     setSpinner('profile-submit-btn', 'profile-spinner', false);
   });
 
@@ -79,12 +79,12 @@
     var file = input.files && input.files[0];
     if (!file) return;
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      showFeedback('profile-feedback', 'danger', 'Avatar must be a JPEG, PNG, GIF, or WebP image.');
+      showFeedback('profile-feedback', 'danger', Ferum.t('js-avatar-invalid-type'));
       input.value = '';
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      showFeedback('profile-feedback', 'danger', 'Avatar must be under 5 MB.');
+      showFeedback('profile-feedback', 'danger', Ferum.t('js-avatar-too-large'));
       input.value = '';
       return;
     }
@@ -94,15 +94,15 @@
     try {
       var res = await FerumApi.users.uploadAvatar(fd);
       if (res.ok) {
-        showFeedback('profile-feedback', 'success', 'Avatar updated.');
+        showFeedback('profile-feedback', 'success', Ferum.t('js-avatar-updated'));
         setTimeout(function () { location.reload(); }, 1200);
       } else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || 'Upload failed.');
+        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-upload-failed'));
         setUploadStatus('avatar-upload-status', '');
       }
     } catch (_) {
-      showFeedback('profile-feedback', 'danger', 'Network error.');
+      showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error'));
       setUploadStatus('avatar-upload-status', '');
     }
     input.value = '';
@@ -112,22 +112,22 @@
     try {
       var res = await FerumApi.users.removeAvatar();
       if (res.ok) {
-        showFeedback('profile-feedback', 'success', 'Avatar removed.');
+        showFeedback('profile-feedback', 'success', Ferum.t('js-avatar-removed'));
         setTimeout(function () { location.reload(); }, 1200);
-      } else showFeedback('profile-feedback', 'danger', 'Failed to remove avatar.');
-    } catch (_) { showFeedback('profile-feedback', 'danger', 'Network error.'); }
+      } else showFeedback('profile-feedback', 'danger', Ferum.t('js-failed-remove-avatar'));
+    } catch (_) { showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error')); }
   }
 
   async function uploadCover(input) {
     var file = input.files && input.files[0];
     if (!file) return;
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      showFeedback('profile-feedback', 'danger', 'Cover must be a JPEG, PNG, GIF, or WebP image.');
+      showFeedback('profile-feedback', 'danger', Ferum.t('js-cover-invalid-type'));
       input.value = '';
       return;
     }
     if (file.size > 8 * 1024 * 1024) {
-      showFeedback('profile-feedback', 'danger', 'Cover image must be under 8 MB.');
+      showFeedback('profile-feedback', 'danger', Ferum.t('js-cover-too-large'));
       input.value = '';
       return;
     }
@@ -137,15 +137,15 @@
     try {
       var res = await FerumApi.users.uploadCover(fd);
       if (res.ok) {
-        showFeedback('profile-feedback', 'success', 'Cover updated.');
+        showFeedback('profile-feedback', 'success', Ferum.t('js-cover-updated'));
         setTimeout(function () { location.reload(); }, 1200);
       } else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || 'Upload failed.');
+        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-upload-failed'));
         setUploadStatus('cover-upload-status', '');
       }
     } catch (_) {
-      showFeedback('profile-feedback', 'danger', 'Network error.');
+      showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error'));
       setUploadStatus('cover-upload-status', '');
     }
     input.value = '';
@@ -155,10 +155,10 @@
     try {
       var res = await FerumApi.users.removeCover();
       if (res.ok) {
-        showFeedback('profile-feedback', 'success', 'Cover removed.');
+        showFeedback('profile-feedback', 'success', Ferum.t('js-cover-removed'));
         setTimeout(function () { location.reload(); }, 1200);
-      } else showFeedback('profile-feedback', 'danger', 'Failed to remove cover.');
-    } catch (_) { showFeedback('profile-feedback', 'danger', 'Network error.'); }
+      } else showFeedback('profile-feedback', 'danger', Ferum.t('js-failed-remove-cover'));
+    } catch (_) { showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error')); }
   }
 
   // ── Password form ─────────────────────────────────────────────────
@@ -174,11 +174,11 @@
     var submitBtn = document.getElementById('pw-submit-btn');
 
     if (np.length > 0 && !passwordIsStrong(np)) {
-      if (mismatch) mismatch.textContent = 'Must include a digit and a special character.';
+      if (mismatch) mismatch.textContent = Ferum.t('js-password-missing-digit-special');
       cpEl.classList.add('is-invalid'); cpEl.classList.remove('is-valid');
       if (submitBtn) submitBtn.disabled = true;
     } else if (cp.length > 0 && np !== cp) {
-      if (mismatch) mismatch.textContent = 'Passwords do not match.';
+      if (mismatch) mismatch.textContent = Ferum.t('js-passwords-do-not-match');
       cpEl.classList.add('is-invalid'); cpEl.classList.remove('is-valid');
       if (submitBtn) submitBtn.disabled = true;
     } else if (cp.length >= 8 && np === cp && passwordIsStrong(np)) {
@@ -204,14 +204,14 @@
         document.getElementById('new_password').value,
       );
       if (res.ok) {
-        showFeedback('password-feedback', 'success', 'Password changed successfully.');
+        showFeedback('password-feedback', 'success', Ferum.t('js-password-changed'));
         document.getElementById('password-form').reset();
         document.getElementById('confirm_password')?.classList.remove('is-valid');
       } else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('password-feedback', 'danger', (b.error && b.error.message) || 'Failed to change password.');
+        showFeedback('password-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-failed-change-password'));
       }
-    } catch (_) { showFeedback('password-feedback', 'danger', 'Network error.'); }
+    } catch (_) { showFeedback('password-feedback', 'danger', Ferum.t('js-network-error')); }
     setSpinner('pw-submit-btn', 'pw-spinner', false);
   });
 
@@ -248,11 +248,29 @@
     var theme    = document.getElementById('theme-val').value;
     var fontSize = document.getElementById('font-size-val').value;
     var layout   = document.getElementById('layout-val').value;
+    // The language <select> only exists when the site has more than one locale.
+    var localeEl = document.getElementById('locale-val');
+    // Empty string means "no explicit choice"; send null so the server clears the
+    // stored preference rather than pinning the user to the default language.
+    var locale   = localeEl ? (localeEl.value || null) : undefined;
+    // Normalize both sides to a string: `locale` is null for "no choice" while
+    // the attribute is "", and a raw !== would report a change on every save.
+    var localeChanged =
+      localeEl && (locale || '') !== (localeEl.getAttribute('data-initial') || '');
+
     setSpinner('prefs-submit-btn', 'prefs-spinner', true);
     try {
-      var res = await FerumApi.users.updatePreferences({ theme: theme, font_size: fontSize, layout: layout });
+      var payload = { theme: theme, font_size: fontSize, layout: layout };
+      if (locale !== undefined) payload.locale = locale;
+      var res = await FerumApi.users.updatePreferences(payload);
       if (res.ok) {
-        showFeedback('prefs-feedback', 'success', 'Preferences saved.');
+        showFeedback('prefs-feedback', 'success', Ferum.t('js-preferences-saved'));
+        // Theme/font/layout are applied live below, but language is baked into
+        // the server-rendered HTML — the only way to show it is to reload.
+        if (localeChanged) {
+          window.location.reload();
+          return;
+        }
         try {
           localStorage.setItem('ferum-theme', theme);
           localStorage.setItem('ferum-font-size', fontSize);
@@ -265,9 +283,9 @@
         if (layout && layout !== 'comfortable') document.documentElement.setAttribute('data-layout', layout);
         else document.documentElement.removeAttribute('data-layout');
       } else {
-        showFeedback('prefs-feedback', 'danger', 'Failed to save preferences.');
+        showFeedback('prefs-feedback', 'danger', Ferum.t('js-failed-save-preferences'));
       }
-    } catch (_) { showFeedback('prefs-feedback', 'danger', 'Network error.'); }
+    } catch (_) { showFeedback('prefs-feedback', 'danger', Ferum.t('js-network-error')); }
     setSpinner('prefs-submit-btn', 'prefs-spinner', false);
   });
 
@@ -311,14 +329,14 @@
         this.removing = this.removing.concat([id]);
         try {
           var pr = await FerumApi.users.getPreferences();
-          if (!pr.ok) { Ferum.toast('Failed to unwatch category. Please try again.', true); return; }
+          if (!pr.ok) { Ferum.toast(Ferum.t('js-failed-unwatch'), true); return; }
           var prefs = (await pr.json()).data || {};
           var res   = await FerumApi.users.updatePreferences(Object.assign({}, prefs, {
             watched_categories: (prefs.watched_categories || []).filter(function (x) { return x !== id; }),
           }));
           if (res.ok) this.watched = this.watched.filter(function (c) { return c.id !== id; });
-          else Ferum.toast('Failed to unwatch category. Please try again.', true);
-        } catch (_) { Ferum.toast('Network error. Please try again.', true); }
+          else Ferum.toast(Ferum.t('js-failed-unwatch'), true);
+        } catch (_) { Ferum.toast(Ferum.t('js-network-error'), true); }
         this.removing = this.removing.filter(function (x) { return x !== id; });
       },
       async unmute(id) {
@@ -326,14 +344,14 @@
         this.removing = this.removing.concat([id]);
         try {
           var pr = await FerumApi.users.getPreferences();
-          if (!pr.ok) { Ferum.toast('Failed to unmute category. Please try again.', true); return; }
+          if (!pr.ok) { Ferum.toast(Ferum.t('js-failed-unmute'), true); return; }
           var prefs = (await pr.json()).data || {};
           var res   = await FerumApi.users.updatePreferences(Object.assign({}, prefs, {
             muted_categories: (prefs.muted_categories || []).filter(function (x) { return x !== id; }),
           }));
           if (res.ok) this.muted = this.muted.filter(function (c) { return c.id !== id; });
-          else Ferum.toast('Failed to unmute category. Please try again.', true);
-        } catch (_) { Ferum.toast('Network error. Please try again.', true); }
+          else Ferum.toast(Ferum.t('js-failed-unmute'), true);
+        } catch (_) { Ferum.toast(Ferum.t('js-network-error'), true); }
         this.removing = this.removing.filter(function (x) { return x !== id; });
       },
     };

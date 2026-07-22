@@ -42,6 +42,26 @@ pub struct ProductListItem {
     pub avg_overall: Option<Decimal>,
 }
 
+/// What a product would take down with it. Gathered before a hard delete so the
+/// caller can refuse (or warn) instead of silently orphaning review threads:
+/// `threads.product_id` is `ON DELETE SET NULL`, so a delete leaves every review
+/// intact but pointing at nothing.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ProductDependents {
+    /// Review threads linked to this product — the blocking dependency.
+    pub reviews: u64,
+    pub media: u64,
+    pub materials: u64,
+}
+
+impl ProductDependents {
+    /// Reviews are the only dependency that carries information a cascade would
+    /// destroy; media and material links are safe to drop with the product.
+    pub fn blocks_hard_delete(&self) -> bool {
+        self.reviews > 0
+    }
+}
+
 /// Partial update. Outer `None` = leave unchanged. For nullable columns,
 /// `Some(None)` clears the value and `Some(Some(v))` sets it.
 #[derive(Debug, Default, Clone)]
@@ -77,6 +97,10 @@ pub trait ProductRepository: Send + Sync {
 
     async fn update(&self, id: Uuid, patch: UpdateProduct) -> Result<Product, AppError>;
     async fn delete(&self, id: Uuid) -> Result<(), AppError>;
+
+    /// Count the rows that reference this product, so a delete can be refused
+    /// before it orphans review threads.
+    async fn count_dependents(&self, product_id: Uuid) -> Result<ProductDependents, AppError>;
 
     /// Replace the product's material links with exactly `material_ids`.
     async fn set_materials(&self, product_id: Uuid, material_ids: &[Uuid])

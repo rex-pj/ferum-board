@@ -15,23 +15,23 @@
 <ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-general"
-            type="button" role="tab">General</button>
+            type="button" role="tab">{{ t(k="adm-general") }}</button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-email"
-            type="button" role="tab">Email</button>
+            type="button" role="tab">{{ t(k="adm-email") }}</button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-content-policy"
-            type="button" role="tab">Content Policy</button>
+            type="button" role="tab">{{ t(k="adm-content-policy") }}</button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-security"
-            type="button" role="tab">Security</button>
+            type="button" role="tab">{{ t(k="adm-security") }}</button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-webhooks"
-            type="button" role="tab">Webhooks</button>
+            type="button" role="tab">{{ t(k="adm-webhooks") }}</button>
   </li>
 </ul>
 
@@ -46,30 +46,30 @@
       {# ── Branding ─────────────────────────────────────────────── #}
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-semibold">Branding</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-branding") }}</div>
           <div class="card-body">
             <div class="row g-4">
 
               {# Logo #}
               <div class="col-md-6">
-                <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">Logo</h6>
+                <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">{{ t(k="adm-logo") }}</h6>
 
                 <div class="d-flex gap-3 align-items-start mb-3">
                   <div id="logo-preview-wrap"
                        class="border rounded d-flex align-items-center justify-content-center bg-body-secondary flex-shrink-0"
                        style="width:72px;height:72px;overflow:hidden">
                     {% if config.logo_url %}
-                      <img id="logo-preview" src="{{ config.logo_url }}" alt="Logo"
+                      <img id="logo-preview" src="{{ config.logo_url }}" alt="{{ t(k='adm-logo') }}"
                            style="max-width:100%;max-height:100%;object-fit:contain">
                     {% else %}
                       <i class="fa-solid fa-image text-muted fa-xl"></i>
                     {% endif %}
                   </div>
                   <div class="flex-grow-1 min-width-0">
-                    <div class="text-muted small mb-2">Current</div>
+                    <div class="text-muted small mb-2">{{ t(k="adm-current") }}</div>
                     <div class="d-flex gap-2 flex-wrap mb-2">
                       <label class="btn btn-sm btn-outline-secondary mb-0" for="logo-file-input">
-                        <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>Choose file
+                        <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>{{ t(k="adm-choose-file") }}
                       </label>
                       <input type="file" id="logo-file-input" accept="image/*" class="d-none"
                              data-branding-upload="logo">
@@ -81,41 +81,41 @@
                       {% endif %}
                     </div>
                     <div class="text-muted" style="font-size:.72rem">
-                      Accepted: JPEG, PNG, WebP, GIF &middot; Max 2 MB
+                      {{ t(k="adm-accepted-jpeg-png-webp-gif-max") }}
                     </div>
                     <div id="logo-status" class="small mt-1"></div>
                   </div>
                 </div>
 
                 <div>
-                  <label class="form-label fw-semibold small" for="cfg-logo_url">Logo URL</label>
+                  <label class="form-label fw-semibold small" for="cfg-logo_url">{{ t(k="adm-logo-url") }}</label>
                   <input type="text" id="cfg-logo_url" class="form-control form-control-sm"
                          value="{{ config.logo_url | default(value='') }}"
                          placeholder="https://example.com/logo.png or /files/…">
-                  <div class="form-text">Set automatically on upload, or enter an external URL.</div>
+                  <div class="form-text">{{ t(k="adm-set-automatically-on-upload-or-enter") }}</div>
                 </div>
               </div>
 
               {# Favicon #}
               <div class="col-md-6">
-                <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">Favicon</h6>
+                <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">{{ t(k="adm-favicon") }}</h6>
 
                 <div class="d-flex gap-3 align-items-start mb-3">
                   <div id="favicon-preview-wrap"
                        class="border rounded d-flex align-items-center justify-content-center bg-body-secondary flex-shrink-0"
                        style="width:48px;height:48px;overflow:hidden">
                     {% if config.favicon_url %}
-                      <img id="favicon-preview" src="{{ config.favicon_url }}" alt="Favicon"
+                      <img id="favicon-preview" src="{{ config.favicon_url }}" alt="{{ t(k='adm-favicon') }}"
                            style="max-width:100%;max-height:100%;object-fit:contain">
                     {% else %}
                       <i class="fa-solid fa-star text-muted"></i>
                     {% endif %}
                   </div>
                   <div class="flex-grow-1 min-width-0">
-                    <div class="text-muted small mb-2">Current</div>
+                    <div class="text-muted small mb-2">{{ t(k="adm-current") }}</div>
                     <div class="d-flex gap-2 flex-wrap mb-2">
                       <label class="btn btn-sm btn-outline-secondary mb-0" for="favicon-file-input">
-                        <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>Choose file
+                        <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>{{ t(k="adm-choose-file") }}
                       </label>
                       <input type="file" id="favicon-file-input" accept="image/*,.ico" class="d-none"
                              data-branding-upload="favicon">
@@ -127,7 +127,7 @@
                       {% endif %}
                     </div>
                     <div class="text-muted" style="font-size:.72rem">
-                      Accepted: ICO, SVG, PNG, GIF, JPEG &middot; Max 512 KB
+                      {{ t(k="adm-accepted-ico-svg-png-gif-jpeg") }}
                     </div>
                     <div id="favicon-status" class="small mt-1"></div>
                   </div>
@@ -142,32 +142,32 @@
       {# ── Site Identity ─────────────────────────────────────────── #}
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-semibold">Site Identity</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-site-identity") }}</div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-md-5">
-                <label class="form-label" for="cfg-site_name">Site Name</label>
+                <label class="form-label" for="cfg-site_name">{{ t(k="adm-site-name") }}</label>
                 <input type="text" id="cfg-site_name" class="form-control"
                        value="{{ config.site_name | default(value='') }}" required maxlength="100">
               </div>
               <div class="col-md-7">
-                <label class="form-label" for="cfg-site_slogan">Slogan</label>
+                <label class="form-label" for="cfg-site_slogan">{{ t(k="adm-slogan") }}</label>
                 <input type="text" id="cfg-site_slogan" class="form-control"
                        value="{{ config.site_slogan | default(value='') }}"
-                       placeholder="Your space, your rules" maxlength="100">
-                <div class="form-text">Short text shown beside the logo in the header.</div>
+                       placeholder="{{ t(k='adm-your-space-your-rules') }}" maxlength="100">
+                <div class="form-text">{{ t(k="adm-short-text-shown-beside-the-logo") }}</div>
               </div>
               <div class="col-md-8">
-                <label class="form-label" for="cfg-site_tagline">Tagline</label>
+                <label class="form-label" for="cfg-site_tagline">{{ t(k="adm-tagline") }}</label>
                 <input type="text" id="cfg-site_tagline" class="form-control"
                        value="{{ config.site_tagline | default(value='') }}"
-                       placeholder="A modern self-hosted forum" maxlength="255">
-                <div class="form-text">Shown in page meta descriptions (SEO).</div>
+                       placeholder="{{ t(k='adm-a-modern-self-hosted-forum') }}" maxlength="255">
+                <div class="form-text">{{ t(k="adm-shown-in-page-meta-descriptions-seo") }}</div>
               </div>
               <div class="col-md-4">
-                <label class="form-label" for="cfg-primary_color_hex">Primary Color</label>
+                <label class="form-label" for="cfg-primary_color_hex">{{ t(k="adm-primary-color") }}</label>
                 <div class="input-group">
-                  <input type="color" id="cfg-primary_color" aria-label="Color picker"
+                  <input type="color" id="cfg-primary_color" aria-label="{{ t(k='adm-color-picker') }}"
                          class="form-control form-control-color flex-shrink-0"
                          style="width:42px;padding:4px 6px;"
                          value="{{ config.primary_color | default(value='#0d6efd') }}">
@@ -175,7 +175,7 @@
                          maxlength="7" placeholder="#0d6efd"
                          value="{{ config.primary_color | default(value='#0d6efd') }}">
                 </div>
-                <div class="form-text">Applied as the primary accent color across the entire site.</div>
+                <div class="form-text">{{ t(k="adm-applied-as-the-primary-accent-color") }}</div>
               </div>
             </div>
           </div>
@@ -185,18 +185,18 @@
       {# ── Registration + Post Approval ──────────────────────────── #}
       <div class="col-md-6">
         <div class="card h-100">
-          <div class="card-header fw-semibold">Registration</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-registration") }}</div>
           <div class="card-body">
             <div class="form-check form-switch mb-2">
               <input class="form-check-input" type="checkbox" role="switch"
                      id="cfg-registration_open"
                      {% if config.registration_open == "true" %}checked{% endif %}>
               <label class="form-check-label fw-semibold" for="cfg-registration_open">
-                Allow new user registration
+                {{ t(k="adm-allow-new-user-registration") }}
               </label>
             </div>
             <p class="text-muted small mb-0">
-              When disabled, the registration page returns 403 and invite links stop working.
+              {{ t(k="adm-when-disabled-the-registration-page-returns") }}
             </p>
           </div>
         </div>
@@ -204,49 +204,47 @@
 
       <div class="col-md-6">
         <div class="card h-100">
-          <div class="card-header fw-semibold">Post Approval Queue</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-post-approval-queue") }}</div>
           <div class="card-body">
             <div class="form-check form-switch mb-2">
               <input class="form-check-input" type="checkbox" role="switch"
                      id="cfg-post_approval_enabled"
                      {% if config.post_approval_enabled == "true" %}checked{% endif %}>
               <label class="form-check-label fw-semibold" for="cfg-post_approval_enabled">
-                Enable global post approval
+                {{ t(k="adm-enable-global-post-approval") }}
               </label>
             </div>
             <p class="text-muted small mb-3">
-              When enabled, posts from users below the selected trust level go to the moderator
-              queue before being published. Individual categories can also be set to
-              <em>Moderated</em> in their settings — this always requires approval regardless
-              of the global toggle.
+              {{ t(k="adm-when-enabled-posts-from-users-below") }}
+              <em>{{ t(k="adm-moderated") }}</em> {{ t(k="adm-in-their-settings-this-always-requires") }}
             </p>
             <div>
               <label class="form-label small" for="cfg-post_approval_min_trust">
-                Minimum trust level to skip queue
+                {{ t(k="adm-minimum-trust-level-to-skip-queue") }}
               </label>
               <select id="cfg-post_approval_min_trust" class="form-select form-select-sm">
                 <option value="new"
                   {% if not config.post_approval_min_trust or config.post_approval_min_trust == "new" %}selected{% endif %}>
-                  New (all users)
+                  {{ t(k="adm-new-all-users") }}
                 </option>
                 <option value="basic"
                   {% if config.post_approval_min_trust == "basic" %}selected{% endif %}>
-                  Basic
+                  {{ t(k="adm-basic") }}
                 </option>
                 <option value="member"
                   {% if config.post_approval_min_trust == "member" %}selected{% endif %}>
-                  Member
+                  {{ t(k="adm-member") }}
                 </option>
                 <option value="regular"
                   {% if config.post_approval_min_trust == "regular" %}selected{% endif %}>
-                  Regular
+                  {{ t(k="adm-regular") }}
                 </option>
                 <option value="leader"
                   {% if config.post_approval_min_trust == "leader" %}selected{% endif %}>
-                  Leader
+                  {{ t(k="adm-leader") }}
                 </option>
               </select>
-              <div class="form-text">Users at or below this level require approval.</div>
+              <div class="form-text">{{ t(k="adm-users-at-or-below-this-level") }}</div>
             </div>
           </div>
         </div>
@@ -255,13 +253,13 @@
       {# ── Content Moderation ────────────────────────────────────── #}
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-semibold">Content Moderation</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-content-moderation") }}</div>
           <div class="card-body">
-            <label class="form-label" for="cfg-keyword_blacklist">Keyword Blacklist</label>
+            <label class="form-label" for="cfg-keyword_blacklist">{{ t(k="adm-keyword-blacklist") }}</label>
             <textarea id="cfg-keyword_blacklist" class="form-control font-monospace" rows="4"
-                      placeholder="One keyword per line" maxlength="10000">{{ config.keyword_blacklist | default(value='') }}</textarea>
+                      placeholder="{{ t(k='adm-one-keyword-per-line') }}" maxlength="10000">{{ config.keyword_blacklist | default(value='') }}</textarea>
             <div class="form-text">
-              Posts containing these keywords will be flagged for moderator review.
+              {{ t(k="adm-posts-containing-these-keywords-will-be") }}
             </div>
           </div>
         </div>
@@ -271,10 +269,10 @@
 
     <div class="mt-3 d-flex align-items-center gap-3">
       <button class="btn btn-primary" type="button" data-admin-action="save-settings">
-        <i class="fa-solid fa-floppy-disk me-1"></i>Save Settings
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ t(k="adm-save-settings") }}
       </button>
       <span id="save-spinner" class="text-muted small d-none">
-        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>{{ t(k="adm-saving") }}
       </span>
     </div>
 
@@ -288,46 +286,43 @@
     <div class="alert alert-info d-flex gap-2 mb-4" role="alert">
       <i class="fa-solid fa-circle-info flex-shrink-0 mt-1"></i>
       <div>
-        SMTP changes are applied immediately for new emails. The initial values are seeded
-        from environment variables on first startup — updating them here overrides the env
-        values without requiring a server restart.
+        {{ t(k="adm-smtp-changes-are-applied-immediately-for") }}
         <br>
-        If <strong>SMTP Host</strong> is blank, email sending is disabled and new
-        registrations are auto-verified.
+        {{ t(k="adm-if") }} <strong>{{ t(k="adm-smtp-host") }}</strong> {{ t(k="adm-is-blank-email-sending-is-disabled") }}
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header fw-semibold">SMTP Configuration</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-smtp-configuration") }}</div>
       <div class="card-body">
         <div class="row g-3">
           <div class="col-md-8">
-            <label class="form-label" for="cfg-smtp_host">SMTP Host</label>
+            <label class="form-label" for="cfg-smtp_host">{{ t(k="adm-smtp-host") }}</label>
             <input type="text" id="cfg-smtp_host" class="form-control"
                    value="{{ config.smtp_host | default(value='') }}"
                    placeholder="smtp.sendgrid.net" maxlength="255">
-            <div class="form-text">Leave blank to disable email sending.</div>
+            <div class="form-text">{{ t(k="adm-leave-blank-to-disable-email-sending") }}</div>
           </div>
           <div class="col-md-4">
-            <label class="form-label" for="cfg-smtp_port">Port</label>
+            <label class="form-label" for="cfg-smtp_port">{{ t(k="adm-port") }}</label>
             <input type="number" id="cfg-smtp_port" class="form-control"
                    value="{{ config.smtp_port | default(value='587') }}"
                    min="1" max="65535" placeholder="587">
           </div>
           <div class="col-md-6">
-            <label class="form-label" for="cfg-smtp_user">Username</label>
+            <label class="form-label" for="cfg-smtp_user">{{ t(k="adm-username") }}</label>
             <input type="text" id="cfg-smtp_user" class="form-control"
                    value="{{ config.smtp_user | default(value='') }}"
-                   placeholder="apikey or noreply@example.com" maxlength="255">
+                   placeholder="{{ t(k='adm-apikey-or-noreply-example-com') }}" maxlength="255">
           </div>
           <div class="col-md-6">
-            <label class="form-label" for="cfg-smtp_pass">Password</label>
+            <label class="form-label" for="cfg-smtp_pass">{{ t(k="adm-password") }}</label>
             <input type="text" id="cfg-smtp_pass" class="form-control font-monospace"
                    value=""
                    autocomplete="off"
                    maxlength="500"
                    placeholder="{% if config.smtp_pass %}(set — enter new value to change){% else %}(not set){% endif %}">
-            <div class="form-text">Leave blank to keep the existing password.</div>
+            <div class="form-text">{{ t(k="adm-leave-blank-to-keep-the-existing") }}</div>
           </div>
         </div>
       </div>
@@ -336,10 +331,10 @@
     <div class="mt-3 d-flex align-items-center gap-3">
       <button class="btn btn-primary" type="button" data-admin-action="save-settings"
               data-settings-tab="email">
-        <i class="fa-solid fa-floppy-disk me-1"></i>Save Email Settings
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ t(k="adm-save-email-settings") }}
       </button>
       <span id="save-spinner-email" class="text-muted small d-none">
-        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>{{ t(k="adm-saving") }}
       </span>
     </div>
 
@@ -353,10 +348,10 @@
 
       <div class="col-md-6">
         <div class="card h-100">
-          <div class="card-header fw-semibold">Post Edit Window</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-post-edit-window") }}</div>
           <div class="card-body">
             <label class="form-label" for="cfg-post_edit_window_hours">
-              Hours after creation users can edit their own posts/threads
+              {{ t(k="adm-hours-after-creation-users-can-edit") }}
             </label>
             <div class="input-group" style="max-width:200px">
               <input type="number" id="cfg-post_edit_window_hours" class="form-control"
@@ -365,8 +360,7 @@
               <span class="input-group-text">hours</span>
             </div>
             <div class="form-text">
-              Set to <code>0</code> to disallow editing entirely.
-              Moderators can always edit regardless of this window.
+              {{ t(k="adm-set-to") }} <code>0</code> {{ t(k="adm-to-disallow-editing-entirely-moderators-can") }}
             </div>
           </div>
         </div>
@@ -374,10 +368,10 @@
 
       <div class="col-md-6">
         <div class="card h-100">
-          <div class="card-header fw-semibold">Forum Index</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-forum-index") }}</div>
           <div class="card-body">
             <label class="form-label" for="cfg-forum_index_threads_per_category">
-              Recent threads shown per category on the home page
+              {{ t(k="adm-recent-threads-shown-per-category-on") }}
             </label>
             <div class="input-group" style="max-width:200px">
               <input type="number" id="cfg-forum_index_threads_per_category" class="form-control"
@@ -391,12 +385,12 @@
 
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-semibold">Pagination</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-pagination") }}</div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label" for="cfg-max_posts_per_page">
-                  Max posts per page
+                  {{ t(k="adm-max-posts-per-page") }}
                 </label>
                 <div class="input-group" style="max-width:200px">
                   <input type="number" id="cfg-max_posts_per_page" class="form-control"
@@ -404,11 +398,11 @@
                          min="5" max="100">
                   <span class="input-group-text">posts</span>
                 </div>
-                <div class="form-text">Hard ceiling on the <code>per_page</code> query parameter for the post list API.</div>
+                <div class="form-text">{{ t(k="adm-hard-ceiling-on-the") }} <code>per_page</code> {{ t(k="adm-query-parameter-for-the-post-list") }}</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label" for="cfg-max_threads_per_page">
-                  Max threads per page
+                  {{ t(k="adm-max-threads-per-page") }}
                 </label>
                 <div class="input-group" style="max-width:200px">
                   <input type="number" id="cfg-max_threads_per_page" class="form-control"
@@ -416,7 +410,7 @@
                          min="5" max="100">
                   <span class="input-group-text">threads</span>
                 </div>
-                <div class="form-text">Hard ceiling on the <code>per_page</code> query parameter for all thread list APIs.</div>
+                <div class="form-text">{{ t(k="adm-hard-ceiling-on-the") }} <code>per_page</code> {{ t(k="adm-query-parameter-for-all-thread-list") }}</div>
               </div>
             </div>
           </div>
@@ -428,10 +422,10 @@
     <div class="mt-3 d-flex align-items-center gap-3">
       <button class="btn btn-primary" type="button" data-admin-action="save-settings"
               data-settings-tab="content-policy">
-        <i class="fa-solid fa-floppy-disk me-1"></i>Save Content Policy
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ t(k="adm-save-content-policy") }}
       </button>
       <span id="save-spinner-content-policy" class="text-muted small d-none">
-        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>{{ t(k="adm-saving") }}
       </span>
     </div>
 
@@ -445,12 +439,12 @@
 
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-semibold">Account Lockout</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-account-lockout") }}</div>
           <div class="card-body">
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label" for="cfg-account_lockout_attempts">
-                  Failed login attempts before lockout
+                  {{ t(k="adm-failed-login-attempts-before-lockout") }}
                 </label>
                 <div class="input-group" style="max-width:200px">
                   <input type="number" id="cfg-account_lockout_attempts" class="form-control"
@@ -461,7 +455,7 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label" for="cfg-account_lockout_duration_minutes">
-                  Lockout duration
+                  {{ t(k="adm-lockout-duration") }}
                 </label>
                 <div class="input-group" style="max-width:200px">
                   <input type="number" id="cfg-account_lockout_duration_minutes" class="form-control"
@@ -477,34 +471,33 @@
 
       <div class="col-12">
         <div class="card">
-          <div class="card-header fw-semibold">Rate Limiting</div>
+          <div class="card-header fw-semibold">{{ t(k="adm-rate-limiting") }}</div>
           <div class="card-body">
             <p class="text-muted small mb-3">
-              Changes take effect immediately — the in-memory config cache is updated on save.
-              Rate limiting must be enabled via the <code>RATE_LIMIT_ENABLED=true</code>
-              environment variable.
+              {{ t(k="adm-changes-take-effect-immediately-the-in") }} <code>{{ t(k="adm-rate-limit-enabled-true") }}</code>
+              {{ t(k="adm-environment-variable") }}
             </p>
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label" for="cfg-auth_rate_limit_per_min">
-                  Auth endpoints (login, register, password reset)
+                  {{ t(k="adm-auth-endpoints-login-register-password-reset") }}
                 </label>
                 <div class="input-group" style="max-width:220px">
                   <input type="number" id="cfg-auth_rate_limit_per_min" class="form-control"
                          value="{{ config.auth_rate_limit_per_min | default(value='10') }}"
                          min="1" max="1000">
-                  <span class="input-group-text">req / min</span>
+                  <span class="input-group-text">{{ t(k="adm-req-min") }}</span>
                 </div>
               </div>
               <div class="col-md-6">
                 <label class="form-label" for="cfg-public_write_rate_limit_per_min">
-                  Public write endpoints (create post, thread, reaction)
+                  {{ t(k="adm-public-write-endpoints-create-post-thread") }}
                 </label>
                 <div class="input-group" style="max-width:220px">
                   <input type="number" id="cfg-public_write_rate_limit_per_min" class="form-control"
                          value="{{ config.public_write_rate_limit_per_min | default(value='30') }}"
                          min="1" max="1000">
-                  <span class="input-group-text">req / min</span>
+                  <span class="input-group-text">{{ t(k="adm-req-min") }}</span>
                 </div>
               </div>
             </div>
@@ -517,10 +510,10 @@
     <div class="mt-3 d-flex align-items-center gap-3">
       <button class="btn btn-primary" type="button" data-admin-action="save-settings"
               data-settings-tab="security">
-        <i class="fa-solid fa-floppy-disk me-1"></i>Save Security Settings
+        <i class="fa-solid fa-floppy-disk me-1"></i>{{ t(k="adm-save-security-settings") }}
       </button>
       <span id="save-spinner-security" class="text-muted small d-none">
-        <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+        <i class="fa-solid fa-spinner fa-spin me-1"></i>{{ t(k="adm-saving") }}
       </span>
     </div>
 
@@ -532,9 +525,7 @@
   <div class="tab-pane fade" id="tab-webhooks" role="tabpanel" x-data="webhooksPanel()">
 
     <p class="text-muted mb-4" style="max-width:640px">
-      Webhooks fire an HTTP POST to your URL when forum events occur.
-      Optionally set a secret to verify the <code>X-Ferum-Signature</code> header (HMAC-SHA256).
-      A webhook is auto-disabled after 5 consecutive delivery failures.
+      {{ t(k="adm-webhooks-fire-an-http-post-to") }} <code>{{ t(k="adm-x-ferum-signature") }}</code> {{ t(k="adm-header-hmac-sha256-a-webhook-is") }}
     </p>
 
     {# Loading #}
@@ -549,7 +540,7 @@
       <div class="card mb-4">
         <div class="card-body text-center text-muted py-5">
           <i class="fa-solid fa-plug-circle-xmark fa-2x mb-3 d-block opacity-50"></i>
-          No webhooks configured yet.
+          {{ t(k="adm-no-webhooks-configured-yet") }}
         </div>
       </div>
     </template>
@@ -562,8 +553,8 @@
             <thead class="table-active">
               <tr>
                 <th>URL</th>
-                <th>Events</th>
-                <th>Status</th>
+                <th>{{ t(k="adm-events") }}</th>
+                <th>{{ t(k="adm-status") }}</th>
                 <th class="text-end" style="width:100px"></th>
               </tr>
             </thead>
@@ -588,9 +579,9 @@
                   </td>
                   <td>
                     <span x-show="wh.is_active"
-                          class="badge bg-success-subtle text-success-emphasis">Active</span>
+                          class="badge bg-success-subtle text-success-emphasis">{{ t(k="adm-active") }}</span>
                     <span x-show="!wh.is_active"
-                          class="badge bg-warning-subtle text-warning-emphasis">Disabled</span>
+                          class="badge bg-warning-subtle text-warning-emphasis">{{ t(k="adm-disabled") }}</span>
                     <template x-if="wh.failure_count > 0">
                       <span class="badge bg-danger-subtle text-danger-emphasis ms-1"
                             :title="'Consecutive failures: ' + wh.failure_count">
@@ -603,7 +594,7 @@
                         <span x-text="'Last fired ' + new Date(wh.last_triggered_at).toLocaleString()"></span>
                       </template>
                       <template x-if="!wh.last_triggered_at">
-                        <span>Never fired yet</span>
+                        <span>{{ t(k="adm-never-fired-yet") }}</span>
                       </template>
                     </div>
                     <div class="small mt-1" x-show="wh.testResult" x-cloak
@@ -612,11 +603,11 @@
                   </td>
                   <td class="text-end">
                     <div class="d-flex gap-1 justify-content-end">
-                      <button class="btn btn-sm btn-outline-secondary" title="Send a test delivery"
+                      <button class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-send-a-test-delivery') }}"
                               :disabled="wh.testing" @click="testWebhook(wh)">
                         <i class="fa-solid" :class="wh.testing ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-secondary" title="Edit"
+                      <button class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-edit') }}"
                               @click="startEdit(wh)">
                         <i class="fa-solid fa-pen"></i>
                       </button>
@@ -625,7 +616,7 @@
                               @click="toggleWebhook(wh)">
                         <i class="fa-solid" :class="wh.is_active ? 'fa-pause' : 'fa-play'"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-danger" title="Delete"
+                      <button class="btn btn-sm btn-outline-danger" title="{{ t(k='adm-delete') }}"
                               @click="deleteWebhook(wh.id)">
                         <i class="fa-solid fa-trash"></i>
                       </button>
@@ -641,7 +632,7 @@
 
     {# Add Webhook ─────────────────────────────────────────────── #}
     <div class="card">
-      <div class="card-header fw-semibold">Add Webhook</div>
+      <div class="card-header fw-semibold">{{ t(k="adm-add-webhook") }}</div>
       <div class="card-body">
         <div class="row g-3">
           <div class="col-md-7">
@@ -653,15 +644,15 @@
           </div>
           <div class="col-md-5">
             <label class="form-label">
-              Secret
-              <span class="text-muted fw-normal small">(optional)</span>
+              {{ t(k="adm-secret") }}
+              <span class="text-muted fw-normal small">{{ t(k="adm-optional") }}</span>
             </label>
             <input type="text" class="form-control font-monospace" x-model="form.secret"
-                   placeholder="Leave blank for unsigned" maxlength="255">
+                   placeholder="{{ t(k='adm-leave-blank-for-unsigned') }}" maxlength="255">
           </div>
           <div class="col-12">
             <label class="form-label">
-              Events <span class="text-danger">*</span>
+              {{ t(k="adm-events") }} <span class="text-danger">*</span>
             </label>
             <div class="row g-2">
               <template x-for="ev in allEvents" :key="ev">
@@ -685,10 +676,10 @@
           <button class="btn btn-primary" type="button"
                   :disabled="!form.url || form.events.length === 0 || saving"
                   @click="addWebhook()">
-            <i class="fa-solid fa-plus me-1"></i>Add Webhook
+            <i class="fa-solid fa-plus me-1"></i>{{ t(k="adm-add-webhook") }}
           </button>
           <span x-show="saving" x-cloak class="text-muted small">
-            <i class="fa-solid fa-spinner fa-spin me-1"></i>Saving…
+            <i class="fa-solid fa-spinner fa-spin me-1"></i>{{ t(k="adm-saving") }}
           </span>
         </div>
 
@@ -704,7 +695,7 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Edit Webhook</h5>
+            <h5 class="modal-title">{{ t(k="adm-edit-webhook") }}</h5>
             <button type="button" class="btn-close" @click="cancelEdit()"></button>
           </div>
           <div class="modal-body">
@@ -715,13 +706,13 @@
               </div>
               <div class="col-md-5">
                 <label class="form-label">
-                  Secret <span class="text-muted fw-normal small">(leave blank to keep current)</span>
+                  {{ t(k="adm-secret") }} <span class="text-muted fw-normal small">{{ t(k="adm-leave-blank-to-keep-current") }}</span>
                 </label>
                 <input type="text" class="form-control font-monospace" x-model="editForm.secret"
-                       placeholder="Unchanged" maxlength="255">
+                       placeholder="{{ t(k='adm-unchanged') }}" maxlength="255">
               </div>
               <div class="col-12">
-                <label class="form-label">Events <span class="text-danger">*</span></label>
+                <label class="form-label">{{ t(k="adm-events") }} <span class="text-danger">*</span></label>
                 <div class="row g-2">
                   <template x-for="ev in allEvents" :key="ev">
                     <div class="col-md-4 col-sm-6">
@@ -739,10 +730,10 @@
             <div x-show="editError" x-cloak class="alert alert-danger mt-3 mb-0 py-2 small" x-text="editError"></div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="cancelEdit()">Cancel</button>
+            <button class="btn btn-secondary" @click="cancelEdit()">{{ t(k="adm-cancel") }}</button>
             <button class="btn btn-primary" :disabled="!editForm.url || editForm.events.length === 0 || saving"
                     @click="saveEdit()">
-              <i class="fa-solid fa-spinner fa-spin me-1" x-show="saving" x-cloak></i>Save Changes
+              <i class="fa-solid fa-spinner fa-spin me-1" x-show="saving" x-cloak></i>{{ t(k="adm-save-changes") }}
             </button>
           </div>
         </div>

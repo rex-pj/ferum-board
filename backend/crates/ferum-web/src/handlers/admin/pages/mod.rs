@@ -1,5 +1,6 @@
 pub mod categories;
 pub mod dashboard;
+pub mod languages;
 pub mod plugins;
 pub mod products;
 pub mod reports;

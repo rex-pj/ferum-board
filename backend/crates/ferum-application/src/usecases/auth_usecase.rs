@@ -92,12 +92,10 @@ impl AuthUseCase {
         }
 
         if !crate::validators::validate_username(&cmd.username) {
-            return Err(AppError::unprocessable(
-                "Username must be 3–30 chars, alphanumeric/underscore/hyphen",
-            ));
+            return Err(AppError::invalid("invalid_username_format"));
         }
         if !crate::validators::validate_password(&cmd.password) {
-            return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
+            return Err(AppError::invalid("password_requirements"));
         }
 
         let email = cmd.email.to_lowercase();
@@ -160,11 +158,30 @@ impl AuthUseCase {
                     user_id: user.id,
                     email,
                     token,
+                    locale: cmd.locale.clone(),
                 })
                 .await?;
         }
 
         Ok(user)
+    }
+
+    /// The language to write an email to `user_id` in.
+    ///
+    /// Always the *recipient's* stored preference, never the actor's: a member
+    /// reading the site in Vietnamese who triggers a notification to an English
+    /// member must not send them a Vietnamese email.
+    ///
+    /// Falls back to the site default when the user has never chosen, or when the
+    /// lookup fails — an email in the wrong language still beats no email.
+    async fn recipient_locale(&self, user_id: Uuid) -> ferum_domain::Locale {
+        match self.users.get_preferences(user_id).await {
+            Ok(prefs) => prefs.locale.unwrap_or_default(),
+            Err(e) => {
+                tracing::warn!(error = %e, %user_id, "could not read recipient locale, using default");
+                ferum_domain::Locale::default_locale()
+            }
+        }
     }
 
     // ─── Verify email ─────────────────────────────────────────────────────────
@@ -196,11 +213,13 @@ impl AuthUseCase {
         if let Some(user) = self.users.find_by_email(&email.to_lowercase()).await? {
             if !user.is_email_verified {
                 let token = self.tokens.mint_email_token(user.id, "email_verification")?;
+                let locale = self.recipient_locale(user.id).await;
                 self.jobs
                     .enqueue(ForumJob::SendEmailVerification {
                         user_id: user.id,
                         email: user.email,
                         token,
+                        locale,
                     })
                     .await?;
             }
@@ -350,8 +369,13 @@ impl AuthUseCase {
     pub async fn forgot_password(&self, email: &str) -> Result<(), AppError> {
         if let Some(user) = self.users.find_by_email(&email.to_lowercase()).await? {
             let token = self.tokens.mint_email_token(user.id, "password_reset")?;
+            let locale = self.recipient_locale(user.id).await;
             self.jobs
-                .enqueue(ForumJob::SendPasswordResetEmail { email: user.email, token })
+                .enqueue(ForumJob::SendPasswordResetEmail {
+                    email: user.email,
+                    token,
+                    locale,
+                })
                 .await?;
         }
         Ok(())
@@ -362,7 +386,7 @@ impl AuthUseCase {
     #[tracing::instrument(skip_all)]
     pub async fn reset_password(&self, cmd: ResetPasswordCmd) -> Result<(), AppError> {
         if !crate::validators::validate_password(&cmd.new_password) {
-            return Err(AppError::unprocessable(crate::validators::PASSWORD_REQUIREMENTS));
+            return Err(AppError::invalid("password_requirements"));
         }
 
         let user_id = self
@@ -419,6 +443,12 @@ pub struct RegisterCmd {
     pub username: String,
     pub email: String,
     pub password: String,
+    /// Language the visitor was reading the site in when they signed up.
+    ///
+    /// A brand-new account has no stored preference yet, so the request locale is
+    /// the only evidence of what language this person reads — and the
+    /// verification email is the very first thing they receive.
+    pub locale: ferum_domain::Locale,
 }
 
 #[derive(Debug)]

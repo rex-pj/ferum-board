@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { getBookmarkStatus, toggleBookmark } from "./lib/bookmarks";
+  import { t } from "./lib/i18n";
 
   let {
     "thread-id": threadId = "",
@@ -41,13 +42,13 @@
   class="bookmark-btn {isBookmarked ? 'active' : ''}"
   onclick={toggle}
   disabled={loading}
-  title={isBookmarked ? "Remove bookmark" : "Bookmark this thread"}
+  title={isBookmarked ? t("js-remove-bookmark") : t("js-bookmark-this-thread")}
 >
   <i
     class={isBookmarked ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark"}
     aria-hidden="true"
   ></i>
-  <span class="label">{isBookmarked ? "Bookmarked" : "Bookmark"}</span>
+  <span class="label">{isBookmarked ? t("js-bookmarked") : t("js-bookmark")}</span>
 </button>
 
 <style>

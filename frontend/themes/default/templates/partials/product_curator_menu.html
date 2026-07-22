@@ -1,0 +1,28 @@
+{# ── Product page: management menu trigger ──────────────────────────────────
+   Included inline next to the <h1> (both catalog/product.html templates), so
+   Edit/Delete sit on the title row instead of pushing the seller/brand line
+   down a whole extra row. Contains ONLY the trigger — the "your submission is
+   pending/published" notices are block-level content and live in
+   product_curator_actions.html instead, included separately below the title.
+#}
+{% if can_edit_product %}
+  <div class="dropdown flex-shrink-0">
+    <button type="button" class="btn btn-sm btn-icon-ghost" data-bs-toggle="dropdown"
+            aria-expanded="false" aria-label="{{ t(k='ui-manage-product') }}">
+      <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li>
+        <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#pdpEditModal">
+          <i class="fa-solid fa-pen me-2" aria-hidden="true"></i>{{ t(k="ui-edit") }}
+        </button>
+      </li>
+      <li><hr class="dropdown-divider"></li>
+      <li>
+        <button type="button" class="dropdown-item text-danger" id="pdp-delete-open">
+          <i class="fa-solid fa-trash me-2" aria-hidden="true"></i>{{ t(k="ui-delete") }}
+        </button>
+      </li>
+    </ul>
+  </div>
+{% endif %}

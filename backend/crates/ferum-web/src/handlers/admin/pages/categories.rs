@@ -13,6 +13,7 @@ use crate::view_models::page_context::{AdminCategoryRowCtx, CurrentUserCtx};
 pub async fn categories(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<PageQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -87,12 +88,13 @@ pub async fn categories(
     ctx.insert("categories", &categories_ctx);
     ctx.insert("search_query", &search);
 
-    render_admin(&state, "admin/categories/list.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/categories/list.html", &ctx).await
 }
 
 pub async fn category_moderators(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
@@ -125,5 +127,5 @@ pub async fn category_moderators(
     ctx.insert("category_name", &category_name);
     ctx.insert("moderators", &moderators);
 
-    render_admin(&state, "admin/categories/moderators.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/categories/moderators.html", &ctx).await
 }

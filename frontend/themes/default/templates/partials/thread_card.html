@@ -13,8 +13,8 @@
       {{ m::thread_status_icons(is_pinned=thread.is_pinned, is_solved=thread.is_solved, is_locked=thread.is_locked) }}
       {% if thread.is_review %}
         <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle flex-shrink-0"
-              style="font-size:.62rem" title="Product review">
-          <i class="fa-solid fa-star me-1" aria-hidden="true"></i>{% if thread.review_overall %}{{ thread.review_overall }}/5{% else %}Review{% endif %}
+              style="font-size:.62rem" title="{{ t(k='thread-product-review') }}">
+          <i class="fa-solid fa-star me-1" aria-hidden="true"></i>{% if thread.review_overall %}{{ thread.review_overall }}/5{% else %}{{ t(k="thread-review") }}{% endif %}
         </span>
       {% endif %}
       <a href="/forum/t/{{ thread.slug }}" class="fr-thread-title stretched-link">{{ thread.title }}</a>
@@ -35,7 +35,7 @@
         </span>
       {% endif %}
       <span aria-hidden="true">·</span>
-      <time class="fr-notif-time" data-rel datetime="{{ thread.created_at }}">{{ thread.created_at | date(format="%b %d, %Y") }}</time>
+      <time class="fr-notif-time" data-rel datetime="{{ thread.created_at }}">{{ thread.created_at | localdate }}</time>
       {# Reply count — visible only on mobile where fr-thread-stats column is hidden #}
       <span class="d-md-none" aria-hidden="true">·</span>
       <span class="d-md-none fr-notif-time"><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>{{ thread.reply_count }}</span>
@@ -43,11 +43,14 @@
   </div>
 
   <div class="fr-thread-stats fr-link-elevated d-none d-md-flex">
-    <span title="{{ thread.reply_count }} replies"><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>{{ thread.reply_count }}</span>
-    <span title="{{ thread.view_count }} views"><i class="fa-regular fa-eye me-1" aria-hidden="true"></i>{{ thread.view_count }}</span>
+    {# Counts are pluralized by the catalog rather than concatenated here: the
+       count must stay a number so Fluent can pick the right plural form, and
+       languages disagree about where it goes in the sentence. #}
+    <span title="{{ t(k='thread-replies', count=thread.reply_count) }}"><i class="fa-regular fa-comment me-1" aria-hidden="true"></i>{{ thread.reply_count }}</span>
+    <span title="{{ t(k='thread-views', count=thread.view_count) }}"><i class="fa-regular fa-eye me-1" aria-hidden="true"></i>{{ thread.view_count }}</span>
     {% if thread.last_post_at %}
-      <time class="fr-notif-time" data-rel datetime="{{ thread.last_post_at }}" title="Last reply">
-        <i class="fa-regular fa-clock me-1" aria-hidden="true"></i>{{ thread.last_post_at | date(format="%b %d, %Y") }}
+      <time class="fr-notif-time" data-rel datetime="{{ thread.last_post_at }}" title="{{ t(k='thread-last-reply-label') }}">
+        <i class="fa-regular fa-clock me-1" aria-hidden="true"></i>{{ thread.last_post_at | localdate }}
       </time>
     {% endif %}
   </div>

@@ -66,7 +66,8 @@ async fn create_category_reserved_slug_returns_422() {
     );
     // "admin" is a reserved slug
     let result = uc.create_category(&actor, make_cmd("admin")).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "slug_reserved"),
+        "expected slug_reserved, got {result:?}");
 }
 
 #[tokio::test]
@@ -103,7 +104,8 @@ async fn create_category_parent_already_has_parent_returns_422() {
     );
     let cmd = CreateCategoryCmd { parent_id: Some(parent_id), ..make_cmd("child-cat") };
     let result = uc.create_category(&actor, cmd).await;
-    assert!(matches!(result, Err(AppError::UnprocessableEntity(_))));
+    assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "category_nesting_too_deep"),
+        "expected category_nesting_too_deep, got {result:?}");
 }
 
 #[tokio::test]
