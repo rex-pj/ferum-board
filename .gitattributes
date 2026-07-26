@@ -1,0 +1,51 @@
+# Normalise line endings in the repository.
+#
+# Without this, every file's line endings depend on each developer's local
+# `core.autocrlf`. A shell script committed from a Windows checkout with CRLF
+# fails on Linux at the shebang itself — `#!/usr/bin/env bash\r` is read as a
+# request for an interpreter literally named "bash\r", and the error
+# ("No such file or directory") points at the file rather than the line ending,
+# which makes it a genuinely confusing failure.
+#
+# `text=auto` stores text as LF in the repo and lets Git hand Windows checkouts
+# CRLF; the explicit `eol=lf` entries below are for files that must be LF *in
+# the working tree too*, because something other than Git reads them.
+
+* text=auto
+
+# ── Must be LF even in a Windows working tree ────────────────────────────────
+# Executed by a shell, directly or inside a container.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.dockerfile    text eol=lf
+.env.example    text eol=lf
+
+# Read by Fluent; keep byte-identical across platforms so locale diffs stay
+# reviewable rather than showing every line as changed.
+*.ftl           text eol=lf
+
+# Note: `.ps1` needs no rule of its own. PowerShell parses LF and CRLF equally
+# on every platform, and `pwsh` runs on Linux and macOS too, so pinning it to
+# CRLF would only force Windows line endings onto checkouts that have no use for
+# them. `text=auto` above already gives Windows working trees CRLF.
+
+# ── Binary: never touch, never diff as text ──────────────────────────────────
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.webp          binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.eot           binary
+*.zip           binary
+*.fpkg          binary
+*.pdf           binary
+
+# Built asset bundles: committed on purpose (other developers must not need
+# Node to run the app), but reviewing them line-by-line is noise.
+frontend/static/js/ferum-widgets.iife.js  -diff
+frontend/static/js/*.min.js               -diff
+frontend/static/css/*.min.css             -diff

@@ -2,6 +2,7 @@ pub mod bcrypt_password_hasher;
 pub mod network_utils;
 pub mod plugins;
 pub mod role_permission_cache;
+#[cfg(feature = "bulk_seed")]
 pub mod bulk_seed_service;
 pub mod cache;
 pub mod email;
@@ -15,4 +16,5 @@ pub mod rate_limit;
 pub mod repositories;
 pub mod search;
 pub mod storage;
+pub mod system_seed_service;
 pub mod webhook_delivery;

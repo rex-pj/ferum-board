@@ -104,6 +104,30 @@ adm-catalog-files-restart-to-pick-it = catalog files. Restart to pick it up. The
 adm-catalogs-are-read-from = Catalogs are read from
 adm-categories = Categories
 adm-category = Category
+# Named "Product category" and never bare "Category": the material dialog also
+# has a field called Category and it means a material class, not this taxonomy.
+adm-product-category = Product category
+adm-product-category-hint = Optional. Drives the catalogue category filter — products left unfiled are excluded from it.
+adm-uncategorised = Uncategorised
+adm-product-categories = Categories
+adm-new-product-category = New category
+adm-edit-product-category = Edit category
+adm-match-keywords = Match keywords
+adm-match-keywords-hint = Comma-separated words that identify this category inside a product name — "sofa, salon". Used by Auto-assign. Accents optional.
+adm-icon-class = Icon class
+adm-position = Position
+adm-products-count = Products
+adm-auto-assign = Auto-assign
+adm-auto-assign-title = File unfiled products by name
+adm-auto-assign-explainer =
+    Matches each unfiled product's name against the keywords above and files the
+    ones it recognises. Products nothing matches are left unfiled rather than
+    guessed. Never changes a category you set by hand.
+adm-auto-assign-preview = { $assigned } would be filed · { $unmatched } left unfiled
+adm-auto-assign-done = { $assigned } filed · { $unmatched } still unfiled
+adm-auto-assign-apply = Apply
+adm-unfiled-products = { $count } products have no category
+adm-delete-product-category-warning = Products filed here become uncategorised. They are not deleted.
 adm-changes-take-effect-immediately-the-in = Changes take effect immediately — the in-memory config cache is updated on save. Rate limiting must be enabled via the
 adm-choose-file = Choose file
 adm-choose-which-languages-visitors-can-read = Choose which languages visitors can read the forum in. Threads and posts are never translated — they stay in the language they were written in.
@@ -213,6 +237,19 @@ adm-grants-a-dedicated-postgres-schema = Grants a dedicated Postgres schema (
 adm-group = Group
 adm-hard-ceiling-on-the = Hard ceiling on the
 adm-header-hmac-sha256-a-webhook-is = header (HMAC-SHA256). A webhook is auto-disabled after 5 consecutive delivery failures.
+adm-hero-add-image = Add image
+adm-hero-caption = Caption
+adm-hero-caption-placeholder = e.g. Oak flooring, 3 years in
+adm-hero-empty = No images chosen. The homepage is picking its own from the top-rated products.
+adm-hero-formats = Accepted: JPEG, PNG, WebP, GIF · Max 8 MB each · Up to 4 images
+adm-hero-link = Link
+adm-hero-save = Save hero images
+adm-hero-saved = Homepage hero saved.
+adm-homepage-hero = Homepage hero
+adm-homepage-hero-help =
+    Pick the photographs that open the homepage. Leave this empty and the homepage
+    selects images from the top-rated products automatically — set images here when
+    you want the final say. Order matters: the first image leads the mosaic.
 adm-hook = Hook
 adm-hours-after-creation-users-can-edit = Hours after creation users can edit their own posts/threads
 adm-if = If
@@ -289,6 +326,8 @@ adm-moderator-panel = Moderator panel
 adm-moderators = Moderators
 adm-monthly-active-users = Monthly active users
 adm-most-replies = Most replies
+adm-move-down = Move down
+adm-move-up = Move up
 adm-must-contain = Must contain
 adm-my-community = My Community
 adm-name = Name
@@ -370,7 +409,6 @@ adm-posts-containing-these-keywords-will-be = Posts containing these keywords wi
 adm-powered-by = Powered by
 adm-price = Price (₫)
 adm-price-from = Price from (₫)
-adm-price-origin = Price & origin
 adm-price-range = Price range
 adm-price-to = Price to (₫)
 adm-primary-color = Primary Color

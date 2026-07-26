@@ -9,10 +9,11 @@ ferum-domain = { path = "../../crates/ferum-domain" }
 ferum-application = { path = "../../crates/ferum-application" }
 ferum-test-support = { path = "../support" }
 
-async-trait = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
-mockall = "0.13"
-serde_json = "1"
-slug = "0.1"
-tokio = { version = "1", features = ["rt", "macros"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+mockall = { workspace = true }
+rust_decimal = { workspace = true }
+serde_json = { workspace = true }
+slug = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+uuid = { workspace = true }

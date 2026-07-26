@@ -78,6 +78,23 @@ pub fn admin_api_routes() -> Router<AppState> {
             "/materials/{id}",
             patch(admin::api::products::update_material).delete(admin::api::products::delete_material),
         )
+        // The catalogue taxonomy. Distinct path from `/categories`, which is the
+        // forum's discussion tree — sharing one would be the same conflation
+        // this taxonomy exists to undo.
+        .route(
+            "/product-categories",
+            get(admin::api::products::list_product_categories)
+                .post(admin::api::products::create_product_category),
+        )
+        .route(
+            "/product-categories/auto-assign",
+            post(admin::api::products::auto_assign_product_categories),
+        )
+        .route(
+            "/product-categories/{id}",
+            patch(admin::api::products::update_product_category)
+                .delete(admin::api::products::delete_product_category),
+        )
         .route("/brands", post(admin::api::products::create_brand))
         .route(
             "/brands/{id}",
@@ -98,6 +115,13 @@ pub fn admin_api_routes() -> Router<AppState> {
         .route(
             "/config/favicon",
             post(admin::api::config::upload_favicon).delete(admin::api::config::delete_favicon),
+        )
+        // POST appends one uploaded image; PUT saves captions/links/order and, by
+        // omission, deletions. Both live under /config because a hero tile is site
+        // configuration, not a content entity with its own lifecycle.
+        .route(
+            "/config/hero-tiles",
+            post(admin::api::config::add_hero_tile).put(admin::api::config::save_hero_tiles),
         )
         .route(
             "/webhooks",

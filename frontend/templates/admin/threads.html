@@ -191,7 +191,8 @@
                 <i class="fa-solid fa-arrow-up-right-from-square"></i>
               </a>
               <button class="btn btn-sm btn-outline-danger"
-                      data-admin-action="delete-thread" data-thread-id="{{ thread.id }}" data-thread-title="{{ thread.title | escape }}"
+                      {# DELETE /api/threads/{slug} resolves by slug, not id — see ferum-admin.js #}
+                      data-admin-action="delete-thread" data-thread-slug="{{ thread.slug }}" data-thread-title="{{ thread.title | escape }}"
                       title="{{ t(k='adm-delete') }}">
                 <i class="fa-solid fa-trash"></i>
               </button>

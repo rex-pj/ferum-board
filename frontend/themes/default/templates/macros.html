@@ -8,9 +8,9 @@
 
 {# ── avatar ───────────────────────────────────────────────────────
    Renders a circular avatar image with a fallback initials circle.
-   size: 24 | 32 | 40 | 80 | 96
+   size: 22 | 24 | 28 | 32 | 36 | 38 | 80
 #}
-{% macro avatar(url, name, size=40) %}
+{% macro avatar(url, name, size=32) %}
 {% if url %}
   <img src="{{ url }}"
        class="fr-avatar fr-avatar--{{ size }}"
@@ -63,25 +63,6 @@
 {% endmacro thread_status_badges %}
 
 
-{# ── tag_chip ─────────────────────────────────────────────────────
-   Single tag chip with dynamic --tag-color CSS variable.
-   linked=true  → <a href="/forum?tag={slug}">
-   linked=false → <span>
-   extra_class  → appended to class (e.g. "fr-link-elevated" in stretched-link contexts)
-   Note: style="--tag-color:..." is intentional — per-instance CSS variable injection.
-#}
-{% macro tag_chip(tag, linked=true, extra_class="") %}
-{% if linked %}
-  <a href="/?tag={{ tag.slug }}"
-     class="fr-tag-chip {{ extra_class }}"
-     style="--tag-color: {{ tag.color | default(value='#6b7280') }}">{{ tag.name }}</a>
-{% else %}
-  <span class="fr-tag-chip {{ extra_class }}"
-        style="--tag-color: {{ tag.color | default(value='#6b7280') }}">{{ tag.name }}</span>
-{% endif %}
-{% endmacro tag_chip %}
-
-
 {# ── tag_list ─────────────────────────────────────────────────────
    Renders up to `max` tag chips, then a "+N more" overflow label.
    extra_class is forwarded to each chip (e.g. "fr-link-elevated").
@@ -129,6 +110,56 @@
 {%- else -%}{{ code }}
 {%- endif -%}
 {% endmacro product_type_label %}
+
+
+{# ── product_card ─────────────────────────────────────────────────
+   The catalogue card, used by both /catalog and /search. One definition on
+   purpose: a product found by searching and the same product found by browsing
+   must carry the same signals, and two copies of this markup would drift.
+
+   p needs: slug, name, primary_image_key, price_min, price_max,
+            review_count, avg_overall, product_type, style.
+#}
+{% macro product_card(p) %}
+<a href="/catalog/{{ p.slug }}" class="fr-product-card">
+  <div class="fr-product-thumb">
+    {% if p.primary_image_key %}
+      <img src="/files/{{ p.primary_image_key }}" alt="{{ p.name }}" loading="lazy">
+    {% else %}
+      <i class="fa-solid fa-couch fa-2x opacity-25" aria-hidden="true"></i>
+    {% endif %}
+  </div>
+  <div class="fr-product-card-body">
+    <div class="fr-product-name">{{ p.name }}</div>
+    <div class="fr-product-price">
+      {% if p.price_min %}
+        {{ p.price_min | thousands }}₫{% if p.price_max and p.price_max != p.price_min %} – {{ p.price_max | thousands }}₫{% endif %}
+      {% else %}<span class="text-muted fw-normal">{{ t(k="ui-price-on-request") }}</span>{% endif %}
+    </div>
+    {# Rating score — the review platform's primary signal.
+
+       Both numbers carry their own unit. "5 (1)" was two bare numbers with
+       nothing saying which was the score and which the sample size, sitting
+       directly under a price range that is also two numbers — so the line
+       read as more price data. The score states its scale and the count is
+       spelled out, which also puts the emphasis where it belongs: on a
+       review card the sample size is what makes the score mean anything. #}
+    <div class="fr-rating-line mt-1">
+      {% if p.review_count and p.review_count > 0 and p.avg_overall %}
+        <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+        <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}/5</span>
+        <span class="text-muted">· {{ p.review_count }} {{ t(k="ui-reviews-label", count=p.review_count) }}</span>
+      {% else %}
+        <span class="text-muted"><i class="fa-regular fa-star me-1" aria-hidden="true"></i>{{ t(k="ui-no-reviews-yet") }}</span>
+      {% endif %}
+    </div>
+    <div class="mt-1">
+      <span class="fr-review-chip">{{ self::product_type_label(code=p.product_type) }}</span>
+      {% if p.style %}<span class="fr-product-meta ms-1">{{ p.style }}</span>{% endif %}
+    </div>
+  </div>
+</a>
+{% endmacro product_card %}
 
 
 {# ── material_category_label ──────────────────────────────────────
@@ -336,15 +367,6 @@
 {% endmacro trust_badge %}
 
 
-{# ── category_pill ────────────────────────────────────────────────
-   Small bordered category link pill.
-   extra_class: appended to class (e.g. "fr-link-elevated" in stretched-link contexts)
-#}
-{% macro category_pill(category, extra_class="") %}
-<a href="/forum/{{ category.slug }}" class="fr-category-pill {{ extra_class }}">{{ category.name }}</a>
-{% endmacro category_pill %}
-
-
 {# ── btn_submit ───────────────────────────────────────────────────
    Submit button with integrated loading spinner (shown via JS).
    variant: "primary" | "danger" | "secondary" etc.
@@ -406,23 +428,6 @@
   </button>
 </div>
 {% endmacro password_field %}
-
-
-{# ── page_header ──────────────────────────────────────────────────
-   Standard admin/mod page title row with optional item count.
-   total:       integer count; if > 0 a sub-line is shown
-   count_label: label after the number, e.g. "total" or "pending"
-#}
-{% macro page_header(title, total=0, count_label="total") %}
-<div class="d-flex align-items-start justify-content-between mb-3">
-  <div>
-    <h4 class="mb-0 fw-semibold">{{ title }}</h4>
-    {% if total > 0 %}
-      <div class="text-muted small mt-1">{{ total }} {{ count_label }}</div>
-    {% endif %}
-  </div>
-</div>
-{% endmacro page_header %}
 
 
 {# ── search_form_header ───────────────────────────────────────────

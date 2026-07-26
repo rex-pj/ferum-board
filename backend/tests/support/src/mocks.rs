@@ -14,6 +14,7 @@ pub mod permission_repository;
 pub mod plugin_db_repository;
 pub mod plugin_repository;
 pub mod post_repository;
+pub mod product_category_repository;
 pub mod product_repository;
 pub mod reaction_repository;
 pub mod report_repository;

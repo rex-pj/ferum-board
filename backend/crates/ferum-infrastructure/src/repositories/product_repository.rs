@@ -13,8 +13,8 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::product::{NewProduct, Product, ProductStatus, ProductType};
 use ferum_domain::models::product_media::{NewProductMedia, ProductMedia};
 use ferum_domain::repositories::product_repository::{
-    ProductDependents, ProductListFilter, ProductListItem, ProductRepository, ProductSort,
-    UpdateProduct,
+    bayesian, CategoryFilter, ProductDependents, ProductListFilter, ProductListItem,
+    ProductRepository, ProductSort, ReviewedProduct, UpdateProduct,
 };
 
 pub struct PgProductRepository {
@@ -24,6 +24,40 @@ pub struct PgProductRepository {
 impl PgProductRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    /// Joins a set of product rows to their aggregate ratings in one extra query
+    /// (no N+1), preserving the input order. Products with no rating row are
+    /// returned as unrated rather than dropped — an unreviewed product is a
+    /// perfectly valid catalogue entry, and on a review platform it is the one
+    /// most in need of being found.
+    async fn attach_ratings(
+        &self,
+        models: Vec<products::Model>,
+    ) -> Result<Vec<ProductListItem>, AppError> {
+        let ids: Vec<Uuid> = models.iter().map(|m| m.id).collect();
+        let mut stats: HashMap<Uuid, (i32, Option<Decimal>)> = HashMap::new();
+        if !ids.is_empty() {
+            for s in product_rating_stats::Entity::find()
+                .filter(product_rating_stats::Column::ProductId.is_in(ids))
+                .all(&self.db)
+                .await?
+            {
+                stats.insert(s.product_id, (s.review_count, s.avg_overall));
+            }
+        }
+
+        Ok(models
+            .into_iter()
+            .map(|m| {
+                let (review_count, avg_overall) = stats.get(&m.id).cloned().unwrap_or((0, None));
+                ProductListItem {
+                    product: to_domain(m),
+                    review_count,
+                    avg_overall,
+                }
+            })
+            .collect())
     }
 }
 
@@ -166,8 +200,18 @@ impl ProductRepository for PgProductRepository {
         if let Some(brand_id) = filter.brand_id {
             q = q.filter(products::Column::BrandId.eq(brand_id));
         }
-        if let Some(category_id) = filter.category_id {
-            q = q.filter(products::Column::CategoryId.eq(category_id));
+        match &filter.category {
+            CategoryFilter::Any => {}
+            // Strictly NULL, not "everything else". A product with no category
+            // is genuinely unfiled, and lumping it in with any selected category
+            // would make the filter lie.
+            CategoryFilter::Unassigned => {
+                q = q.filter(products::Column::CategoryId.is_null());
+            }
+            CategoryFilter::In(ids) if !ids.is_empty() => {
+                q = q.filter(products::Column::CategoryId.is_in(ids.clone()));
+            }
+            CategoryFilter::In(_) => {}
         }
         if let Some(material_id) = filter.material_id {
             q = q.filter(
@@ -186,6 +230,21 @@ impl ProductRepository for PgProductRepository {
             let pattern = format!("%{}%", text.trim());
             q = q.filter(Expr::col(products::Column::Name).ilike(pattern));
         }
+        if let Some(min) = filter.min_review_count.filter(|m| *m > 0) {
+            // Expressed as a subquery rather than a condition on the rating join
+            // below, so it also narrows the `total` count — the join is added
+            // after counting, and a HAVING there would report a total the caller
+            // could never page through.
+            q = q.filter(
+                products::Column::Id.in_subquery(
+                    Query::select()
+                        .column(product_rating_stats::Column::ProductId)
+                        .from(product_rating_stats::Entity)
+                        .and_where(product_rating_stats::Column::ReviewCount.gte(min))
+                        .to_owned(),
+                ),
+            );
+        }
 
         let per_page = per_page.clamp(1, 100);
         // Count the filtered set before joining the stats table (a LEFT JOIN on a
@@ -197,14 +256,39 @@ impl ProductRepository for PgProductRepository {
         let stats_rel = product_rating_stats::Relation::Product.def().rev();
         let q = match filter.sort {
             ProductSort::Newest => q.order_by_desc(products::Column::CreatedAt),
-            ProductSort::TopRated => q
-                .join(JoinType::LeftJoin, stats_rel)
-                .order_by_with_nulls(
-                    product_rating_stats::Column::AvgOverall,
-                    Order::Desc,
-                    NullOrdering::Last,
-                )
-                .order_by_desc(products::Column::CreatedAt),
+            // Bayesian-shrunk mean, not the raw average: one 5★ review must not
+            // outrank a 4.6★ with two hundred. The CASE keeps unrated products
+            // NULL so they sort last instead of inheriting the prior (3.5) and
+            // landing above products that genuinely scored below it.
+            ProductSort::TopRated => q.join(JoinType::LeftJoin, stats_rel).order_by_with_nulls(
+                Expr::cust_with_values(
+                    // PRIOR_WEIGHT is bound twice rather than repeating `$2`:
+                    // whether sea-query resolves a reused placeholder is not
+                    // worth depending on, and a silent misbinding here would
+                    // corrupt the ordering without failing anything.
+                    "CASE WHEN COALESCE(product_rating_stats.review_count, 0) > 0 \
+                     THEN (product_rating_stats.avg_overall * product_rating_stats.review_count \
+                           + $1 * $2) \
+                          / (product_rating_stats.review_count + $3) \
+                     END",
+                    [
+                        bayesian::PRIOR_MEAN,
+                        bayesian::PRIOR_WEIGHT,
+                        bayesian::PRIOR_WEIGHT,
+                    ],
+                ),
+                Order::Desc,
+                NullOrdering::Last,
+            )
+            // Two products with the same shrunk score: the better-evidenced one
+            // first, then newest — a total order, so pagination can't repeat or
+            // skip a row between pages.
+            .order_by_with_nulls(
+                product_rating_stats::Column::ReviewCount,
+                Order::Desc,
+                NullOrdering::Last,
+            )
+            .order_by_desc(products::Column::CreatedAt),
             ProductSort::MostReviewed => q
                 .join(JoinType::LeftJoin, stats_rel)
                 .order_by_with_nulls(
@@ -220,32 +304,18 @@ impl ProductRepository for PgProductRepository {
             .fetch_page(page.saturating_sub(1))
             .await?;
 
-        // Fetch aggregate ratings for just this page in one query (no N+1).
-        let ids: Vec<Uuid> = models.iter().map(|m| m.id).collect();
-        let mut stats: HashMap<Uuid, (i32, Option<Decimal>)> = HashMap::new();
-        if !ids.is_empty() {
-            for s in product_rating_stats::Entity::find()
-                .filter(product_rating_stats::Column::ProductId.is_in(ids))
-                .all(&self.db)
-                .await?
-            {
-                stats.insert(s.product_id, (s.review_count, s.avg_overall));
-            }
-        }
+        Ok((self.attach_ratings(models).await?, total))
+    }
 
-        let items = models
-            .into_iter()
-            .map(|m| {
-                let (review_count, avg_overall) =
-                    stats.get(&m.id).cloned().unwrap_or((0, None));
-                ProductListItem {
-                    product: to_domain(m),
-                    review_count,
-                    avg_overall,
-                }
-            })
-            .collect();
-        Ok((items, total))
+    async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<ProductListItem>, AppError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let models = products::Entity::find()
+            .filter(products::Column::Id.is_in(ids.to_vec()))
+            .all(&self.db)
+            .await?;
+        self.attach_ratings(models).await
     }
 
     async fn update(&self, id: Uuid, patch: UpdateProduct) -> Result<Product, AppError> {
@@ -364,30 +434,47 @@ impl ProductRepository for PgProductRepository {
             .collect())
     }
 
-    async fn primary_image_by_threads(
+    async fn reviewed_product_by_threads(
         &self,
         thread_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, String>, AppError> {
+    ) -> Result<HashMap<Uuid, ReviewedProduct>, AppError> {
         if thread_ids.is_empty() {
             return Ok(HashMap::new());
         }
         #[derive(FromQueryResult)]
         struct Row {
             thread_id: Uuid,
-            key: String,
+            slug: String,
+            name: String,
+            key: Option<String>,
         }
+        // No `primary_image_key IS NOT NULL` filter: a product without a cover
+        // still needs to reach the card, which names and links it regardless.
         let rows = threads::Entity::find()
             .select_only()
             .column_as(threads::Column::Id, "thread_id")
+            .column_as(products::Column::Slug, "slug")
+            .column_as(products::Column::Name, "name")
             .column_as(products::Column::PrimaryImageKey, "key")
             .join(JoinType::InnerJoin, threads::Relation::Product.def())
             .filter(threads::Column::Id.is_in(thread_ids.to_vec()))
             .filter(products::Column::Status.eq(products::ProductStatus::Published))
-            .filter(products::Column::PrimaryImageKey.is_not_null())
             .into_model::<Row>()
             .all(&self.db)
             .await?;
-        Ok(rows.into_iter().map(|r| (r.thread_id, r.key)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                (
+                    r.thread_id,
+                    ReviewedProduct {
+                        slug: r.slug,
+                        name: r.name,
+                        primary_image_key: r.key,
+                    },
+                )
+            })
+            .collect())
     }
 
     async fn add_media(&self, media: NewProductMedia) -> Result<ProductMedia, AppError> {

@@ -24,8 +24,6 @@ pub const DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY: u64 = 5;
 
 // ── Fixed constants — not admin-configurable ─────────────────────────────────
 
-pub const APP_URL_DEFAULT: &str = "http://localhost:5173";
-
 pub const DEFAULT_THEME_SLUG: &str = "default";
 
 /// Site name used before an admin sets one, e.g. in transactional email copy.
@@ -43,6 +41,34 @@ pub const MAX_PLUGIN_MEDIA_BYTES: usize = 8 * 1024 * 1024; // 8 MB
 pub const MAX_FAVICON_BYTES: usize = 512 * 1024; // 512 KB
 pub const MAX_LOGO_BYTES: usize = 2 * 1024 * 1024; // 2 MB
 pub const MAX_POST_ATTACHMENT_BYTES: usize = 8 * 1024 * 1024; // 8 MB
+
+/// Ceiling on an uploaded plugin package (`.fpkg`).
+///
+/// Three places enforce this — the two upload handlers, so an oversize body is
+/// rejected before it is buffered, and `package_extractor`, which is the last
+/// gate and cannot assume it was called through a handler. They were three
+/// separate literals; the router's global `RequestBodyLimitLayer` is sized from
+/// this ceiling too, so a change in one place and not the others silently makes
+/// the backstop the real limit.
+pub const MAX_PLUGIN_PACKAGE_BYTES: usize = 50 * 1024 * 1024; // 50 MB
+
+// ── Curated homepage hero tiles ──────────────────────────────────────────────
+// Admin-picked photography for the homepage masthead, stored as a JSON array in
+// the `home_hero_tiles` site_config key. This exists because auto-selecting the
+// images from the catalogue cannot tell a good product photo from a bad one —
+// the operator needs the final say over the first thing a visitor sees.
+//
+// The tile budget is a layout constraint, not an arbitrary cap: the masthead
+// mosaic is a 2x2 grid, so a fifth tile has nowhere to render.
+pub const MAX_HERO_TILES: usize = 4;
+/// Hero photography is full-bleed, so it needs the cover-image budget rather
+/// than the logo's — a 2 MB ceiling would reject ordinary camera JPEGs.
+pub const MAX_HERO_IMAGE_BYTES: usize = 8 * 1024 * 1024; // 8 MB
+/// Captions overlay the photo on one line and ellipsize; past this they are
+/// never readable, so the limit is enforced rather than silently truncated.
+pub const MAX_HERO_CAPTION_LEN: usize = 120;
+/// Guards the stored JSON against unbounded growth from a hand-crafted request.
+pub const MAX_HERO_LINK_LEN: usize = 500;
 
 // ── Per-account rolling upload quota ─────────────────────────────────────────
 // The generic write rate limiter keys on IP, not account, so it does not bound

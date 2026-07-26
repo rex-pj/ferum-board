@@ -90,6 +90,15 @@ generated columns, `tsvector`/GIN). Convention for **new** migrations: use the
 schema builder (`Table::create()` with `Iden`) for plain DDL, raw
 `execute_unprepared` only for PostgreSQL-specific features.
 
+Migrations carry **DDL only**. Rows the application needs in order to boot —
+system roles, permissions and their first-install grants, `site_config`
+defaults, the built-in theme, the catalogue taxonomy — are written by
+`PgSystemSeedService`, idempotently, on every startup. A permission is therefore
+defined once, in `ferum-domain::models::role::PERMISSIONS`, next to the `perm::`
+constant the code checks against; adding one needs no migration. The test
+harness runs the same seeder after `Migrator::up`, which is why repository tests
+can assert on seeded roles.
+
 ## Status
 
 This is the foundation step of the repository strong-typing effort. Remaining

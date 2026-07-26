@@ -45,8 +45,7 @@ pub async fn list_users(
     Query(q): Query<UserListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).min(100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let (users, total) = state
         .admin
@@ -193,8 +192,7 @@ pub async fn lookup_users(
     Query(q): Query<LookupQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 50);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 50);
     let search = q.q.as_deref().filter(|s| !s.is_empty());
     let (users, total) = state.admin.search_users_lookup(actor, search, page, per_page).await?;
     let data: Vec<LookupOption> = users.into_iter().map(LookupOption::from).collect();

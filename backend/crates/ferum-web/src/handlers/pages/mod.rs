@@ -251,13 +251,16 @@ pub(super) fn map_threads(
     map_threads_with_ratings(threads, &empty_r, &empty_i)
 }
 
-/// Like `map_threads`, but attaches each review's overall score and product
-/// cover from pre-loaded `thread_id → …` maps (batch-fetched by the caller —
+/// Like `map_threads`, but attaches each review's overall score and reviewed
+/// product from pre-loaded `thread_id → …` maps (batch-fetched by the caller —
 /// no N+1).
 pub(super) fn map_threads_with_ratings(
     threads: &[ferum_domain::models::Thread],
     ratings: &std::collections::HashMap<uuid::Uuid, i16>,
-    product_images: &std::collections::HashMap<uuid::Uuid, String>,
+    products: &std::collections::HashMap<
+        uuid::Uuid,
+        ferum_domain::repositories::product_repository::ReviewedProduct,
+    >,
 ) -> Vec<ThreadCtx> {
     threads
         .iter()
@@ -278,7 +281,11 @@ pub(super) fn map_threads_with_ratings(
                 is_review: t.category_slug
                     == ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG,
                 review_overall: ratings.get(&t.id).copied(),
-                review_product_image: product_images.get(&t.id).cloned(),
+                review_product_image: products
+                    .get(&t.id)
+                    .and_then(|p| p.primary_image_key.clone()),
+                review_product_name: products.get(&t.id).map(|p| p.name.clone()),
+                review_product_slug: products.get(&t.id).map(|p| p.slug.clone()),
                 reply_count: t.reply_count,
                 view_count: t.view_count,
                 is_pinned: t.is_pinned,
@@ -328,13 +335,16 @@ pub(super) async fn review_overall_map(
         .collect()
 }
 
-/// Batch-load `review_thread_id → product cover key` for the review threads in
-/// `threads`, so review cards can fall back to the product image. One query;
-/// empty when none are reviews.
-pub(super) async fn review_product_image_map(
+/// Batch-load `review_thread_id → reviewed product` for the review threads in
+/// `threads`, so review cards can name and link their subject and fall back to
+/// its cover image. One query; empty when none are reviews.
+pub(super) async fn review_product_map(
     state: &crate::app_state::AppState,
     threads: &[ferum_domain::models::Thread],
-) -> std::collections::HashMap<uuid::Uuid, String> {
+) -> std::collections::HashMap<
+    uuid::Uuid,
+    ferum_domain::repositories::product_repository::ReviewedProduct,
+> {
     use ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG;
     let ids: Vec<uuid::Uuid> = threads
         .iter()
@@ -344,7 +354,7 @@ pub(super) async fn review_product_image_map(
     if ids.is_empty() {
         return std::collections::HashMap::new();
     }
-    state.product.review_thumbnails(&ids).await.unwrap_or_default()
+    state.product.reviewed_products(&ids).await.unwrap_or_default()
 }
 
 // ─── Static fallback HTML ─────────────────────────────────────────────────────
@@ -392,6 +402,12 @@ pub async fn render_error_page(
 
 pub enum PageError {
     Internal(anyhow::Error),
+    /// The *caller* got it wrong — a corrupt archive, a manifest that will not
+    /// parse, a file over the size cap. Distinct from `Internal` because the
+    /// admin can act on it, so the reason has to reach them: these endpoints are
+    /// fetched by JS that renders the response into a modal, and a 500 with the
+    /// generic error page tells the person holding the bad file nothing at all.
+    BadRequest(String),
     Unauthorized,
     NotFound,
 }
@@ -408,6 +424,42 @@ impl From<AppError> for PageError {
     }
 }
 
+/// Marks a response whose body is already a message meant for the caller, so
+/// `error_page_layer` leaves it alone instead of substituting the themed error
+/// page. Without it the reason an upload was rejected is replaced by a generic
+/// "Something went wrong" before it ever reaches the modal that asked for it.
+#[derive(Clone, Copy)]
+pub struct ClientErrorPassthrough;
+
+/// Converts a use-case error into a `PageError` that preserves its message.
+///
+/// The `From<AppError>` impl above collapses everything into `Internal`, which
+/// is right for a page navigation — a visitor cannot act on "conflict:
+/// slug_taken" — and wrong for the admin upload endpoints, which are fetched by
+/// JS and render the response into a dialog. There the catalog already holds a
+/// usable sentence for every coded error; this resolves it in the request's
+/// locale, exactly as `translate_errors` does for the JSON API.
+///
+/// Server errors stay `Internal`: their detail is for the log, not the browser.
+pub fn client_facing_error(
+    state: &AppState,
+    locale: &ferum_domain::Locale,
+    e: AppError,
+) -> PageError {
+    if e.status_and_code().0.is_server_error() {
+        return PageError::Internal(anyhow::anyhow!("{:?}", e));
+    }
+    let message = match e.error_payload() {
+        Some(payload) => state.translator.translate(
+            locale,
+            &payload.key(),
+            payload.translator_args().as_slice(),
+        ),
+        None => e.fallback_message(),
+    };
+    PageError::BadRequest(message)
+}
+
 impl IntoResponse for PageError {
     fn into_response(self) -> Response {
         match self {
@@ -415,6 +467,13 @@ impl IntoResponse for PageError {
                 tracing::error!("Page render error: {:?}", e);
                 // Never render via Tera here — Tera itself may have caused this error.
                 (StatusCode::INTERNAL_SERVER_ERROR, Html(STATIC_ERROR_HTML)).into_response()
+            }
+            PageError::BadRequest(msg) => {
+                // Plain text, not the HTML error page: the callers of these
+                // endpoints put the body straight into an alert box.
+                let mut res = (StatusCode::BAD_REQUEST, msg).into_response();
+                res.extensions_mut().insert(ClientErrorPassthrough);
+                res
             }
             PageError::Unauthorized => {
                 axum::response::Redirect::to("/login").into_response()

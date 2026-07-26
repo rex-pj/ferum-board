@@ -50,5 +50,67 @@ pub(crate) fn build_access_token_claims(
         is_banned: user.is_banned,
         banned_until: user.banned_until.map(|t| t.timestamp()),
         exp: (Utc::now() + chrono::Duration::seconds(expiry_secs as i64)).timestamp(),
+        iat: Utc::now().timestamp(),
     }
+}
+
+/// Cache key holding the Unix timestamp of a user's most recent session
+/// invalidation. An access token whose `iat` predates this value is refused by
+/// the auth middleware.
+///
+/// Deliberately keyed per user and written with a TTL equal to the access-token
+/// lifetime: once every token issued before the epoch has expired on its own,
+/// the marker has no work left to do and can be evicted.
+pub fn session_epoch_key(user_id: uuid::Uuid) -> String {
+    format!("user:session_epoch:{user_id}")
+}
+
+/// How long a session-epoch marker is retained.
+///
+/// Only needs to outlive the longest access token that could still be in flight
+/// when it is written. Fixed at 30 days rather than derived from
+/// `JWT_EXPIRY_SECONDS` so that raising that setting can never silently shorten
+/// the window and resurrect tokens the user already revoked. One small key per
+/// user who logged out or changed a password is a negligible cost for removing
+/// that failure mode.
+const SESSION_EPOCH_TTL: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 60 * 60);
+
+/// Revokes every access token issued to `user_id` before the returned epoch,
+/// which callers re-issuing a token in the same request must use as its `iat`.
+///
+/// The epoch is `now + 1`, not `now`, and that one second is the whole
+/// correctness argument. `iat` is expressed in whole seconds, so a token minted
+/// during the same second as the revocation has `iat == now`. Against an epoch
+/// of `now` the middleware's `iat < epoch` test is false and the token survives
+/// — logging out would silently fail to revoke anything whenever the session was
+/// created and ended within the same second. Setting the epoch one second ahead
+/// makes `iat <= now < epoch` hold for every token that already exists.
+///
+/// The cost is that a token minted concurrently in that same second is also
+/// revoked. That fails safe (the holder logs in again) and is the correct
+/// direction to err.
+///
+/// Best-effort by design: a cache write failure must not turn a successful
+/// password change into an error response, so it is logged and swallowed. The
+/// refresh token is invalidated separately, through its own key.
+pub async fn invalidate_sessions(
+    cache: &dyn crate::ports::CacheService,
+    user_id: uuid::Uuid,
+) -> i64 {
+    let epoch = chrono::Utc::now().timestamp() + 1;
+    if let Err(e) = cache
+        .set(
+            &session_epoch_key(user_id),
+            &epoch.to_string(),
+            SESSION_EPOCH_TTL,
+        )
+        .await
+    {
+        tracing::warn!(
+            user_id = %user_id,
+            error = %e,
+            "failed to write session epoch; previously issued access tokens remain valid until exp"
+        );
+    }
+    epoch
 }

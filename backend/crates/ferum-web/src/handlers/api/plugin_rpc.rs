@@ -7,7 +7,6 @@ use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::ports::HookContext;
-use ferum_application::shared::AppError;
 
 /// Generic inbound entry point for Tier 2 (Script) plugins that need to accept
 /// arbitrary client requests — not just react to core hooks. The plugin's JS
@@ -69,29 +68,9 @@ pub async fn upload_media(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let mut file_bytes: Option<bytes::Bytes> = None;
-    let mut content_type = "application/octet-stream".to_string();
-
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-            file_bytes = Some(
-                field
-                    .bytes()
-                    .await
-                    .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?,
-            );
-        }
-    }
-
-    let data = file_bytes.ok_or_else(|| AppError::invalid("file_field_missing"))?;
+    // Validation stays in the use case: it owns the per-plugin media limits and
+    // the `granted_capabilities.media` check.
+    let (data, content_type) = crate::utils::read_file_field(&mut multipart, "file").await?;
     let url = state.plugin.upload_media(actor, &slug, data, content_type).await?;
     Ok(Json(DataResponse::new(UploadMediaResponse { url })))
 }

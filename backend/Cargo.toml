@@ -13,12 +13,143 @@ members = [
 resolver = "2"
 default-members = ["crates/ferum-web"]
 
+# Single source of truth for every third-party version in the workspace. Member
+# crates write `dep = { workspace = true }` and add only the features they need
+# on top — features are additive, so a crate asking for more never conflicts
+# with one asking for less.
+#
+# This table exists because the versions had already drifted: `sha2` was pinned
+# to "0.11" in ferum-application and "0.10" in ferum-infrastructure, which forked
+# the entire RustCrypto stack (two copies each of sha2, digest, block-buffer,
+# crypto-common, cpufeatures) into one binary. Same library, two builds, no
+# warning. A per-crate version string cannot prevent that; one table can.
+[workspace.dependencies]
+# Where the per-crate declarations disagreed on a minimum, this table takes the
+# TIGHTEST of them — a merged requirement must be the union of what every crate
+# asked for, and relaxing a floor here would silently widen what a future
+# `cargo update` may resolve to.
+ammonia = "4"
+anyhow = "1.0.102"
+async-trait = "0.1.91"
+aws-config = "1"
+aws-sdk-s3 = "1"
+axum = "0.8"
+bcrypt = "0.15"
+boa_engine = "0.19"
+bytes = "1"
+chrono = { version = "0.4", features = ["serde"] }
+colored = "2"
+# Only `config::Environment` is used (ferum-web/src/config.rs) — env vars, no
+# config FILES. The default feature set turns on six format parsers anyway:
+# toml, json, yaml (yaml-rust2), ini (rust-ini), ron, json5. Beyond the parsers
+# themselves that chain drags in `pest` (a second copy, ~6 MB rlib, via json5),
+# `nom` 7 (a second major version, via rust-ini) and `base64` 0.21 (via ron) —
+# three of the workspace's duplicate-version pairs exist for formats nothing
+# reads. `Environment` is part of the core crate and needs no feature.
+config = { version = "0.14", default-features = false }
+dashmap = "6"
+dotenvy = "0.15"
+fluent-bundle = "0.16.0"
+fluent-syntax = "0.12.0"
+futures = "0.3"
+hex = "0.4.3"
+# Tied to sha2 below: hmac 0.12 is built on digest 0.10. Bumping one without the
+# other does not fail to compile — it silently duplicates the stack again.
+hmac = "0.12"
+http = "1"
+http-body-util = "0.1"
+intl-memoizer = "0.5.3"
+jsonwebtoken = "9"
+lettre = { version = "0.11", default-features = false, features = [
+    "tokio1",
+    "tokio1-rustls-tls",
+    "smtp-transport",
+    "builder",
+] }
+meilisearch-sdk = "0.28"
+mockall = "0.13"
+pulldown-cmark = { version = "0.13", features = ["html"] }
+# The cache and rate limiter use GET / INCR / TTL / SET / SCAN and nothing else.
+# redis's default feature set additionally compiles the `acl`, `streams`,
+# `geospatial` and `script` command families — thousands of generated command
+# builders this codebase never calls. `keep-alive` is deliberately KEPT: it is
+# also a default, but it enables TCP keepalive on pooled connections, which is
+# how a `ConnectionManager` notices a silently dropped link. Dropping it to save
+# compile time would trade a real production behaviour for nothing.
+redis = { version = "0.27", default-features = false, features = [
+    "tokio-comp",
+    "connection-manager",
+    "keep-alive",
+] }
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rust_decimal = { version = "1", features = ["serde"] }
+sea-orm = { version = "1", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+    "with-uuid",
+    "with-chrono",
+    "with-json",
+] }
+# `default-features = false` drops the `cli` feature, which is ON by default and
+# pulls `sea-orm-cli` -> `clap` + `clap_derive` (21 crates) into the SERVER
+# binary. The server only ever calls `Migrator::up` as a library; the CLI is
+# needed solely by the `migration` bin target, which re-enables it through that
+# crate's own `cli` feature + `required-features`.
+sea-orm-migration = { version = "1", default-features = false, features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Must stay on the 0.10 line: sqlx (via sea-orm) pins it there, so any other
+# choice duplicates rather than upgrades. See the note on `hmac`.
+sha2 = "0.10"
+slug = "0.1"
+tera = "1"
+thiserror = "2"
+tikv-jemallocator = "0.6"
+tokio = "1.52.3"
+tokio-stream = "0.1.18"
+toml = "0.8"
+tower = "0.5"
+tower-http = "0.6"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+unic-langid = "0.9.6"
+url = "2"
+urlencoding = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+validator = { version = "0.19", features = ["derive"] }
+# Theme `.zip` and plugin `.fpkg` archives are ordinary zips: every archive in
+# examples/ is `Defl:N` throughout, and both packaging scripts (PowerShell
+# `Compress-Archive`, `zip -X -r`) emit deflate, as does every mainstream desktop
+# tool. zip's DEFAULT features additionally compile bzip2, zstd, lzma, xz,
+# deflate64 and AES — three of which are C libraries built from source by a
+# build script. `cargo build --timings` put `lzma-sys` at 93s and `zstd-sys` at
+# 89s: three minutes of every cold build spent on compression formats no archive
+# this application reads has ever used.
+#
+# TRADE-OFF: an archive compressed with zstd/bzip2/xz, or AES-encrypted, is now
+# rejected as an unsupported method instead of extracting. That is a real
+# (if narrow) capability loss — re-enable the specific feature if a user ever
+# needs it, rather than restoring the whole default set.
+zip = { version = "2.1", default-features = false, features = ["deflate"] }
+
 [profile.dev]
 debug = "line-tables-only"
 codegen-units = 256
 
 [profile.dev.package."*"]
 opt-level = 1
+# Third-party code is not what you step through in a debugger, and its debug
+# info is the bulk of what the linker has to chew on every single rebuild — a
+# cost paid on each edit-compile cycle, not once. Workspace crates keep their
+# `line-tables-only` info from [profile.dev] above, so backtraces through OUR
+# code still carry file/line.
+debug = false
 
 [profile.release]
 opt-level = 3
@@ -28,3 +159,31 @@ strip = true         # strip symbols — smaller binary, faster page-in
 # NOTE: panic is intentionally left as "unwind". This server uses fire-and-forget
 # tokio::spawn tasks; with panic="abort" a single panicked task would kill the whole
 # process. Unwind keeps a request/task panic isolated, preserving availability.
+
+# Optimised, but built in minutes rather than half an hour — for profiling, for
+# reproducing a bug that only appears under `opt-level = 3`, for a perf
+# measurement you do not want to wait 27 minutes to start.
+#
+#     cargo build --profile release-fast
+#     cargo run   --profile release-fast
+#
+# ADDITIVE ON PURPOSE: `--release` keeps its exact previous meaning, so any
+# deploy step or script that builds it still produces the fully-optimised
+# artifact. Flipping `release` to thin LTO and moving `fat` to a new `dist`
+# profile would have been the same two profiles, but it silently changes what
+# every existing `--release` invocation ships.
+#
+# WHY THIS IS THE SLOW PART: `cargo build --timings` on the fat-LTO build put
+# the final `ferum-web` binary unit at 859s — over half of a 27m29s build —
+# because `lto = "fat"` + `codegen-units = 1` deliberately serialises codegen
+# for the whole 393-crate program into one unit. Thin LTO keeps most
+# cross-crate inlining while letting those units run in parallel.
+#
+# TRADE-OFF: expect a few percent off peak throughput versus the `release`
+# profile. Never ship this one — benchmark numbers taken here are indicative,
+# not final, and the binary keeps its symbols.
+[profile.release-fast]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+strip = false        # keep symbols: this profile exists to be profiled/debugged

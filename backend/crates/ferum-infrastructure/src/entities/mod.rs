@@ -3,6 +3,7 @@ pub mod bookmarks;
 pub mod brands;
 pub mod daily_stats;
 pub mod materials;
+pub mod product_categories;
 pub mod product_materials;
 pub mod product_media;
 pub mod product_rating_stats;

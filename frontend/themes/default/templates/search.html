@@ -4,57 +4,308 @@
 {% block title %}{{ t(k="ui-search") }}{% if query %}: {{ query }}{% endif %} — {{ site.name }}{% endblock %}
 
 {% block content %}
-<h1 class="h4 fw-bold mb-3">
-  {{ t(k="ui-search") }}{% if query %}<span class="fw-normal text-body-secondary"> — {{ query }}</span>{% endif %}
-</h1>
+<div class="fr-search-head">
+  {# Plain title. The query is NOT echoed or colour-accented here — it already
+     lives in the field below and in the results count, and a second, tinted copy
+     in the heading is the kind of flourish that reads as amateur. #}
+  <h1 class="h4 fw-bold mb-3">{{ t(k="ui-search") }}</h1>
 
-<form class="mb-4" action="/search" method="get">
-  <div class="d-flex flex-column gap-2">
-    <div class="input-group">
-      <input type="search" class="form-control" name="q" value="{{ query }}"
-             placeholder="{{ t(k='ui-search-threads-and-posts') }}" autofocus>
-      <button class="btn btn-primary" type="submit">
-        <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="ui-search") }}
+  <form id="searchForm" action="/search" method="get" role="search" x-data="{ open: false }">
+    {# The active tab rides along with the query so refining a search keeps you
+       where you were, instead of silently bouncing back to "All". #}
+    {% if active_tab != "all" %}<input type="hidden" name="tab" value="{{ active_tab }}">{% endif %}
+
+    {# Field + trailing submit button, mirroring the masthead search so the two
+       read as one design. The button is a real, obvious tap target (the earlier
+       icon-only submit was too subtle to register as clickable on mobile); its
+       size is restrained to the field height so it does not shout. Each theme
+       colours .fr-search-submit to match its own accent. #}
+    <div class="fr-search-field">
+      <input type="search" name="q" value="{{ query }}" autofocus
+             placeholder="{{ t(k='ui-search-placeholder-everything') }}" aria-label="{{ t(k='ui-search') }}">
+      <button type="submit" class="fr-search-submit">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <span>{{ t(k="ui-search") }}</span>
       </button>
     </div>
 
-    {# Category filter dropdown — only shown when categories are available #}
-    {% if search_categories %}
-    <div class="d-flex align-items-center gap-2 flex-wrap" x-data>
-      <label class="form-label mb-0 text-muted small" style="white-space:nowrap">{{ t(k="ui-filter-by-category") }}</label>
-      <select name="category_id" class="form-select form-select-sm" style="max-width:260px"
-              @change="$el.form.submit()">
-        <option value="">{{ t(k="ui-all-categories-2") }}</option>
-        {% for cat in search_categories %}
-          <option value="{{ cat.id }}"
-            {% if active_category_id and active_category_id == cat.id %}selected{% endif %}>
-            {% if cat.parent_id %}-- {% endif %}{{ cat.name }}
-          </option>
-        {% endfor %}
-      </select>
-      {% if active_category_id %}
-        <a href="/search?q={{ query }}" class="btn btn-sm btn-outline-secondary">
-          <i class="fa-solid fa-xmark me-1"></i>{{ t(k="ui-clear-filter") }}
+    {# Two taxonomies, deliberately not merged into one control.
+
+       Chuyên mục (forum) organises *conversation* — Off-Topic, Programming,
+       Site Feedback — so it narrows discussions and appears only on the tabs
+       that show them. Loại sản phẩm (catalogue) organises *furniture* — Sofa,
+       Ghế, Bàn — so it narrows products and appears in the product row.
+
+       Merging them was the earlier mistake: no forum category is a sensible
+       home for a sofa, so one shared dropdown could only ever return nothing on
+       one side of the split.
+
+       All filters AND together: each choice narrows. That is the only reading
+       anyone expects, and when the intersection is empty the result page offers
+       the specific filter to drop rather than a bare "no results". #}
+    {# ── Tabs, then the controls that refine the chosen tab ────────────────────
+
+       The tab strip comes FIRST because it is the mode switch: it decides which
+       filters exist at all. With filters above it, the reader met four controls,
+       then found the thing that changes them underneath — and the row silently
+       reshaped itself when they clicked a tab they had already scrolled past.
+       Cause above effect.
+
+       The strip also stays put across tabs, so the one element that never
+       changes is the one anchoring the page. #}
+    {% if query %}
+    <nav class="fr-search-tabs" aria-label="{{ t(k='ui-search-result-types') }}">
+      {# Products and discussions are ranked on incomparable scales, so they are
+         never interleaved. The badge on the tab you are NOT on is the whole
+         point: without it, a searcher looking at an empty discussion list has no
+         way to know that twelve products matched. #}
+      <a href="/search?q={{ query_encoded }}{% if active_category_id %}&category_id={{ active_category_id }}{% endif %}"
+         class="fr-search-tab{% if active_tab == 'all' %} active{% endif %}"
+         {% if active_tab == "all" %}aria-current="page"{% endif %}>
+        {{ t(k="ui-search-tab-all") }}
+        <span class="fr-search-tab-count">{{ total_all }}</span>
+      </a>
+      <a href="/search?q={{ query_encoded }}&tab=products{{ facet_params }}"
+         class="fr-search-tab{% if active_tab == 'products' %} active{% endif %}"
+         {% if active_tab == "products" %}aria-current="page"{% endif %}>
+        {{ t(k="ui-search-tab-products") }}
+        <span class="fr-search-tab-count">{{ product_total }}</span>
+      </a>
+      <a href="/search?q={{ query_encoded }}&tab=threads{% if active_category_id %}&category_id={{ active_category_id }}{% endif %}{% if active_tsort and active_tsort != 'relevance' %}&tsort={{ active_tsort }}{% endif %}"
+         class="fr-search-tab{% if active_tab == 'threads' %} active{% endif %}"
+         {% if active_tab == "threads" %}aria-current="page"{% endif %}>
+        {{ t(k="ui-search-tab-discussions") }}
+        <span class="fr-search-tab-count">{{ thread_total }}</span>
+      </a>
+    </nav>
+
+    {# "Tất cả" is a router, not a workspace: its job is to say where the matches
+       are so the reader can go there. A filter that narrows only one of the two
+       lists it shows would be answering a question nobody asked yet — so it
+       carries no controls, only the counts above.
+
+       On a phone four dropdowns push the results a screen and a half down, so
+       they collapse behind a disclosure that carries the active count. Nothing
+       is hidden without saying how much. #}
+    {% if active_tab != "all" %}
+    <div class="fr-search-refine">
+      <button type="button" class="fr-refine-toggle d-md-none" @click="open = !open"
+              :aria-expanded="open ? 'true' : 'false'" aria-controls="refineControls">
+        <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+        <span>{{ t(k="ui-filter") }}{% if filter_chips %} ({{ filter_chips | length }}){% endif %}</span>
+      </button>
+
+      {# Each control's *default option is its own name* ("Danh mục", "Thương
+         hiệu"), not "Tất cả …". Four dropdowns that all begin with the same word
+         cannot be scanned — the eye has to read to the end of each to tell them
+         apart — and it was actively wrong here: "Tất cả loại sản phẩm" (Sofa /
+         Ghế / Bàn) sat next to "Tất cả loại" (Nội thất / Vật liệu / Phòng), two
+         different axes reading as near-duplicates.
+
+         With every control self-labelled, the row needs no "Lọc theo:" heading
+         of its own — it sits under the tab strip and is unmistakable. The label
+         survives for screen readers on the group. #}
+      <div id="refineControls" class="fr-refine-controls" :class="{ 'is-open': open }">
+    {% if active_tab == "threads" and search_categories %}
+        <div class="fr-refine-filters" role="group" aria-label="{{ t(k='ui-filter-by') }}">
+          <select id="searchCategory" name="category_id" class="form-select form-select-sm w-auto{% if active_category_id %} is-active{% endif %}"
+                  @change="$el.form.submit()" aria-label="{{ t(k='ui-category') }}">
+            <option value="">{{ t(k="ui-category") }}</option>
+            {% for cat in search_categories %}
+              <option value="{{ cat.id }}"
+                {% if active_category_id and active_category_id == cat.id %}selected{% endif %}>
+                {% if cat.parent_id %}— {% endif %}{{ cat.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+    {% elif active_tab == "products" %}
+        <div class="fr-refine-filters" role="group" aria-label="{{ t(k='ui-filter-by') }}">
+          {# Every control submits on change. One model across the page, and it
+             matches how narrowing actually works: you pick, you see the count move,
+             you pick again. A batch-then-Apply button made the reader guess what
+             four choices would do before seeing any of them. #}
+          {% if product_categories %}
+          <select id="searchPcat" name="pcat" class="form-select form-select-sm w-auto{% if active_pcat %} is-active{% endif %}"
+                  @change="$el.form.submit()" aria-label="{{ t(k='ui-product-category') }}">
+            <option value="">{{ t(k="ui-product-category") }}</option>
+            {% for pc in product_categories %}
+              <option value="{{ pc.id }}" {% if active_pcat == pc.id %}selected{% endif %}>{% if pc.is_child %}— {% endif %}{{ pc.name }}</option>
+            {% endfor %}
+          </select>
+          {% endif %}
+          <select id="searchProductType" name="type" class="form-select form-select-sm w-auto{% if active_type %} is-active{% endif %}"
+                  @change="$el.form.submit()" aria-label="{{ t(k='ui-type') }}">
+            <option value="">{{ t(k="ui-type") }}</option>
+            <option value="furniture" {% if active_type == "furniture" %}selected{% endif %}>{{ t(k="ui-furniture") }}</option>
+            <option value="material" {% if active_type == "material" %}selected{% endif %}>{{ t(k="ui-material") }}</option>
+            <option value="room" {% if active_type == "room" %}selected{% endif %}>{{ t(k="ui-room") }}</option>
+          </select>
+          <select name="brand_id" class="form-select form-select-sm w-auto{% if active_brand %} is-active{% endif %}"
+                  @change="$el.form.submit()" aria-label="{{ t(k='ui-brand') }}">
+            <option value="">{{ t(k="ui-brand") }}</option>
+            {% for b in brands %}
+              <option value="{{ b.id }}" {% if active_brand == b.id %}selected{% endif %}>{{ b.name }}</option>
+            {% endfor %}
+          </select>
+          <select name="material_id" class="form-select form-select-sm w-auto{% if active_material %} is-active{% endif %}"
+                  @change="$el.form.submit()" aria-label="{{ t(k='ui-material') }}">
+            <option value="">{{ t(k="ui-material") }}</option>
+            {% for mat in materials %}
+              <option value="{{ mat.id }}" {% if active_material == mat.id %}selected{% endif %}>{{ mat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+    {% endif %}
+      </div>{# /.fr-refine-controls #}
+    </div>{# /.fr-search-refine #}
+    {% endif %}
+    {% endif %}{# /query #}
+
+    {# Whatever the current tab does not show, it carries — so refining the
+       query here and switching back finds the other tab as you left it. #}
+    {% if active_tab == "products" %}
+      {% if active_category_id %}<input type="hidden" name="category_id" value="{{ active_category_id }}">{% endif %}
+    {% else %}
+      {% if active_type %}<input type="hidden" name="type" value="{{ active_type }}">{% endif %}
+      {% if active_brand %}<input type="hidden" name="brand_id" value="{{ active_brand }}">{% endif %}
+      {% if active_material %}<input type="hidden" name="material_id" value="{{ active_material }}">{% endif %}
+      {% if active_pcat %}<input type="hidden" name="pcat" value="{{ active_pcat }}">{% endif %}
+      {% if active_psort and active_psort != "relevance" %}<input type="hidden" name="psort" value="{{ active_psort }}">{% endif %}
+      {# On "Tất cả" the category control is hidden but the filter still applies,
+         so it has to survive a re-search from here too. #}
+      {% if active_tab == "all" and active_category_id %}<input type="hidden" name="category_id" value="{{ active_category_id }}">{% endif %}
+    {% endif %}
+    {# Discussion sort is the visible control on the Discussions tab; on every
+       other tab it rides along hidden so switching back restores the order. #}
+    {% if active_tab != "threads" and active_tsort and active_tsort != "relevance" %}
+      <input type="hidden" name="tsort" value="{{ active_tsort }}">
+    {% endif %}
+  </form>
+</div>
+
+{% if query %}
+  {# What is narrowing this page, in one line, each removable.
+
+     Four dropdowns cannot answer that question at a glance — you have to read
+     every one and notice which is off its default. The chips state it plainly
+     and turn "undo this one" into a single click, which is what makes stacking
+     several filters usable at all. #}
+  {% if filter_chips %}
+  <div class="fr-search-chips" role="group" aria-label="{{ t(k='ui-active-filters') }}">
+    {% for chip in filter_chips %}
+      <a href="{{ chip.remove_url }}" class="fr-search-catchip">
+        {% if chip.kind == "code" %}{{ m::product_type_label(code=chip.label) }}{% else %}{{ chip.label }}{% endif %}
+        <i class="fa-solid fa-xmark fa-xs" aria-hidden="true"></i>
+        <span class="visually-hidden">{{ t(k="ui-clear-filter") }}</span>
+      </a>
+    {% endfor %}
+    {% if filter_chips | length > 1 %}
+      <a href="/search?q={{ query_encoded }}{% if active_tab != 'all' %}&tab={{ active_tab }}{% endif %}"
+         class="fr-search-clear">{{ t(k="ui-clear-all-filters") }}</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if search_error %}
+    <div class="text-center py-5" style="color:var(--bs-secondary-color)">
+      <i class="fa-solid fa-triangle-exclamation fa-3x mb-3 d-block text-warning opacity-50" aria-hidden="true"></i>
+      {{ t(k="ui-search-is-temporarily-unavailable-please-try") }}
+    </div>
+  {% else %}
+
+  {# ── Products ──────────────────────────────────────────────────────────────
+     On "All" this is a preview row capped server-side, headed by a link to the
+     full set — enough to answer "does this product exist here?" without burying
+     the discussions. On the Products tab it is the full, paginated grid. #}
+  {% if products %}
+    {% if active_tab == "all" %}
+    {# The count rides in the heading on every "All" section, not just when there
+       is a "see all" link — otherwise a small result set shows a bare title and
+       the reader cannot tell two matches from twenty without switching tabs. #}
+    <div class="fr-search-section-head">
+      <h2 class="fr-search-section-title">
+        {{ t(k="ui-search-tab-products") }}
+        <span class="fr-search-section-count">{{ product_total }}</span>
+      </h2>
+      {% if product_total > products | length %}
+        <a href="/search?q={{ query_encoded }}&tab=products{{ facet_params }}" class="fr-search-section-more">
+          {{ t(k="ui-see-all-n-products", count=product_total) }}
+          <i class="fa-solid fa-arrow-right fa-xs ms-1" aria-hidden="true"></i>
         </a>
       {% endif %}
     </div>
+    {% else %}
+    <div class="fr-search-count d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <strong>{{ product_total }}</strong> {{ t(k="ui-products-label", count=product_total) }}
+        “<strong>{{ query }}</strong>”
+      </div>
+      {# This control sits with the results, OUTSIDE the <form> up in the search
+         head. So it associates with the form by id (form="searchForm") to be
+         submitted, and carries its own x-data so Alpine binds @change here —
+         it is not inside the form's x-data subtree. Without both, selecting a
+         sort option does nothing. #}
+      <div class="fr-search-sort" x-data>
+        <label class="fr-search-filter-label" for="searchPsort">{{ t(k="ui-sort") }}:</label>
+        <select id="searchPsort" name="psort" form="searchForm" class="fr-sort-select" @change="$el.form.submit()">
+          <option value="relevance" {% if active_psort == "relevance" %}selected{% endif %}>{{ t(k="ui-sort-relevance") }}</option>
+          <option value="top_rated" {% if active_psort == "top_rated" %}selected{% endif %}>{{ t(k="ui-top-rated") }}</option>
+          <option value="most_reviewed" {% if active_psort == "most_reviewed" %}selected{% endif %}>{{ t(k="ui-most-reviewed") }}</option>
+          <option value="newest" {% if active_psort == "newest" %}selected{% endif %}>{{ t(k="ui-newest") }}</option>
+        </select>
+      </div>
+    </div>
     {% endif %}
-  </div>
-</form>
 
-{% if query %}
-  {% if results %}
-    <p class="mb-3" style="font-size:0.875rem;color:var(--bs-secondary-color)">
-      <strong>{{ pagination.total }}</strong> {{ t(k="ui-results-label", count=pagination.total) }}
-      "<strong>{{ query }}</strong>"
+    <div class="row g-3 mb-4">
+      {% for p in products %}
+      <div class="col-6 col-md-4 col-lg-3">
+        {{ m::product_card(p=p) }}
+      </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {# ── Discussions ───────────────────────────────────────────────────────── #}
+  {% if active_tab != "products" and results %}
+    <div class="fr-search-count d-flex align-items-center gap-2 flex-wrap mb-3">
+      {% if active_tab == "all" and products %}
+        <h2 class="fr-search-section-title mb-0">{{ t(k="ui-search-tab-discussions") }}</h2>
+      {% endif %}
+      <span>
+        <strong>{{ thread_total }}</strong> {{ t(k="ui-results-label", count=thread_total) }}
+        “<strong>{{ query }}</strong>”
+      </span>
+      {# Active category rendered as a removable chip — replaces the old inline
+         "in <category>" prose (which hardcoded an English word) and doubles as the
+         clear-filter control. #}
       {% if active_category_id %}
         {% for cat in search_categories %}
           {% if cat.id == active_category_id %}
-            in <strong>{{ cat.name }}</strong>
+            <a href="/search?q={{ query_encoded }}{% if active_tab != 'all' %}&tab={{ active_tab }}{% endif %}"
+               class="fr-search-catchip" title="{{ t(k='ui-clear-filter') }}">
+              <i class="fa-solid fa-layer-group fa-xs" aria-hidden="true"></i>{{ cat.name }}
+              <i class="fa-solid fa-xmark fa-xs" aria-hidden="true"></i>
+            </a>
           {% endif %}
         {% endfor %}
       {% endif %}
-    </p>
+      {# Sort only on the Discussions tab. "All" is a router: it previews two
+         incomparable lists, so a single order control there would be ambiguous —
+         the "see all" links lead here, where sorting is unambiguous. Same
+         out-of-form association as the product sort above. #}
+      {% if active_tab == "threads" %}
+      <div class="fr-search-sort ms-auto" x-data>
+        <label class="fr-search-filter-label" for="searchTsort">{{ t(k="ui-sort") }}:</label>
+        <select id="searchTsort" name="tsort" form="searchForm" class="fr-sort-select" @change="$el.form.submit()">
+          <option value="relevance" {% if active_tsort == "relevance" %}selected{% endif %}>{{ t(k="ui-sort-relevance") }}</option>
+          <option value="newest" {% if active_tsort == "newest" %}selected{% endif %}>{{ t(k="ui-newest") }}</option>
+          <option value="most_replies" {% if active_tsort == "most_replies" %}selected{% endif %}>{{ t(k="ui-sort-most-replies") }}</option>
+        </select>
+      </div>
+      {% endif %}
+    </div>
     <div class="fr-feed mb-3">
       {% for result in results %}
         <div class="fr-thread-row">
@@ -94,26 +345,78 @@
         </div>
       {% endfor %}
     </div>
+  {% endif %}
+
+  {% if products or results %}
     {% include "default/templates/partials/pagination.html" %}
-  {% elif search_error %}
-    <div class="text-center py-5" style="color:var(--bs-secondary-color)">
-      <i class="fa-solid fa-triangle-exclamation fa-3x mb-3 d-block text-warning opacity-50" aria-hidden="true"></i>
-      {{ t(k="ui-search-is-temporarily-unavailable-please-try") }}
-    </div>
-  {% else %}
+  {% endif %}
+
+  {# ── Nothing on this tab ───────────────────────────────────────────────────
+     A miss is not a dead end. Where the *other* tab has matches, say so and
+     link there — that is the single most likely thing the searcher wanted. And
+     a query that finds no product is a gap in the catalogue, so a contributor
+     is offered the action that closes it, pre-filled with what they typed. #}
+  {% if not products and not results %}
     <div class="text-center py-5" style="color:var(--bs-secondary-color)">
       <i class="fa-solid fa-magnifying-glass fa-3x mb-3 d-block opacity-25" aria-hidden="true"></i>
-      {{ t(k="ui-no-results-found-for") }}<strong>{{ query }}</strong>"
-      {% if active_category_id %} {{ t(k="ui-in-this-category") }}{% endif %}.
-      {% if active_category_id %}
-        <div class="mt-2">
-          <a href="/search?q={{ query }}" class="btn btn-sm btn-outline-secondary">
+      <p class="mb-3">
+        {% if active_tab == "products" %}
+          {{ t(k="ui-no-products-found-for-query", query=query) }}
+        {% else %}
+          {{ t(k="ui-no-results-found-for") }}<strong>{{ query }}</strong>”{% if active_category_id %} {{ t(k="ui-in-this-category") }}{% endif %}.
+        {% endif %}
+      </p>
+
+      {# Filters AND together, so an empty page is often an empty *intersection*
+         rather than an absent thing. Naming the filter to drop, with the count
+         it would restore, turns that into one click instead of a guessing game.
+         Most-specific first: the product facets are the narrower choice, so
+         dropping them is offered before dropping the category. #}
+      {% if has_relaxation %}
+      <p class="mb-3">
+        <span class="d-block small mb-2" style="color:var(--bs-tertiary-color)">{{ t(k="ui-too-many-filters") }}</span>
+        {% if relaxed.without_facets and relaxed.without_facets > 0 %}
+          <a href="/search?q={{ query_encoded }}&tab=products{% if active_category_id %}&category_id={{ active_category_id }}{% endif %}"
+             class="btn btn-sm btn-outline-primary me-2">
+            {{ t(k="ui-drop-product-filters", count=relaxed.without_facets) }}
+          </a>
+        {% endif %}
+        {% if relaxed.without_category and relaxed.without_category > 0 %}
+          <a href="/search?q={{ query_encoded }}{% if active_tab != 'all' %}&tab={{ active_tab }}{% endif %}{% if active_tab != 'threads' %}{{ facet_params }}{% endif %}"
+             class="btn btn-sm btn-outline-primary me-2">
+            {{ t(k="ui-drop-category-filter", count=relaxed.without_category) }}
+          </a>
+        {% endif %}
+      </p>
+      {% endif %}
+
+      <div class="d-flex flex-wrap gap-2 justify-content-center">
+        {% if active_tab == "products" and thread_total > 0 %}
+          <a href="/search?q={{ query_encoded }}&tab=threads" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-regular fa-comments me-1" aria-hidden="true"></i>{{ t(k="ui-see-n-discussions-instead", count=thread_total) }}
+          </a>
+        {% endif %}
+        {% if active_tab != "products" and product_total > 0 %}
+          <a href="/search?q={{ query_encoded }}&tab=products{{ facet_params }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fa-solid fa-couch me-1" aria-hidden="true"></i>{{ t(k="ui-see-n-products-instead", count=product_total) }}
+          </a>
+        {% endif %}
+        {% if active_category_id %}
+          <a href="/search?q={{ query_encoded }}{% if active_tab != 'all' %}&tab={{ active_tab }}{% endif %}"
+             class="btn btn-sm btn-outline-secondary">
             {{ t(k="ui-search-all-categories") }}
           </a>
-        </div>
-      {% endif %}
+        {% endif %}
+        {% if can_submit_product and product_total == 0 %}
+          <a href="/new-thread?add_product=1&name={{ query | urlencode }}" class="btn btn-sm btn-primary">
+            <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>{{ t(k="ui-suggest-a-product-named", query=query) }}
+          </a>
+        {% endif %}
+      </div>
     </div>
   {% endif %}
+
+  {% endif %}{# /search_error #}
 {% endif %}
 {% endblock %}
 
@@ -124,10 +427,10 @@
     <div class="fr-panel-section">{{ t(k="ui-search-tips") }}</div>
     <div class="fr-panel-body">
       <ul class="small text-muted ps-3 mb-0" style="line-height:2">
+        <li>{{ t(k="ui-tip-searches-products-and-threads") }}</li>
+        <li>{{ t(k="ui-tip-accents-optional") }}</li>
+        <li>{{ t(k="ui-tip-filter-products-by-brand") }}</li>
         <li>{{ t(k="ui-use-specific-keywords") }}</li>
-        <li>{{ t(k="ui-search-is-case-insensitive") }}</li>
-        <li>{{ t(k="ui-searches-thread-titles-and-post-content") }}</li>
-        <li>{{ t(k="ui-use-the-category-filter-to-narrow") }}</li>
         <li>{{ t(k="ui-shorter-queries-return-more-results") }}</li>
       </ul>
     </div>
@@ -135,6 +438,10 @@
 
   <div class="fr-panel">
     <div class="fr-panel-header">{{ t(k="ui-browse") }}</div>
+    <a href="/catalog" class="fr-panel-row">
+      <i class="fa-solid fa-couch fa-sm fr-icon-col" aria-hidden="true"></i>
+      <span>{{ t(k="ui-products") }}</span>
+    </a>
     <a href="/forum" class="fr-panel-row">
       <i class="fa-regular fa-folder fa-sm fr-icon-col" aria-hidden="true"></i>
       <span>{{ t(k="ui-all-categories") }}</span>

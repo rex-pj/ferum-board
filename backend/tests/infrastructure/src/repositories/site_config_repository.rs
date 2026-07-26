@@ -8,7 +8,7 @@ use crate::common::TestDb;
 
 #[tokio::test]
 async fn get_on_empty_returns_none() {
-    // "site_name" is seeded by migrations; use a key that is never seeded.
+    // "site_name" is seeded at startup; use a key that is never seeded.
     let db = TestDb::new("sc_get_empty").await;
     let repo = PgSiteConfigRepository::new(db.conn.clone());
     let val = repo.get("nonexistent_key").await.expect("get");

@@ -29,6 +29,7 @@ use ferum_application::usecases::user_usecase::UserUseCase;
 use ferum_application::usecases::plugin_usecase::PluginUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
 use ferum_application::usecases::theme_usecase::ThemeUseCase;
+use ferum_infrastructure::email::ReloadableEmailService;
 use ferum_domain::repositories::{SiteConfigRepository, StoredFileRepository, UserRoleRepository};
 use ferum_domain::repositories::user_repository::UserRepository;
 
@@ -75,6 +76,10 @@ pub struct AppState {
     /// In-memory authoritative copy of site_config table. Loaded at startup,
     /// updated synchronously on every write — no TTL, no serialization overhead.
     pub site_config_cache: Arc<tokio::sync::RwLock<HashMap<String, String>>>,
+    /// The live mail transport, as the concrete reloadable type rather than
+    /// `Arc<dyn EmailService>`: the config handler needs `reload()` to apply SMTP
+    /// settings edited from /admin/settings without a restart.
+    pub email: Arc<ReloadableEmailService>,
     /// In-memory copy of the active theme slug. Loaded at startup, updated on theme activation.
     pub active_theme_cache: Arc<tokio::sync::RwLock<String>>,
     /// Ordered inheritance chain for the active theme: [active, parent, …, "default"].

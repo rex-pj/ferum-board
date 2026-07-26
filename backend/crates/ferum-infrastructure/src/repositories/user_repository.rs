@@ -157,7 +157,7 @@ fn row_to_domain(row: UserRow) -> User {
     }
 }
 
-fn domain_trust_to_entity(level: &TrustLevel) -> users::TrustLevel {
+pub(crate) fn domain_trust_to_entity(level: &TrustLevel) -> users::TrustLevel {
     match level {
         TrustLevel::New => users::TrustLevel::New,
         TrustLevel::Basic => users::TrustLevel::Basic,

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use uuid::Uuid;
 
+use ferum_domain::models::product::ProductType;
 use ferum_domain::Locale;
 /// Re-exported so port consumers get the argument type alongside the trait.
 /// It lives in the domain because `AppError` carries translation arguments and
@@ -56,6 +57,20 @@ pub struct AccessTokenClaims {
     /// Unix timestamp of ban expiry; None means permanent ban.
     pub banned_until: Option<i64>,
     pub exp: i64,
+    /// Unix timestamp the token was issued at.
+    ///
+    /// Access tokens are stateless, so there is otherwise no way to stop one:
+    /// logging out or changing a password left every already-issued token valid
+    /// until `exp`. Comparing this against a per-user "session epoch" (bumped on
+    /// logout and password change) gives revocation without adding a session
+    /// table. See `session_epoch_key` and the check in the auth middleware.
+    ///
+    /// Defaulted so tokens minted before this field existed still deserialize;
+    /// such a token reads as `iat = 0` and is therefore treated as predating any
+    /// epoch that gets set — it is revoked the first time a user actually
+    /// invalidates their sessions, which is the correct, fail-safe direction.
+    #[serde(default)]
+    pub iat: i64,
 }
 
 // ─── CacheService ─────────────────────────────────────────────────────────────
@@ -154,13 +169,152 @@ pub trait SearchService: Send + Sync {
     async fn search(&self, query: SearchQuery) -> Result<SearchResults, AppError>;
 }
 
+/// What a query is searching over. One call answers for exactly one kind: the
+/// relevance scores of a thread title and a product name are not on a common
+/// scale, and merging them into one ranked list produces an order that means
+/// nothing. Callers that want both run both and present them as distinct
+/// sections — see `SearchUseCase::search_all`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchKind {
+    Thread,
+    Product,
+}
+
+/// Ordering for product results.
+///
+/// Deliberately not `ProductSort` from the domain: browsing a catalogue has no
+/// notion of relevance, and search has no business defaulting to "newest". The
+/// two enums overlap but their defaults are opposites, which is exactly the
+/// kind of thing that goes wrong silently when one type serves both.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProductSearchSort {
+    #[default]
+    Relevance,
+    TopRated,
+    MostReviewed,
+    Newest,
+}
+
+impl ProductSearchSort {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProductSearchSort::Relevance => "relevance",
+            ProductSearchSort::TopRated => "top_rated",
+            ProductSearchSort::MostReviewed => "most_reviewed",
+            ProductSearchSort::Newest => "newest",
+        }
+    }
+
+    /// Unknown values fall back to relevance rather than erroring — a stale or
+    /// hand-edited `?psort=` should still return results.
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "top_rated" => ProductSearchSort::TopRated,
+            "most_reviewed" => ProductSearchSort::MostReviewed,
+            "newest" => ProductSearchSort::Newest,
+            _ => ProductSearchSort::Relevance,
+        }
+    }
+}
+
+/// Ordering for thread (discussion) results.
+///
+/// Separate from the domain's `ThreadSort` (feed browsing) for the same reason
+/// [`ProductSearchSort`] is separate from `ProductSort`: search defaults to
+/// relevance, a feed defaults to recency, and the feed's `Latest`/`Unanswered`/
+/// `Solved` modes have no meaning over a text-match result set. Kept minimal on
+/// purpose — three orderings the searcher actually reaches for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ThreadSearchSort {
+    #[default]
+    Relevance,
+    Newest,
+    MostReplies,
+}
+
+impl ThreadSearchSort {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ThreadSearchSort::Relevance => "relevance",
+            ThreadSearchSort::Newest => "newest",
+            ThreadSearchSort::MostReplies => "most_replies",
+        }
+    }
+
+    /// Unknown values fall back to relevance, mirroring [`ProductSearchSort::parse`].
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "newest" => ThreadSearchSort::Newest,
+            "most_replies" => ThreadSearchSort::MostReplies,
+            _ => ThreadSearchSort::Relevance,
+        }
+    }
+}
+
+/// Product-only narrowing, applied on top of the text match.
+///
+/// The forum category is deliberately *not* here — it narrows both kinds and
+/// lives on [`SearchQuery::in_category_ids`]. Everything in this struct is
+/// meaningless for a thread, and keeping the split explicit is what stops a
+/// brand filter from silently shrinking the discussion list.
+#[derive(Debug, Clone, Default)]
+pub struct ProductFacets {
+    pub product_type: Option<ProductType>,
+    pub brand_id: Option<Uuid>,
+    pub material_id: Option<Uuid>,
+    pub sort: ProductSearchSort,
+}
+
+impl ProductFacets {
+    /// Whether any narrowing facet is set. Sort is excluded — reordering is not
+    /// filtering, and a page that shows "filters active" because someone picked
+    /// an ordering is lying to the reader.
+    pub fn is_narrowed(&self) -> bool {
+        self.product_type.is_some() || self.brand_id.is_some() || self.material_id.is_some()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SearchQuery {
     pub q: String,
-    /// All category IDs to filter by (parent + resolved children). Empty = no filter.
-    pub category_ids: Vec<Uuid>,
+    pub kind: SearchKind,
+    pub facets: ProductFacets,
+    /// Ordering for thread hits. Ignored when `kind` is `Product` (products use
+    /// `facets.sort`). Defaults to relevance, so a caller that does not set it
+    /// gets the text-rank order that was the only option before.
+    pub thread_sort: ThreadSearchSort,
+    /// The exact set of categories a thread hit may come from — already
+    /// intersected with what the viewer is allowed to see. **Empty yields no
+    /// thread hits**, which is the safe default: a caller that forgets to
+    /// resolve visibility gets nothing rather than leaking the titles of
+    /// `staff_only` threads. Ignored when `kind` is `Product`.
+    ///
+    /// Named for what it is, because the field below has the *opposite* empty
+    /// semantics and one of them has to fail closed.
+    pub visible_category_ids: Vec<Uuid>,
+    /// The category the reader chose, expanded to include its children.
+    /// **Empty means no restriction** — unlike `visible_category_ids`, this is a
+    /// user filter, not an access control, so its absence must widen rather
+    /// than narrow.
+    ///
+    /// Applied to products only; the thread side gets the same narrowing by
+    /// having `visible_category_ids` intersected with the choice before it
+    /// arrives here. Products with no category are excluded when this is set —
+    /// an unfiled product is genuinely not in any category, and including it
+    /// everywhere would make the filter meaningless.
+    pub in_category_ids: Vec<Uuid>,
+    /// Who is asking. Draft products are unlisted, except to whoever submitted
+    /// them — otherwise a contributor cannot find their own pending entry.
+    /// Ignored when `kind` is `Thread`.
+    pub viewer_id: Option<Uuid>,
     pub page: u64,
     pub per_page: u64,
+    /// Return only `total`, with no hits. Tab badges need the size of the kind
+    /// the user is *not* currently looking at ("Products (12)"), and fetching
+    /// rows that will be discarded to learn a number is waste. `page` and
+    /// `per_page` are ignored when this is set.
+    pub count_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -169,10 +323,16 @@ pub struct SearchResults {
     pub total: u64,
 }
 
+/// A bare hit: enough to identify and link the match, no more. Display data
+/// (author, rating, price, cover) is joined on afterwards by the use case,
+/// which owns the repositories — a search backend should not be a second,
+/// stale copy of the domain.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
-    pub thread_id: Uuid,
-    pub thread_slug: String,
+    pub kind: SearchKind,
+    /// Thread id or product id, per `kind`.
+    pub id: Uuid,
+    pub slug: String,
     pub title: String,
     pub excerpt: Option<String>,
 }
@@ -231,6 +391,20 @@ pub trait BulkSeedService: Send + Sync {
     /// Seed example + bulk test data.  `admin_id` is the already-created admin
     /// user so example content can be authored by the real account.
     async fn seed_bulk(&self, admin_id: Uuid) -> Result<(), AppError>;
+}
+
+/// Used when the `bulk_seed` feature is compiled out — see
+/// `ferum-infrastructure`'s Cargo.toml for why a production build would want
+/// that. Refuses rather than silently succeeding: the setup wizard's checkbox
+/// is a promise to create demo content, so a build that cannot keep it must say
+/// so instead of finishing setup with an empty forum and no explanation.
+pub struct NullBulkSeedService;
+
+#[async_trait]
+impl BulkSeedService for NullBulkSeedService {
+    async fn seed_bulk(&self, _admin_id: Uuid) -> Result<(), AppError> {
+        Err(AppError::invalid("seed_data_unavailable"))
+    }
 }
 
 // ─── PluginRuntime ────────────────────────────────────────────────────────────

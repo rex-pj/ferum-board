@@ -46,6 +46,11 @@ pub struct Config {
     /// Meilisearch index name — override when multiple environments share one instance.
     #[serde(default = "default_meilisearch_index")]
     pub meilisearch_index: String,
+    /// Meilisearch index holding products. Separate from the thread index: the
+    /// two have different fields, different filterable attributes and different
+    /// ranking rules, and search results present them as distinct sections.
+    #[serde(default = "default_meilisearch_product_index")]
+    pub meilisearch_product_index: String,
 
     #[serde(default = "default_true")]
     pub rate_limit_enabled: bool,
@@ -189,6 +194,9 @@ fn default_s3_region() -> String {
 }
 fn default_meilisearch_index() -> String {
     "threads".to_string()
+}
+fn default_meilisearch_product_index() -> String {
+    "products".to_string()
 }
 fn default_db_max_connections() -> u32 {
     20

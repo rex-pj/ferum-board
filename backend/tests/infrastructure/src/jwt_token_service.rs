@@ -18,6 +18,7 @@ fn make_claims(user_id: Uuid) -> AccessTokenClaims {
         is_banned: false,
         banned_until: None,
         exp: (Utc::now() + Duration::hours(1)).timestamp(),
+        iat: Utc::now().timestamp(),
     }
 }
 

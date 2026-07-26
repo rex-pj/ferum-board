@@ -15,47 +15,70 @@ path = "src/main.rs"
 s3 = ["ferum-infrastructure/s3"]
 meilisearch = ["ferum-infrastructure/meilisearch"]
 script_plugins = ["ferum-infrastructure/script_plugins"]
-default = ["script_plugins"]
+bulk_seed = ["ferum-infrastructure/bulk_seed"]
+default = ["script_plugins", "bulk_seed"]
 
 [dependencies]
-ferum-domain = { path = "../ferum-domain" }
+# `axum` feature = `IntoResponse for AppError`, which every handler returning
+# `Result<_, AppError>` needs; `sea-orm` = `From<DbErr>`, used by the handlers
+# that query the connection directly (e.g. api/uploads.rs).
+ferum-domain = { path = "../ferum-domain", features = ["axum", "sea-orm"] }
 ferum-application = { path = "../ferum-application" }
-ferum-infrastructure = { path = "../ferum-infrastructure" }
+# `default-features = false` is load-bearing, not tidiness: this crate's own
+# `bulk_seed` feature is what forwards to `ferum-infrastructure/bulk_seed`. Left
+# taking infrastructure's defaults, that crate would switch the dataset back on
+# by itself and `cargo build --no-default-features` here would appear to work
+# while changing nothing.
+ferum-infrastructure = { path = "../ferum-infrastructure", default-features = false }
 migration = { path = "../../migration" }
 
-anyhow = "1"
-axum = { version = "0.8", features = ["macros", "multipart"] }
-bytes = "1"
-chrono = { version = "0.4", features = ["serde"] }
-config = "0.14"
-dotenvy = "0.15"
-sea-orm = { version = "1", features = [
-    "sqlx-postgres",
-    "runtime-tokio-rustls",
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true, features = ["macros", "multipart"] }
+bytes = { workspace = true }
+chrono = { workspace = true }
+colored = { workspace = true }
+config = { workspace = true }
+dotenvy = { workspace = true }
+# Body::Limited, used by middleware/body_limit.rs to cap non-upload request
+# bodies. Already in the tree as an axum dependency; declared here because we
+# name the type directly.
+http-body-util = { workspace = true }
+rust_decimal = { workspace = true }
+sea-orm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tera = { workspace = true }
+tokio = { workspace = true, features = [
+    "rt-multi-thread",
     "macros",
-    "with-uuid",
-    "with-chrono",
-    "with-json",
+    "net",
+    "sync",
+    "time",
+    "signal",
 ] }
-rust_decimal = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
-tower = { version = "0.5" }
-tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "util", "fs", "set-header", "limit"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-appender = "0.2"
-uuid = { version = "1", features = ["v4", "serde"] }
-validator = { version = "0.19", features = ["derive"] }
-tokio-stream = "0.1.18"
-tera = "1"
-zip = "2"
-colored = "2"
-async-trait = "0.1.91"
+tokio-stream = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true, features = [
+    "cors",
+    "trace",
+    "request-id",
+    "fs",
+    "set-header",
+    "limit",
+] }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+# Query strings are assembled server-side for pagination/tab links; a raw
+# `&q={query}` breaks the moment someone searches for a term containing `&`.
+urlencoding = { workspace = true }
+uuid = { workspace = true }
+validator = { workspace = true }
+zip = { workspace = true }
 
 # Drop-in high-concurrency allocator for the production (Linux/macOS) build. Reduces
 # malloc contention and long-uptime fragmentation under heavy async load. Falls back
 # to the system allocator on MSVC (Windows dev), so behaviour there is unchanged.
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
+tikv-jemallocator = { workspace = true }

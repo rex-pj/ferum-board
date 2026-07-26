@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -32,9 +33,13 @@ pub struct AuthUseCase {
     pub jobs: Arc<dyn JobQueue>,
     pub plugin_runtime: Arc<dyn PluginHookRuntime>,
     pub site_config: Option<Arc<dyn SiteConfigRepository>>,
-    /// When true, newly registered users are immediately verified (no email required).
-    /// Set to true when SMTP_HOST is not configured.
-    pub auto_verify_email: bool,
+    /// When true, newly registered users are immediately verified (no email required),
+    /// because no SMTP transport is configured to deliver a verification mail.
+    ///
+    /// Shared state rather than a captured `bool`: SMTP is editable at runtime from
+    /// `/admin/settings`, and a stale value here would let registrations skip email
+    /// verification long after mail started working.
+    pub auto_verify_email: Arc<AtomicBool>,
 }
 
 impl AuthUseCase {
@@ -57,12 +62,20 @@ impl AuthUseCase {
             jobs,
             plugin_runtime: Arc::new(NullPluginRuntime),
             site_config: None,
-            auto_verify_email: false,
+            auto_verify_email: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    pub fn with_auto_verify_email(mut self, enabled: bool) -> Self {
-        self.auto_verify_email = enabled;
+    /// Fixed value, for callers with no reloadable transport (tests, tooling).
+    pub fn with_auto_verify_email(self, enabled: bool) -> Self {
+        self.auto_verify_email.store(enabled, Ordering::Relaxed);
+        self
+    }
+
+    /// Shares the mail transport's own flag, so the decision tracks SMTP being
+    /// configured or cleared at runtime. Preferred over [`Self::with_auto_verify_email`].
+    pub fn with_auto_verify_flag(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.auto_verify_email = flag;
         self
     }
 
@@ -148,7 +161,7 @@ impl AuthUseCase {
                 .await;
         }
 
-        if self.auto_verify_email {
+        if self.auto_verify_email.load(Ordering::Relaxed) {
             self.users.set_email_verified(user.id).await?;
             self.users.set_trust_level(user.id, TrustLevel::Basic).await?;
         } else {
@@ -360,6 +373,23 @@ impl AuthUseCase {
     #[tracing::instrument(skip_all, fields(user_id = %user_id))]
     pub async fn logout(&self, user_id: Uuid, refresh_token: &str) -> Result<(), AppError> {
         self.cache.del(&refresh_token_key(user_id, refresh_token)).await?;
+        // Dropping the refresh token alone left the *access* token usable until
+        // its own expiry — logging out did not actually end the session for
+        // anyone holding a copy of the cookie.
+        crate::usecases::invalidate_sessions(self.cache.as_ref(), user_id).await;
+        Ok(())
+    }
+
+    /// Logout when the refresh token is not available (expired, or a client that
+    /// only ever held the access token). Revoking the access token still has to
+    /// happen — otherwise "log out" is purely cosmetic for that caller.
+    #[tracing::instrument(skip(self), fields(user_id = %user_id))]
+    pub async fn logout_all(&self, user_id: Uuid) -> Result<(), AppError> {
+        self.cache
+            .del_prefix(&format!("refresh:{}:", user_id))
+            .await
+            .ok();
+        crate::usecases::invalidate_sessions(self.cache.as_ref(), user_id).await;
         Ok(())
     }
 
@@ -405,6 +435,11 @@ impl AuthUseCase {
 
         let hash = self.hasher.hash(&cmd.new_password).await?;
         self.users.set_password_hash(user_id, hash).await?;
+
+        // A password reset is usually a response to compromise; leaving the
+        // attacker's existing access token working for up to another hour
+        // defeats the point of the reset.
+        crate::usecases::invalidate_sessions(self.cache.as_ref(), user_id).await;
 
         Ok(())
     }

@@ -85,6 +85,8 @@
                 <span class="badge bg-secondary" title="{{ t(k='adm-no-new-posts-allowed-existing-content') }}">closed</span>
               {% elif cat.post_policy == "trusted" %}
                 <span class="badge bg-warning text-dark" title="{{ t(k='adm-requires-member-trust-level-or-higher') }}">trusted</span>
+              {% elif cat.post_policy == "moderated" %}
+                <span class="badge bg-info text-dark">{{ t(k="adm-moderated") }}</span>
               {% else %}
                 <span class="badge bg-primary" title="{{ t(k='adm-any-registered-member-can-post') }}">members</span>
               {% endif %}
@@ -184,6 +186,7 @@
               <option value="trusted">{{ t(k="adm-trusted") }}</option>
               <option value="staff_only">{{ t(k="adm-staff-only-2") }}</option>
               <option value="closed">{{ t(k="adm-closed") }}</option>
+              <option value="moderated">{{ t(k="adm-moderated") }}</option>
             </select>
           </div>
         </div>
@@ -261,6 +264,7 @@
               <option value="trusted">{{ t(k="adm-trusted") }}</option>
               <option value="staff_only">{{ t(k="adm-staff-only-2") }}</option>
               <option value="closed">{{ t(k="adm-closed") }}</option>
+              <option value="moderated">{{ t(k="adm-moderated") }}</option>
             </select>
           </div>
         </div>

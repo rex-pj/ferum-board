@@ -25,6 +25,7 @@ pub struct NewBrand {
     pub logo_url: Option<String>,
     pub website: Option<String>,
     pub country: Option<String>,
+    pub is_verified: bool,
     pub owner_user_id: Option<Uuid>,
 }
 

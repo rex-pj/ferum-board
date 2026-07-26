@@ -6,10 +6,12 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
+use crate::utils::{read_image_field, validate_upload_image, ImageKind};
 use crate::view_models::thread::{
     MarkSolvedRequest, MoveThreadRequest, ThreadListQuery, ThreadResponse,
 };
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
+use ferum_application::constants::MAX_THUMBNAIL_BYTES;
 use ferum_application::permission::PermissionChecker;
 use ferum_application::shared::AppError;
 use ferum_application::usecases::thread_usecase::CreateThreadCmd;
@@ -17,28 +19,24 @@ use ferum_domain::repositories::thread_repository::ThreadSort;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/// Thumbnail rules = the shared image rules, under the thumbnail limit.
+///
+/// `ThreadUseCase::set_thumbnail` enforces exactly this and is the authority.
+/// The check is repeated here anyway — but only because `create_thread` and
+/// `update_thread` reach `set_thumbnail` *after* the thread and its first post
+/// are already written. Letting a bad thumbnail fail there would leave a thread
+/// behind and force a compensating delete; failing before the first write is
+/// what keeps the operation atomic. It is a guard on ordering, not a second
+/// opinion on the rules.
+///
+/// It used to be a hand-rolled copy carrying its own `MAX_SIZE = 2 MB`, which
+/// contradicted `MAX_THUMBNAIL_BYTES` (10 MB) — the value the use case enforces
+/// and the value `error-thumbnail-too-large` quotes back to the user. Uploads
+/// between 2 and 10 MB were refused with a hardcoded English sentence that
+/// disagreed with the catalog. They are now accepted, as the constant always
+/// said they would be.
 fn validate_image_field(content_type: &str, data: &bytes::Bytes) -> Result<(), AppError> {
-    if !matches!(
-        content_type,
-        "image/jpeg" | "image/png" | "image/webp" | "image/gif"
-    ) {
-        return Err(AppError::UnprocessableEntity(
-            "Unsupported image type. Allowed: JPEG, PNG, WebP, GIF".to_string(),
-        ));
-    }
-    const MAX_SIZE: usize = 2 * 1024 * 1024;
-    if data.len() > MAX_SIZE {
-        return Err(AppError::UnprocessableEntity(
-            "Thumbnail exceeds 2 MB limit".to_string(),
-        ));
-    }
-    if !ferum_application::validators::validate_image_magic(data) {
-        return Err(AppError::UnprocessableEntity(
-            "File content does not match a supported image format (JPEG, PNG, WebP, GIF)"
-                .to_string(),
-        ));
-    }
-    Ok(())
+    validate_upload_image(content_type, data, MAX_THUMBNAIL_BYTES, ImageKind::THUMBNAIL)
 }
 
 // ─── Thread list / get ─────────────────────────────────────────────────────────
@@ -49,8 +47,7 @@ pub async fn list_feed(
     Extension(auth_user): Extension<Option<AuthUser>>,
     Query(q): Query<ThreadListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let (threads, total) = if let Some(tag_slug) = &q.tag {
@@ -79,8 +76,7 @@ pub async fn list_threads(
     Query(q): Query<ThreadListQuery>,
     Path(category_slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let (threads, total) = state
@@ -525,32 +521,10 @@ pub async fn upload_thumbnail(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let mut file_bytes: Option<bytes::Bytes> = None;
-    let mut content_type = "application/octet-stream".to_string();
-
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let ct = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-            let data = field
-                .bytes()
-                .await
-                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
-            validate_image_field(&ct, &data)?;
-            content_type = ct;
-            file_bytes = Some(data);
-            break;
-        }
-    }
-
-    let data = file_bytes
-        .ok_or_else(|| AppError::UnprocessableEntity("Missing file field".to_string()))?;
+    // No pre-check here: unlike create/update this endpoint's very next call is
+    // `set_thumbnail`, so the use case rejects a bad file before anything is
+    // written and a second copy of the rules would buy nothing.
+    let (data, content_type) = read_image_field(&mut multipart, "file").await?;
     let url = state
         .thread
         .set_thumbnail(actor, id, data, content_type)

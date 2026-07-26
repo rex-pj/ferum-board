@@ -16,6 +16,7 @@ use ferum_domain::repositories::thread_repository::{
 };
 use ferum_domain::repositories::user_repository::{NewUser, UserRepository};
 use ferum_infrastructure::repositories::{PgCategoryRepository, PgThreadRepository, PgUserRepository};
+use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use uuid::Uuid;
 
 use crate::common::TestDb;
@@ -308,6 +309,134 @@ async fn try_record_view_on_conflict_dedup_logic() {
         .expect("try_record_view second call (ON CONFLICT)");
     assert!(!second, "same viewer on same day must not count as a new view");
 
+    db.teardown().await;
+}
+
+// ─── list_latest_reviews ──────────────────────────────────────────────────────
+// This query is hand-written SQL (DISTINCT ON subquery + the published-product
+// guard), so the type checker sees none of its logic. The tests below pin the
+// three things that logic exists for: one row per product, newest-first, drafts
+// excluded.
+
+/// Insert a minimal published product. Raw SQL rather than the product repository:
+/// the FK on `threads.product_id` needs a real row, and these tests only care that
+/// the row exists and carries a `status`, not about the full product model.
+async fn make_product(db: &sea_orm::DatabaseConnection, slug: &str, status: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    db.execute(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "INSERT INTO products (id, slug, name, product_type, status, currency, dimensions, created_at, updated_at) \
+         VALUES ($1, $2, $2, 'furniture', $3::product_status, 'VND', '{}'::jsonb, now(), now())",
+        [id.into(), slug.into(), status.into()],
+    ))
+    .await
+    .expect("insert product");
+    id
+}
+
+/// Create a review thread (thread linked to a product) and stamp its `created_at`
+/// to a fixed instant, so newest-per-product and overall ordering are deterministic
+/// rather than at the mercy of insert timing within one clock tick.
+async fn make_review(
+    db: &sea_orm::DatabaseConnection,
+    category_id: Uuid,
+    author_id: Uuid,
+    product_id: Uuid,
+    n: u8,
+    created_at: &str,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    PgThreadRepository::new(db.clone())
+        .create(NewThread {
+            id,
+            category_id,
+            author_id,
+            title: format!("Review {n}"),
+            slug: format!("review-{n}"),
+            product_id: Some(product_id),
+        })
+        .await
+        .expect("create review thread");
+    db.execute(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "UPDATE threads SET created_at = $2::timestamptz WHERE id = $1",
+        [id.into(), created_at.into()],
+    ))
+    .await
+    .expect("stamp created_at");
+    id
+}
+
+#[tokio::test]
+async fn list_latest_reviews_collapses_to_one_row_per_product() {
+    let db = TestDb::new("thread_latest_reviews_collapse").await;
+    let repo = PgThreadRepository::new(db.conn.clone());
+
+    let cat = make_category(&db.conn, "reviews").await;
+    let u1 = make_user(&db.conn, 1).await;
+    let u2 = make_user(&db.conn, 2).await;
+    let sofa = make_product(&db.conn, "sofa", "published").await;
+    let chair = make_product(&db.conn, "chair", "published").await;
+
+    // Sofa reviewed by two different people (allowed — the per-author unique index
+    // only stops one account reviewing the same product twice). Chair once.
+    make_review(&db.conn, cat.id, u1.id, sofa, 1, "2026-01-01T10:00:00Z").await;
+    let sofa_newer =
+        make_review(&db.conn, cat.id, u2.id, sofa, 2, "2026-01-03T10:00:00Z").await;
+    let chair_only =
+        make_review(&db.conn, cat.id, u1.id, chair, 3, "2026-01-02T10:00:00Z").await;
+
+    let got = repo.list_latest_reviews(10).await.expect("list_latest_reviews");
+    let ids: Vec<Uuid> = got.iter().map(|t| t.id).collect();
+
+    // One row per product: the sofa contributes only its newer review, not both.
+    // Overall order is newest-first, so sofa (Jan 3) precedes chair (Jan 2).
+    assert_eq!(
+        ids,
+        vec![sofa_newer, chair_only],
+        "one row per product, newest per product, newest-first overall"
+    );
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn list_latest_reviews_excludes_draft_products() {
+    let db = TestDb::new("thread_latest_reviews_draft").await;
+    let repo = PgThreadRepository::new(db.conn.clone());
+
+    let cat = make_category(&db.conn, "reviews").await;
+    let u1 = make_user(&db.conn, 1).await;
+    let live = make_product(&db.conn, "live", "published").await;
+    let pending = make_product(&db.conn, "pending", "draft").await;
+
+    let live_review =
+        make_review(&db.conn, cat.id, u1.id, live, 1, "2026-01-01T10:00:00Z").await;
+    // Newer, but its product is still a draft — must not surface publicly.
+    make_review(&db.conn, cat.id, u1.id, pending, 2, "2026-01-05T10:00:00Z").await;
+
+    let got = repo.list_latest_reviews(10).await.expect("list_latest_reviews");
+    let ids: Vec<Uuid> = got.iter().map(|t| t.id).collect();
+
+    assert_eq!(
+        ids,
+        vec![live_review],
+        "a review of a draft product is hidden even though it is the newest"
+    );
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn list_latest_reviews_empty_when_no_reviews() {
+    let db = TestDb::new("thread_latest_reviews_empty").await;
+    let repo = PgThreadRepository::new(db.conn.clone());
+
+    // A plain discussion thread (no product_id) must never appear here.
+    let cat = make_category(&db.conn, "general").await;
+    let u1 = make_user(&db.conn, 1).await;
+    make_thread(&db.conn, cat.id, u1.id, 1).await;
+
+    let got = repo.list_latest_reviews(10).await.expect("list_latest_reviews");
+    assert!(got.is_empty(), "non-review threads are not reviews");
     db.teardown().await;
 }
 

@@ -312,14 +312,27 @@ impl ThreadUseCase {
         let visible_ids: Vec<Uuid> = category_map.keys().cloned().collect();
         let per_page = per_page.min(self.max_threads_per_page().await);
 
+        // Resolved from the map already in hand — no extra query. `None` means the
+        // category does not exist yet (no review has ever been written), in which
+        // case there is nothing to exclude.
+        let reviews_id: Option<Uuid> = category_map
+            .iter()
+            .find(|(_, (slug, _))| slug == crate::usecases::category_usecase::REVIEWS_CATEGORY_SLUG)
+            .map(|(id, _)| *id);
+
         // Personalized feed: filter by watched/muted when the user is logged in.
-        let feed_ids = if let Some(actor) = actor {
+        let (feed_ids, watches_reviews) = if let Some(actor) = actor {
             let (watched, muted) = tokio::try_join!(
                 self.users.get_watched_categories(actor.id),
                 self.users.get_muted_categories(actor.id),
             )?;
 
             let had_watched = !watched.is_empty();
+            // Watching the reviews category is a deliberate opt-in, so it overrides
+            // the blanket exclusion applied further down. Without this, a user who
+            // went looking for that toggle and switched it on would see no effect —
+            // the worst kind of setting.
+            let watches_reviews = reviews_id.is_some_and(|id| watched.contains(&id));
 
             // watched takes priority — show only watched (minus muted) if any are set.
             // fall back to all visible categories minus muted when no watched set.
@@ -338,16 +351,17 @@ impl ThreadUseCase {
             // Fallback to all visible only when there was no effective personalization
             // (no watched set, or all watched categories became invisible/deleted).
             // Never fall back when the user deliberately muted all their watched categories.
-            if filtered.is_empty() && !has_visible_watched {
+            let ids = if filtered.is_empty() && !has_visible_watched {
                 category_map.keys()
                     .cloned()
                     .filter(|id| !muted.contains(id))
                     .collect()
             } else {
                 filtered
-            }
+            };
+            (ids, watches_reviews)
         } else {
-            visible_ids
+            (visible_ids, false)
         };
 
         // Final safety fallback: if every visible category is muted by a guest-path
@@ -358,12 +372,37 @@ impl ThreadUseCase {
             feed_ids
         };
 
+        // Product reviews are kept out of the discussion feed. They are threads and
+        // keep every thread behaviour (replies, reactions, reports, search), but they
+        // are *catalogue* content: they arrive at a rate driven by products × buyers,
+        // so left in the feed they crowd out discussion exactly as the catalogue
+        // succeeds. They stay reachable via the product page, /catalog, the reviews
+        // category itself, search, and the homepage's "latest reviews" panel.
+        //
+        // Applied after the fallbacks above so neither can reintroduce the category.
+        // Deliberately no "don't empty the feed" guard: if reviews are the only
+        // visible category then there genuinely are no discussions, and the empty
+        // state says so honestly. `list_feed` treats an empty id list as an empty
+        // result, not as "unfiltered", so this cannot widen the query.
+        let feed_ids: Vec<Uuid> = match reviews_id {
+            Some(id) if !watches_reviews => {
+                feed_ids.into_iter().filter(|c| *c != id).collect()
+            }
+            _ => feed_ids,
+        };
+
         let filter = ThreadFilter { sort };
         // Only cache the count for the guest feed, whose category set is stable. A
         // logged-in user's feed is personalized (watched/muted), so its count is not
         // shared and not worth caching — pass None to compute it normally.
+        //
+        // The key carries `nr` ("no reviews") because the guest feed's category set
+        // changed when reviews were excluded. Reusing the old key would serve a total
+        // that still counted review threads against a list that no longer contains
+        // them — a paginator promising pages that render empty, and it would fail
+        // silently until the 30s TTL expired on every deployed instance.
         let count_key = (actor.is_none())
-            .then(|| format!("threads:count:feed:guest:{}", filter.sort.as_str()));
+            .then(|| format!("threads:count:feed:guest:nr:{}", filter.sort.as_str()));
         let cached_total = match &count_key {
             Some(k) => self.read_cached_count(k).await,
             None => None,
@@ -564,6 +603,16 @@ impl ThreadUseCase {
             return Err(AppError::NotFound);
         }
         Ok(thread)
+    }
+
+    /// Latest reviews across the whole catalogue, at most one per product.
+    ///
+    /// Feeds the homepage panel that replaces reviews in the discussion feed: the
+    /// feed no longer carries them, so this is how a new review still reaches the
+    /// front page. See [`ThreadRepository::list_latest_reviews`] for why the
+    /// per-product collapse happens in SQL.
+    pub async fn latest_reviews(&self, limit: u64) -> Result<Vec<Thread>, AppError> {
+        self.threads.list_latest_reviews(limit).await
     }
 
     /// Author-enriched review threads for one product (public — newest first).

@@ -1,19 +1,22 @@
-{# Catalog sub-navigation — reuses the forum feed's fr-sort-tabs component so the
-   three browse modes read as one surface. Set `catalog_tab` before including.
-   The right-aligned action lets eligible members propose a missing product
-   (opens the review composer with the add-product form expanded). #}
+{# Catalog sub-navigation — uses the same .fr-search-tabs component as the search
+   result tabs, so the two surfaces read as one. Set `catalog_tab` before
+   including. The right-aligned action lets eligible members propose a missing
+   product (opens the review composer with the add-product form expanded). #}
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-  <div class="fr-sort-tabs mb-0">
-    <a href="/catalog" class="fr-sort-tab {% if catalog_tab == 'products' %}fr-sort-tab--active{% endif %}">
+  <nav class="fr-search-tabs mb-0" aria-label="{{ t(k='ui-products') }}">
+    <a href="/catalog" class="fr-search-tab{% if catalog_tab == 'products' %} active{% endif %}"
+       {% if catalog_tab == 'products' %}aria-current="page"{% endif %}>
       <i class="fa-solid fa-couch fa-xs" aria-hidden="true"></i>{{ t(k="ui-products") }}
     </a>
-    <a href="/materials" class="fr-sort-tab {% if catalog_tab == 'materials' %}fr-sort-tab--active{% endif %}">
+    <a href="/materials" class="fr-search-tab{% if catalog_tab == 'materials' %} active{% endif %}"
+       {% if catalog_tab == 'materials' %}aria-current="page"{% endif %}>
       <i class="fa-solid fa-swatchbook fa-xs" aria-hidden="true"></i>{{ t(k="ui-materials") }}
     </a>
-    <a href="/brands" class="fr-sort-tab {% if catalog_tab == 'brands' %}fr-sort-tab--active{% endif %}">
+    <a href="/brands" class="fr-search-tab{% if catalog_tab == 'brands' %} active{% endif %}"
+       {% if catalog_tab == 'brands' %}aria-current="page"{% endif %}>
       <i class="fa-solid fa-tag fa-xs" aria-hidden="true"></i>{{ t(k="ui-brands") }}
     </a>
-  </div>
+  </nav>
   {% if can_submit_product %}
   <a href="/new-thread?add_product=1" class="btn btn-primary btn-sm">
     <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>{{ t(k="ui-suggest-a-product") }}

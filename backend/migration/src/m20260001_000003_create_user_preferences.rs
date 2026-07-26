@@ -19,7 +19,6 @@ pub enum UserPreferences {
     Layout,
     EmailNotifications,
     UpdatedAt,
-    /// Added by m20260001_000033. NULL = never chosen, so the site default applies.
     Locale,
 }
 
@@ -66,6 +65,12 @@ impl MigrationTrait for Migration {
                             .timestamp_with_time_zone()
                             .null(),
                     )
+                    // Nullable rather than NOT NULL DEFAULT 'en': NULL means
+                    // "this user has never chosen", which is genuinely different
+                    // from "this user chose English". Only the former should
+                    // follow the site default when an admin changes it, or fall
+                    // through to Accept-Language negotiation.
+                    .col(ColumnDef::new(UserPreferences::Locale).string().null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_user_preferences_user_id")

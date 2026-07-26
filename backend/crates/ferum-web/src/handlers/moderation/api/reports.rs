@@ -51,8 +51,7 @@ pub async fn list_my_reports(
     Query(q): Query<ReportListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).min(100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let (reports, total) = state.moderation.list_my_reports(actor, page, per_page).await?;
     Ok(Json(PagedResponse::new(
@@ -69,8 +68,7 @@ pub async fn list_reports(
     Query(q): Query<ReportListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).min(100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
     let target_type = q.target_type.as_deref();
 
     let (reports, total) = state

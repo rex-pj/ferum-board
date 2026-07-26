@@ -26,7 +26,9 @@
       uploadTo: async function (threadId) {
         if (!this.file) return;
         var fd = new FormData();
-        fd.append('thumbnail', this.file);
+        // 'file': POST /api/threads/{id}/thumbnail reads that part name only.
+        // (The multipart POST /api/threads create path uses 'thumbnail' instead.)
+        fd.append('file', this.file);
         await FerumApi.threads.uploadThumbnail(threadId, fd);
       },
     };

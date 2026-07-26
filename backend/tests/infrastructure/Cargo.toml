@@ -10,20 +10,13 @@ ferum-application = { path = "../../crates/ferum-application" }
 ferum-infrastructure = { path = "../../crates/ferum-infrastructure" }
 migration = { path = "../../migration" }
 
-async-trait = "0.1"
-bcrypt = "0.15"
-bytes = "1"
-chrono = { version = "0.4", features = ["serde"] }
-dotenvy = "0.15"
-zip = "2"
-sea-orm = { version = "1", features = [
-    "sqlx-postgres",
-    "runtime-tokio-rustls",
-    "macros",
-    "with-uuid",
-    "with-chrono",
-    "with-json",
-] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-serde_json = "1"
-uuid = { version = "1", features = ["v4", "serde"] }
+async-trait = { workspace = true }
+bcrypt = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+dotenvy = { workspace = true }
+zip = { workspace = true }
+sea-orm = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+serde_json = { workspace = true }
+uuid = { workspace = true }

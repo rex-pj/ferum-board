@@ -15,13 +15,29 @@
     read as "nobody is here". It now opens on a thesis: what this place is and
     who writes here, plus the search field, which is the actual entry point for
     someone hunting a specific material.
-    Uses site.tagline / site.slogan only — no new context data.
+    Uses site.tagline / site.slogan only — no new context data. The fallback
+    copy (when the operator hasn't set a tagline/slogan) and the rest of the
+    masthead's strings are unique to this theme — see the "Ferum Review theme"
+    section in locales/*/common.ftl, since the default catalog has no
+    equivalent copy to reuse.
 
   CHANGE 2 — Counters gated behind a credibility threshold
     "4 products · 3 reviews" is an anti-signal: it advertises emptiness. The
     band is now withheld until the numbers support the claim. Nothing is
     fabricated and nothing is permanently hidden — it appears on its own once
     the catalogue passes the threshold.
+
+  KEEP IN SYNC WITH default/templates/home.html
+  Every i18n key below outside the masthead is the exact key default/home.html
+  uses for the same string — a new key added there for shared copy belongs
+  here too, not a re-typed duplicate.
+
+  THIS FILE IS THE SOURCE OF TRUTH for the ferum-review theme. It is packaged
+  into examples/themes/ferum-review-1.0.0.zip and installed from there into
+  frontend/themes/ferum-review/ via the admin theme-upload flow. Editing the
+  installed copy directly is a dead end — the next reinstall of this zip
+  overwrites it back to whatever is here. Edit this file, then repackage the
+  zip and reinstall (or copy this file over the installed one) to deploy.
 #}
 
 {% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
@@ -42,45 +58,131 @@
   {% for slot in plugin_slots.home_feed_top %}{{ slot.html | safe }}{% endfor %}
 {% endif %}
 
-{# ── Masthead — the page's thesis, shown before any feed ── #}
+{# ── Masthead — the page's thesis, shown before any feed ──────────────────────
+   Two columns when the catalogue can supply photography, one when it can't. The
+   copy is the constant; the gallery is evidence layered beside it. It is NOT a
+   carousel: every tile is present at once, static, and is a real link into the
+   product it shows — a rotating hero would hide most of these images behind a
+   timer and turn a navigation surface into decoration.
+
+   TWO SOURCES, ONE MOSAIC
+   `hero_tiles` is the operator's curated list, set in Admin → Settings → General
+   → Homepage hero. When it has anything in it, it wins outright — an admin who
+   picked four photographs meant those four. When it is empty the masthead falls
+   back to pulling `primary_image_key` off the top-rated products, so a fresh
+   install still gets a populated hero with no configuration at all.
+
+   The two sources are gated differently on purpose:
+     · curated  → ≥1 tile. One deliberately-chosen photo is a decision worth honouring.
+     · automatic → ≥2 photos. One machine-picked photo reads as a stock image that
+       wandered in, and the catalogue cannot judge whether a photo is any good.
+
+   The count is resolved BEFORE the section opens because it decides the layout
+   class on the section element itself.
+
+   set_global (not set): the counter is mutated inside the for-loop and read after
+   it, which a block-scoped `set` cannot do across loop iterations. #}
 {% if not active_tag %}
-<section class="fr-hero">
-  <p class="fr-hero-eyebrow">{% if site.slogan %}{{ site.slogan }}{% else %}Material &amp; furniture reviews{% endif %}</p>
-  <h1 class="fr-hero-title">
-    {% if site.tagline %}{{ site.tagline }}{% else %}Real reviews from the people who built it and live with it{% endif %}
-  </h1>
-  <p class="fr-hero-sub">
-    Architects, contractors and homeowners log the numbers that matter: how it wears
-    over years, how it handles damp, how hard it is to install, and the real cost per m².
-  </p>
+{% set curated = hero_tiles | default(value=[]) %}
+{% set_global hero_img_count = 0 %}
+{% set_global show_gallery = false %}
+{% if curated %}
+  {% set_global hero_img_count = curated | length %}
+  {% set_global show_gallery = true %}
+{% else %}
+  {% for p in top_rated %}{% if p.primary_image_key %}{% set_global hero_img_count = hero_img_count + 1 %}{% endif %}{% endfor %}
+  {% if hero_img_count >= 2 %}{% set_global show_gallery = true %}{% endif %}
+{% endif %}
 
-  <form class="fr-hero-search" action="/search" method="get" role="search">
-    <label class="visually-hidden" for="hero-q">Search products or materials</label>
-    <input type="search" id="hero-q" name="q" autocomplete="off"
-           placeholder="Search flooring, tile, sofas, paint…">
-    <button type="submit" class="btn btn-accent">
-      <i class="fa-solid fa-magnifying-glass me-1" aria-hidden="true"></i>Search
-    </button>
-  </form>
+<section class="fr-hero{% if show_gallery %} fr-hero--split{% endif %}">
+  <div class="fr-hero-copy">
+    <p class="fr-hero-eyebrow">{% if site.slogan %}{{ site.slogan }}{% else %}{{ t(k="ui-material-furniture-reviews") }}{% endif %}</p>
+    <h1 class="fr-hero-title">
+      {% if site.tagline %}{{ site.tagline }}{% else %}{{ t(k="ui-real-reviews-from-the-people-who-built-it") }}{% endif %}
+    </h1>
+    <p class="fr-hero-sub">{{ t(k="ui-architects-contractors-log-the-numbers") }}</p>
 
-  <div class="fr-hero-actions">
-    <a href="/catalog" class="fr-hero-link">
-      <i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>Product catalog
-    </a>
-    <a href="/forum" class="fr-hero-link">
-      <i class="fa-solid fa-comments fa-xs me-1" aria-hidden="true"></i>Discussion categories
-    </a>
-    {% if current_user %}
-      <a href="/new-thread" class="fr-hero-link fr-hero-link--strong">
-        <i class="fa-solid fa-pen fa-xs me-1" aria-hidden="true"></i>Write a review
-      </a>
+    <form class="fr-hero-search" action="/search" method="get" role="search">
+      <label class="visually-hidden" for="hero-q">{{ t(k="ui-search-products-or-materials") }}</label>
+      <input type="search" id="hero-q" name="q" autocomplete="off"
+             placeholder="{{ t(k='ui-search-flooring-tile-sofas-paint') }}">
+      <button type="submit" class="btn btn-accent">
+        <i class="fa-solid fa-magnifying-glass me-1" aria-hidden="true"></i>{{ t(k="ui-search") }}
+      </button>
+    </form>
+  </div>
+
+  {# The mosaic, capped at 4 (a 2×2 grid). In both modes the visible caption is the
+     link's accessible name, so the img itself carries alt="" — duplicating the
+     caption there would make a screen reader announce it twice. A curated tile with
+     a link but no caption has no such name, so it gets an explicit aria-label
+     instead; an unlabelled link is a WCAG failure, not a cosmetic gap.
+
+     The first image is the desktop LCP candidate, hence fetchpriority=high; the
+     rest defer. Hidden below 768px (see theme.css) so the masthead never pushes the
+     feed — the reason people came — under the fold on a phone. #}
+  {% if show_gallery %}
+  <div class="fr-hero-gallery">
+    {% if curated %}
+      {# Curated: an operator-set link is optional, so a tile without one renders as
+         a plain figure rather than an anchor that goes nowhere. #}
+      {% for tile in curated %}
+        {% if tile.link %}
+        <a class="fr-hero-tile" href="{{ tile.link }}"
+           {% if not tile.caption %}aria-label="{{ t(k='ui-featured-image') }}"{% endif %}>
+          <img src="{{ tile.image_url }}" alt=""
+               {% if loop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
+          {% if tile.caption %}<span class="fr-hero-tile-name">{{ tile.caption }}</span>{% endif %}
+        </a>
+        {% else %}
+        <div class="fr-hero-tile">
+          <img src="{{ tile.image_url }}" alt="{{ tile.caption }}"
+               {% if loop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
+          {% if tile.caption %}<span class="fr-hero-tile-name">{{ tile.caption }}</span>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
     {% else %}
-      <a href="/register" class="fr-hero-link fr-hero-link--strong">
-        <i class="fa-solid fa-user-plus fa-xs me-1" aria-hidden="true"></i>Join the community
-      </a>
+      {% set_global hero_shown = 0 %}
+      {% for p in top_rated %}
+        {% if p.primary_image_key and hero_shown < 4 %}
+        <a class="fr-hero-tile" href="/catalog/{{ p.slug }}">
+          <img src="/files/{{ p.primary_image_key }}" alt=""
+               {% if hero_shown == 0 %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
+          <span class="fr-hero-tile-name">{{ p.name }}</span>
+        </a>
+        {% set_global hero_shown = hero_shown + 1 %}
+        {% endif %}
+      {% endfor %}
     {% endif %}
   </div>
+  {% endif %}
 </section>
+
+{# ── Browse by type — three always-valid entry points into the catalogue ───────
+   The catalogue's only stable, guaranteed-non-empty facet is product_type
+   (furniture / material / room — the three the /catalog `?type=` filter accepts).
+   Finer buckets like "flooring" or "paint" are not a queryable dimension, so a
+   strip of them would link to filters the backend can't honour — this stays on
+   the three that always resolve. Labels reuse the existing ui-product-type-* keys
+   rather than minting theme-local duplicates. #}
+<nav class="fr-typenav" aria-label="{{ t(k='ui-browse-by-type') }}">
+  <a class="fr-typenav-tile" href="/catalog?type=furniture">
+    <span class="fr-typenav-icon"><i class="fa-solid fa-couch" aria-hidden="true"></i></span>
+    <span class="fr-typenav-label">{{ t(k="ui-product-type-furniture") }}</span>
+    <i class="fa-solid fa-arrow-right fr-typenav-go" aria-hidden="true"></i>
+  </a>
+  <a class="fr-typenav-tile" href="/catalog?type=material">
+    <span class="fr-typenav-icon"><i class="fa-solid fa-swatchbook" aria-hidden="true"></i></span>
+    <span class="fr-typenav-label">{{ t(k="ui-product-type-material") }}</span>
+    <i class="fa-solid fa-arrow-right fr-typenav-go" aria-hidden="true"></i>
+  </a>
+  <a class="fr-typenav-tile" href="/catalog?type=room">
+    <span class="fr-typenav-icon"><i class="fa-solid fa-vector-square" aria-hidden="true"></i></span>
+    <span class="fr-typenav-label">{{ t(k="ui-product-type-room") }}</span>
+    <i class="fa-solid fa-arrow-right fr-typenav-go" aria-hidden="true"></i>
+  </a>
+</nav>
 {% endif %}
 
 {# ── Market data band — aggregate signals for the review platform ── #}
@@ -89,30 +191,58 @@
   <div class="fr-panel-body fr-stat-band py-3">
     <a href="/catalog" class="fr-stat-band-item text-decoration-none text-body">
       <div class="h4 fw-bold mb-0">{{ total_products | thousands }}</div>
-      <div class="text-muted small"><i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>Products</div>
+      <div class="text-muted small"><i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-products") }}</div>
     </a>
     <div class="fr-stat-band-item">
       <div class="h4 fw-bold mb-0">{{ total_reviews | thousands }}</div>
-      <div class="text-muted small"><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>Reviews</div>
+      <div class="text-muted small"><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-reviews") }}</div>
     </div>
     {% if avg_rating %}
     <div class="fr-stat-band-item">
       <div class="h4 fw-bold mb-0 text-warning">{{ avg_rating | round(precision=1) }}<i class="fa-solid fa-star fa-sm ms-1" aria-hidden="true"></i></div>
-      <div class="text-muted small">Average rating</div>
+      <div class="text-muted small">{{ t(k="ui-average-rating") }}</div>
     </div>
     {% endif %}
   </div>
 </div>
 {% endif %}
 
-{# ── Top Rated products shelf — horizontal scroll, reads well at any count ── #}
+{# ── Product shelf — grid on desktop, snap-scroll rail on mobile ──────────────
+   `shelf_mode` is set by the handler and decides which claim the heading makes:
+   "top_rated" once enough products carry enough reviews to rank meaningfully,
+   otherwise "newest". The shelf itself is never withheld — hiding the catalogue
+   until reviews accumulate would leave the homepage of a product-review site
+   with no products on it. #}
 {% if top_rated %}
-<div class="fr-feed mb-3">
+{# Show more / show less. At rest the shelf is clipped to exactly one row
+   (mechanism inherited from the default theme); expanding lifts the clip so the
+   grid shows the whole fetched set. It is NOT a collapse — the shelf never
+   hides, because a product-review homepage with no products on it is a worse
+   page.
+
+   The button carries the whole signal, and carries a count with it ("show 7
+   more"), which is why there is no fading peek of the next row underneath: that
+   would be a second, weaker voice saying the same thing, and it made the shelf
+   look broken whenever the next row happened to hold a single card.
+
+   The control is at the FOOT of the shelf, not in the header, and the header
+   stays an inert label. Two reasons: the arrow belongs on the seam where the
+   grid is cut off, pointing at what it opens; and a chevron in a section header
+   already means "collapse this section" on /forum, so reusing it here for "there
+   is more below" would give one icon two meanings in one app.
+
+   KEEP IN SYNC with default/templates/home.html — this block is a copy of it. #}
+<div class="fr-feed mb-3" x-data="productShelf()">
   <div class="fr-cat-header" style="cursor:default;pointer-events:none">
-    <span class="fw-semibold"><i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>Top rated products</span>
-    <a href="/catalog?sort=top_rated" class="btn btn-xs btn-outline-secondary" style="pointer-events:auto">View all</a>
+    {% if shelf_mode == "top_rated" %}
+      <span class="fw-semibold"><i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-top-rated-products") }}</span>
+      <a href="/catalog?sort=top_rated" class="btn btn-xs btn-outline-secondary" style="pointer-events:auto">{{ t(k="ui-view-all") }}</a>
+    {% else %}
+      <span class="fw-semibold"><i class="fa-solid fa-couch me-1" aria-hidden="true"></i>{{ t(k="ui-newest-products") }}</span>
+      <a href="/catalog" class="btn btn-xs btn-outline-secondary" style="pointer-events:auto">{{ t(k="ui-view-all") }}</a>
+    {% endif %}
   </div>
-  <div class="fr-shelf p-2">
+  <div class="fr-shelf p-2" id="fr-product-shelf">
     {% for p in top_rated %}
     <a href="/catalog/{{ p.slug }}" class="fr-shelf-card card text-decoration-none shadow-sm">
       <div class="ratio ratio-4x3 bg-body-tertiary rounded-top overflow-hidden">
@@ -125,15 +255,41 @@
         {% endif %}
       </div>
       <div class="card-body p-2">
-        <div class="fw-semibold text-body small text-truncate">{{ p.name }}</div>
+        <div class="fw-semibold text-body small fr-shelf-card-name">{{ p.name }}</div>
+        {# The review count is spelled out, not parenthesised: on a review card the
+           sample size is what makes the score mean anything, so it reads as a fact
+           ("12 reviews") rather than as a footnote to the star.
+
+           Guarded on review_count because in "newest" mode the shelf carries
+           unreviewed products, whose avg_overall is null — piping null through
+           `round` raises a Tera error and takes the whole page down. #}
         <div style="font-size:.72rem">
-          <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-          <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}</span>
-          <span class="text-muted">({{ p.review_count }})</span>
+          {% if p.review_count > 0 %}
+            <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+            <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}/5</span>
+            <span class="text-muted">· {{ p.review_count }} {{ t(k="ui-reviews-label", count=p.review_count) }}</span>
+          {% else %}
+            <span class="text-muted">{{ t(k="ui-no-reviews-yet") }}</span>
+          {% endif %}
         </div>
       </div>
     </a>
     {% endfor %}
+  </div>
+
+  {# hiddenCount is `cards - columns`, so it stays truthy while expanded too —
+     the control must survive being opened, which the earlier `|| open` was
+     papering over. x-cloak: before Alpine runs the count is unknown, so the
+     control would flash on even for a catalogue with nothing to reveal. #}
+  <div class="fr-shelf-more" x-show="hiddenCount > 0" x-cloak>
+    <button type="button" class="fr-shelf-more-btn"
+            @click="toggle()" :aria-expanded="open.toString()"
+            aria-controls="fr-product-shelf">
+      <i class="fa-solid fa-chevron-down fr-shelf-more-icon"
+         :class="open ? 'fr-shelf-more-icon--up' : ''" aria-hidden="true"></i>
+      <span x-show="!open" x-text="moreLabel()"></span>
+      <span x-show="open" style="display:none">{{ t(k="ui-show-less") }}</span>
+    </button>
   </div>
 </div>
 {% endif %}
@@ -147,21 +303,21 @@
         <i class="fa-solid fa-tag fa-xs text-muted" aria-hidden="true"></i>
         <span class="fw-semibold text-truncate">#{{ active_tag }}</span>
         <a href="/" class="btn btn-xs btn-outline-secondary ms-2" style="pointer-events:auto">
-          <i class="fa-solid fa-xmark me-1"></i>Clear filter
+          <i class="fa-solid fa-xmark me-1"></i>{{ t(k="ui-clear-filter") }}
         </a>
       </div>
     {% else %}
-      <span class="fw-semibold">Latest discussions</span>
+      <span class="fw-semibold">{{ t(k="ui-latest-discussions") }}</span>
       {% if watched_count and watched_count > 0 %}
         <a href="/account#preferences" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none ms-2"
-           style="pointer-events:auto" title="Manage watched categories">
-          <i class="fa-solid fa-eye fa-xs me-1"></i>Personalised from {{ watched_count }} categories
+           style="pointer-events:auto" title="{{ t(k='ui-manage-watched-categories') }}">
+          <i class="fa-solid fa-eye fa-xs me-1"></i>{{ t(k="ui-personalised-from-categories", count=watched_count) }}
         </a>
       {% endif %}
     {% endif %}
     {% if current_user %}
       <a href="/new-thread" class="btn btn-primary btn-sm" style="pointer-events:auto">
-        <i class="fa-solid fa-plus me-1"></i>New post
+        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-post") }}
       </a>
     {% endif %}
   </div>
@@ -170,19 +326,19 @@
   {% if not active_tag %}
   <div class="fr-sort-tabs">
     <a href="/?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' or not active_sort %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>Activity
+      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>{{ t(k="ui-activity") }}
     </a>
     <a href="/?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>Newest
+      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>{{ t(k="ui-newest") }}
     </a>
     <a href="/?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>Hottest
+      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>{{ t(k="ui-hottest") }}
     </a>
     <a href="/?sort=unanswered" class="fr-sort-tab {% if active_sort == 'unanswered' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>Unanswered
+      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>{{ t(k="ui-unanswered") }}
     </a>
     <a href="/?sort=solved" class="fr-sort-tab {% if active_sort == 'solved' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>Solved
+      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>{{ t(k="ui-solved") }}
     </a>
   </div>
   {% endif %}
@@ -196,19 +352,19 @@
     <div class="text-center py-5 px-3">
       <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block text-muted opacity-50" aria-hidden="true"></i>
       {% if active_tag %}
-        <p class="text-secondary mb-3">No posts found for the tag <strong>#{{ active_tag }}</strong>.</p>
-        <a href="/" class="btn btn-outline-secondary btn-sm">View all discussions</a>
+        <p class="text-secondary mb-3">{{ t(k="ui-no-posts-found-for-the-tag") }} <strong>#{{ active_tag }}</strong>.</p>
+        <a href="/" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-view-all-discussions") }}</a>
       {% elif active_sort == "unanswered" %}
-        <p class="text-secondary mb-0">Nothing left unanswered — nice work!</p>
+        <p class="text-secondary mb-0">{{ t(k="ui-nothing-left-unanswered-nice-work") }}</p>
       {% elif active_sort == "solved" %}
-        <p class="text-secondary mb-0">No posts have been marked solved yet.</p>
+        <p class="text-secondary mb-0">{{ t(k="ui-no-posts-have-been-marked-solved") }}</p>
       {% else %}
-        <p class="text-secondary mb-3">No discussions yet. Be the first to start one!</p>
+        <p class="text-secondary mb-3">{{ t(k="ui-no-discussions-yet-be-the-first") }}</p>
         {% if current_user %}
-          <a href="/new-thread" class="btn btn-primary btn-sm">Create a post</a>
+          <a href="/new-thread" class="btn btn-primary btn-sm">{{ t(k="ui-create-a-post") }}</a>
         {% else %}
-          <a href="/register" class="btn btn-primary btn-sm me-2">Join the community</a>
-          <a href="/login" class="btn btn-outline-secondary btn-sm">Log in</a>
+          <a href="/register" class="btn btn-primary btn-sm me-2">{{ t(k="ui-join-the-community") }}</a>
+          <a href="/login" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-log-in") }}</a>
         {% endif %}
       {% endif %}
     </div>
@@ -224,16 +380,16 @@
   {# Community panel #}
   {% if not current_user %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Join in</div>
+    <div class="fr-panel-header">{{ t(k="ui-join-in") }}</div>
     <div class="fr-panel-body">
       <p class="small text-secondary mb-3">
-        {% if site.tagline %}{{ site.tagline }}{% else %}Join the conversation and share your thoughts.{% endif %}
+        {% if site.tagline %}{{ site.tagline }}{% else %}{{ t(k="ui-join-the-conversation-and-share") }}{% endif %}
       </p>
       <div class="d-grid gap-2">
         <a href="/register" class="btn btn-primary btn-sm">
-          <i class="fa-solid fa-user-plus me-1"></i>Create account
+          <i class="fa-solid fa-user-plus me-1"></i>{{ t(k="ui-create-account") }}
         </a>
-        <a href="/login" class="btn btn-outline-secondary btn-sm">Log in</a>
+        <a href="/login" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-log-in") }}</a>
       </div>
     </div>
   </div>
@@ -241,14 +397,14 @@
 
   {# Community stats #}
   <div class="fr-panel">
-    <div class="fr-panel-header">Community</div>
+    <div class="fr-panel-header">{{ t(k="ui-community") }}</div>
     <div class="fr-panel-body">
       <div class="fr-panel-stat-row">
-        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>Posts</span>
+        <span><i class="fa-regular fa-comment fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-posts") }}</span>
         <span class="fr-panel-stat-val">{{ total_threads | default(value=0) }}</span>
       </div>
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>Categories</span>
+        <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-categories") }}</span>
         <span class="fr-panel-stat-val">{{ total_categories | default(value=0) }}</span>
       </div>
       {# Same credibility threshold as the counter band above. Gating one and not
@@ -257,28 +413,56 @@
          at all. Posts and Categories stay: they are healthy from day one. #}
       {% if total_products and total_products >= stats_min_products %}
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>Products</span>
+        <span><i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-products") }}</span>
         <span class="fr-panel-stat-val">{{ total_products | default(value=0) | thousands }}</span>
       </div>
       <div class="fr-panel-stat-row">
-        <span><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>Reviews</span>
+        <span><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-reviews") }}</span>
         <span class="fr-panel-stat-val">{{ total_reviews | default(value=0) | thousands }}</span>
       </div>
       {% endif %}
     </div>
-    {% if current_user %}
-    <div class="fr-panel-body border-top" style="padding-top:.5rem;padding-bottom:.5rem">
-      <a href="/new-thread" class="btn btn-primary btn-sm w-100">
-        <i class="fa-solid fa-plus me-1"></i>New post
-      </a>
-    </div>
-    {% endif %}
+    {# No "new post" button here on purpose. The feed header already carries one,
+       and two identical primary CTAs on one screen make the reader stop to work
+       out whether they differ. The feed header's wins: it sits in the reading
+       path, next to the content the post will join. #}
   </div>
+
+  {# Latest reviews — the sidebar home for review content now that it no longer
+     appears in the discussion feed. One row per product (collapsed server-side),
+     so five rows are five different products. Ranked above "trending" because on
+     a review platform a fresh review is the more valuable signal. #}
+  {% if latest_reviews %}
+  <div class="fr-panel">
+    <div class="fr-panel-header">
+      <i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-latest-reviews") }}
+    </div>
+    {% for r in latest_reviews %}
+      {# Link to the product when it is known, else to the review thread — product
+         is the more useful destination and the one the reader is deciding about. #}
+      <a href="{% if r.product_slug %}/catalog/{{ r.product_slug }}{% else %}/forum/t/{{ r.slug }}{% endif %}" class="fr-panel-row">
+        {{ m::avatar(url=r.author_avatar_url, name=r.author_display_name, size=32) }}
+        <div class="min-w-0 flex-grow-1">
+          <div class="small fw-medium text-body text-truncate lh-sm mb-1">
+            {% if r.product_name %}{{ r.product_name }}{% else %}{{ t(k="ui-a-product") }}{% endif %}
+          </div>
+          <div class="d-flex align-items-center gap-2" style="font-size:.75rem;color:var(--bs-tertiary-color)">
+            {% if r.overall %}
+              <span class="text-warning"><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>{{ r.overall }}/5</span>
+              <span aria-hidden="true">·</span>
+            {% endif %}
+            <span class="text-truncate">{{ r.author_display_name }}</span>
+          </div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {# Active discussions — most-viewed from current feed #}
   {% if threads %}
   <div class="fr-panel">
-    <div class="fr-panel-header">Trending now</div>
+    <div class="fr-panel-header">{{ t(k="ui-trending-now") }}</div>
     {% set hot = threads | sort(attribute="view_count") | reverse | slice(end=5) %}
     {% for t in hot %}
       <a href="/forum/t/{{ t.slug }}" class="fr-panel-row">
@@ -295,4 +479,11 @@
   {% endif %}
 
 </aside>
+{% endblock %}
+
+{% block scripts %}
+{# ?v= is not optional here — see the note in default/templates/home.html. An
+   unversioned URL means the browser keeps its cached copy and edits to the file
+   never reach the page. #}
+<script src="/static/js/ferum-page-home.js?v={{ asset_version() }}" defer></script>
 {% endblock %}

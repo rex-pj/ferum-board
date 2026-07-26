@@ -3,21 +3,32 @@ name = "ferum-domain"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+# Two glue impls in `error.rs` reach outside the domain: `IntoResponse for
+# AppError` (axum) and `From<sea_orm::DbErr> for AppError`. The orphan rule
+# forces both to live in THIS crate — the trait or the error type is foreign to
+# every other crate — so they cannot simply be moved to the layer that owns the
+# framework. Making them opt-in is the next best thing: with default features,
+# `cargo check -p ferum-domain` compiles the domain against no framework at all,
+# which is what keeps "pure domain, no I/O, no frameworks" an enforced property
+# rather than a comment. Consumers turn on only the glue they actually use.
+axum = ["dep:axum"]
+sea-orm = ["dep:sea-orm"]
+
 [dependencies]
-async-trait = "0.1"
-axum = { version = "0.8", features = ["macros"] }
-chrono = { version = "0.4", features = ["serde"] }
-sea-orm = { version = "1", features = [
-    "sqlx-postgres",
-    "runtime-tokio-rustls",
-    "macros",
-    "with-uuid",
-    "with-chrono",
-    "with-json",
-] }
-rust_decimal = { version = "1", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-tracing = "0.1"
-uuid = { version = "1", features = ["v4", "serde"] }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+# `http` (not axum) supplies StatusCode for the always-available
+# `AppError::status_and_code`. It is a type-definition crate with no runtime, so
+# depending on it does not make this crate framework-bound; `axum::http` is a
+# re-export of exactly these types, so the identity holds either way.
+http = { workspace = true }
+axum = { workspace = true, optional = true }
+sea-orm = { workspace = true, optional = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

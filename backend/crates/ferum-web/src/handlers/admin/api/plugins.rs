@@ -5,6 +5,7 @@ use axum::extract::{Extension, Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
+use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
@@ -16,11 +17,10 @@ use crate::view_models::plugin::{
 };
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::ports::{HookContext, HookDecision};
+use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::PluginLogQuery;
 use ferum_infrastructure::plugins::{manifest_loader, package_extractor};
-
-const MAX_FPKG_SIZE: usize = 50 * 1024 * 1024; // 50 MB
 
 pub async fn list_plugins(
     State(state): State<AppState>,
@@ -50,28 +50,17 @@ pub async fn upload_plugin(
     let actor = auth_user.require_auth()?;
     ferum_application::permission::PermissionChecker::can_manage_plugins(actor)?;
 
-    let mut pkg_bytes: Option<bytes::Bytes> = None;
-
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let data = field
-                .bytes()
-                .await
-                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
-
-            if data.len() > MAX_FPKG_SIZE {
-                return Err(AppError::invalid_with("package_too_large", [("limit_mb", (MAX_FPKG_SIZE / (1024 * 1024)).into())]).into());
-            }
-            pkg_bytes = Some(data);
-            break;
-        }
+    let (pkg_bytes, _content_type) = crate::utils::read_file_field(&mut multipart, "file").await?;
+    if pkg_bytes.len() > MAX_PLUGIN_PACKAGE_BYTES {
+        return Err(AppError::invalid_with(
+            "package_too_large",
+            [(
+                "limit_mb",
+                (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into(),
+            )],
+        )
+        .into());
     }
-
-    let pkg_bytes = pkg_bytes.ok_or_else(|| AppError::invalid("file_field_missing"))?;
 
     let plugins_dir = PathBuf::from(&state.plugins_dir);
     let tmp_slug = format!("__tmp_upload_{}", uuid::Uuid::new_v4().simple());
@@ -237,6 +226,8 @@ pub async fn uninstall_plugin(
     Path(slug): Path<String>,
     Json(body): Json<UninstallPluginRequest>,
 ) -> HandlerResult<impl IntoResponse> {
+    body.validate()
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
     let actor = auth_user.require_auth()?;
     state
         .plugin
@@ -252,6 +243,11 @@ pub async fn get_logs(
     Path(slug): Path<String>,
     Query(params): Query<PluginLogQueryParams>,
 ) -> HandlerResult<impl IntoResponse> {
+    // Enforces the declared caps, including `limit`'s upper bound — without this
+    // a single request could ask for the entire log table.
+    params
+        .validate()
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
     let actor = auth_user.require_auth()?;
     let query = PluginLogQuery {
         level: params.level,
@@ -271,6 +267,8 @@ pub async fn debug_hook(
     Extension(auth_user): Extension<Option<AuthUser>>,
     Json(body): Json<DebugHookRequest>,
 ) -> HandlerResult<impl IntoResponse> {
+    body.validate()
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
     let actor = auth_user.require_auth()?;
     ferum_application::permission::PermissionChecker::can_manage_plugins(actor)?;
 

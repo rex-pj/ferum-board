@@ -38,8 +38,7 @@ pub async fn list_user_threads(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let (threads, total) = state
         .thread
@@ -66,8 +65,7 @@ pub async fn list_user_posts(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).min(50);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 50);
 
     let (posts, total) = state.post.list_by_author(user.id, page, per_page).await?;
 

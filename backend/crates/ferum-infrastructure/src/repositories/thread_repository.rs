@@ -269,6 +269,38 @@ impl ThreadRepository for PgThreadRepository {
             .collect())
     }
 
+    async fn list_latest_reviews(&self, limit: u64) -> Result<Vec<Thread>, AppError> {
+        // The inner `DISTINCT ON (product_id)` picks the newest thread for each
+        // product; the outer query then enriches only those winners and orders the
+        // result by recency. Selecting ids first lets ENRICHED_SELECT be reused
+        // verbatim — DISTINCT ON has to sit immediately after SELECT, so applying it
+        // to the enriched query directly would mean string-splicing that constant.
+        //
+        // `(created_at, id)` breaks ties deterministically: two reviews of the same
+        // product posted in the same clock tick would otherwise make the winner —
+        // and therefore the panel — flip between page loads.
+        let sql = format!(
+            "{ENRICHED_SELECT}
+             WHERE t.id IN (
+                 SELECT DISTINCT ON (product_id) id
+                 FROM threads
+                 WHERE product_id IS NOT NULL AND deleted_at IS NULL
+                 ORDER BY product_id, created_at DESC, id DESC
+             )
+             AND t.deleted_at IS NULL{HIDE_PENDING_PRODUCT_SQL}
+             ORDER BY t.created_at DESC, t.id DESC
+             LIMIT $1"
+        );
+        let stmt =
+            Statement::from_sql_and_values(DbBackend::Postgres, &sql, [(limit as i64).into()]);
+        Ok(ThreadRow::find_by_statement(stmt)
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(row_to_domain)
+            .collect())
+    }
+
     async fn find_review_by_author(
         &self,
         product_id: Uuid,

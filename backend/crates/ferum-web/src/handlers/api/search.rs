@@ -4,8 +4,11 @@ use axum::Json;
 
 use crate::app_state::AppState;
 use crate::middleware::AuthUser;
-use crate::view_models::search::{SearchHitResponse, SearchQuery};
-use crate::view_models::{HandlerResult, PagedResponse};
+use crate::view_models::product::parse_product_type;
+use crate::view_models::search::{SearchQuery, SearchResponse};
+use crate::view_models::HandlerResult;
+use ferum_application::ports::{ProductFacets, ProductSearchSort, ThreadSearchSort};
+use ferum_application::usecases::search_usecase::{SearchRequest, SearchScope};
 
 pub async fn search(
     State(state): State<AppState>,
@@ -13,36 +16,40 @@ pub async fn search(
     Query(q): Query<SearchQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let query = q.q.unwrap_or_default();
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 50);
+    // Capped below the SSR page's own limit: this endpoint backs typeahead,
+    // where a caller asking for 50 rows per keystroke is a mistake, not a need.
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 30);
+    let scope = q.tab.as_deref().map(SearchScope::parse).unwrap_or_default();
 
-    let category_ids: Vec<uuid::Uuid> = match q.category_id {
-        None => vec![],
-        Some(selected_id) => {
-            let cats = state.category.list_visible(auth_user.as_ref()).await.unwrap_or_default();
-            let mut ids = vec![selected_id];
-            for cat in &cats {
-                if cat.parent_id == Some(selected_id) {
-                    ids.push(cat.id);
-                }
-            }
-            ids
-        }
+    // Category visibility is resolved inside the use case from `auth_user`, so
+    // a caller cannot widen it by naming a category it may not see.
+    let facets = ProductFacets {
+        product_type: q.product_type.as_deref().and_then(parse_product_type),
+        brand_id: q.brand_id,
+        material_id: q.material_id,
+        sort: q.psort.as_deref().map(ProductSearchSort::parse).unwrap_or_default(),
     };
 
-    let results = state
+    let outcome = state
         .search
-        .search(query, category_ids, page, per_page)
+        .search_all(
+            auth_user.as_ref(),
+            SearchRequest {
+                q: query,
+                scope,
+                category_id: q.category_id,
+                product_category_ids: crate::utils::resolve_product_category_ids(
+                    &state,
+                    q.pcat.as_deref(),
+                )
+                .await,
+                facets,
+                thread_sort: q.tsort.as_deref().map(ThreadSearchSort::parse).unwrap_or_default(),
+                page,
+                per_page,
+            },
+        )
         .await?;
 
-    Ok(Json(PagedResponse::new(
-        results
-            .hits
-            .into_iter()
-            .map(SearchHitResponse::from)
-            .collect(),
-        results.total,
-        page,
-        per_page,
-    )))
+    Ok(Json(SearchResponse::from(outcome)))
 }

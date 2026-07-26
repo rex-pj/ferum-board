@@ -96,13 +96,16 @@ impl UserUseCase {
             .await
     }
 
+    /// Returns the session epoch published by this change, when a cache is
+    /// wired. The caller must mint any replacement access token with this value
+    /// as its `iat` — see [`crate::usecases::invalidate_sessions`].
     #[tracing::instrument(skip_all, fields(user_id = %actor.id))]
     pub async fn change_password(
         &self,
         actor: &AuthUser,
         current_password: &str,
         new_password: &str,
-    ) -> Result<(), AppError> {
+    ) -> Result<Option<i64>, AppError> {
         if !crate::validators::validate_password(new_password) {
             return Err(AppError::invalid("password_requirements"));
         }
@@ -122,7 +125,22 @@ impl UserUseCase {
         }
 
         let new_hash = self.hasher.hash(new_password).await?;
-        self.users.set_password_hash(actor.id, new_hash).await
+        self.users.set_password_hash(actor.id, new_hash).await?;
+
+        // Changing a password must end sessions opened with the old one —
+        // otherwise a token stolen before the change keeps working until it
+        // expires on its own. Only possible where a cache is wired; without one
+        // there is nowhere to publish the epoch and behaviour is unchanged.
+        //
+        // Returns the epoch so the caller can mint the replacement token with a
+        // matching `iat`; anything earlier would be revoked by the very epoch
+        // this call just published, logging the user out of the session they
+        // are currently using.
+        let epoch = match &self.cache {
+            Some(cache) => Some(crate::usecases::invalidate_sessions(cache.as_ref(), actor.id).await),
+            None => None,
+        };
+        Ok(epoch)
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]

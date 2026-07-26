@@ -23,17 +23,33 @@
       </span>
     </a>
 
-    {# Search bar #}
-    <form class="fr-topbar-search" action="/search" method="get" role="search">
+    {# Search bar. On desktop it sits inline between brand and actions. On mobile
+       it collapses to the icon button below; toggling adds `.search-open` to the
+       topbar, which drops this form as a full-width bar under the header (see the
+       mobile rules in theme.css and initSearchToggle in ferum-utils.js). #}
+    <form class="fr-topbar-search" id="topbarSearch" action="/search" method="get" role="search">
       <button type="submit" class="fr-topbar-search-btn" aria-label="{{ t(k='ui-search') }}">
         <i class="fa-solid fa-magnifying-glass fr-topbar-search-icon" aria-hidden="true"></i>
       </button>
-      <input type="search" name="q" placeholder="{{ t(k='ui-search-discussions') }}" autocomplete="off"
+      {# Echo the active query so the bar keeps state after a search. `query` is
+         only set on the search page; every other page leaves it unset, hence the
+         default. Without this the term vanishes from the masthead the moment
+         results load, even though the URL still carries it. #}
+      <input type="search" name="q" value="{{ query | default(value='') }}"
+             placeholder="{{ t(k='ui-search-placeholder-everything') }}" autocomplete="off"
              aria-label="{{ t(k='ui-search') }}">
     </form>
 
     {# Right actions #}
     <div class="fr-topbar-actions">
+
+      {# Mobile-only search trigger. Reveals the form above as a full-width drop
+         bar; on desktop the inline bar is always visible so this is hidden. #}
+      <button type="button" class="fr-icon-btn fr-topbar-search-toggle d-lg-none"
+              data-action="toggle-search"
+              aria-label="{{ t(k='ui-search') }}" aria-controls="topbarSearch" aria-expanded="false">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      </button>
 
       {# Language switcher sits to the LEFT of the theme toggle: both are
          display preferences, and the language choice is the more consequential

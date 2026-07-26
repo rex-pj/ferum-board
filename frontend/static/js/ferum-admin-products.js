@@ -8,6 +8,9 @@
 
   var state = {
     materials: [], brands: [], selectedMaterials: [],
+    // Catalogue taxonomy + how many products still have no category. The
+    // unfiled count is the size of the remaining manual queue.
+    pcats: [], unfiled: 0,
     page: 1, perPage: 20, total: 0, editing: null,
     // Images picked while creating a product. There is no id to upload against
     // until the product exists, so they wait here and are sent after the POST.
@@ -19,11 +22,10 @@
 
   function $(id) { return document.getElementById(id); }
 
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  // Was a local copy predating the shared helper being quote-safe. Now that
+  // Ferum.escapeHtml escapes quotes too, there is one implementation to audit
+  // instead of two that can drift apart.
+  var escapeHtml = Ferum.escapeHtml;
 
   function slugify(s) {
     return String(s || '')
@@ -161,10 +163,28 @@
     return b ? escapeHtml(b.name) : '<span class="text-muted">—</span>';
   }
 
+  // Resolved off the server-rendered picker rather than a second fetch — the
+  // option list is already on the page, and it is the same list the form writes
+  // back, so the two can't disagree.
+  //
+  // An unfiled product is badged, not dashed like a missing brand: a product
+  // with no forum category is excluded from the public category filter, so this
+  // is a gap to close rather than merely a blank.
+  function categoryName(id) {
+    if (!id) {
+      var sel = $('pCategory');
+      var blank = sel ? sel.querySelector('option[value=""]') : null;
+      var label = blank ? blank.textContent.trim() : 'Uncategorised';
+      return '<span class="badge text-bg-warning-subtle border border-warning-subtle fw-normal">' + escapeHtml(label) + '</span>';
+    }
+    var c = state.pcats.find(function (x) { return x.id === id; });
+    return c ? escapeHtml(c.name) : '<span class="text-muted">—</span>';
+  }
+
   function renderProducts(products) {
     var tbody = $('productRows');
     if (!tbody) return;
-    if (!products.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No products yet.</td></tr>'; return; }
+    if (!products.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No products yet.</td></tr>'; return; }
     tbody.innerHTML = products.map(function (p) {
       var moderate = p.status === 'draft'
         ? '<button class="btn btn-sm btn-success me-1" data-approve="' + p.id + '" title="Approve"><i class="fa-solid fa-check"></i></button>' +
@@ -175,6 +195,7 @@
         '<div class="text-muted small">/' + escapeHtml(p.slug) + (p.style ? ' · ' + escapeHtml(p.style) : '') + '</div></td>' +
         '<td>' + priceRange(p) + '</td>' +
         '<td class="small">' + brandName(p.brand_id) + '</td>' +
+        '<td class="small">' + categoryName(p.category_id) + '</td>' +
         '<td>' + statusBadge(p.status) + '</td>' +
         '<td class="text-end">' + moderate +
         '<button class="btn btn-sm btn-outline-secondary me-1" data-edit="' + p.id + '"><i class="fa-solid fa-pen"></i></button>' +
@@ -222,7 +243,11 @@
     var params = new URLSearchParams();
     params.set('page', state.page); params.set('per_page', state.perPage);
     var q = $('filterQuery').value.trim(), t = $('filterType').value, s = $('filterStatus').value;
+    // `none` is a real value here, not an absent one — it selects products with
+    // no forum category, which is the queue a curator works through.
+    var c = $('filterCategory') ? $('filterCategory').value : '';
     if (q) params.set('q', q); if (t) params.set('type', t); if (s) params.set('status', s);
+    if (c) params.set('category_id', c);
     var res = await getJSON('/api/admin/products?' + params.toString());
     if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
     var body = await res.json();
@@ -315,6 +340,7 @@
     setRadio('pType', 'furniture');
     setRadio('pStatus', 'published');
     $('pBrand').value = '';
+    if ($('pCategory')) $('pCategory').value = '';
     // Slug starts collapsed behind the helper line and only opens on request.
     $('pSlugEditWrap').classList.add('d-none');
     $('pSlugEdit').classList.remove('d-none');
@@ -347,6 +373,7 @@
     setRadio('pType', p.product_type || 'furniture');
     setRadio('pStatus', p.status || 'draft');
     $('pBrand').value = p.brand_id || '';
+    if ($('pCategory')) $('pCategory').value = p.category_id || '';
     $('pStyle').value = p.style || '';
     $('pPriceMin').value = p.price_min != null ? vnd.format(p.price_min) : '';
     $('pPriceMax').value = p.price_max != null ? vnd.format(p.price_max) : '';
@@ -395,7 +422,12 @@
       if (editing) {
         var patch = {
           name: $('pName').value.trim(), status: radioValue('pStatus'),
-          brand_id: $('pBrand').value || null, style: strOrNull('pStyle'),
+          brand_id: $('pBrand').value || null,
+          // Explicit null clears the column (`Some(None)` server-side), which is
+          // what an admin selecting "Uncategorised" means — omitting the key
+          // would leave the old category in place.
+          category_id: ($('pCategory') && $('pCategory').value) || null,
+          style: strOrNull('pStyle'),
           price_min: parsePrice('pPriceMin'), price_max: parsePrice('pPriceMax'),
           origin: strOrNull('pOrigin'), description_md: strOrNull('pDescription'),
         };
@@ -407,7 +439,9 @@
       } else {
         var create = {
           name: $('pName').value.trim(), slug: $('pSlug').value.trim(), product_type: radioValue('pType'),
-          brand_id: $('pBrand').value || null, style: strOrNull('pStyle'),
+          brand_id: $('pBrand').value || null,
+          category_id: ($('pCategory') && $('pCategory').value) || null,
+          style: strOrNull('pStyle'),
           price_min: parsePrice('pPriceMin'), price_max: parsePrice('pPriceMax'),
           origin: strOrNull('pOrigin'), description_md: strOrNull('pDescription'), material_ids: mats,
         };
@@ -754,7 +788,7 @@
     var body = { name: $('bName').value.trim(), website: strOrNull('bWebsite'), country: strOrNull('bCountry'), description: strOrNull('bDescription'), is_verified: $('bVerified').checked };
     var res = id
       ? await sendJSON('PATCH', '/api/admin/brands/' + id, body)
-      : await sendJSON('POST', '/api/admin/brands', { name: body.name, slug: $('bSlug').value.trim(), website: body.website, country: body.country, description: body.description });
+      : await sendJSON('POST', '/api/admin/brands', { name: body.name, slug: $('bSlug').value.trim(), website: body.website, country: body.country, description: body.description, is_verified: body.is_verified });
     if (!res.ok) { showFormError('brandFormError', await readError(res)); return; }
     modal('brandModal').hide();
     showStatus(id ? 'Brand updated.' : 'Brand created.', 'success');
@@ -853,7 +887,14 @@
     // Reference data feeds the product modal too — load all up front. Use
     // allSettled so a failure in one loader never blocks the others (the product
     // table must render even if materials/brands can't load).
-    Promise.allSettled([loadBrands(), loadMaterials()])
+    $('btnNewPcat').addEventListener('click', function () { openPcat(null); });
+    $('pcatForm').addEventListener('submit', submitPcat);
+    $('btnAutoAssignPreview').addEventListener('click', function () { autoAssign(false); });
+    $('btnAutoAssignApply').addEventListener('click', function () { autoAssign(true); });
+
+    // Categories load with the other reference data: the product table renders
+    // a category column, so it cannot draw correctly before they arrive.
+    Promise.allSettled([loadBrands(), loadMaterials(), loadPcats()])
       .then(loadProducts)
       .then(openDeepLinkedProduct);
   });
@@ -872,5 +913,174 @@
     }
     // Drop the parameter so a refresh doesn't reopen the modal.
     window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  // ── Product categories ───────────────────────────────────────────────────
+  // The catalogue's own taxonomy. The list is loaded rather than read off the
+  // server-rendered <option>s so that creating a category updates every picker
+  // on the page without a reload.
+
+  async function loadPcats() {
+    var res = await getJSON('/api/admin/product-categories');
+    if (!res.ok) return;
+    var body = await res.json();
+    state.pcats = body.data || [];
+    state.unfiled = (body.meta && body.meta.unfiled) || 0;
+    renderPcatRows();
+    refreshCategoryPickers();
+    renderUnfiledNotice();
+  }
+
+  // Both the product form's picker and the list filter are rebuilt from the
+  // same array — two hand-maintained option lists would drift the first time
+  // someone renamed a category.
+  function refreshCategoryPickers() {
+    var opts = state.pcats.map(function (c) {
+      return '<option value="' + c.id + '">' + (c.parent_id ? '— ' : '') + escapeHtml(c.name) + '</option>';
+    }).join('');
+
+    var form = $('pCategory');
+    if (form) {
+      var keep = form.value;
+      var blank = form.querySelector('option[value=""]');
+      form.innerHTML = '<option value="">' + escapeHtml(blank ? blank.textContent.trim() : 'Uncategorised') + '</option>' + opts;
+      form.value = keep;
+    }
+    var filter = $('filterCategory');
+    if (filter) {
+      var keepF = filter.value;
+      var first = filter.querySelector('option[value=""]');
+      var none = filter.querySelector('option[value="none"]');
+      filter.innerHTML =
+        '<option value="">' + escapeHtml(first ? first.textContent.trim() : 'All categories') + '</option>' +
+        '<option value="none">' + escapeHtml(none ? none.textContent.trim() : 'Uncategorised') + '</option>' + opts;
+      filter.value = keepF;
+    }
+  }
+
+  function renderUnfiledNotice() {
+    var el = $('pcatUnfiled');
+    if (!el) return;
+    if (!state.unfiled) { el.textContent = ''; return; }
+    el.className = 'small mb-0 mt-2 text-warning-emphasis';
+    el.textContent = state.unfiled + ' products have no category';
+  }
+
+  function renderPcatRows() {
+    var tbody = $('pcatRows');
+    if (!tbody) return;
+    if (!state.pcats.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No categories yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = state.pcats.map(function (c) {
+      var kw = (c.match_keywords || []).join(', ');
+      return '<tr>' +
+        '<td><div class="fw-semibold">' + (c.icon ? '<i class="fa-solid ' + escapeHtml(c.icon) + ' me-2 text-body-secondary"></i>' : '') +
+          escapeHtml(c.name) + '</div><div class="text-muted small">/' + escapeHtml(c.slug) + '</div></td>' +
+        '<td class="small text-body-secondary">' + (kw ? escapeHtml(kw) : '<span class="text-muted">—</span>') + '</td>' +
+        '<td class="small">' + c.product_count + '</td>' +
+        '<td class="text-end">' +
+          '<button class="btn btn-sm btn-outline-secondary me-1" data-cedit="' + c.id + '"><i class="fa-solid fa-pen"></i></button>' +
+          '<button class="btn btn-sm btn-outline-danger" data-cdel="' + c.id + '" data-name="' + escapeHtml(c.name) + '"><i class="fa-solid fa-trash"></i></button>' +
+        '</td></tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-cedit]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var c = state.pcats.find(function (x) { return x.id === b.getAttribute('data-cedit'); });
+        if (c) openPcat(c);
+      });
+    });
+    tbody.querySelectorAll('[data-cdel]').forEach(function (b) {
+      b.addEventListener('click', function () { deletePcat(b.getAttribute('data-cdel'), b.getAttribute('data-name')); });
+    });
+  }
+
+  function openPcat(c) {
+    clearErrors('pcatForm', 'pcatFormError');
+    $('pcatModalTitle').textContent = c ? 'Edit category' : 'New category';
+    $('cId').value = c ? c.id : '';
+    $('cName').value = c ? c.name : '';
+    $('cSlug').value = c ? c.slug : '';
+    // Slug is a stable key: shown on edit, never editable.
+    $('cSlug').disabled = !!c;
+    $('cKeywords').value = c ? (c.match_keywords || []).join(', ') : '';
+    $('cIcon').value = c ? (c.icon || '') : '';
+    $('cPosition').value = c ? c.position : 0;
+    modal('pcatModal').show();
+  }
+
+  function keywordList() {
+    return $('cKeywords').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  async function submitPcat(e) {
+    e.preventDefault();
+    clearErrors('pcatForm', 'pcatFormError');
+    var id = $('cId').value;
+    var btn = $('pcatSubmit');
+    btn.disabled = true;
+    try {
+      var res;
+      if (id) {
+        res = await sendJSON('PATCH', '/api/admin/product-categories/' + id, {
+          name: $('cName').value.trim(),
+          icon: $('cIcon').value.trim() || null,
+          position: parseInt($('cPosition').value, 10) || 0,
+          match_keywords: keywordList(),
+        });
+      } else {
+        res = await sendJSON('POST', '/api/admin/product-categories', {
+          name: $('cName').value.trim(),
+          slug: $('cSlug').value.trim(),
+          icon: $('cIcon').value.trim() || null,
+          position: parseInt($('cPosition').value, 10) || 0,
+          match_keywords: keywordList(),
+        });
+      }
+      if (!res.ok) { showFormError('pcatFormError', await readError(res)); return; }
+      modal('pcatModal').hide();
+      showStatus('Category saved.', 'success');
+      await loadPcats();
+      loadProducts();
+    } catch (err) {
+      showFormError('pcatFormError', 'Error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function deletePcat(id, name) {
+    // Products are not deleted with the category — they fall back to unfiled —
+    // so the confirmation says so rather than implying data loss.
+    if (!confirm('Delete "' + name + '"? Products filed here become uncategorised.')) return;
+    var res = await fetch('/api/admin/product-categories/' + id, { method: 'DELETE', credentials: 'same-origin' });
+    if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
+    showStatus('Category deleted.', 'success');
+    await loadPcats();
+    loadProducts();
+  }
+
+  // Preview first, apply second. A bulk write across the whole catalogue is not
+  // something to trigger from a single click with no idea of the blast radius.
+  async function autoAssign(apply) {
+    var url = '/api/admin/product-categories/auto-assign' + (apply ? '?apply=1' : '');
+    var res = await fetch(url, { method: 'POST', credentials: 'same-origin' });
+    if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
+    var report = (await res.json()).data || {};
+
+    if (apply) {
+      $('pcatPreviewWrap').classList.add('d-none');
+      showStatus(report.assigned + ' filed · ' + report.unmatched + ' still unfiled', 'success');
+      await loadPcats();
+      loadProducts();
+      return;
+    }
+
+    $('pcatPreview').textContent = report.assigned + ' would be filed · ' + report.unmatched + ' left unfiled';
+    // Nothing to apply is not a call to action — say so and leave the button away.
+    $('pcatPreviewWrap').classList.toggle('d-none', !report.assigned);
+    if (!report.assigned) showStatus('Nothing left to file automatically.', 'info');
   }
 }());

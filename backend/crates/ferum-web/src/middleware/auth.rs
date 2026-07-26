@@ -32,6 +32,26 @@ pub async fn auth_middleware(
 
     if let Some(token) = token {
         if let Ok(claims) = state.token_service.verify_access_token(&token) {
+            // Stateless tokens cannot be withdrawn, so logout and password change
+            // publish a "session epoch" instead: any token issued before it is
+            // refused from here on. Without this, a stolen token stayed valid for
+            // the full JWT lifetime even after the victim changed their password.
+            //
+            // Same shape as the `user:banned:` probe below — one cache read on a
+            // key that only exists for users who recently invalidated.
+            if let Some(epoch) = state
+                .cache
+                .get(&ferum_application::usecases::session_epoch_key(claims.sub))
+                .await
+                .and_then(|v| v.parse::<i64>().ok())
+            {
+                if claims.iat < epoch {
+                    tracing::debug!(user_id = %claims.sub, "token rejected: predates session epoch");
+                    req.extensions_mut().insert(Option::<AuthUser>::None);
+                    return next.run(req).await;
+                }
+            }
+
             let trust_level = match claims.trust_level.as_str() {
                 "leader" => TrustLevel::Leader,
                 "regular" => TrustLevel::Regular,

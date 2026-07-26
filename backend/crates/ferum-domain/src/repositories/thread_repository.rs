@@ -82,6 +82,22 @@ pub trait ThreadRepository: Send + Sync {
         product_id: Uuid,
         limit: u64,
     ) -> Result<Vec<Thread>, AppError>;
+    /// The most recent review threads across all products, **at most one per
+    /// product** (the newest), newest first.
+    ///
+    /// Backs the homepage "latest reviews" panel. The per-product cap is the point:
+    /// a product that several people review in the same week would otherwise fill
+    /// the panel by itself, and a five-row panel showing five different products
+    /// carries five times the information. Note this is not a spam guard — a single
+    /// account already cannot review one product twice (`uq_threads_product_author`,
+    /// `uq_threads_product_author`), so the duplicates this collapses come from *different* people,
+    /// which is exactly the signal the rating system wants. It is collapsed for
+    /// display only; the product page still lists every review.
+    ///
+    /// Reviews of unpublished (draft) products are excluded, matching every other
+    /// public listing.
+    async fn list_latest_reviews(&self, limit: u64) -> Result<Vec<Thread>, AppError>;
+
     /// The author's existing (non-deleted) review of this product, if any.
     ///
     /// Backs the one-review-per-author rule. `uq_threads_product_author` enforces

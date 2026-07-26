@@ -32,3 +32,43 @@ fn search_query_invalid_category_uuid_fails() {
         serde_json::from_str(r#"{"category_id":"not-a-uuid"}"#);
     assert!(result.is_err());
 }
+
+// ─── Blank facet params ───────────────────────────────────────────────────────
+//
+// Every product facet on the search page is an HTML `<select>` whose placeholder
+// option has `value=""`, and the form auto-submits on change. A native submit
+// includes *all* named controls, so a request carries `brand_id=` and
+// `material_id=` the moment any one dropdown is touched. With a bare
+// `Option<Uuid>` that fails the whole extractor and 400s the request.
+
+#[test]
+fn blank_category_id_is_treated_as_absent() {
+    let q: SearchQuery = serde_json::from_str(r#"{"category_id":""}"#).unwrap();
+    assert!(q.category_id.is_none());
+}
+
+#[test]
+fn blank_brand_and_material_ids_are_treated_as_absent() {
+    let q: SearchQuery =
+        serde_json::from_str(r#"{"q":"sofa","brand_id":"","material_id":""}"#).unwrap();
+    assert!(q.brand_id.is_none());
+    assert!(q.material_id.is_none());
+    assert_eq!(q.q.as_deref(), Some("sofa"));
+}
+
+#[test]
+fn blank_facets_do_not_prevent_a_real_one_from_parsing() {
+    let brand = Uuid::new_v4();
+    let json = format!(r#"{{"brand_id":"{brand}","material_id":""}}"#);
+    let q: SearchQuery = serde_json::from_str(&json).unwrap();
+    assert_eq!(q.brand_id, Some(brand));
+    assert!(q.material_id.is_none());
+}
+
+/// Blank is tolerated; garbage is not. Quietly dropping a malformed filter would
+/// hand the caller unfiltered results they never asked for.
+#[test]
+fn malformed_brand_id_still_fails() {
+    let result: Result<SearchQuery, _> = serde_json::from_str(r#"{"brand_id":"nope"}"#);
+    assert!(result.is_err());
+}

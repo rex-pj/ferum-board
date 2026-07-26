@@ -22,8 +22,7 @@ pub async fn list_notifications(
     Query(q): Query<PostListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let (notifs, total) = state.notification.inbox(actor, page, per_page).await?;
     Ok(Json(PagedResponse::new(

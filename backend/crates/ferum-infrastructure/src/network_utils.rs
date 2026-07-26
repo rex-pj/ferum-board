@@ -15,6 +15,16 @@ pub(crate) async fn build_pinned_client(url: &str) -> Result<reqwest::Client, St
     let addrs = resolve_and_validate(url).await?;
     reqwest::Client::builder()
         .resolve_to_addrs(&host, &addrs)
+        // Redirects are refused outright. `resolve_to_addrs` pins ONLY `host`;
+        // a redirect hop to any other host is resolved by reqwest normally,
+        // with no validation at all — which would hand back the exact
+        // DNS-rebinding/private-range bypass this module exists to close. A
+        // 302 to http://169.254.169.254/ is the canonical attack. Following
+        // redirects safely would mean re-running `resolve_and_validate` per
+        // hop; until a caller genuinely needs that, refusing is the honest
+        // default. The redirect response itself is still returned to the
+        // caller as a normal 3xx, so a caller that wants to inspect it can.
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("failed to build HTTP client: {e}"))

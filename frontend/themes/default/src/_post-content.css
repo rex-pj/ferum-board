@@ -69,7 +69,6 @@
 .post-content th { background: var(--bs-secondary-bg); font-weight: 600; }
 
 /* Best answer highlight */
-.post-best-answer { border-left: 3px solid #10b981 !important; }
 .fr-post-best-answer {
   border-left: 4px solid #10b981 !important;
   background: color-mix(in srgb, #10b981 5%, var(--bs-body-bg)) !important;

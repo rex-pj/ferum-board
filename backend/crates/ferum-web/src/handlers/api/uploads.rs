@@ -33,9 +33,36 @@ pub async fn serve_plugin_asset(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    let file_path = PathBuf::from(&state.plugins_dir)
-        .join(&slug)
-        .join(&asset_path);
+    // `..` is not the only way out of the base directory: `Path::join` REPLACES
+    // the base entirely when its argument is absolute or carries a Windows drive
+    // prefix, so `/plugins/x/assets/C:/Windows/win.ini` would escape without ever
+    // containing `..`. Reject those components explicitly — the same check the
+    // plugin package extractor already applies on the way in.
+    let rel = std::path::Path::new(&asset_path);
+    if rel.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::RootDir
+                | std::path::Component::ParentDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    let plugin_root = PathBuf::from(&state.plugins_dir).join(&slug);
+    let file_path = plugin_root.join(rel);
+
+    // Belt-and-braces: even with the component filter above, confirm the resolved
+    // path really is inside this plugin's directory before reading it. Compares
+    // canonical forms so a symlink inside the package cannot point outward.
+    match (
+        tokio::fs::canonicalize(&plugin_root).await,
+        tokio::fs::canonicalize(&file_path).await,
+    ) {
+        (Ok(root), Ok(resolved)) if resolved.starts_with(&root) => {}
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    }
 
     match tokio::fs::read(&file_path).await {
         Ok(data) => {

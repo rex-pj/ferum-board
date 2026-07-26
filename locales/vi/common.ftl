@@ -20,31 +20,6 @@ language-name-zh = 中文
 nav-language = Ngôn ngữ
 nav-change-language = Đổi ngôn ngữ
 nav-search = Tìm kiếm
-nav-search-placeholder = Tìm chủ đề và bài viết…
-nav-home = Trang chủ
-nav-forum = Diễn đàn
-nav-notifications = Thông báo
-nav-bookmarks = Đã lưu
-nav-account = Tài khoản
-nav-sign-in = Đăng nhập
-nav-sign-out = Đăng xuất
-nav-register = Đăng ký
-nav-new-thread = Tạo chủ đề
-nav-toggle-theme = Chuyển chế độ sáng/tối
-nav-menu = Menu
-
-## ─── Hành động ───────────────────────────────────────────────────────────────
-
-action-save = Lưu
-action-cancel = Hủy
-action-delete = Xóa
-action-edit = Sửa
-action-reply = Trả lời
-action-submit = Gửi
-action-close = Đóng
-action-confirm = Xác nhận
-action-back = Quay lại
-action-loading = Đang tải…
 
 ## ─── Chủ đề & bài viết ───────────────────────────────────────────────────────
 
@@ -59,28 +34,7 @@ thread-views =
     { $count ->
        *[other] { $count } lượt xem
     }
-thread-pinned = Đã ghim
-thread-locked = Đã khóa
-thread-solved = Đã giải quyết
-thread-by-author = bởi { $author }
-thread-last-reply = Trả lời gần nhất { $when }
 thread-edited = đã sửa
-thread-deleted = Bài viết đã bị xóa.
-thread-best-answer = Câu trả lời hay nhất
-
-## ─── Phân trang ──────────────────────────────────────────────────────────────
-
-pagination-previous = Trước
-pagination-next = Sau
-pagination-page-of = Trang { $page } / { $total }
-
-## ─── Trạng thái trống ────────────────────────────────────────────────────────
-
-empty-no-threads = Chưa có chủ đề nào.
-empty-no-posts = Chưa có bài viết nào.
-empty-no-results = Không tìm thấy kết quả.
-empty-no-notifications = Bạn chưa có thông báo nào.
-empty-no-bookmarks = Bạn chưa lưu nội dung nào.
 
 ## ─── Tùy chọn ────────────────────────────────────────────────────────────────
 
@@ -89,15 +43,6 @@ prefs-language-help =
     Chọn ngôn ngữ cho menu và nút bấm. Chủ đề và bài viết vẫn giữ nguyên ngôn ngữ
     người viết đã dùng.
 prefs-language-auto = Theo trình duyệt
-prefs-theme = Giao diện
-prefs-font-size = Cỡ chữ
-prefs-layout = Bố cục
-
-## ─── Phản hồi ────────────────────────────────────────────────────────────────
-
-feedback-saved = Đã lưu.
-feedback-network-error = Lỗi kết nối. Vui lòng thử lại.
-feedback-language-changed = Đã đổi ngôn ngữ.
 
 ## ─── Thẻ chủ đề ──────────────────────────────────────────────────────────────
 
@@ -150,8 +95,6 @@ js-account-created = Đã tạo tài khoản! Đang chuyển tới trang đăng 
 js-password-updated = Đã cập nhật mật khẩu! Đang chuyển tới trang đăng nhập…
 js-reset-link-sent = Nếu email này đã đăng ký, liên kết đặt lại mật khẩu đã được gửi đi.
 js-verify-link-sent = Nếu địa chỉ này cần xác minh, liên kết mới đang được gửi đi.
-js-post-deleted = Bài viết đã bị xóa.
-js-edited = đã sửa
 js-reply-pending-approval = Trả lời của bạn đã được gửi và đang chờ kiểm duyệt.
 js-report-submitted = Đã gửi báo cáo. Cảm ơn bạn.
 js-provide-a-reason = Vui lòng nhập lý do.
@@ -167,19 +110,16 @@ js-could-not-change-language = Không đổi được ngôn ngữ.
 js-pending-approval = Chờ duyệt
 js-resend-email = Gửi lại email
 
-## ─── Nội dung trang (bản dịch một phần) ──────────────────────────────────────
-# Khóa nào chưa dịch sẽ tự động dùng bản tiếng Anh qua chuỗi fallback, nên bản
-# dịch một phần vẫn cho ra trang chạy được. Ưu tiên các chuỗi người đọc gặp
-# nhiều nhất: điều hướng, danh sách chủ đề, đăng nhập/đăng ký, tài khoản.
-
 ## Điều hướng & khung trang
 ui-home = Trang chủ
 ui-home-feed = Bảng tin
 ui-forum = Diễn đàn
 ui-from = Từ
 ui-search = Tìm kiếm
-ui-search-discussions = Tìm chủ đề…
-ui-search-threads-and-posts = Tìm chủ đề và bài viết…
+# Tìm kiếm toàn site bao gồm cả danh mục sản phẩm lẫn diễn đàn; phần gợi ý
+# trong ô tìm kiếm phải nói rõ điều đó, nếu không sẽ không ai nghĩ tới việc
+# tìm sản phẩm ở đây.
+ui-search-placeholder-everything = Tìm sản phẩm, thảo luận…
 ui-categories = Chuyên mục
 ui-category = Chuyên mục
 ui-account = Tài khoản
@@ -221,7 +161,6 @@ ui-sort = Sắp xếp
 ui-save = Lưu
 ui-loading = Đang tải…
 ui-view-all = Xem tất cả
-ui-back = Quay lại
 ui-new = Mới
 ui-next = Sau
 ui-previous = Trước
@@ -244,6 +183,11 @@ ui-best-answer = Câu trả lời hay nhất
 ui-mark-best-answer = Chọn câu trả lời hay nhất
 ui-jump-to-best-answer = Tới câu trả lời hay nhất
 ui-latest-discussions = Chủ đề mới nhất
+# Panel sidebar trang chủ: đánh giá mới nhất mỗi sản phẩm, sau khi review đã
+# được tách khỏi feed thảo luận.
+ui-latest-reviews = Đánh giá mới nhất
+# Nhãn dự phòng khi không tải được sản phẩm của một bài đánh giá.
+ui-a-product = Một sản phẩm
 ui-recent-discussions = Chủ đề gần đây
 ui-trending-now = Đang được quan tâm
 ui-newest = Mới nhất
@@ -284,6 +228,9 @@ ui-forgot-password = Quên mật khẩu?
 ui-forgot-your-password = Quên mật khẩu?
 ui-back-to-sign-in = Về trang đăng nhập
 ui-set-new-password = Đặt mật khẩu mới
+# Thu kệ sản phẩm trang chủ về một hàng. Chuỗi tĩnh, khác với "xem thêm"
+# (js-show-more-products) vì bên kia có số đếm động.
+ui-show-less = Thu gọn
 ui-show-password = Hiện mật khẩu
 ui-already-have-an-account = Đã có tài khoản?
 ui-don-t-have-an-account = Chưa có tài khoản?
@@ -317,7 +264,6 @@ ui-follow = Theo dõi
 ui-followers = Người theo dõi
 ui-following = Đang theo dõi
 ui-watch = Theo dõi
-ui-mute = Tắt thông báo
 ui-member-since = Thành viên từ
 ui-trust-level = Mức tin cậy
 ui-warnings = Cảnh báo
@@ -339,15 +285,14 @@ ui-brand = Thương hiệu
 ui-brands = Thương hiệu
 ui-material = Chất liệu
 ui-materials = Chất liệu
+ui-origin = Xuất xứ
+ui-style = Phong cách
 ui-overall = Tổng thể
 ui-average-rating = Điểm trung bình
 ui-verified-purchase = Đã mua hàng
 ui-verified = Đã xác minh
 ui-no-reviews-yet = Chưa có đánh giá nào
 ui-view-product = Xem sản phẩm
-ui-all-brands = Tất cả thương hiệu
-ui-all-materials = Tất cả chất liệu
-ui-all-types = Tất cả loại
 ui-all-categories = Tất cả chuyên mục
 ui-all-categories-2 = Tất cả chuyên mục
 ui-highest-rated = Điểm cao nhất
@@ -394,11 +339,7 @@ ui-manage-watched-categories = Quản lý chuyên mục đang theo dõi
 ui-watching-muted = Theo dõi & Tắt thông báo
 ui-watching = Đang theo dõi
 ui-muted = Đã tắt thông báo
-ui-not-watching-any-categories-visit-a = Chưa theo dõi chuyên mục nào. Hãy vào trang một chuyên mục và bấm
-ui-not-muting-any-categories-visit-a = Chưa tắt thông báo chuyên mục nào. Hãy vào trang một chuyên mục và bấm
 ui-to = Đến
-ui-to-follow-it = để theo dõi.
-ui-to-hide-it = để ẩn đi.
 ui-sign-in-to-watch-this-category = Đăng nhập để theo dõi chuyên mục này
 ui-your-account-has-been-suspended = Tài khoản của bạn đã bị đình chỉ.
 ui-see-warning-details-in-your-notifications = Xem chi tiết cảnh cáo trong mục thông báo của bạn
@@ -454,7 +395,6 @@ ui-post-actions = Thao tác với bài viết
 ui-this-post-has-been-deleted = Bài viết này đã bị xóa.
 ui-this-thread-is-locked-and-no = Chủ đề này đã bị khóa và không nhận thêm trả lời.
 ui-your-account-does-not-yet-have = Tài khoản của bạn chưa có quyền trả lời trong chuyên mục này. Hãy xác minh email hoặc tham gia thêm để mở khóa quyền đăng bài.
-ui-to-join-the-conversation = để tham gia thảo luận.
 ui-awaiting-moderator-approval-only-visible-to = Đang chờ kiểm duyệt — chỉ bạn và ban quản trị nhìn thấy
 ui-pending-approval = Chờ duyệt
 ui-thread-info = Thông tin chủ đề
@@ -466,11 +406,7 @@ ui-unanswered = Chưa trả lời
 ui-thumbnail-preview = Xem trước ảnh đại diện
 ui-remove-thumbnail = Xóa ảnh đại diện
 ui-drop-to-set-thumbnail = Thả để đặt làm ảnh đại diện
-ui-drag-and-drop-here-or = Kéo thả vào đây, hoặc
-ui-drop-here-or = Kéo thả vào đây hoặc
-ui-click-to-browse = bấm để chọn tệp
 ui-close = Đóng
-ui-click-to-choose-an-image = bấm để chọn ảnh
 ui-jpeg-png-webp-gif-max-10 = JPEG · PNG · WebP · GIF · tối đa 10 MB
 ui-recommended-1280-720-px-16-9 = Khuyến nghị 1280 × 720 px (16:9)
 ui-1280-720-px-16-9-recommended = Khuyến nghị 1280 × 720 px (16:9)
@@ -498,8 +434,42 @@ ui-search-all-categories = Tìm trong tất cả chuyên mục
 ui-no-results-found-for = Không tìm thấy kết quả nào cho "
 ui-search-tips = Mẹo tìm kiếm
 ui-use-specific-keywords = Dùng từ khóa cụ thể
-ui-searches-thread-titles-and-post-content = Tìm trong tiêu đề chủ đề và nội dung bài viết
-ui-search-is-case-insensitive = Không phân biệt chữ hoa chữ thường
+ui-tip-searches-products-and-threads = Tìm trong tên sản phẩm, thương hiệu và tiêu đề chủ đề
+ui-tip-accents-optional = Không cần gõ dấu — “ghe an” vẫn ra “ghế ăn”
+ui-tip-filter-products-by-brand = Ở tab Sản phẩm, lọc thêm theo loại, thương hiệu hoặc chất liệu
+ui-sort-relevance = Liên quan nhất
+ui-sort-most-replies = Nhiều trả lời nhất
+# Bộ lọc chuyên mục áp cho cả hai loại; các facet sản phẩm thì không. Ghi rõ
+# ngay cạnh control là cách duy nhất để người đọc không tưởng bộ lọc thương
+# hiệu cũng làm giảm số thảo luận.
+# Cây phân loại của chính danh mục sản phẩm (Sofa, Ghế, Bàn…), không phải của
+# diễn đàn. Đặt tên theo thứ nó phân loại để không bị nhầm với chuyên mục thảo luận.
+ui-product-category = Danh mục
+ui-too-many-filters = Không có kết quả nào khớp tổ hợp bộ lọc này.
+ui-drop-product-filters =
+    { $count ->
+       *[other] Bỏ bộ lọc sản phẩm: { $count } sản phẩm
+    }
+ui-drop-category-filter =
+    { $count ->
+       *[other] Bỏ lọc chuyên mục: { $count } kết quả
+    }
+ui-search-result-types = Loại kết quả
+ui-search-tab-all = Tất cả
+ui-search-tab-products = Sản phẩm
+ui-search-tab-discussions = Thảo luận
+ui-see-all-n-products =
+    { $count ->
+       *[other] Xem cả { $count } sản phẩm
+    }
+ui-see-n-products-instead =
+    { $count ->
+       *[other] Xem { $count } sản phẩm khớp
+    }
+ui-see-n-discussions-instead =
+    { $count ->
+       *[other] Xem { $count } thảo luận khớp
+    }
 ui-shorter-queries-return-more-results = Truy vấn ngắn hơn cho nhiều kết quả hơn
 ui-use-the-category-filter-to-narrow = Dùng bộ lọc chuyên mục để thu hẹp kết quả
 ui-search-is-temporarily-unavailable-please-try = Chức năng tìm kiếm tạm thời không khả dụng. Vui lòng thử lại sau giây lát.
@@ -532,18 +502,19 @@ ui-none = — Không —
 ui-optional = (không bắt buộc)
 ui-photos = Hình ảnh
 ui-select-if-known = (chọn nếu biết)
-ui-is-required = là bắt buộc.
 ui-price-from = Giá từ (₫)
 ui-price-to = Giá đến (₫)
 ui-price-on-request = Giá liên hệ
 ui-price-range = Khoảng giá
-ui-filter-by-brand = Lọc theo thương hiệu
 ui-filter-by-category = Lọc theo chuyên mục:
 ui-no-brands-yet = Chưa có thương hiệu nào.
 ui-no-materials-yet = Chưa có chất liệu nào.
 ui-pick-a-brand-to-see-all = Chọn một thương hiệu để xem toàn bộ sản phẩm của họ.
 ui-pick-a-material-to-see-every = Chọn một chất liệu để xem mọi sản phẩm dùng chất liệu đó.
 ui-top-rated-products = Sản phẩm được đánh giá cao
+# Tiêu đề thay thế khi chưa đủ sản phẩm có lượng đánh giá để gọi là "đánh giá
+# cao". Độ mới là điều catalog luôn khẳng định được, nên kệ vẫn hiện sản phẩm.
+ui-newest-products = Sản phẩm mới nhất
 ui-most-reviewed = Nhiều đánh giá nhất
 ui-review = Đánh giá
 ui-reviewing-a-product = Bạn đang đánh giá sản phẩm?
@@ -553,13 +524,10 @@ ui-can-t-find-it-add-a = Không tìm thấy? Thêm sản phẩm mới
 ui-add-a-product = Thêm sản phẩm
 ui-add-select-for-review = Thêm & chọn để đánh giá
 ui-the-product-becomes-public-once-an = Sản phẩm sẽ hiển thị công khai sau khi quản trị viên duyệt. Bài đánh giá của bạn được lưu ngay trong mọi trường hợp.
-ui-will-be-public = Sẽ được công khai
-ui-once-approved = sau khi được duyệt
 ui-your-rating = Điểm của bạn
 ui-your-submission-pending = Sản phẩm này đang chờ quản trị viên duyệt — bạn vẫn thêm hoặc xoá được ảnh trong lúc chờ.
 ui-your-submission-published = Bạn đã thêm sản phẩm này, giờ thuộc danh mục chung — hãy báo quản trị viên nếu cần sửa.
 ui-not-rated = Chưa chấm điểm
-ui-tap-the-stars-to-score-only = Chạm vào sao để chấm điểm · chỉ
 ui-i-have-actually-bought-or-used = Tôi đã thực sự mua hoặc dùng sản phẩm này
 ui-verified-purchases-only = Chỉ người đã mua hàng
 ui-review-summary = Tổng quan đánh giá
@@ -652,7 +620,6 @@ ui-your-post-was-marked-as-best-answer = Bài viết của bạn đã được c
 ## Soạn bài & thao tác kiểm duyệt
 
 ui-publish = Đăng bài
-ui-publish-review = Đăng đánh giá
 ui-pin = Ghim
 ui-unpin = Bỏ ghim
 ui-lock = Khóa
@@ -708,16 +675,22 @@ ui-related = Liên quan
 ui-in-this-category = trong chuyên mục này
 
 ## Giao diện đánh giá
+# Nội dung riêng của theme ferum-review (phần masthead trên trang chủ) — theme
+# default không có chuỗi tương ứng. Xem
+# frontend/themes/ferum-review/templates/home.html.
 
-ui-review-hero-eyebrow = Đánh giá vật liệu & nội thất
-ui-review-hero-title = Đánh giá thật từ những người đã thi công và sống cùng sản phẩm
-ui-review-hero-sub = Kiến trúc sư, nhà thầu và chủ nhà ghi lại những con số thật sự quan trọng: độ bền qua nhiều năm, khả năng chịu ẩm, độ khó khi thi công và chi phí thực tế trên mỗi m².
-ui-search-products-or-materials = Tìm sản phẩm hoặc chất liệu
-ui-search-placeholder-products = Tìm sàn gỗ, gạch, sofa, sơn…
+ui-material-furniture-reviews = Đánh giá vật liệu & nội thất
+ui-real-reviews-from-the-people-who-built-it = Đánh giá thực tế từ những người đã thi công và sử dụng
+ui-architects-contractors-log-the-numbers =
+    Kiến trúc sư, nhà thầu và chủ nhà ghi lại những con số quan trọng: độ bền
+    theo thời gian, khả năng chống ẩm, độ khó khi thi công và chi phí thực tế
+    trên mỗi m².
+ui-search-products-or-materials = Tìm sản phẩm hoặc vật liệu
+ui-search-flooring-tile-sofas-paint = Tìm sàn gỗ, gạch, sofa, sơn…
 ui-product-catalog = Danh mục sản phẩm
 ui-discussion-categories = Chuyên mục thảo luận
-ui-origin = Xuất xứ
-ui-style = Phong cách
+ui-browse-by-type = Duyệt theo loại
+ui-featured-image = Ảnh nổi bật
 
 # Hộp thoại xác nhận + thanh đo độ mạnh mật khẩu
 js-confirm = Xác nhận
@@ -765,7 +738,6 @@ js-delete-product-confirm = Xóa
 js-material-links = Liên kết chất liệu
 js-photos = Hình ảnh
 js-reviews = Đánh giá
-js-product-archived = Đã lưu trữ sản phẩm — các bài đánh giá được giữ nguyên.
 js-product-delete-blocked =
     Sản phẩm này đang có { $count } bài đánh giá. Xóa đi sẽ khiến các bài đó không
     còn sản phẩm để đánh giá, nên việc xóa vĩnh viễn bị chặn. Hãy lưu trữ thay thế —
@@ -773,8 +745,6 @@ js-product-delete-blocked =
 js-product-delete-permanent-warning =
     Không có gì tham chiếu tới sản phẩm này nên có thể xóa hẳn. Ảnh của nó cũng được
     giải phóng khỏi kho lưu trữ. Thao tác này không thể hoàn tác.
-js-product-deleted = Đã xóa sản phẩm.
-js-product-updated = Đã cập nhật sản phẩm.
 js-product-added-photos-failed =
     Đã thêm sản phẩm, nhưng một số hình ảnh không tải lên được. Bạn có thể thêm
     lại sau khi sản phẩm được duyệt.
@@ -789,8 +759,6 @@ js-write-a-review = Viết đánh giá
 js-new-post = Bài viết mới
 js-publish = Đăng bài
 js-publish-review = Đăng đánh giá
-js-add-a-product = Thêm sản phẩm
-js-suggest-a-product = Đề xuất sản phẩm
 
 # Nhãn loại sản phẩm & nhóm chất liệu
 js-product-type-furniture = Nội thất
@@ -848,6 +816,10 @@ js-type-to-search = Nhập để tìm…
 js-search = Tìm kiếm
 js-no-matches = Không có kết quả khớp
 
+# Kệ sản phẩm trang chủ. Số lượng là số card bị breakpoint hiện tại ẩn đi, nên
+# được đo ở trình duyệt chứ không render từ server.
+js-show-more-products = Xem thêm { $count } sản phẩm
+
 # Xác nhận & lỗi ở trang chủ đề
 js-delete-post-title = Xóa bài viết
 js-delete-post-body = Xóa bài viết này? Thao tác không thể hoàn tác.
@@ -872,3 +844,11 @@ js-scroll-for-more = Cuộn để xem thêm…
 js-cannot-react-own-post = Bạn không thể bày tỏ cảm xúc với bài viết của chính mình.
 js-react-trust-insufficient = Tài khoản của bạn cần được xác minh để bày tỏ cảm xúc.
 js-account-suspended = Tài khoản của bạn đã bị đình chỉ.
+
+## ─── Bộ lọc tìm kiếm ─────────────────────────────────────────────────────────
+# Tùy chọn mặc định của mỗi ô lọc là TÊN của chính nó, không phải "Tất cả …".
+# Bốn dropdown cùng mở đầu bằng một chữ thì mắt không quét được — phải đọc hết
+# từng cái mới phân biệt nổi.
+ui-filter-by = Lọc theo:
+ui-active-filters = Bộ lọc đang áp dụng
+ui-clear-all-filters = Bỏ tất cả

@@ -1,6 +1,6 @@
 //! Integration tests for [`PgPermissionRepository`].
 //!
-//! Permissions are seeded by migrations — `list_all` runs immediately against
+//! Permissions are seeded by PgSystemSeedService — `list_all` runs immediately against
 //! the migrated schema. `set_role_permissions` replaces the full permission set
 //! for a role (DELETE + INSERT in a transaction).
 
@@ -11,7 +11,7 @@ use crate::common::{insert_role, TestDb};
 
 #[tokio::test]
 async fn list_all_returns_seeded_permissions() {
-    // Migrations seed the canonical permission rows; list_all must return them.
+    // The system seeder writes the canonical permission rows; list_all must return them.
     let db = TestDb::new("perm_list_all").await;
     let repo = PgPermissionRepository::new(db.conn.clone());
     let perms = repo.list_all().await.expect("list_all");

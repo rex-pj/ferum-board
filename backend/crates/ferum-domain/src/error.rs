@@ -1,6 +1,4 @@
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
-use serde_json::json;
+use http::StatusCode;
 use thiserror::Error;
 
 use crate::i18n::{error_key, TransArg};
@@ -105,10 +103,63 @@ impl AppError {
             }
         }
     }
+
+    /// Which errors carry text the catalog owns, and with what arguments.
+    ///
+    /// `PluginBlocked` is deliberately excluded: its `reason` is authored by a
+    /// third-party plugin at runtime, so there is no key for it and no catalog
+    /// we could translate it against. `UnprocessableEntity` is excluded for the
+    /// same structural reason — it carries free-form prose, not a code.
+    ///
+    /// Public because two callers need it: `IntoResponse` below, which hands it
+    /// to the `translate_errors` middleware, and the page handlers that answer a
+    /// `fetch()` with plain text and therefore have to resolve the message
+    /// themselves.
+    pub fn error_payload(&self) -> Option<ErrorPayload> {
+        match self {
+            AppError::Forbidden(c) | AppError::Conflict(c) => {
+                Some(ErrorPayload::new(c.clone(), Vec::new()))
+            }
+            AppError::Invalid { code, args } => {
+                Some(ErrorPayload::new(code.clone(), args.clone()))
+            }
+            AppError::TooManyRequests(retry) => Some(ErrorPayload::new(
+                "rate_limit_exceeded".to_string(),
+                vec![("seconds".to_string(), TransArg::Int(*retry as i64))],
+            )),
+            AppError::Unauthorized => Some(ErrorPayload::new("unauthorized".to_string(), Vec::new())),
+            AppError::NotFound => Some(ErrorPayload::new("not_found".to_string(), Vec::new())),
+            AppError::Internal(_) => {
+                Some(ErrorPayload::new("internal_error".to_string(), Vec::new()))
+            }
+            // Free-form prose and plugin-authored text pass through untouched.
+            AppError::UnprocessableEntity(_) | AppError::PluginBlocked { .. } => None,
+        }
+    }
+
+    /// The message to show when no translator is available to resolve
+    /// [`Self::error_payload`] — free-form variants carry their own text, and
+    /// everything else degrades to a readable form of its code ("thread locked"
+    /// rather than a blank string).
+    pub fn fallback_message(&self) -> String {
+        match self {
+            AppError::UnprocessableEntity(m) => m.clone(),
+            AppError::PluginBlocked { reason, .. } => reason.clone(),
+            _ => self.status_and_code().1.replace('_', " "),
+        }
+    }
 }
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
+/// Wire format for `AppError`, enabled by the `axum` feature.
+///
+/// Kept here only because the orphan rule requires it: `IntoResponse` belongs to
+/// axum and `AppError` belongs to this crate, so `ferum-web` cannot write this
+/// impl itself. Nothing else in the domain depends on it.
+#[cfg(feature = "axum")]
+impl axum::response::IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        use serde_json::json;
+
         let (status, code) = self.status_and_code();
         let retry_after = if let AppError::TooManyRequests(secs) = &self {
             Some(*secs)
@@ -131,30 +182,7 @@ impl IntoResponse for AppError {
             }
             _ => {}
         }
-        // Which errors carry text the catalog owns, and with what arguments.
-        //
-        // `PluginBlocked` is deliberately excluded: its `reason` is authored by
-        // a third-party plugin at runtime, so there is no key for it and no
-        // catalog we could translate it against.
-        let payload = match &self {
-            AppError::Forbidden(c) | AppError::Conflict(c) => {
-                Some(ErrorPayload::new(c.clone(), Vec::new()))
-            }
-            AppError::Invalid { code, args } => {
-                Some(ErrorPayload::new(code.clone(), args.clone()))
-            }
-            AppError::TooManyRequests(retry) => Some(ErrorPayload::new(
-                "rate_limit_exceeded".to_string(),
-                vec![("seconds".to_string(), TransArg::Int(*retry as i64))],
-            )),
-            AppError::Unauthorized => Some(ErrorPayload::new("unauthorized".to_string(), Vec::new())),
-            AppError::NotFound => Some(ErrorPayload::new("not_found".to_string(), Vec::new())),
-            AppError::Internal(_) => {
-                Some(ErrorPayload::new("internal_error".to_string(), Vec::new()))
-            }
-            // Free-form prose and plugin-authored text pass through untouched.
-            AppError::UnprocessableEntity(_) | AppError::PluginBlocked { .. } => None,
-        };
+        let payload = self.error_payload();
 
         // The body is written with an *untranslated* placeholder. The
         // `translate_errors` middleware rewrites `message` using the request's
@@ -165,13 +193,9 @@ impl IntoResponse for AppError {
         // `AppState` or to request extensions, so the only alternatives would be
         // a process-wide static or a task-local — both of which this codebase
         // deliberately avoids.
-        let message = match &self {
-            AppError::UnprocessableEntity(m) => m.clone(),
-            AppError::PluginBlocked { reason, .. } => reason.clone(),
-            // Readable degradation if the middleware is ever absent: the user
-            // sees "thread locked" rather than a blank string.
-            _ => code.replace('_', " "),
-        };
+        // Readable degradation if the middleware is ever absent: the user sees
+        // "thread locked" rather than a blank string.
+        let message = self.fallback_message();
 
         let body = json!({ "error": { "code": code, "message": message } });
         let mut res = (status, axum::Json(body)).into_response();
@@ -231,6 +255,12 @@ impl<T> OptionExt<T> for Option<T> {
     }
 }
 
+/// Database-error mapping, enabled by the `sea-orm` feature.
+///
+/// Same orphan-rule constraint as the impl above: `ferum-infrastructure` owns
+/// neither `From` nor `AppError`, so the conversion that lets its 73 repository
+/// files write `?` on a `DbErr` has to be declared here.
+#[cfg(feature = "sea-orm")]
 impl From<sea_orm::DbErr> for AppError {
     #[track_caller]
     fn from(e: sea_orm::DbErr) -> Self {

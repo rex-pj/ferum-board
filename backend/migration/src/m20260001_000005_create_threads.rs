@@ -170,9 +170,12 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
+        // Expression must match the search query's expression exactly, or the
+        // index is silently ignored — see `f_unaccent` in migration 000001 and
+        // `plan_threads` in postgres_fts.rs.
         conn.execute_unprepared(
             "CREATE INDEX idx_threads_fts ON threads \
-             USING GIN(to_tsvector('simple', title))",
+             USING GIN(to_tsvector('simple', f_unaccent(title)))",
         )
         .await?;
 

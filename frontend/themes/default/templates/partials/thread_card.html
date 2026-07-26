@@ -28,6 +28,17 @@
       {{ m::avatar(url=thread.author_avatar_url, name=thread.author_display_name, size=28) }}
       <a href="/u/{{ thread.author_username }}" class="fr-link-elevated">{{ thread.author_display_name }}</a>
       <span aria-hidden="true">·</span>
+      {# Names the product a review is *of*, and links to it. Without this the
+         connection between the catalogue and the feed is left for the reader to
+         infer from the title — the single thing that makes the two halves of this
+         site read as one product rather than two bolted together. #}
+      {% if thread.review_product_slug %}
+        <a href="/catalog/{{ thread.review_product_slug }}" class="fr-category-pill fr-link-elevated"
+           title="{{ t(k='ui-product-review') }}: {{ thread.review_product_name }}">
+          <i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>{{ thread.review_product_name }}
+        </a>
+        <span aria-hidden="true">·</span>
+      {% endif %}
       <a href="/forum/{{ thread.category_slug }}" class="fr-category-pill fr-link-elevated">{{ thread.category_name }}</a>
       {% if thread.tags %}
         <span class="fr-thread-meta-tags">

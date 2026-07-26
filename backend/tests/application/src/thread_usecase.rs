@@ -566,7 +566,7 @@ async fn update_tags_non_author_without_edit_any_perm_returns_forbidden() {
 
 // ─── create: one review per author per product ───────────────────────────────
 //
-// `uq_threads_product_author` (migration 32) is the real guarantee; these cover
+// `uq_threads_product_author` (migration 28) is the real guarantee; these cover
 // the use-case check that turns a would-be unique violation into a 409 the
 // caller can act on. Without the rule one account can open N threads on the
 // same product and set the product's average single-handed, because
@@ -616,6 +616,87 @@ async fn create_allows_first_review_of_product() {
 
     let result = b.build().create(&actor, review_cmd(Some(ids::product_a()))).await;
     assert!(result.is_ok());
+}
+
+// ─── list_feed: reviews excluded from the discussion feed ────────────────────
+//
+// Reviews are threads but not discussion, so the homepage feed must not list the
+// canonical reviews category. These assert on the exact category-id set handed to
+// `list_feed` — the whole behaviour lives in which ids reach the repository.
+
+/// A category with an explicit id and slug (the shared fixture hard-codes slug
+/// "general"; these tests need the "reviews" slug to be recognised).
+fn category_with_slug(id: uuid::Uuid, slug: &str) -> ferum_domain::models::category::Category {
+    ferum_domain::models::category::Category {
+        slug: slug.to_string(),
+        ..make_category(id)
+    }
+}
+
+fn reviews_category_id() -> uuid::Uuid {
+    uuid::Uuid::parse_str("00000000-0000-0000-0000-0000000000e5").unwrap()
+}
+
+#[tokio::test]
+async fn list_feed_excludes_reviews_category_for_guest() {
+    use ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG;
+    let general = ids::category_a();
+    let reviews = reviews_category_id();
+
+    let mut b = Uc::new();
+    b.categories.expect_list_all().returning(move || {
+        Ok(vec![
+            category_with_slug(general, "general"),
+            category_with_slug(reviews, REVIEWS_CATEGORY_SLUG),
+        ])
+    });
+    // The assertion: the reviews id must never be among the categories queried.
+    b.threads
+        .expect_list_feed()
+        .withf(move |ids, _, _, _, _| ids.contains(&general) && !ids.contains(&reviews))
+        .return_once(|_, _, _, _, _| Ok((vec![], 0)));
+    b.tags.expect_find_by_threads().return_once(|_| Ok(Default::default()));
+
+    let result = b
+        .build()
+        .list_feed(None, ferum_domain::repositories::thread_repository::ThreadSort::Latest, 1, 20)
+        .await;
+    assert!(result.is_ok(), "guest feed should build without the reviews category");
+}
+
+#[tokio::test]
+async fn list_feed_keeps_reviews_when_user_explicitly_watches_it() {
+    use ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG;
+    let general = ids::category_a();
+    let reviews = reviews_category_id();
+    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+
+    let mut b = Uc::new();
+    b.categories.expect_list_all().returning(move || {
+        Ok(vec![
+            category_with_slug(general, "general"),
+            category_with_slug(reviews, REVIEWS_CATEGORY_SLUG),
+        ])
+    });
+    // The user has deliberately watched the reviews category — that opt-in must
+    // win over the blanket exclusion, otherwise the toggle does nothing.
+    b.users
+        .expect_get_watched_categories()
+        .return_once(move |_| Ok(vec![reviews]));
+    b.users
+        .expect_get_muted_categories()
+        .return_once(|_| Ok(vec![]));
+    b.threads
+        .expect_list_feed()
+        .withf(move |ids, _, _, _, _| ids.contains(&reviews))
+        .return_once(|_, _, _, _, _| Ok((vec![], 0)));
+    b.tags.expect_find_by_threads().return_once(|_| Ok(Default::default()));
+
+    let result = b
+        .build()
+        .list_feed(Some(&actor), ferum_domain::repositories::thread_repository::ThreadSort::Latest, 1, 20)
+        .await;
+    assert!(result.is_ok(), "an explicit watch on reviews must survive the exclusion");
 }
 
 #[tokio::test]

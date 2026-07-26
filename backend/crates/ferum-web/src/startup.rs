@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::config::Config;
+use crate::handlers::admin::api::config::smtp_settings_from_config;
 use crate::tera_engine::TeraEngine;
 use ferum_application::event_bus::{EventBus, EventPublisher};
 use ferum_application::ports::{
@@ -37,9 +38,8 @@ use ferum_infrastructure::search::MeilisearchService;
 use ferum_infrastructure::storage::S3StorageService;
 use ferum_infrastructure::{
     bcrypt_password_hasher::BcryptPasswordHasher,
-    bulk_seed_service::PgBulkSeedService,
     cache::{InMemoryCacheService, RedisCacheService},
-    email::LettreEmailService,
+    email::ReloadableEmailService,
     job_queue::{InlineJobRunner, JobExecutor},
     jwt_token_service::JwtTokenService,
     notification::{SseBroadcaster, SseNotificationBus},
@@ -49,7 +49,8 @@ use ferum_infrastructure::{
         PgAuditLogRepository, PgBookmarkRepository, PgCategoryRepository, PgFollowRepository,
         PgBrandRepository, PgMaterialRepository, PgNotificationRepository, PgPermissionRepository,
         PgPluginDbGateway,
-        PgPluginRepository, PgPluginStorageRepository, PgPostRepository, PgProductRepository,
+        PgPluginRepository, PgPluginStorageRepository, PgPostRepository,
+        PgProductCategoryRepository, PgProductRepository,
         PgReactionRepository, PgReportRepository, PgReviewRatingRepository, PgRoleRepository,
         PgSiteConfigRepository, PgStatsRepository, PgStoredFileRepository, PgTagRepository,
         PgThreadRepository, PgUserRepository,
@@ -58,6 +59,7 @@ use ferum_infrastructure::{
     role_permission_cache::RolePermissionCache,
     search::PostgresFtsService,
     storage::DatabaseStorageService,
+    system_seed_service::PgSystemSeedService,
 };
 use migration::MigratorTrait;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
@@ -91,6 +93,15 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     migration::Migrator::up(&pg_write, None).await?;
     tracing::info!("Migrations completed successfully");
 
+    // ─── System data ─────────────────────────────────────────────────────────
+    // Idempotent, and deliberately unconditional: migrations carry no data, so
+    // this is what guarantees the roles and permissions exist — including any
+    // added since this database was created. Must precede
+    // RolePermissionCache::load below, which reads exactly these rows.
+    PgSystemSeedService::new(pg_write.clone())
+        .seed_system()
+        .await?;
+
     let pg_read: DatabaseConnection = match &config.database_read_url {
         Some(url) => {
             tracing::info!("Read replica enabled");
@@ -103,20 +114,12 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     };
 
     // ─── Email service ──────────────────────────────────────────────────────
-    // When SMTP_HOST is absent, email is disabled and users are auto-verified on registration.
-    let smtp_enabled = config.smtp_host.is_some();
-    let email = Arc::new(LettreEmailService::new(
-        config.smtp_host.as_deref().unwrap_or("localhost"),
-        config.smtp_port,
-        config.smtp_user.as_deref(),
-        config.smtp_pass.as_deref(),
-        &config.from_email,
-    )?);
-    if !smtp_enabled {
-        tracing::warn!(
-            "SMTP_HOST not set — email sending disabled, new registrations are auto-verified"
-        );
-    }
+    // Created unconfigured and loaded further down, once site_config is available:
+    // SMTP settings are editable from /admin/settings and stored values win over
+    // env (env seeds them on first run — see the seeding block below). The
+    // reloadable wrapper also owns the "auto-verify registrations" flag, so
+    // turning SMTP on or off at runtime takes effect without a restart.
+    let email = Arc::new(ReloadableEmailService::new(&config.from_email));
 
     // ─── SSE broadcaster ─────────────────────────────────────────────────────
     let broadcaster_concrete = Arc::new(SseBroadcaster::new());
@@ -177,6 +180,9 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         Arc::new(PgTagRepository::new(pg_write.clone()));
     let product_repo: Arc<dyn ferum_domain::repositories::product_repository::ProductRepository> =
         Arc::new(PgProductRepository::new(pg_write.clone()));
+    let product_category_repo: Arc<
+        dyn ferum_domain::repositories::product_repository::ProductCategoryRepository,
+    > = Arc::new(PgProductCategoryRepository::new(pg_write.clone()));
     let material_repo: Arc<dyn ferum_domain::repositories::material_repository::MaterialRepository> =
         Arc::new(PgMaterialRepository::new(pg_write.clone()));
     let brand_repo: Arc<dyn ferum_domain::repositories::brand_repository::BrandRepository> =
@@ -201,6 +207,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 url,
                 config.meilisearch_key.as_deref(),
                 &config.meilisearch_index,
+                &config.meilisearch_product_index,
             ))
         }
         None => Arc::new(PostgresFtsService::new(pg_read.clone())),
@@ -406,9 +413,13 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     // Seed SMTP credentials from env into site_config on first run so admins can
     // later update them via the settings UI without touching env vars.
+    //
+    // Only when the key is *absent*. A stored empty host means an admin cleared
+    // SMTP deliberately; re-seeding it from env would undo that on every restart,
+    // and site_config is the authority now that the settings page writes here.
     if config.smtp_host.is_some() {
         let existing_smtp = site_config.get("smtp_host").await.unwrap_or(None);
-        if existing_smtp.is_none() || existing_smtp.as_deref() == Some("") {
+        if existing_smtp.is_none() {
             let mut smtp_seed = std::collections::HashMap::new();
             if let Some(h) = &config.smtp_host {
                 smtp_seed.insert("smtp_host".to_string(), h.clone());
@@ -433,6 +444,34 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         }),
     ));
 
+    // ─── Mail transport ─────────────────────────────────────────────────────
+    // Loaded from site_config (seeded from env above), so an operator who changed
+    // SMTP through the admin UI keeps those settings across restarts. A bad stored
+    // value must not stop the process booting — log and leave email disabled,
+    // which also flips the auto-verify flag so registration still works.
+    {
+        let stored = site_config_cache.read().await.clone();
+        let settings = match smtp_settings_from_config(&stored) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("Stored SMTP settings are invalid ({e}) — email disabled");
+                None
+            }
+        };
+        let (host, port, user, pass) = match &settings {
+            Some(s) => (
+                Some(s.host.as_str()),
+                s.port,
+                s.username.as_deref(),
+                s.password.as_deref(),
+            ),
+            None => (None, config.smtp_port, None, None),
+        };
+        if let Err(e) = email.reload(host, port, user, pass).await {
+            tracing::error!("Failed to build SMTP transport ({e}) — email disabled");
+        }
+    }
+
     // ─── Use cases ───────────────────────────────────────────────────────────
     let auth = Arc::new(
         AuthUseCase::new(
@@ -444,7 +483,10 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             cache.clone(),
             job_queue.clone(),
         )
-        .with_auto_verify_email(!smtp_enabled)
+        // Shared flag, not a snapshot: it must follow SMTP being configured or
+        // cleared at runtime, or registrations keep skipping email verification
+        // long after mail started working.
+        .with_auto_verify_flag(email.auto_verify_flag())
         .with_site_config(site_config.clone())
         .with_plugin_runtime(plugin_hooks.clone()),
     );
@@ -527,7 +569,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let notification = Arc::new(NotificationUseCase::new(notification_repo.clone()));
 
     let product = Arc::new(ProductUseCase::new(
-        product_repo,
+        product_repo.clone(),
+        product_category_repo,
         material_repo,
         brand_repo,
         stored_file_repo.clone(),
@@ -553,6 +596,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         search_svc,
         thread_repo.clone(),
         category_repo.clone(),
+        product_repo,
     ));
 
     let stats_repo = Arc::new(PgStatsRepository::new(pg_write.clone()));
@@ -593,7 +637,16 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     ));
 
     let hasher3 = Arc::new(BcryptPasswordHasher);
-    let bulk_seed = Arc::new(PgBulkSeedService::new(pg_write.clone()));
+    // Same adapter/fallback shape as storage, search and the plugin runtime: the
+    // use case only ever sees `Arc<dyn BulkSeedService>`, so compiling the
+    // 1,400-line example dataset out changes nothing above this line.
+    #[cfg(feature = "bulk_seed")]
+    let bulk_seed: Arc<dyn ferum_application::ports::BulkSeedService> = Arc::new(
+        ferum_infrastructure::bulk_seed_service::PgBulkSeedService::new(pg_write.clone()),
+    );
+    #[cfg(not(feature = "bulk_seed"))]
+    let bulk_seed: Arc<dyn ferum_application::ports::BulkSeedService> =
+        Arc::new(ferum_application::ports::NullBulkSeedService);
     let setup = Arc::new(SetupUseCase::new(
         user_repo.clone(),
         role_repo,
@@ -728,6 +781,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         plugin_rpc,
         site_config,
         site_config_cache,
+        email: email.clone(),
         active_theme_cache,
         active_theme_chain_cache,
         active_theme_color_scheme_cache,

@@ -20,8 +20,7 @@ pub async fn threads(
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
 
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).min(100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
     let search = q.q.clone().unwrap_or_default();
     let sort = ThreadSort::from_str(q.sort_by.as_deref().unwrap_or("latest"));
     let status_filter = q.status.clone().unwrap_or_default();
@@ -75,6 +74,8 @@ pub async fn threads(
                 is_review: t.category_slug == ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG,
                 review_overall: None,
                 review_product_image: None,
+                review_product_name: None,
+                review_product_slug: None,
             category_name: t.category_name.clone().unwrap_or_default(),
             reply_count: t.reply_count,
             view_count: t.view_count,

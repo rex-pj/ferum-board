@@ -338,6 +338,14 @@ async fn logout_deletes_refresh_token_from_cache() {
     let user_id = Uuid::new_v4();
     let mut cache = MockCacheService::new();
     cache.expect_del().times(1).returning(|_| Ok(()));
+    // Logout must also bump the session epoch. Dropping the refresh token alone
+    // leaves the already-issued access token working until its own expiry, so
+    // "log out" would not actually end the session for anyone holding the cookie.
+    cache
+        .expect_set()
+        .withf(move |key, _, _| key == format!("user:session_epoch:{user_id}"))
+        .times(1)
+        .returning(|_, _, _| Ok(()));
 
     let uc = build_uc(
         MockUserRepository::new(), MockRoleRepository::new(), MockUserRoleRepository::new(),
@@ -407,6 +415,14 @@ async fn reset_password_success() {
 
     let mut cache = MockCacheService::new();
     cache.expect_set_nx().returning(|_, _, _| Ok(true));
+    // A reset is normally a response to compromise, so it must also revoke the
+    // access tokens already out there — otherwise the attacker's session keeps
+    // working for up to another full token lifetime after the reset.
+    cache
+        .expect_set()
+        .withf(move |key, _, _| key == format!("user:session_epoch:{user_id}"))
+        .times(1)
+        .returning(|_, _, _| Ok(()));
 
     let mut hasher = MockPasswordHasher::new();
     hasher.expect_hash().returning(|_| Ok("$2b$12$newhash".to_string()));

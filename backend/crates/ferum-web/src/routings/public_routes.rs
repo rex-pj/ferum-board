@@ -181,7 +181,11 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
         .route("/products", get(api::products::list_products))
         .route("/products/{slug}", get(api::products::get_product))
         .route("/materials", get(api::products::list_materials))
-        .route("/brands", get(api::products::list_brands));
+        .route("/brands", get(api::products::list_brands))
+        .route(
+            "/product-categories",
+            get(api::products::list_product_categories),
+        );
 
     // Member-submitted products (crowd-sourced catalog). Rate-limited like other
     // public writes; the handler enforces `product.submit` + email-verified.

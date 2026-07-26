@@ -12,6 +12,83 @@ impl MigrationName for Migration {
     }
 }
 
+/// Name of the low-privilege role every plugin query runs as.
+///
+/// One shared role, not one per plugin: roles are cluster-wide objects while
+/// plugins are per-database, and a role-per-plugin would leak objects across
+/// databases sharing this cluster. Isolation *between* plugins is still enforced
+/// — each plugin's schema is granted separately, and `PgPluginDbGateway` pins
+/// `search_path` to the calling plugin's own schema.
+pub const PLUGIN_DB_ROLE: &str = "ferum_plugin";
+
+/// Creates the role plugin SQL executes as. Lives with the plugin tables it
+/// exists to protect rather than in a migration of its own.
+///
+/// Plugin queries used to run with the application's own database privileges,
+/// held back only by a substring denylist over the SQL text — which
+/// `FROM "public".users` walked straight through, since the quoted form does not
+/// contain the blocked substring `public.`. A denylist over SQL text cannot be
+/// made airtight; letting Postgres own the boundary can.
+///
+/// The role is created with **no grants at all**, and that is sufficient on its
+/// own: `PUBLIC` holds `USAGE` on schema `public`, but table privileges are
+/// never granted to `PUBLIC` by default, so this role can read and write nothing.
+/// Only the plugin schemas explicitly granted by
+/// `PgPluginDbGateway::provision_schema` become reachable. No `REVOKE` on
+/// `PUBLIC` is needed, which keeps this from disturbing anything else in the
+/// database.
+///
+/// No backfill of pre-existing `plugin_*` schemas is needed here: this runs
+/// while the plugin tables are still being created, so no plugin can yet have
+/// provisioned one.
+///
+/// Both statements tolerate failure. `CREATE ROLE` needs `CREATEROLE`, which a
+/// locked-down managed-Postgres user may not have, and a hard failure here would
+/// leave the application unable to start — strictly worse than the status quo.
+/// When the role is absent the gateway logs loudly and falls back to
+/// denylist-only enforcement.
+async fn create_plugin_db_role(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    let conn = manager.get_connection();
+
+    conn.execute_unprepared(&format!(
+        r#"
+        DO $$
+        BEGIN
+            CREATE ROLE {PLUGIN_DB_ROLE} NOLOGIN;
+        EXCEPTION
+            WHEN duplicate_object THEN
+                RAISE NOTICE 'role {PLUGIN_DB_ROLE} already exists, leaving as is';
+            WHEN insufficient_privilege THEN
+                RAISE WARNING
+                    'could not create role {PLUGIN_DB_ROLE} (no CREATEROLE). Plugin SQL will fall back to denylist-only enforcement.';
+        END
+        $$;
+        "#
+    ))
+    .await?;
+
+    // `SET ROLE` requires membership unless the caller is a superuser. Granting
+    // the role to the connected user keeps this working for the ordinary,
+    // non-superuser deployment too.
+    conn.execute_unprepared(&format!(
+        r#"
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{PLUGIN_DB_ROLE}') THEN
+                EXECUTE format('GRANT {PLUGIN_DB_ROLE} TO %I', current_user);
+            END IF;
+        EXCEPTION
+            WHEN insufficient_privilege THEN
+                RAISE WARNING 'could not grant {PLUGIN_DB_ROLE} to current_user';
+        END
+        $$;
+        "#
+    ))
+    .await?;
+
+    Ok(())
+}
+
 #[derive(Iden)]
 pub enum Plugins {
     Table,
@@ -385,9 +462,15 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        create_plugin_db_role(manager).await?;
+
         Ok(())
     }
 
+    /// `ferum_plugin` is deliberately NOT dropped here. A role is cluster-wide,
+    /// so it may still hold grants on plugin schemas in another database, and
+    /// `DROP ROLE` errors while any grant remains — turning a routine rollback
+    /// into a hard failure. An unused NOLOGIN role costs nothing to leave behind.
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(PluginLogs::Table).if_exists().to_owned())

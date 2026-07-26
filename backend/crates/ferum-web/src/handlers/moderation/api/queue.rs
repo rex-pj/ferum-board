@@ -22,8 +22,7 @@ pub async fn list_pending_posts(
     Query(q): Query<PendingQueueQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).min(100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
     let (posts, total) = state.post.list_pending(actor, q.category_id, page, per_page).await?;
     Ok(Json(PagedResponse::new(
         posts.into_iter().map(PostResponse::from).collect(),

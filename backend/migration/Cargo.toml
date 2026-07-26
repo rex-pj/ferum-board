@@ -7,10 +7,21 @@ edition = "2021"
 name = "migration"
 path = "src/lib.rs"
 
+# The standalone migration CLI. Gated behind `required-features` so that
+# building it is the only thing that drags `sea-orm-cli` + `clap` into the tree.
+# `ferum-web` and `ferum-infrastructure` depend on this crate as a LIBRARY only
+# (Migrator::up at startup, PLUGIN_DB_ROLE), so their builds no longer pay for a
+# CLI argument parser they never invoke.
+#   Run it with:  cargo run -p migration --features cli -- up
 [[bin]]
 name = "migration"
 path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = []
+cli = ["sea-orm-migration/cli"]
 
 [dependencies]
-sea-orm-migration = { version = "1", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+sea-orm-migration = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

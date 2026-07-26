@@ -1,12 +1,12 @@
 use sea_orm_migration::prelude::*;
 
-use crate::m20260001_000024_create_products::Products;
+use crate::m20260001_000025_create_products::Products;
 
 pub struct Migration;
 
 impl MigrationName for Migration {
     fn name(&self) -> &str {
-        "m20260001_000026_create_product_media"
+        "m20260001_000027_create_product_media"
     }
 }
 

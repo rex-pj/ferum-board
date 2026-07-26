@@ -71,6 +71,13 @@ const BRAND_HOA_PHAT: Uuid = uuid!("61000000-0000-0000-0000-000000000002");
 const TH_SOFA_REVIEW: Uuid = uuid!("21000000-0000-0000-0000-000000000001");
 const POST_SOFA_REVIEW: Uuid = uuid!("31000000-0000-0000-0000-000000000001");
 
+// Moderation demo — fixed ids so re-running the seed cannot pile up duplicate
+// reports on the same post.
+const REPORT_SPAM: Uuid = uuid!("50000000-0000-0000-0000-000000000001");
+const REPORT_RUDE: Uuid = uuid!("50000000-0000-0000-0000-000000000002");
+const REPORT_THREAD: Uuid = uuid!("50000000-0000-0000-0000-000000000003");
+const REPORT_DISMISSED: Uuid = uuid!("50000000-0000-0000-0000-000000000004");
+
 const BULK_THREAD_TITLE_PREFIXES: [&str; 10] = [
     "What do you think about",
     "How to approach",
@@ -164,6 +171,10 @@ impl BulkSeedService for PgBulkSeedService {
         self.seed_materials().await?;
         self.seed_brands().await?;
         self.seed_furniture_demo(admin_id).await?;
+        self.seed_moderation_demo(admin_id).await?;
+        self.seed_social_demo(admin_id).await?;
+        // Last: every post that counts towards a total has been written by now.
+        self.sync_user_post_counts().await?;
 
         Ok(())
     }
@@ -185,7 +196,12 @@ impl PgBulkSeedService {
                     password_hash: Set(Some(hash.into())),
                     trust_level: Set(TrustLevel::Member),
                     trust_score: Set(80),
-                    post_count: Set(2), // POST_INTRO_1, POST_FAV_LANG_3
+                    // post_count is left at its default here and for every other
+                    // seeded user: `sync_user_post_counts` derives it from the
+                    // posts actually written, at the end of the run. A
+                    // hand-maintained number goes stale the moment a seed step
+                    // is added, and a profile that claims 5 posts above a list
+                    // of 3 is a bug report waiting to happen.
                     ..Default::default()
                 },
                 users::ActiveModel {
@@ -197,7 +213,6 @@ impl PgBulkSeedService {
                     password_hash: Set(Some(hash.into())),
                     trust_level: Set(TrustLevel::Member),
                     trust_score: Set(40),
-                    post_count: Set(5), // POST_WELCOME_2, POST_INTRO_2, POST_FAV_LANG_1, POST_RUST_GO_2, POST_DARK_1
                     ..Default::default()
                 },
                 users::ActiveModel {
@@ -209,7 +224,6 @@ impl PgBulkSeedService {
                     password_hash: Set(Some(hash.into())),
                     trust_level: Set(TrustLevel::Basic),
                     trust_score: Set(10),
-                    post_count: Set(3), // POST_WELCOME_3, POST_FAV_LANG_2, POST_RUST_GO_1
                     ..Default::default()
                 },
             ],
@@ -596,7 +610,7 @@ impl PgBulkSeedService {
     async fn seed_user_roles(&self, admin_id: Uuid) -> Result<(), AppError> {
         use crate::entities::roles;
 
-        // Fetch role IDs from DB (seeded by migration 014 create_rbac)
+        // Fetch role IDs from DB (written by PgSystemSeedService at startup)
         let all_roles = roles::Entity::find()
             .all(&self.db)
             .await
@@ -734,7 +748,6 @@ impl PgBulkSeedService {
                 password_hash: Set(Some(hash.into())),
                 trust_level: Set(trust_levels[(i - 1) % 5].clone()),
                 trust_score: Set(((i * 7) % 100) as i32),
-                post_count: Set(((i * 3) % 30) as i32),
                 ..Default::default()
             })
             .collect();
@@ -1136,13 +1149,26 @@ impl PgBulkSeedService {
 
     async fn seed_furniture_demo(&self, admin_id: Uuid) -> Result<(), AppError> {
         use crate::entities::{
-            materials, product_materials, product_rating_stats, products, review_ratings,
+            materials, product_categories, product_materials, product_rating_stats, products,
+            review_ratings,
         };
         use rust_decimal::Decimal;
 
         let now = Utc::now().fixed_offset();
 
-        // 1. Products (VN prices in đồng; category left unset for the demo).
+        // Catalogue categories come from PgSystemSeedService, which has already
+        // run by the time setup calls this. Looked up by slug rather than by a
+        // fixed UUID because an admin may have edited the taxonomy first.
+        let pcat: std::collections::HashMap<String, Uuid> = product_categories::Entity::find()
+            .all(&self.db)
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?
+            .into_iter()
+            .map(|c| (c.slug, c.id))
+            .collect();
+        let cat = |slug: &str| pcat.get(slug).copied();
+
+        // 1. Products (VN prices in đồng).
         insert_or_ignore::<products::Entity, _, _>(&self.db, [
             products::ActiveModel {
                 id: Set(P_SOFA),
@@ -1151,6 +1177,7 @@ impl PgBulkSeedService {
                 product_type: Set(products::ProductType::Furniture),
                 status: Set(products::ProductStatus::Published),
                 brand_id: Set(Some(BRAND_NHA_XINH)),
+                category_id: Set(cat("sofa")),
                 style: Set(Some("Scandinavian".into())),
                 price_min: Set(Some(6_500_000)),
                 price_max: Set(Some(8_900_000)),
@@ -1166,6 +1193,7 @@ impl PgBulkSeedService {
                 product_type: Set(products::ProductType::Furniture),
                 status: Set(products::ProductStatus::Published),
                 brand_id: Set(Some(BRAND_HOA_PHAT)),
+                category_id: Set(cat("ban")),
                 style: Set(Some("Hiện đại".into())),
                 price_min: Set(Some(18_000_000)),
                 price_max: Set(Some(24_000_000)),
@@ -1173,6 +1201,10 @@ impl PgBulkSeedService {
                 created_by_id: Set(Some(admin_id)),
                 ..Default::default()
             },
+            // Deliberately unfiled: the taxonomy describes furniture, and a
+            // sheet of MDF is a material, not a piece of it. It also gives the
+            // admin's Unfiled count and the auto-assign preview a real row to
+            // act on instead of an empty screen.
             products::ActiveModel {
                 id: Set(P_MDF),
                 slug: Set("van-mdf-phu-melamine".into()),
@@ -1188,7 +1220,7 @@ impl PgBulkSeedService {
         ])
         .await?;
 
-        // 2. Link products to materials seeded by migration 031 (look up by slug).
+        // 2. Link products to the materials `seed_materials` wrote above.
         let mat_ids: std::collections::HashMap<String, Uuid> = materials::Entity::find()
             .all(&self.db)
             .await
@@ -1273,6 +1305,160 @@ impl PgBulkSeedService {
         )
         .await?;
 
+        Ok(())
+    }
+
+    // ── Moderation demo ───────────────────────────────────────────────────────
+    // Without these, /mod/reports, /mod/queue and the dashboard's pending-reports
+    // tile all render empty on a freshly seeded install — the surfaces a Power
+    // User most wants to look at are the ones with nothing to show.
+
+    async fn seed_moderation_demo(&self, admin_id: Uuid) -> Result<(), AppError> {
+        use crate::entities::reports::{self, ReportStatus};
+
+        let now = Utc::now().fixed_offset();
+
+        insert_or_ignore::<reports::Entity, _, _>(&self.db, [
+            reports::ActiveModel {
+                id: Set(REPORT_SPAM),
+                reporter_id: Set(ALICE_ID),
+                post_id: Set(Some(POST_RUST_GO_1)),
+                thread_id: Set(None),
+                reason: Set("Off-topic promotion in the middle of a technical thread.".into()),
+                status: Set(ReportStatus::Pending),
+                created_at: Set(now - Duration::hours(4)),
+                ..Default::default()
+            },
+            reports::ActiveModel {
+                id: Set(REPORT_RUDE),
+                reporter_id: Set(BOB_ID),
+                post_id: Set(Some(POST_FAV_LANG_3)),
+                thread_id: Set(None),
+                reason: Set("Dismissive tone towards other members.".into()),
+                status: Set(ReportStatus::Pending),
+                created_at: Set(now - Duration::hours(2)),
+                ..Default::default()
+            },
+            // Thread-level report: the queue must show both shapes, since the
+            // resolve action differs between them.
+            reports::ActiveModel {
+                id: Set(REPORT_THREAD),
+                reporter_id: Set(MOD_ID),
+                post_id: Set(None),
+                thread_id: Set(Some(TH_DARK_MODE)),
+                reason: Set("Duplicate of an existing feature request.".into()),
+                status: Set(ReportStatus::Resolved),
+                moderator_notes: Set(Some("Merged into the roadmap discussion.".into())),
+                resolved_by_id: Set(Some(admin_id)),
+                resolved_at: Set(Some(now - Duration::hours(20))),
+                created_at: Set(now - Duration::days(1)),
+                ..Default::default()
+            },
+            reports::ActiveModel {
+                id: Set(REPORT_DISMISSED),
+                reporter_id: Set(ALICE_ID),
+                post_id: Set(Some(POST_WELCOME_3)),
+                thread_id: Set(None),
+                reason: Set("Suspected bot account.".into()),
+                status: Set(ReportStatus::Dismissed),
+                moderator_notes: Set(Some("Genuine member; no action taken.".into())),
+                resolved_by_id: Set(Some(MOD_ID)),
+                resolved_at: Set(Some(now - Duration::days(1))),
+                created_at: Set(now - Duration::days(2)),
+                ..Default::default()
+            },
+        ])
+        .await
+    }
+
+    // ── Social demo ───────────────────────────────────────────────────────────
+
+    async fn seed_social_demo(&self, admin_id: Uuid) -> Result<(), AppError> {
+        use crate::entities::{bookmarks, user_follows};
+
+        let now = Utc::now().fixed_offset();
+
+        insert_or_ignore::<bookmarks::Entity, _, _>(&self.db, [
+            bookmarks::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                user_id: Set(ALICE_ID),
+                thread_id: Set(TH_WELCOME),
+                created_at: Set(now - Duration::days(2)),
+            },
+            bookmarks::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                user_id: Set(ALICE_ID),
+                thread_id: Set(TH_RUST_VS_GO),
+                created_at: Set(now - Duration::days(1)),
+            },
+            bookmarks::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                user_id: Set(BOB_ID),
+                thread_id: Set(TH_SOFA_REVIEW),
+                created_at: Set(now - Duration::hours(6)),
+            },
+            bookmarks::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                user_id: Set(MOD_ID),
+                thread_id: Set(TH_FAV_LANG),
+                created_at: Set(now - Duration::hours(9)),
+            },
+        ])
+        .await?;
+
+        insert_or_ignore::<user_follows::Entity, _, _>(&self.db, [
+            user_follows::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                follower_id: Set(BOB_ID),
+                followed_id: Set(ALICE_ID),
+                created_at: Set(now - Duration::days(3)),
+            },
+            user_follows::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                follower_id: Set(ALICE_ID),
+                followed_id: Set(MOD_ID),
+                created_at: Set(now - Duration::days(2)),
+            },
+            user_follows::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                follower_id: Set(MOD_ID),
+                followed_id: Set(admin_id),
+                created_at: Set(now - Duration::days(2)),
+            },
+            user_follows::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                follower_id: Set(ALICE_ID),
+                followed_id: Set(admin_id),
+                created_at: Set(now - Duration::days(1)),
+            },
+        ])
+        .await
+    }
+
+    /// Set every user's `post_count` to the number of posts they actually have.
+    ///
+    /// The counter is maintained incrementally by the post use case at runtime;
+    /// seeding writes rows underneath it, so the two only agree if the total is
+    /// recomputed once at the end. Deleted posts are excluded, matching what the
+    /// profile page lists.
+    async fn sync_user_post_counts(&self) -> Result<(), AppError> {
+        use sea_orm::{ConnectionTrait, Statement};
+
+        self.db
+            .execute(Statement::from_string(
+                self.db.get_database_backend(),
+                "UPDATE users u SET post_count = coalesce(c.n, 0) \
+                 FROM ( \
+                     SELECT u2.id, count(p.id) AS n \
+                     FROM users u2 \
+                     LEFT JOIN posts p ON p.author_id = u2.id AND p.is_deleted = false \
+                     GROUP BY u2.id \
+                 ) c \
+                 WHERE u.id = c.id AND u.post_count IS DISTINCT FROM coalesce(c.n, 0)"
+                    .to_owned(),
+            ))
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
         Ok(())
     }
 }

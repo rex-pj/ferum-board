@@ -1,4 +1,4 @@
-use axum::extract::Request;
+use axum::extract::{Request, State};
 use axum::http::HeaderValue;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -12,9 +12,33 @@ use axum::response::Response;
 /// Alpine-driven pages (e.g. /admin/permissions) render blank. Inline `<script>` tags and
 /// `on*=` attributes remain forbidden — only Alpine's evaluator is permitted.
 /// Styles allow `'unsafe-inline'` because Bootstrap injects inline styles at runtime.
-pub async fn security_headers(req: Request, next: Next) -> Response {
+/// `https_enabled` is `AppState::cookies_secure` — taken as a bare `bool` rather
+/// than the whole `AppState` because that is genuinely all this needs, and it
+/// keeps the middleware constructible in a test without standing up a database.
+pub async fn security_headers(
+    State(https_enabled): State<bool>,
+    req: Request,
+    next: Next,
+) -> Response {
     let mut res = next.run(req).await;
     let headers = res.headers_mut();
+
+    // HSTS, but only once the deployment is actually HTTPS — `cookies_secure` is
+    // derived from APP_URL's scheme, the same signal that gates the Secure cookie
+    // flag. Sending this over plain HTTP in local dev would pin localhost to
+    // HTTPS in the developer's browser and break it for every other project on
+    // the same host.
+    //
+    // Previously delegated entirely to Nginx, which is not part of this repo: any
+    // deployment terminating TLS elsewhere silently shipped without HSTS.
+    // Emitting it here means the guarantee travels with the app. A reverse proxy
+    // that also sets it is harmless — this only inserts when absent.
+    if https_enabled && !headers.contains_key("strict-transport-security") {
+        headers.insert(
+            axum::http::header::HeaderName::from_static("strict-transport-security"),
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        );
+    }
 
     headers.insert(
         axum::http::header::HeaderName::from_static("x-content-type-options"),

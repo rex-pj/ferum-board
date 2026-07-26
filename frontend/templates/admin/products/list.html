@@ -8,6 +8,7 @@
 
 <ul class="nav nav-tabs mb-3" id="catalogTabs">
   <li class="nav-item"><button type="button" class="nav-link active" data-tab="products">{{ t(k="adm-products") }}</button></li>
+  <li class="nav-item"><button type="button" class="nav-link" data-tab="pcats">{{ t(k="adm-product-categories") }}</button></li>
   <li class="nav-item"><button type="button" class="nav-link" data-tab="materials">{{ t(k="adm-materials") }}</button></li>
   <li class="nav-item"><button type="button" class="nav-link" data-tab="brands">{{ t(k="adm-brands") }}</button></li>
 </ul>
@@ -33,6 +34,17 @@
           <option value="published">{{ t(k="adm-published") }}</option>
           <option value="archived">{{ t(k="adm-archived") }}</option>
         </select>
+        {# "Unassigned" is the load-bearing option, not a nicety: every product
+           created before categories were assignable has none, and the public
+           category filter excludes them. Without a way to list exactly those,
+           the backfill has no work queue and never gets done. #}
+        <select id="filterCategory" class="form-select form-select-sm" style="max-width:190px" aria-label="{{ t(k='adm-product-category') }}">
+          <option value="">{{ t(k="adm-all-categories") }}</option>
+          <option value="none">{{ t(k="adm-uncategorised") }}</option>
+          {% for c in product_categories %}
+            <option value="{{ c.id }}">{% if c.is_child %}— {% endif %}{{ c.name }}</option>
+          {% endfor %}
+        </select>
         <button type="button" id="applyFilters" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-filter me-1"></i>{{ t(k="adm-filter") }}</button>
         <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewProduct" data-bs-toggle="modal" data-bs-target="#productModal">
           <i class="fa-solid fa-plus me-1"></i>{{ t(k="adm-new-product") }}
@@ -44,13 +56,17 @@
         <thead class="table-active">
           <tr>
             <th>{{ t(k="adm-product") }}</th>
-            <th style="width:18%">{{ t(k="adm-price") }}</th>
-            <th style="width:12%">{{ t(k="adm-brand") }}</th>
-            <th style="width:12%">{{ t(k="adm-status") }}</th>
+            <th style="width:16%">{{ t(k="adm-price") }}</th>
+            <th style="width:11%">{{ t(k="adm-brand") }}</th>
+            {# Visible in the list, not only in the edit dialog: an unfiled
+               product is invisible to the public category filter, so the gap
+               has to be readable at a glance. #}
+            <th style="width:13%">{{ t(k="adm-product-category") }}</th>
+            <th style="width:11%">{{ t(k="adm-status") }}</th>
             <th style="width:14%" class="text-end"></th>
           </tr>
         </thead>
-        <tbody id="productRows"><tr><td colspan="5" class="text-center text-muted py-4">{{ t(k="adm-loading") }}</td></tr></tbody>
+        <tbody id="productRows"><tr><td colspan="6" class="text-center text-muted py-4">{{ t(k="adm-loading") }}</td></tr></tbody>
       </table>
     </div>
     <div class="card-footer d-flex align-items-center justify-content-between gap-3 py-2">
@@ -58,6 +74,61 @@
       <nav aria-label="{{ t(k='adm-product-pagination') }}">
         <ul class="pagination pagination-sm mb-0 flex-wrap gap-0" id="catalogPager"></ul>
       </nav>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Tab: Product categories ════════════════════════════════════
+     The catalogue's own taxonomy. Kept beside Products rather than under the
+     forum's Categories page, because it classifies furniture, not conversation.
+-->
+<div data-panel="pcats" class="d-none">
+  <!-- Auto-assign sits above the table because it is the answer to the question
+       the table raises. Filing a few hundred products by hand is the chore this
+       whole taxonomy exists to avoid, so the way out has to be the first thing
+       visible — not buried in a menu. -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div>
+          <h6 class="mb-1">{{ t(k="adm-auto-assign-title") }}</h6>
+          <p class="text-body-secondary small mb-0" style="max-width:60ch">{{ t(k="adm-auto-assign-explainer") }}</p>
+          <p class="small mb-0 mt-2" id="pcatUnfiled"></p>
+        </div>
+        <div class="text-end">
+          <button type="button" class="btn btn-outline-primary btn-sm" id="btnAutoAssignPreview">
+            <i class="fa-solid fa-wand-magic-sparkles me-1"></i>{{ t(k="adm-auto-assign") }}
+          </button>
+          <div class="mt-2 d-none" id="pcatPreviewWrap">
+            <div class="small mb-1" id="pcatPreview"></div>
+            <button type="button" class="btn btn-primary btn-sm" id="btnAutoAssignApply">{{ t(k="adm-auto-assign-apply") }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header p-0">
+      <div class="adm-filter-row px-3 py-2">
+        <span class="text-body-secondary small">{{ t(k="adm-product-categories") }}</span>
+        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnNewPcat">
+          <i class="fa-solid fa-plus me-1"></i>{{ t(k="adm-new-product-category") }}
+        </button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-active">
+          <tr>
+            <th>{{ t(k="adm-name") }}</th>
+            <th style="width:34%">{{ t(k="adm-match-keywords") }}</th>
+            <th style="width:12%">{{ t(k="adm-products-count") }}</th>
+            <th style="width:14%" class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody id="pcatRows"><tr><td colspan="4" class="text-center text-muted py-4">{{ t(k="adm-loading") }}</td></tr></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -233,6 +304,24 @@
                 <select class="form-select" id="pBrand"><option value="">{{ t(k="adm-none") }}</option></select>
               </div>
               <div class="col-md-6">
+                {# The forum category this product is filed under — NOT the
+                   material category (that select lives in the material dialog
+                   and means something else entirely). Naming it "Forum
+                   category" is the whole reason the two stop being confused.
+
+                   Optional on purpose: a member submitting a product should not
+                   have to guess the taxonomy, so submissions arrive unfiled and
+                   a curator assigns it here on approval. #}
+                <label for="pCategory" class="form-label">{{ t(k="adm-product-category") }}</label>
+                <select class="form-select" id="pCategory" aria-describedby="pCategoryHint">
+                  <option value="">{{ t(k="adm-uncategorised") }}</option>
+                  {% for c in product_categories %}
+                    <option value="{{ c.id }}">{% if c.is_child %}— {% endif %}{{ c.name }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text" id="pCategoryHint">{{ t(k="adm-product-category-hint") }}</div>
+              </div>
+              <div class="col-md-6">
                 <label for="pMatSearch" class="form-label">{{ t(k="adm-materials") }}</label>
                 <div class="position-relative">
                   <div class="form-control h-auto d-flex flex-wrap gap-1 align-items-center fr-chip-input" id="pMatWrap">
@@ -331,6 +420,54 @@
 </div>
 
 <!-- ═══ Modal: Brand (create / edit) ═══════════════════════════════ -->
+<div class="modal fade" id="pcatModal" tabindex="-1" aria-labelledby="pcatModalTitle" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="pcatForm" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="pcatModalTitle">{{ t(k="adm-new-product-category") }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='adm-close') }}"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-danger d-none" id="pcatFormError" role="alert"></div>
+          <input type="hidden" id="cId">
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label for="cName" class="form-label">{{ t(k="adm-name") }} <span class="text-danger" aria-hidden="true">*</span></label>
+              <input type="text" class="form-control" id="cName" required maxlength="120" placeholder="Sofa">
+              <div class="invalid-feedback" id="cNameFeedback"></div>
+            </div>
+            <div class="col-md-5">
+              <label for="cSlug" class="form-label">{{ t(k="adm-slug") }} <span class="text-danger" aria-hidden="true">*</span></label>
+              <input type="text" class="form-control" id="cSlug" required maxlength="120" pattern="[a-z0-9\-]+" placeholder="sofa">
+              <div class="invalid-feedback" id="cSlugFeedback"></div>
+            </div>
+            <div class="col-12">
+              {# The matcher's whole input. Editable here so teaching it a new
+                 word is a data change an admin makes, not a deploy. #}
+              <label for="cKeywords" class="form-label">{{ t(k="adm-match-keywords") }}</label>
+              <input type="text" class="form-control" id="cKeywords" placeholder="sofa, salon, ghe sofa" aria-describedby="cKeywordsHint">
+              <div class="form-text" id="cKeywordsHint">{{ t(k="adm-match-keywords-hint") }}</div>
+            </div>
+            <div class="col-md-7">
+              <label for="cIcon" class="form-label">{{ t(k="adm-icon-class") }}</label>
+              <input type="text" class="form-control" id="cIcon" placeholder="fa-couch">
+            </div>
+            <div class="col-md-5">
+              <label for="cPosition" class="form-label">{{ t(k="adm-position") }}</label>
+              <input type="number" class="form-control" id="cPosition" value="0">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ t(k="adm-cancel") }}</button>
+          <button type="submit" class="btn btn-primary" id="pcatSubmit">{{ t(k="adm-save") }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="brandModal" tabindex="-1" aria-labelledby="brandModalTitle" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

@@ -191,11 +191,24 @@
     },
 
     admin: {
+      getConfig: function () {
+        return get('/api/admin/config');
+      },
       saveConfig: function (body) {
         return put('/api/admin/config', body);
       },
       uploadBranding: function (type, formData) {
         return postForm('/api/admin/config/' + type, formData);
+      },
+      // Homepage hero mosaic. POST uploads one image and appends it; PUT saves
+      // captions, links and order — and, by omission, deletions. Both return the
+      // full updated list, so the caller re-renders from the server's copy rather
+      // than assuming its local edit applied.
+      addHeroTile: function (formData) {
+        return postForm('/api/admin/config/hero-tiles', formData);
+      },
+      saveHeroTiles: function (tiles) {
+        return put('/api/admin/config/hero-tiles', tiles);
       },
       removeBranding: function (type) {
         return del('/api/admin/config/' + type);

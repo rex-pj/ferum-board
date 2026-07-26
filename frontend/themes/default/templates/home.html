@@ -4,6 +4,28 @@
 {% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
 
 {% block content %}
+{# Below this many products the counters undersell rather than reassure: "6
+   products · 5 reviews" advertises emptiness in the operator's own voice, and it
+   spends the most valuable space on the page to do it. The band is withheld
+   until the numbers support the claim — nothing is fabricated and nothing is
+   permanently hidden, it appears on its own once the catalogue passes the bar.
+
+   Kept a template-local constant: it is a presentation judgement owned by the
+   theme, not application configuration.
+
+   Must stay INSIDE this block. With `{% extends %}` Tera renders the parent and
+   substitutes the child's blocks — top-level statements in the child are never
+   executed, so a `set` above `{% block content %}` silently never runs.
+
+   It is read again from `right_sidebar_wrap` below. That works because Tera
+   keeps a block's assignments in the shared context frame and base.html renders
+   `content` before `right_sidebar_wrap`, so the value is still in scope. This
+   was confirmed by rendering (the ferum-review theme uses the identical
+   structure): with the threshold lowered the gated rows DO appear. That test
+   matters because the failure mode is silent — an out-of-scope variable makes
+   the comparison fail closed, which looks exactly like a working gate whose
+   threshold simply is not met. Anyone moving this `set` should re-run it. #}
+{% set stats_min_products = 50 %}
 
 {# Plugin slot: home_feed_top — homepage-only widgets (e.g. shared chat room) #}
 {% if plugin_slots.home_feed_top %}
@@ -11,7 +33,7 @@
 {% endif %}
 
 {# ── Market data band — aggregate signals for the review platform ── #}
-{% if total_products and total_products > 0 %}
+{% if total_products and total_products >= stats_min_products %}
 <div class="fr-panel mb-3">
   <div class="fr-panel-body fr-stat-band py-3">
     <a href="/catalog" class="fr-stat-band-item text-decoration-none text-body">
@@ -32,14 +54,39 @@
 </div>
 {% endif %}
 
-{# ── Top Rated products shelf — horizontal scroll, reads well at any count ── #}
+{# ── Product shelf — grid on desktop, snap-scroll rail on mobile ──────────────
+   `shelf_mode` is set by the handler and decides which claim the heading makes:
+   "top_rated" once enough products carry enough reviews to rank meaningfully,
+   otherwise "newest". The shelf itself is never withheld — hiding the catalogue
+   until reviews accumulate would leave the homepage of a product-review site
+   with no products on it. #}
+{# Show more / show less. At rest the shelf is clipped to exactly one row;
+   expanding lifts the clip so the grid shows the whole fetched set. It is NOT a
+   collapse — the shelf never hides, because a product-review homepage with no
+   products on it is a worse page.
+
+   The button carries the whole signal, and carries a count with it ("show 7
+   more"), which is why there is no fading peek of the next row underneath: that
+   would be a second, weaker voice saying the same thing, and it made the shelf
+   look broken whenever the next row happened to hold a single card.
+
+   The control is at the FOOT of the shelf, not in the header, and the header is
+   back to being an inert label. Two reasons: the arrow belongs on the seam where
+   the grid is cut off, pointing at what it opens; and a chevron in a section
+   header already means "collapse this section" on /forum, so reusing it here for
+   "there is more below" would give one icon two meanings in one app. #}
 {% if top_rated %}
-<div class="fr-feed mb-3">
+<div class="fr-feed mb-3" x-data="productShelf()">
   <div class="fr-cat-header" style="cursor:default;pointer-events:none">
-    <span class="fw-semibold"><i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-top-rated-products") }}</span>
-    <a href="/catalog?sort=top_rated" class="btn btn-xs btn-outline-secondary" style="pointer-events:auto">{{ t(k="ui-view-all") }}</a>
+    {% if shelf_mode == "top_rated" %}
+      <span class="fw-semibold"><i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-top-rated-products") }}</span>
+      <a href="/catalog?sort=top_rated" class="btn btn-xs btn-outline-secondary" style="pointer-events:auto">{{ t(k="ui-view-all") }}</a>
+    {% else %}
+      <span class="fw-semibold"><i class="fa-solid fa-couch me-1" aria-hidden="true"></i>{{ t(k="ui-newest-products") }}</span>
+      <a href="/catalog" class="btn btn-xs btn-outline-secondary" style="pointer-events:auto">{{ t(k="ui-view-all") }}</a>
+    {% endif %}
   </div>
-  <div class="fr-shelf p-2">
+  <div class="fr-shelf p-2" id="fr-product-shelf">
     {% for p in top_rated %}
     <a href="/catalog/{{ p.slug }}" class="fr-shelf-card card text-decoration-none shadow-sm">
       <div class="ratio ratio-4x3 bg-body-tertiary rounded-top overflow-hidden">
@@ -52,15 +99,41 @@
         {% endif %}
       </div>
       <div class="card-body p-2">
-        <div class="fw-semibold text-body small text-truncate">{{ p.name }}</div>
+        <div class="fw-semibold text-body small fr-shelf-card-name">{{ p.name }}</div>
+        {# The review count is spelled out, not parenthesised: on a review card the
+           sample size is what makes the score mean anything, so it reads as a fact
+           ("12 reviews") rather than as a footnote to the star.
+
+           Guarded on review_count because in "newest" mode the shelf carries
+           unreviewed products, whose avg_overall is null — piping null through
+           `round` raises a Tera error and takes the whole page down. #}
         <div style="font-size:.72rem">
-          <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-          <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}</span>
-          <span class="text-muted">({{ p.review_count }})</span>
+          {% if p.review_count > 0 %}
+            <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+            <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}/5</span>
+            <span class="text-muted">· {{ p.review_count }} {{ t(k="ui-reviews-label", count=p.review_count) }}</span>
+          {% else %}
+            <span class="text-muted">{{ t(k="ui-no-reviews-yet") }}</span>
+          {% endif %}
         </div>
       </div>
     </a>
     {% endfor %}
+  </div>
+
+  {# hiddenCount is `cards - columns`, so it stays truthy while expanded too —
+     the control must survive being opened, which the earlier `|| open` was
+     papering over. x-cloak: before Alpine runs the count is unknown, so the
+     control would flash on even for a catalogue with nothing to reveal. #}
+  <div class="fr-shelf-more" x-show="hiddenCount > 0" x-cloak>
+    <button type="button" class="fr-shelf-more-btn"
+            @click="toggle()" :aria-expanded="open.toString()"
+            aria-controls="fr-product-shelf">
+      <i class="fa-solid fa-chevron-down fr-shelf-more-icon"
+         :class="open ? 'fr-shelf-more-icon--up' : ''" aria-hidden="true"></i>
+      <span x-show="!open" x-text="moreLabel()"></span>
+      <span x-show="open" style="display:none">{{ t(k="ui-show-less") }}</span>
+    </button>
   </div>
 </div>
 {% endif %}
@@ -178,6 +251,11 @@
         <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-categories") }}</span>
         <span class="fr-panel-stat-val">{{ total_categories | default(value=0) }}</span>
       </div>
+      {# Same credibility threshold as the counter band above. Gating one and not
+         the other would leave "Products 4 · Reviews 3" on screen anyway, which
+         defeats the point — the catalogue's size has to be withheld consistently
+         or not at all. Posts and Categories stay: they are healthy from day one. #}
+      {% if total_products and total_products >= stats_min_products %}
       <div class="fr-panel-stat-row">
         <span><i class="fa-solid fa-couch fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-products") }}</span>
         <span class="fr-panel-stat-val">{{ total_products | default(value=0) | thousands }}</span>
@@ -186,15 +264,44 @@
         <span><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-reviews") }}</span>
         <span class="fr-panel-stat-val">{{ total_reviews | default(value=0) | thousands }}</span>
       </div>
+      {% endif %}
     </div>
-    {% if current_user %}
-    <div class="fr-panel-body border-top" style="padding-top:.5rem;padding-bottom:.5rem">
-      <a href="/new-thread" class="btn btn-primary btn-sm w-100">
-        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-post") }}
-      </a>
-    </div>
-    {% endif %}
+    {# No "new post" button here on purpose. The feed header already carries one,
+       and two identical primary CTAs on one screen make the reader stop to work
+       out whether they differ. The feed header's wins: it sits in the reading
+       path, next to the content the post will join. #}
   </div>
+
+  {# Latest reviews — the sidebar home for review content now that it no longer
+     appears in the discussion feed. One row per product (collapsed server-side),
+     so five rows are five different products. Ranked above "trending" because on
+     a review platform a fresh review is the more valuable signal. #}
+  {% if latest_reviews %}
+  <div class="fr-panel">
+    <div class="fr-panel-header">
+      <i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-latest-reviews") }}
+    </div>
+    {% for r in latest_reviews %}
+      {# Link to the product when it is known, else to the review thread — product
+         is the more useful destination and the one the reader is deciding about. #}
+      <a href="{% if r.product_slug %}/catalog/{{ r.product_slug }}{% else %}/forum/t/{{ r.slug }}{% endif %}" class="fr-panel-row">
+        {{ m::avatar(url=r.author_avatar_url, name=r.author_display_name, size=32) }}
+        <div class="min-w-0 flex-grow-1">
+          <div class="small fw-medium text-body text-truncate lh-sm mb-1">
+            {% if r.product_name %}{{ r.product_name }}{% else %}{{ t(k="ui-a-product") }}{% endif %}
+          </div>
+          <div class="d-flex align-items-center gap-2" style="font-size:.75rem;color:var(--bs-tertiary-color)">
+            {% if r.overall %}
+              <span class="text-warning"><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>{{ r.overall }}/5</span>
+              <span aria-hidden="true">·</span>
+            {% endif %}
+            <span class="text-truncate">{{ r.author_display_name }}</span>
+          </div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {# Active discussions — most-viewed from current feed #}
   {% if threads %}
@@ -217,3 +324,12 @@
 
 </aside>
 {% endblock %}
+
+{% block scripts %}
+{# ?v= is not optional here. Without it the URL never changes, so the browser
+   keeps serving its cached copy and edits to this file simply never reach the
+   page — which is exactly what happened while this control was being built.
+   asset_version() is the max mtime across static/js and static/css, so editing
+   this file moves it. #}
+<script src="/static/js/ferum-page-home.js?v={{ asset_version() }}" defer></script>
+{% endblock %} 

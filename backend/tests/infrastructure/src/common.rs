@@ -39,6 +39,7 @@ use ferum_infrastructure::repositories::{
     PgCategoryRepository, PgPostRepository, PgRoleRepository, PgThreadRepository,
     PgUserRepository,
 };
+use ferum_infrastructure::system_seed_service::PgSystemSeedService;
 
 const TEMPLATE_NAME: &str = "ferum_test_template";
 
@@ -74,6 +75,13 @@ fn ensure_template(server_url: &str) {
                     migration::Migrator::up(&conn, None)
                         .await
                         .expect("run migrations on template database");
+                    // Migrations are DDL only; the system roles and permissions
+                    // these tests assert on are written here, exactly as they
+                    // are at startup.
+                    PgSystemSeedService::new(conn.clone())
+                        .seed_system()
+                        .await
+                        .expect("seed system data on template database");
                     conn.close().await.ok();
                 });
         })

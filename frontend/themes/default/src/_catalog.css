@@ -266,17 +266,130 @@
   }
 }
 
-/* ── Home: horizontal product shelf ("top rated") ─────────────────── */
+/* ── Home: product shelf ("top rated") ────────────────────────────────
+   A responsive grid at every width — it wraps, it never scrolls sideways.
+
+   At rest the shelf is clipped to one row plus a slice of the next, by height —
+   NOT by hiding overflow cards with `:nth-child`. Two reasons the height clip
+   won:
+
+   1. The visible slice IS the affordance. A row cut mid-card tells the reader
+      there is more far better than any button can, because they see the product
+      images continue past the fold. Cards removed with `display:none` leave a
+      clean edge that looks like the end of the content.
+   2. `display:none` made the count state-dependent. JS had to measure which
+      cards were hidden, which only works while collapsed — and measuring at the
+      wrong moment during a collapse zeroed the count and made the control
+      vanish. With a height clip every card is always in flow, so the count is
+      just `cards - columns`: true in either state, impossible to race.
+
+   The clip height is set inline by productShelf() (ferum-page-home.js) from
+   measured geometry, since row height depends on the card's content and images.
+   Without JS no clip is applied and the whole grid shows — content is never
+   locked away behind a script that failed to load. */
 .fr-shelf {
-  display: flex;
-  gap: 0.5rem;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.fr-shelf-card { flex: 0 0 190px; scroll-snap-align: start; }
-@media (max-width: 575.98px) { .fr-shelf-card { flex-basis: 150px; } }
+.fr-shelf-card { flex: initial; }
+
+@media (min-width: 768px) {
+  .fr-shelf { gap: 0.75rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 992px) {
+  .fr-shelf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1400px) {
+  .fr-shelf { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* Collapsed — overflow cards are removed from flow, not clipped.
+   productShelf() puts this class on every card from index `columns` onward, so
+   the shelf resolves to exactly one row with no arithmetic involved. Clipping
+   the container to a measured height was tried first and leaked a few pixels of
+   the next row above the control: that cut is a sum of row height, paddings and
+   gap, all of which shift per breakpoint and carry subpixel error, so it was
+   only ever approximately right. This is exact everywhere.
+
+   Deliberately no fade/peek either. The button below already says there is more
+   AND says how many, so a fading slice was a second, weaker voice for the same
+   message — and it made the shelf look broken whenever the next row held a
+   single card beside empty columns. */
+/* Two classes on purpose. The card also carries Bootstrap's `.card`, which sets
+   `display:flex` at the same specificity — so a single-class rule here would win
+   only because this sheet happens to load after bootstrap.min.css. That is a
+   coincidence of link order, not a guarantee, and a theme that loads its own CSS
+   differently would silently un-hide every overflow card. */
+.fr-shelf .fr-shelf-card--hidden {
+  display: none;
+}
+
+/* ── Show-more control ────────────────────────────────────────────────
+   Sits at the bottom edge of the shelf, on the seam where the grid is cut off,
+   so the arrow points at the rows it reveals. It deliberately does NOT live in
+   the section header: a chevron up there is already spoken for — /forum uses it
+   to collapse a section — and the same icon meaning two different things in one
+   app is worse than no icon at all.
+
+   The control removes itself when the catalogue is smaller than one row (see
+   productShelf() in ferum-page-home.js), so it never offers to reveal nothing. */
+.fr-shelf-more { display: block; }
+
+/* A full-width strip, not a bordered chip. The chip version carried the same
+   `btn-outline-secondary` chrome as "view all" in the header — two identical
+   buttons in one panel meaning different things (expand in place vs. leave the
+   page), which costs the reader a beat to tell apart every time.
+   Dropping to a ghost strip settles it: the header keeps the only bordered
+   button, and this reads as "the bottom edge of this panel is actionable".
+   It also lands the biggest possible target on the shortest path — directly
+   under the fade, spanning the panel — without putting the click handler ON the
+   faded row, whose cards are real product links that a handler there would
+   hijack. Carries no `btn` class, so every visual comes from here. */
+.fr-shelf-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--fr-tap-target, 44px);
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-top: 1px solid var(--bs-border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--bs-secondary-color);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.fr-shelf-more-btn:hover {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+}
+
+/* Inset so the ring is not clipped by .fr-feed's overflow:hidden. */
+.fr-shelf-more-btn:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: -2px;
+}
+
+.fr-shelf-more-icon { transition: transform 0.2s; }
+.fr-shelf-more-icon--up { transform: rotate(180deg); }
+
+/* The product name is the differentiator and its tail carries the variant
+   ("… bọc nỉ Scandinavian 3 chỗ"), so it gets two lines rather than one
+   truncated one. Two is a cap, not a reservation: a short name stays short. */
+.fr-shelf-card-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* ── Home: market-data stat band ──────────────────────────────────── */
 .fr-stat-band { display: flex; flex-wrap: wrap; align-items: center; }

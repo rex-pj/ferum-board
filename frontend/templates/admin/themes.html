@@ -64,48 +64,59 @@
         {% endif %}
       </div>
 
-      <div class="card-footer d-flex gap-2 flex-wrap pt-2">
+      <div class="card-footer adm-theme-actions d-flex align-items-center gap-2 pt-2">
         {% if not theme.is_active %}
           <form method="post" action="/admin/themes/{{ theme.slug }}/activate" class="flex-grow-1">
-            <button class="btn btn-sm btn-primary w-100" type="submit">
-              <i class="fa-solid fa-circle-check me-1"></i>{{ t(k="adm-activate") }}
+            <button class="btn btn-primary w-100" type="submit">
+              <i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>{{ t(k="adm-activate") }}
             </button>
           </form>
         {% else %}
-          <span class="btn btn-sm btn-success w-100 pe-none flex-grow-1">
-            <i class="fa-solid fa-check me-1"></i>{{ t(k="adm-currently-active") }}
+          {# Status, not a control. `w-100` used to sit on this element directly —
+             as a flex item that resolved to the full footer width and wrapped the
+             icon buttons onto a second row, so active and inactive cards had
+             footers of different heights. #}
+          <span class="adm-theme-status flex-grow-1">
+            <i class="fa-solid fa-check" aria-hidden="true"></i>{{ t(k="adm-currently-active") }}
           </span>
         {% endif %}
 
-        {# Preview image upload #}
-        <label class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-upload-preview-image') }}"
-               for="preview-input-{{ loop.index }}">
-          <i class="fa-solid fa-image"></i>
-        </label>
+        {# Preview image upload. The input is `visually-hidden` rather than
+           `d-none` so it keeps its place in the tab order — the label styled as
+           a button is not focusable on its own, which left this control
+           reachable by mouse only. #}
         <form x-data method="post" action="/admin/themes/{{ theme.slug }}/preview"
-              enctype="multipart/form-data" class="d-none">
+              enctype="multipart/form-data" class="d-flex">
           <input id="preview-input-{{ loop.index }}" type="file" name="preview_image"
-                 accept="image/*"
+                 accept="image/*" class="visually-hidden"
                  @change="$el.closest('form').submit()">
+          <label class="btn btn-outline-secondary adm-icon-btn"
+                 for="preview-input-{{ loop.index }}"
+                 title="{{ t(k='adm-upload-preview-image') }}"
+                 aria-label="{{ t(k='adm-upload-preview-image') }}">
+            <i class="fa-solid fa-image" aria-hidden="true"></i>
+          </label>
         </form>
 
-        {# Uninstall button — disabled for system or active themes #}
         {% if theme.is_system %}
-          <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="{{ t(k='adm-built-in-themes-cannot-be-removed') }}">
-            <i class="fa-solid fa-lock"></i>
-          </button>
+          {# Nothing rendered: the "Built-in" badge already says why this theme
+             cannot be removed, and a permanently disabled lock button carries no
+             information a keyboard user can ever reach. #}
         {% elif theme.is_active %}
-          <button type="button" class="btn btn-sm btn-outline-secondary" disabled
-                  title="{{ t(k='adm-activate-another-theme-first-before-removing') }}">
-            <i class="fa-solid fa-trash"></i>
+          <button type="button" class="btn btn-outline-secondary adm-icon-btn"
+                  aria-disabled="true"
+                  title="{{ t(k='adm-activate-another-theme-first-before-removing') }}"
+                  aria-label="{{ t(k='adm-activate-another-theme-first-before-removing') }}">
+            <i class="fa-solid fa-trash" aria-hidden="true"></i>
           </button>
         {% else %}
-          <button type="button" class="btn btn-sm btn-outline-danger"
+          <button type="button" class="btn btn-outline-danger adm-icon-btn"
                   data-bs-toggle="modal" data-bs-target="#uninstallModal"
                   data-theme-slug="{{ theme.slug }}"
                   data-theme-name="{{ theme.name }}"
-                  title="{{ t(k='adm-uninstall-theme') }}">
-            <i class="fa-solid fa-trash"></i>
+                  title="{{ t(k='adm-uninstall-theme') }}"
+                  aria-label="{{ t(k='adm-uninstall-theme') }}">
+            <i class="fa-solid fa-trash" aria-hidden="true"></i>
           </button>
         {% endif %}
       </div>

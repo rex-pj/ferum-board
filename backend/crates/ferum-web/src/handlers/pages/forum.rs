@@ -11,15 +11,47 @@ use ferum_domain::models::ThreadStatus;
 use ferum_domain::models::product::ProductStatus;
 use ferum_domain::repositories::product_repository::{ProductListFilter, ProductSort};
 use ferum_domain::repositories::thread_repository::ThreadSort;
+use crate::handlers::admin::api::config::HERO_TILES_KEY;
 use crate::view_models::page_context::{
-    CategoryCtx, PaginationCtx, PostCtx, ReactionSummaryCtx, TagCtx, ThreadDetailCtx,
-    ForumGroupCtx,
+    CategoryCtx, HeroTileCtx, LatestReviewCtx, PaginationCtx, PostCtx, ReactionSummaryCtx, TagCtx,
+    ThreadDetailCtx, ForumGroupCtx,
 };
 use crate::view_models::product::{ProductResponse, RatingStatsResponse};
 use ferum_domain::models::reaction::ReactionKind;
 
 use ferum_application::permission::PermissionChecker;
-use super::{active_theme, map_threads, map_threads_with_ratings, review_overall_map, review_product_image_map, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme_in, user_ctx, PageError};
+use super::{active_theme, map_threads, map_threads_with_ratings, review_overall_map, review_product_map, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme_in, user_ctx, PageError};
+
+/// Minimum reviews a product needs before the homepage will call it "top rated".
+///
+/// The shelf makes a quality claim in the operator's voice, so it has to be able
+/// to back it. Below this the ranking is noise — one enthusiastic review is not
+/// evidence — and the shelf simply doesn't render, matching how the theme already
+/// withholds the counter band on thin data rather than advertising it.
+const SHELF_MIN_REVIEWS: i32 = 3;
+
+/// How many products the shelf fetches. The default theme shows a single row and
+/// links to the catalog for the rest; the ferum-review theme adds an expand
+/// toggle that reveals the whole fetched set as a multi-row grid, so the list is
+/// sized to fill a couple of extra rows there without being unbounded.
+const SHELF_MAX_PRODUCTS: u64 = 12;
+
+/// How many well-reviewed products the "top rated" heading needs before it is
+/// worth using. One or two qualifying products make a ranking that is technically
+/// honest but reads as a shortlist of the only things anyone reviewed — and it
+/// leaves a mostly empty row. Below this the shelf switches to the newest
+/// products instead (see `SHELF_MODE_*`).
+const SHELF_MIN_ITEMS: usize = 3;
+
+/// Which claim the shelf heading is making. Read by the theme templates to pick
+/// the heading and the "view all" target; kept as constants so the template
+/// string and the handler cannot drift apart silently.
+const SHELF_MODE_TOP_RATED: &str = "top_rated";
+const SHELF_MODE_NEWEST: &str = "newest";
+
+/// Rows in the homepage "latest reviews" panel. Sized to sit beside the feed
+/// without turning the sidebar into a second feed.
+const LATEST_REVIEWS_LIMIT: u64 = 5;
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -29,6 +61,70 @@ pub struct ListQuery {
     pub sort: Option<String>,
 }
 
+/// Build the homepage "latest reviews" panel: newest review per product, joined to
+/// the product it reviews and the score it gave.
+///
+/// Three batched queries, no N+1 — the repository already collapses to one review
+/// per product, so `reviewed_products` and `ratings_for_threads` each run once over
+/// the whole (≤ 5 row) set. Every failure degrades to an empty panel rather than
+/// failing the homepage: this is a supporting module, not the page's reason to exist.
+async fn latest_reviews_ctx(state: &AppState) -> Vec<LatestReviewCtx> {
+    let threads = state
+        .thread
+        .latest_reviews(LATEST_REVIEWS_LIMIT)
+        .await
+        .unwrap_or_default();
+    if threads.is_empty() {
+        return Vec::new();
+    }
+
+    let ids: Vec<uuid::Uuid> = threads.iter().map(|t| t.id).collect();
+    let (products, ratings) = tokio::join!(
+        state.product.reviewed_products(&ids),
+        state.review.ratings_for_threads(&ids),
+    );
+    let products = products.unwrap_or_default();
+    let ratings = ratings.unwrap_or_default();
+
+    threads
+        .iter()
+        .map(|t| {
+            let username = t.author_username.clone().unwrap_or_default();
+            let product = products.get(&t.id);
+            LatestReviewCtx {
+                slug: t.slug.clone(),
+                product_name: product.map(|p| p.name.clone()),
+                product_slug: product.map(|p| p.slug.clone()),
+                author_display_name: t
+                    .author_display_name
+                    .clone()
+                    .unwrap_or_else(|| username.clone()),
+                author_username: username,
+                author_avatar_url: t.author_avatar_url.clone(),
+                overall: ratings.get(&t.id).map(|r| r.overall),
+                created_at: t.created_at.to_rfc3339(),
+            }
+        })
+        .collect()
+}
+
+/// Operator-curated masthead tiles, read from the in-process config cache — no DB
+/// hit on the hottest page of the site.
+///
+/// Empty means "not curated", which the template reads as its cue to fall back to
+/// automatic product photography. A malformed value degrades the same way instead
+/// of erroring: a bad config row must not be able to take the homepage down.
+async fn hero_tiles_ctx(state: &AppState) -> Vec<HeroTileCtx> {
+    state
+        .site_config_cache
+        .read()
+        .await
+        .get(HERO_TILES_KEY)
+        .filter(|v| !v.is_empty())
+        .and_then(|v| serde_json::from_str::<Vec<HeroTileCtx>>(v).ok())
+        .unwrap_or_default()
+}
+
 #[tracing::instrument(skip_all, fields(page = q.page, sort = q.sort.as_deref(), tag = q.tag.as_deref()))]
 pub async fn home(
     State(state): State<AppState>,
@@ -36,8 +132,7 @@ pub async fn home(
     Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let sort_str = sort.as_str().to_string();
@@ -88,31 +183,75 @@ pub async fn home(
     // drill-downs shouldn't re-render the product strip. All failures degrade to
     // an empty band rather than failing the page.
     let show_market = q.tag.is_none() && page == 1;
-    let (top_rated, total_products, total_reviews, avg_rating) = if show_market {
-        let (items, product_total) = state
+    let (top_rated, shelf_mode, total_products, total_reviews, avg_rating) = if show_market {
+        // Products with enough reviews to back a "top rated" claim.
+        let (rated, _) = state
             .product
             .list(
                 ProductListFilter {
                     status: Some(ProductStatus::Published),
                     sort: ProductSort::TopRated,
+                    min_review_count: Some(SHELF_MIN_REVIEWS),
                     ..Default::default()
                 },
                 1,
-                8,
+                SHELF_MAX_PRODUCTS,
             )
             .await
             .unwrap_or_default();
-        // The strip is a "top rated" shelf — only products that actually carry a
-        // score belong on it (TopRated already sorts the unrated last).
-        let top: Vec<ProductResponse> = items
-            .into_iter()
-            .filter(|it| it.review_count > 0)
-            .map(ProductResponse::from)
-            .collect();
+
+        // Too little evidence for that claim does NOT mean showing nothing: the
+        // catalogue is half of what this site is, and a homepage that hides it
+        // until reviews accumulate is a worse page than one that ranks honestly.
+        // So the fallback changes the promise the heading makes — recency, which
+        // the catalogue can always back — rather than removing the shelf.
+        let (mode, items) = if rated.len() >= SHELF_MIN_ITEMS {
+            (SHELF_MODE_TOP_RATED, rated)
+        } else {
+            let (newest, _) = state
+                .product
+                .list(
+                    ProductListFilter {
+                        status: Some(ProductStatus::Published),
+                        sort: ProductSort::Newest,
+                        ..Default::default()
+                    },
+                    1,
+                    SHELF_MAX_PRODUCTS,
+                )
+                .await
+                .unwrap_or_default();
+            (SHELF_MODE_NEWEST, newest)
+        };
+        let top: Vec<ProductResponse> = items.into_iter().map(ProductResponse::from).collect();
+        // The counter band means "how big is the catalogue", so it must count the
+        // whole published catalogue — reusing the shelf's total here would silently
+        // report the shelf-eligible slice under a label that promises everything.
+        let (_, product_total) = state
+            .product
+            .list(
+                ProductListFilter {
+                    status: Some(ProductStatus::Published),
+                    ..Default::default()
+                },
+                1,
+                1,
+            )
+            .await
+            .unwrap_or_default();
         let (review_count, avg) = state.review.global_stats().await.unwrap_or((0, None));
-        (top, product_total, review_count, avg)
+        (top, mode, product_total, review_count, avg)
     } else {
-        (Vec::new(), 0, 0, None)
+        (Vec::new(), SHELF_MODE_NEWEST, 0, 0, None)
+    };
+
+    // Reviews are no longer in the discussion feed, so this panel is the only path
+    // by which a new review reaches the front page. Same gating as the market block:
+    // homepage proper only, never a tag drill-down or page 2.
+    let latest_reviews = if show_market {
+        latest_reviews_ctx(&state).await
+    } else {
+        Vec::new()
     };
 
     let mut ctx = Context::new();
@@ -120,8 +259,8 @@ pub async fn home(
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     let thread_ratings = review_overall_map(&state, &threads).await;
-    let thread_images = review_product_image_map(&state, &threads).await;
-    ctx.insert("threads", &map_threads_with_ratings(&threads, &thread_ratings, &thread_images));
+    let thread_products = review_product_map(&state, &threads).await;
+    ctx.insert("threads", &map_threads_with_ratings(&threads, &thread_ratings, &thread_products));
     ctx.insert("pagination", &PaginationCtx::new(page, per_page, total, extra_params));
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("total_threads", &total_threads);
@@ -130,6 +269,12 @@ pub async fn home(
     ctx.insert("active_sort", &sort_str);
     ctx.insert("watched_count", &watched_count);
     ctx.insert("top_rated", &top_rated);
+    ctx.insert("shelf_mode", &shelf_mode);
+    // Not gated on `show_market`: curation is an explicit operator choice, so it
+    // holds wherever the masthead renders — including page 2, where the automatic
+    // product data is deliberately not fetched.
+    ctx.insert("hero_tiles", &hero_tiles_ctx(&state).await);
+    ctx.insert("latest_reviews", &latest_reviews);
     ctx.insert("total_products", &total_products);
     ctx.insert("total_reviews", &total_reviews);
     ctx.insert("avg_rating", &avg_rating);
@@ -211,8 +356,7 @@ pub async fn category(
     Path(slug): Path<String>,
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let sort_str = sort.as_str().to_string();
 
@@ -313,8 +457,8 @@ pub async fn category(
     ctx.insert("subcategories", &subcategories);
     ctx.insert("sibling_categories", &sibling_categories);
     let thread_ratings = review_overall_map(&state, &threads).await;
-    let thread_images = review_product_image_map(&state, &threads).await;
-    ctx.insert("threads", &map_threads_with_ratings(&threads, &thread_ratings, &thread_images));
+    let thread_products = review_product_map(&state, &threads).await;
+    ctx.insert("threads", &map_threads_with_ratings(&threads, &thread_ratings, &thread_products));
     ctx.insert("pagination", &PaginationCtx::new(page, per_page, total, extra_params));
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("active_sort", &sort_str);

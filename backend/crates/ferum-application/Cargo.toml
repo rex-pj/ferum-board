@@ -6,21 +6,21 @@ edition = "2021"
 [dependencies]
 ferum-domain = { path = "../ferum-domain" }
 
-async-trait = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
-http = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-slug = "0.1"
-tracing = "0.1"
-uuid = { version = "1", features = ["v4", "serde"] }
-rust_decimal = { version = "1", features = ["serde"] }
-pulldown-cmark = { version = "0.13", features = ["html"] }
-ammonia = "4"
-regex = "1"
-bytes = "1"
-tokio = "1.52.3"
-futures = "0.3"
-hex = "0.4.3"
-sha2 = "0.11.0"
-dashmap = "6"
+ammonia = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+dashmap = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+pulldown-cmark = { workspace = true }
+regex = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+slug = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

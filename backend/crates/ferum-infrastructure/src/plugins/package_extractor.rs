@@ -2,9 +2,9 @@
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
+use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
 use ferum_application::shared::AppError;
 
-const MAX_PACKAGE_SIZE: usize = 50 * 1024 * 1024; // 50 MB
 const MAX_EXTRACTED_SIZE: u64 = 200 * 1024 * 1024; // 200 MB
 const MAX_FILES: usize = 1000;
 
@@ -17,11 +17,11 @@ pub fn extract(
     plugins_dir: &Path,
     slug: &str,
 ) -> Result<PathBuf, AppError> {
-    if package_bytes.len() > MAX_PACKAGE_SIZE {
-        return Err(AppError::unprocessable(&format!(
-            "Package too large. Maximum size is {}MB",
-            MAX_PACKAGE_SIZE / 1024 / 1024
-        )));
+    if package_bytes.len() > MAX_PLUGIN_PACKAGE_BYTES {
+        return Err(AppError::invalid_with(
+            "package_too_large",
+            [("limit_mb", (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into())],
+        ));
     }
 
     let cursor = std::io::Cursor::new(package_bytes.as_ref());

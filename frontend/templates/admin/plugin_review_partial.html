@@ -41,7 +41,7 @@
   <div class="border rounded p-2">
     {% for h in plugin.hooks %}
     <div class="form-check">
-      <input class="form-check-input cap-hook-checkbox" type="checkbox" value="{{ h.name }}" data-priority="{{ h.priority }}" id="review-hook-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <input class="form-check-input cap-hook-checkbox" type="checkbox" value="{{ h.name }}" data-priority="{{ h.priority }}" id="review-hook-{{ loop.index }}" checked>
       <label class="form-check-label font-monospace small" for="review-hook-{{ loop.index }}">{{ h.name }} <span class="text-muted">(priority {{ h.priority }})</span></label>
     </div>
     {% endfor %}
@@ -56,7 +56,7 @@
   <div class="border rounded p-2">
     {% for host in plugin.http_allowlist %}
     <div class="form-check">
-      <input class="form-check-input cap-http-checkbox" type="checkbox" value="{{ host }}" id="review-http-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <input class="form-check-input cap-http-checkbox" type="checkbox" value="{{ host }}" id="review-http-{{ loop.index }}" checked>
       <label class="form-check-label font-monospace small" for="review-http-{{ loop.index }}">{{ host }}</label>
     </div>
     {% endfor %}
@@ -71,7 +71,7 @@
   <div class="border rounded p-2">
     {% for action in plugin.rpc_actions %}
     <div class="form-check">
-      <input class="form-check-input cap-rpc-checkbox" type="checkbox" value="{{ action }}" id="review-rpc-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <input class="form-check-input cap-rpc-checkbox" type="checkbox" value="{{ action }}" id="review-rpc-{{ loop.index }}" checked>
       <label class="form-check-label font-monospace small" for="review-rpc-{{ loop.index }}">{{ action }}</label>
     </div>
     {% endfor %}
@@ -86,7 +86,7 @@
   <div class="border rounded p-2">
     {% for fn in plugin.api_functions %}
     <div class="form-check">
-      <input class="form-check-input cap-api-checkbox" type="checkbox" value="{{ fn }}" id="review-api-{{ loop.index }}" checked onchange="window.updatePluginGrant()">
+      <input class="form-check-input cap-api-checkbox" type="checkbox" value="{{ fn }}" id="review-api-{{ loop.index }}" checked>
       <label class="form-check-label font-monospace small" for="review-api-{{ loop.index }}">{{ fn }}</label>
     </div>
     {% endfor %}
@@ -106,7 +106,7 @@
 {% endfor %}</pre>
   {% endif %}
   <div class="form-check">
-    <input class="form-check-input" type="checkbox" id="review-cap-db" checked onchange="window.updatePluginGrant()">
+    <input class="form-check-input" type="checkbox" id="review-cap-db" checked>
     <label class="form-check-label" for="review-cap-db">{{ t(k="adm-grant") }} <code>db</code> {{ t(k="adm-allow-this-plugin-to-run-sql") }}</label>
   </div>
 </div>
@@ -117,7 +117,7 @@
   <label class="form-label fw-semibold">{{ t(k="adm-media-upload") }}</label>
   <p class="text-muted small mb-1">{{ t(k="adm-allows-members-to-upload-images-through") }}<code>POST /api/plugins/{{ plugin.slug }}/media</code>{{ t(k="adm-stored-under-the-plugin-s-own") }}</p>
   <div class="form-check">
-    <input class="form-check-input" type="checkbox" id="review-cap-media" checked onchange="window.updatePluginGrant()">
+    <input class="form-check-input" type="checkbox" id="review-cap-media" checked>
     <label class="form-check-label" for="review-cap-media">{{ t(k="adm-grant") }} <code>media</code> {{ t(k="adm-allow-image-uploads-via-this-plugin") }}</label>
   </div>
 </div>

@@ -491,6 +491,14 @@ impl AdminUseCase {
         self.users.find_by_id(id).await?.or_not_found()?;
         self.users.set_trust_level(id, level.clone()).await?;
 
+        // `trust_level` is carried in the access token, not re-read per request
+        // like permissions are — so without this a demotion would not take
+        // effect until the user's current token expired, leaving upload/embed
+        // rights active for up to a full token lifetime after being revoked.
+        // Forcing re-authentication is the cheap, correct fix for a rare admin
+        // action; the alternative is a per-request user lookup on the hot path.
+        crate::usecases::invalidate_sessions(self.cache.as_ref(), id).await;
+
         self.audit_log
             .append(AuditLog::user_action(
                 actor.id,

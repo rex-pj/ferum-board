@@ -45,9 +45,7 @@
   --bs-link-hover-color: var(--fac-magenta);
 }
 
-h1, h2, h3, h4, h5, h6,
-.navbar-brand,
-.fr-nav-brand {
+h1, h2, h3, h4, h5, h6 {
   font-family: var(--fac-font-mono);
   letter-spacing: .02em;
   text-transform: uppercase;
@@ -70,12 +68,6 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* ── Navigation / sidebar / cards ────────────────────────────────────────── */
-.fr-nav {
-  background-color: var(--fac-panel) !important;
-  border-bottom: 1px solid var(--fac-border) !important;
-  box-shadow: 0 1px 0 rgba(0, 229, 255, 0.15);
-}
-
 .fr-sidebar-left {
   background-color: var(--fac-panel);
   border-right-color: var(--fac-border);

@@ -8,6 +8,7 @@ use validator::Validate;
 use ferum_domain::models::brand::Brand;
 use ferum_domain::models::material::Material;
 use ferum_domain::models::product::{Product, ProductStatus, ProductType};
+use ferum_domain::models::product_category::ProductCategory;
 use ferum_domain::models::product_media::ProductMedia;
 use ferum_domain::models::product_rating_stats::ProductRatingStats;
 use ferum_domain::models::review_rating::ReviewRating;
@@ -36,6 +37,10 @@ pub fn parse_product_status(s: &str) -> Option<ProductStatus> {
 /// Deserialize an optional UUID query param, treating an empty/blank string as
 /// `None` (HTML `<select>` "All" options submit `field=`) and an unparseable
 /// value as `None` too (a broken filter param shouldn't 500 the page).
+///
+/// The second half of that is an SSR-only concession. For JSON APIs use
+/// [`crate::view_models::blank_as_none_uuid`], which still rejects garbage
+/// rather than silently returning unfiltered results.
 pub fn empty_string_as_none_uuid<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -87,8 +92,10 @@ pub struct ProductListQuery {
     pub status: Option<String>,
     #[serde(default, deserialize_with = "empty_string_as_none_uuid")]
     pub brand_id: Option<Uuid>,
-    #[serde(default, deserialize_with = "empty_string_as_none_uuid")]
-    pub category_id: Option<Uuid>,
+    /// A category UUID, or the literal `none` for products not filed under any
+    /// category. Typed as a string because `Option<Uuid>` cannot carry that
+    /// third state — see `resolve_product_category_filter`.
+    pub category_id: Option<String>,
     #[serde(default, deserialize_with = "empty_string_as_none_uuid")]
     pub material_id: Option<Uuid>,
     pub q: Option<String>,
@@ -198,6 +205,10 @@ pub struct CreateBrandRequest {
     pub description: Option<String>,
     pub website: Option<String>,
     pub country: Option<String>,
+    /// Present so the admin "Verified" checkbox survives creation; without it the
+    /// brand had to be created and then edited to take effect.
+    #[serde(default)]
+    pub is_verified: bool,
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -235,6 +246,76 @@ pub struct MaterialResponse {
     pub name: String,
     pub category: String,
     pub description: Option<String>,
+}
+
+// ─── Product categories ────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateProductCategoryRequest {
+    #[validate(length(min = 1, max = 120))]
+    pub name: String,
+    #[validate(
+        length(min = 1, max = 120),
+        custom(function = "crate::view_models::validators::slug_format")
+    )]
+    pub slug: String,
+    pub parent_id: Option<Uuid>,
+    #[serde(default)]
+    pub position: i32,
+    pub icon: Option<String>,
+    /// Words that identify this category inside a product name. Lowercased and
+    /// de-duplicated by the use case, since the matcher compares lowercased.
+    #[serde(default)]
+    pub match_keywords: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct UpdateProductCategoryRequest {
+    pub name: Option<String>,
+    pub parent_id: Option<Option<Uuid>>,
+    pub position: Option<i32>,
+    pub icon: Option<Option<String>>,
+    pub match_keywords: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+pub struct ProductCategoryResponse {
+    pub id: Uuid,
+    pub slug: String,
+    pub name: String,
+    pub parent_id: Option<Uuid>,
+    pub position: i32,
+    pub icon: Option<String>,
+    pub match_keywords: Vec<String>,
+    /// How many products are filed here. Only populated on the admin listing —
+    /// public callers get 0, since the count is a curation signal, not catalogue
+    /// data.
+    pub product_count: u64,
+}
+
+impl From<ProductCategory> for ProductCategoryResponse {
+    fn from(c: ProductCategory) -> Self {
+        Self {
+            id: c.id,
+            slug: c.slug,
+            name: c.name,
+            parent_id: c.parent_id,
+            position: c.position,
+            icon: c.icon,
+            match_keywords: c.match_keywords,
+            product_count: 0,
+        }
+    }
+}
+
+/// What the auto-assign matcher did, or would do on a dry run.
+#[derive(Serialize)]
+pub struct AutoAssignResponse {
+    pub assigned: u64,
+    /// Products no keyword could identify. This is the size of the manual queue
+    /// that remains, which is the number an admin actually plans around.
+    pub unmatched: u64,
+    pub dry_run: bool,
 }
 
 impl From<Material> for MaterialResponse {

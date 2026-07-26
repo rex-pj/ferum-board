@@ -24,6 +24,35 @@ pub mod plugin;
 pub mod webhook;
 pub mod page_context;
 
+// ─── Shared query-param deserializers ─────────────────────────────────────────
+
+/// Deserializes an optional UUID query param, treating a blank value as absent
+/// but a malformed one as an error.
+///
+/// The blank case is not optional politeness: an HTML `<select>`'s "All" option
+/// submits `field=`, and a bare `Option<Uuid>` fails the *whole* extractor on
+/// that, so one cleared dropdown 400s the entire request.
+///
+/// Contrast [`product::empty_string_as_none_uuid`], which additionally swallows
+/// unparseable values. That leniency is deliberate for the catalogue's SSR
+/// filters (a hand-mangled URL should degrade, not error) but wrong for a JSON
+/// API, where silently ignoring a filter returns results the caller did not ask
+/// for. Prefer this one unless you specifically want the SSR behaviour.
+pub fn blank_as_none_uuid<'de, D>(deserializer: D) -> Result<Option<uuid::Uuid>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let raw = Option::<String>::deserialize(deserializer)?;
+    match raw.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(v) => v
+            .parse::<uuid::Uuid>()
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
+}
+
 // ─── Shared author info ───────────────────────────────────────────────────────
 
 /// Minimal author info embedded in post/thread responses.

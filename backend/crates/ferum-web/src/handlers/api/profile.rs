@@ -7,6 +7,7 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
+use crate::utils::{read_image_field, validate_upload_image, ImageKind};
 use crate::view_models::auth::UserResponse;
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
@@ -17,10 +18,14 @@ use ferum_domain::models::user::UserPreferences;
 
 /// Re-mints the access token cookie after profile image changes so the header
 /// avatar reflects the new URL immediately (without waiting for the JWT to expire).
-fn refreshed_token_cookie(
+/// `issued_at` overrides the token's `iat`. Callers that have just published a
+/// session epoch must pass it, or the replacement token is itself older than
+/// the epoch and gets revoked on the very next request.
+fn refreshed_token_cookie_at(
     state: &AppState,
     actor: &AuthUser,
     avatar_url: Option<String>,
+    issued_at: Option<i64>,
 ) -> Result<HeaderMap, AppError> {
     let claims = AccessTokenClaims {
         sub: actor.id,
@@ -33,6 +38,7 @@ fn refreshed_token_cookie(
         exp: (chrono::Utc::now()
             + chrono::Duration::seconds(state.token_service.access_token_ttl_secs() as i64))
         .timestamp(),
+        iat: issued_at.unwrap_or_else(|| chrono::Utc::now().timestamp()),
     };
     let token = state.token_service.mint_access_token(&claims)?;
     let mut headers = HeaderMap::new();
@@ -41,6 +47,15 @@ fn refreshed_token_cookie(
         crate::utils::access_token_cookie(state, &token).parse().unwrap(),
     );
     Ok(headers)
+}
+
+/// Re-mint with the current time — for callers that have not revoked anything.
+fn refreshed_token_cookie(
+    state: &AppState,
+    actor: &AuthUser,
+    avatar_url: Option<String>,
+) -> Result<HeaderMap, AppError> {
+    refreshed_token_cookie_at(state, actor, avatar_url, None)
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -119,11 +134,20 @@ pub async fn change_password(
     Json(body): Json<ChangePasswordRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    state
+    let epoch = state
         .user
         .change_password(actor, &body.current_password, &body.new_password)
         .await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+
+    // Changing the password revokes every token issued before the epoch —
+    // including the one this very request authenticated with. Hand back a
+    // freshly minted one so the person who just rotated their own password
+    // stays signed in, while every *other* session (the reason to rotate it)
+    // ends. It must carry the epoch as its `iat`: minted with the current
+    // second instead, it would sort *before* the epoch and be rejected on the
+    // very next request.
+    let headers = refreshed_token_cookie_at(&state, actor, actor.avatar_url.clone(), epoch)?;
+    Ok((axum::http::StatusCode::NO_CONTENT, headers))
 }
 
 pub async fn get_preferences(
@@ -215,60 +239,9 @@ pub async fn upload_avatar(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let mut file_bytes: Option<bytes::Bytes> = None;
-    let mut content_type = "application/octet-stream".to_string();
+    let (data, content_type) = read_image_field(&mut multipart, "file").await?;
+    validate_upload_image(&content_type, &data, MAX_AVATAR_BYTES, ImageKind::AVATAR)?;
 
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let ct = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-
-            if !matches!(
-                ct.as_str(),
-                "image/jpeg" | "image/png" | "image/webp" | "image/gif"
-            ) {
-                return Err(AppError::UnprocessableEntity(
-                    "Unsupported image type. Allowed: JPEG, PNG, WebP, GIF".to_string(),
-                )
-                .into());
-            }
-
-            let data = field
-                .bytes()
-                .await
-                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
-
-            if data.len() > MAX_AVATAR_BYTES {
-                return Err(
-                    AppError::UnprocessableEntity(format!(
-                        "File exceeds {} MB limit",
-                        MAX_AVATAR_BYTES / (1024 * 1024)
-                    ))
-                    .into(),
-                );
-            }
-            if !ferum_application::validators::validate_image_magic(&data) {
-                return Err(AppError::UnprocessableEntity(
-                    "File content does not match a supported image format (JPEG, PNG, WebP, GIF)"
-                        .to_string(),
-                )
-                .into());
-            }
-
-            content_type = ct;
-            file_bytes = Some(data);
-            break;
-        }
-    }
-
-    let data = file_bytes
-        .ok_or_else(|| AppError::UnprocessableEntity("Missing file field".to_string()))?;
     let url = state.user.set_avatar(actor, data, content_type).await?;
     let cookie_headers = refreshed_token_cookie(&state, actor, Some(url.clone()))?;
     Ok((
@@ -296,60 +269,9 @@ pub async fn upload_cover(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let mut file_bytes: Option<bytes::Bytes> = None;
-    let mut content_type = "application/octet-stream".to_string();
+    let (data, content_type) = read_image_field(&mut multipart, "file").await?;
+    validate_upload_image(&content_type, &data, MAX_COVER_BYTES, ImageKind::COVER)?;
 
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let ct = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-
-            if !matches!(
-                ct.as_str(),
-                "image/jpeg" | "image/png" | "image/webp" | "image/gif"
-            ) {
-                return Err(AppError::UnprocessableEntity(
-                    "Unsupported image type. Allowed: JPEG, PNG, WebP, GIF".to_string(),
-                )
-                .into());
-            }
-
-            let data = field
-                .bytes()
-                .await
-                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
-
-            if data.len() > MAX_COVER_BYTES {
-                return Err(
-                    AppError::UnprocessableEntity(format!(
-                        "File exceeds {} MB limit",
-                        MAX_COVER_BYTES / (1024 * 1024)
-                    ))
-                    .into(),
-                );
-            }
-            if !ferum_application::validators::validate_image_magic(&data) {
-                return Err(AppError::UnprocessableEntity(
-                    "File content does not match a supported image format (JPEG, PNG, WebP, GIF)"
-                        .to_string(),
-                )
-                .into());
-            }
-
-            content_type = ct;
-            file_bytes = Some(data);
-            break;
-        }
-    }
-
-    let data = file_bytes
-        .ok_or_else(|| AppError::UnprocessableEntity("Missing file field".to_string()))?;
     let url = state.user.set_cover(actor, data, content_type).await?;
     Ok(Json(serde_json::json!({ "data": { "cover_url": url } })))
 }

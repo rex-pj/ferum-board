@@ -25,31 +25,6 @@ language-name-zh = 中文
 nav-language = Language
 nav-change-language = Change language
 nav-search = Search
-nav-search-placeholder = Search threads and posts…
-nav-home = Home
-nav-forum = Forum
-nav-notifications = Notifications
-nav-bookmarks = Bookmarks
-nav-account = Account
-nav-sign-in = Sign in
-nav-sign-out = Sign out
-nav-register = Register
-nav-new-thread = New thread
-nav-toggle-theme = Toggle dark/light mode
-nav-menu = Menu
-
-## ─── Common actions ──────────────────────────────────────────────────────────
-
-action-save = Save
-action-cancel = Cancel
-action-delete = Delete
-action-edit = Edit
-action-reply = Reply
-action-submit = Submit
-action-close = Close
-action-confirm = Confirm
-action-back = Back
-action-loading = Loading…
 
 ## ─── Thread & post ───────────────────────────────────────────────────────────
 
@@ -64,28 +39,7 @@ thread-views =
         [one] 1 view
        *[other] { $count } views
     }
-thread-pinned = Pinned
-thread-locked = Locked
-thread-solved = Solved
-thread-by-author = by { $author }
-thread-last-reply = Last reply { $when }
 thread-edited = edited
-thread-deleted = Post deleted.
-thread-best-answer = Best answer
-
-## ─── Pagination ──────────────────────────────────────────────────────────────
-
-pagination-previous = Previous
-pagination-next = Next
-pagination-page-of = Page { $page } of { $total }
-
-## ─── Empty states ────────────────────────────────────────────────────────────
-
-empty-no-threads = No threads yet.
-empty-no-posts = No posts yet.
-empty-no-results = No results found.
-empty-no-notifications = You have no notifications.
-empty-no-bookmarks = You haven't bookmarked anything yet.
 
 ## ─── Preferences ─────────────────────────────────────────────────────────────
 
@@ -94,15 +48,6 @@ prefs-language-help =
     Choose the language for menus and buttons. Threads and posts stay in the
     language they were written in.
 prefs-language-auto = Match my browser
-prefs-theme = Theme
-prefs-font-size = Font size
-prefs-layout = Layout
-
-## ─── Feedback ────────────────────────────────────────────────────────────────
-
-feedback-saved = Saved.
-feedback-network-error = Network error. Please try again.
-feedback-language-changed = Language updated.
 
 ## ─── Thread card ─────────────────────────────────────────────────────────────
 
@@ -167,11 +112,8 @@ ui-activity = Activity
 ui-add-a-product = Add a product
 ui-add-select-for-review = Add & select for review
 ui-admin = Admin
-ui-all-brands = All brands
 ui-all-categories = All Categories
 ui-all-categories-2 = All categories
-ui-all-materials = All materials
-ui-all-types = All types
 ui-already-have-an-account = Already have an account?
 ui-apply = Apply
 ui-author = Author
@@ -198,9 +140,7 @@ ui-choose-a-category = Choose a category…
 ui-choose-a-strong-password-for-your = Choose a strong password for your account.
 ui-clear = Clear
 ui-clear-filter = Clear filter
-ui-click-to-browse = click to browse
 ui-close = Close
-ui-click-to-choose-an-image = click to choose an image
 ui-comfortable = Comfortable
 ui-community = Community
 ui-compact = Compact
@@ -228,8 +168,6 @@ ui-describe-why-this-post-violates-the = Describe why this post violates the rul
 ui-display-name = Display name
 ui-don-t-have-an-account = Don't have an account?
 ui-don-t-reuse-passwords-from-other = Don't reuse passwords from other sites
-ui-drag-and-drop-here-or = Drag and drop here, or
-ui-drop-here-or = Drop here or
 ui-drop-to-set-the-cover-image = Drop to set the cover image
 ui-drop-to-set-thumbnail = Drop to set thumbnail
 ui-edit = Edit
@@ -240,7 +178,6 @@ ui-email-address = Email address
 ui-enter-your-email-and-we-ll = Enter your email and we'll send you a reset link.
 ui-ferum-board = Ferum Board
 ui-filter = Filter
-ui-filter-by-brand = Filter by brand
 ui-filter-by-category = Filter by category:
 ui-follow = Follow
 ui-followers = Followers
@@ -261,7 +198,6 @@ ui-i-have-actually-bought-or-used = I have actually bought or used this product
 ui-inbox = Inbox
 ui-invalid-email-or-password = Invalid email or password.
 ui-invalid-or-missing-reset-token = Invalid or missing reset token.
-ui-is-required = is required.
 ui-join-in = Join in
 ui-join-the-community = Join the community
 ui-join-the-conversation = Join the conversation
@@ -269,6 +205,11 @@ ui-jpeg-png-webp-gif-max-10 = JPEG · PNG · WebP · GIF · max 10 MB
 ui-jump-to-best-answer = Jump to best answer
 ui-large = Large
 ui-latest-discussions = Latest discussions
+# Homepage sidebar panel: newest review per product, now that reviews are kept
+# out of the discussion feed.
+ui-latest-reviews = Latest reviews
+# Fallback label for a review whose product row could not be loaded.
+ui-a-product = A product
 ui-leave-a-reply = Leave a reply
 ui-leave-blank-to-use-username = Leave blank to use username
 ui-letters-numbers-underscores-hyphens-cannot-be = Letters, numbers, underscores, hyphens. Cannot be changed later.
@@ -301,7 +242,6 @@ ui-move-thread = Move thread
 ui-move-thread-2 = Move Thread
 ui-moving-a-thread-to-a-different = Moving a thread to a different category is a moderator action.
 ui-must-include-a-digit-and-a = Must include a digit and a special character.
-ui-mute = Mute
 ui-muted = Muted
 ui-my-bookmarks = My Bookmarks
 ui-my-reports = My Reports
@@ -330,15 +270,13 @@ ui-no-reviews-yet = No reviews yet
 ui-no-reviews-yet-be-the-first = No reviews yet — be the first.
 ui-no-threads-yet = No threads yet.
 ui-none = — None —
-ui-not-muting-any-categories-visit-a = Not muting any categories. Visit a category page and click
 ui-not-rated = Not rated
-ui-not-watching-any-categories-visit-a = Not watching any categories. Visit a category page and click
 ui-nothing-left-unanswered-nice-work = Nothing left unanswered — nice work!
 ui-notifications = Notifications
-ui-once-approved = once approved
 ui-open-menu = Open menu
 ui-optional = (optional)
 ui-optional-turns-this-post-into-a = (optional — turns this post into a scored review)
+ui-origin = Origin
 ui-overall = Overall
 ui-page-navigation = Page navigation
 ui-password = Password
@@ -422,14 +360,54 @@ ui-saved-threads-2 = Saved threads
 ui-scores-by-dimension = Scores by dimension
 ui-search = Search
 ui-search-all-categories = Search all categories
-ui-search-discussions = Search discussions…
 ui-search-for-a-product-to-review = Search for a product to review… (leave empty for a regular post)
-ui-search-is-case-insensitive = Search is case-insensitive
 ui-search-is-temporarily-unavailable-please-try = Search is temporarily unavailable. Please try again in a moment.
 ui-search-products = Search products…
-ui-search-threads-and-posts = Search threads and posts…
 ui-search-tips = Search Tips
-ui-searches-thread-titles-and-post-content = Searches thread titles and post content
+# Site-wide search covers the catalogue as well as the forum; the placeholder
+# has to say so, or nobody thinks to look for a product here.
+ui-search-placeholder-everything = Search products and discussions…
+ui-search-result-types = Result types
+ui-search-tab-all = All
+ui-search-tab-products = Products
+ui-search-tab-discussions = Discussions
+ui-see-all-n-products =
+    { $count ->
+        [one] See the 1 product
+       *[other] See all { $count } products
+    }
+ui-see-n-products-instead =
+    { $count ->
+        [one] See 1 matching product
+       *[other] See { $count } matching products
+    }
+ui-see-n-discussions-instead =
+    { $count ->
+        [one] See 1 matching discussion
+       *[other] See { $count } matching discussions
+    }
+ui-tip-searches-products-and-threads = Searches product names, brands and thread titles
+ui-tip-accents-optional = Vietnamese accents are optional — “ghe an” finds “ghế ăn”
+ui-tip-filter-products-by-brand = On the Products tab, narrow by type, brand or material
+ui-sort-relevance = Best match
+ui-sort-most-replies = Most replies
+# The category filter spans both kinds; the product facets do not. Saying so
+# next to the control is what stops a reader thinking their brand filter also
+# shrank the discussion count.
+# The catalogue's own tree (Sofa, Ghế, Bàn …), not the forum's. Named for the
+# thing it classifies so it cannot be mistaken for the discussion categories.
+ui-product-category = Category
+ui-too-many-filters = No match for this combination of filters.
+ui-drop-product-filters =
+    { $count ->
+        [one] Without the product filters: 1 product
+       *[other] Without the product filters: { $count } products
+    }
+ui-drop-category-filter =
+    { $count ->
+        [one] Without the category: 1 result
+       *[other] Without the category: { $count } results
+    }
 ui-security = Security
 ui-see-warning-details-in-your-notifications = See warning details in your notifications
 ui-select-a-category = Select a category…
@@ -437,6 +415,9 @@ ui-select-if-known = (select if known)
 ui-select-the-target-category-for-this = Select the target category for this thread.
 ui-set-new-password = Set new password
 ui-shorter-queries-return-more-results = Shorter queries return more results
+# Collapses the homepage product shelf back to a single row. Static, unlike its
+# "show more" counterpart (js-show-more-products), which carries a live count.
+ui-show-less = Show less
 ui-show-password = Show password
 ui-sign-in = Sign in
 ui-sign-in-to-watch-this-category = Sign in to watch this category
@@ -450,12 +431,12 @@ ui-sort-reviews = Sort reviews
 ui-start-the-first-thread = Start the first thread
 ui-started-following-you = started following you
 ui-strongest = Strongest:
+ui-style = Style
 ui-subcategories = Subcategories
 ui-submit-report = Submit Report
 ui-suggest-a-product = Suggest a product
 ui-summary = Summary
 ui-tags = Tags
-ui-tap-the-stars-to-score-only = Tap the stars to score · only
 ui-that-verification-link-is-invalid-or = That verification link is invalid or has expired.
 ui-the-product-becomes-public-once-an = The product becomes public once an admin approves it. Your review is saved right away either way.
 ui-theme = Theme
@@ -468,13 +449,14 @@ ui-thumbnail-preview = Thumbnail preview
 ui-tips-for-a-strong-password = Tips for a strong password
 ui-title = Title
 ui-to = To
-ui-to-follow-it = to follow it.
-ui-to-hide-it = to hide it.
-ui-to-join-the-conversation = to join the conversation.
 ui-toggle-dark-light-mode = Toggle dark/light mode
 ui-toggle-theme = Toggle theme
 ui-top-rated = Top rated
 ui-top-rated-products = Top rated products
+# Heading the product shelf falls back to when too few products carry enough
+# reviews to justify calling anything "top rated". Recency is a claim the
+# catalogue can always back, so the shelf keeps showing products either way.
+ui-newest-products = Newest products
 ui-total-shown = Total shown
 ui-trending-now = Trending now
 ui-trust-level = Trust level
@@ -507,7 +489,6 @@ ui-watching-muted = Watching & Muted
 ui-weakest = Weakest:
 ui-website = Website
 ui-welcome-back = Welcome back
-ui-will-be-public = Will be public
 ui-write-a-clear-specific-title = Write a clear, specific title
 ui-write-a-review = Write a review
 ui-write-your-post-in-markdown = Write your post in Markdown…
@@ -610,7 +591,6 @@ ui-your-post-was-marked-as-best-answer = Your post was marked as best answer
 ## ─── Compose & moderation actions ────────────────────────────────────────────
 
 ui-publish = Publish
-ui-publish-review = Publish review
 ui-pin = Pin
 ui-unpin = Unpin
 ui-lock = Lock
@@ -665,19 +645,25 @@ ui-in-parent-category = In { $category }
 ui-related = Related
 ui-in-this-category = in this category
 
+## ─── Ferum Review theme ──────────────────────────────────────────────────────
+# Copy unique to the ferum-review theme's home.html masthead — the default
+# theme has no equivalent strings, so these have no counterpart elsewhere in
+# this file. See frontend/themes/ferum-review/templates/home.html.
 
-## ─── Review theme ────────────────────────────────────────────────────────────
-# Strings owned by the ferum-review theme masthead and product page.
-
-ui-review-hero-eyebrow = Material & furniture reviews
-ui-review-hero-title = Real reviews from the people who built it and live with it
-ui-review-hero-sub = Architects, contractors and homeowners log the numbers that matter: how it wears over years, how it handles damp, how hard it is to install, and the real cost per m².
+ui-material-furniture-reviews = Material & furniture reviews
+ui-real-reviews-from-the-people-who-built-it = Real reviews from the people who built it and live with it
+ui-architects-contractors-log-the-numbers =
+    Architects, contractors and homeowners log the numbers that matter: how it
+    wears over years, how it handles damp, how hard it is to install, and the
+    real cost per m².
 ui-search-products-or-materials = Search products or materials
-ui-search-placeholder-products = Search flooring, tile, sofas, paint…
+ui-search-flooring-tile-sofas-paint = Search flooring, tile, sofas, paint…
 ui-product-catalog = Product catalog
 ui-discussion-categories = Discussion categories
-ui-origin = Origin
-ui-style = Style
+ui-browse-by-type = Browse by type
+# Accessible name for a curated masthead tile the operator linked but left
+# uncaptioned — without it the link would reach a screen reader unnamed.
+ui-featured-image = Featured image
 
 ## ─── Client-side messages ────────────────────────────────────────────────────
 # Rendered by JavaScript rather than the server, so they reach the browser via
@@ -693,8 +679,6 @@ js-account-created = Account created! Redirecting to sign in…
 js-password-updated = Password updated! Redirecting to sign in…
 js-reset-link-sent = If an account with that email exists, a reset link has been sent.
 js-verify-link-sent = If that address needs verifying, a new link is on its way.
-js-post-deleted = Post deleted.
-js-edited = edited
 js-reply-pending-approval = Your reply has been submitted and is awaiting moderator approval.
 js-report-submitted = Report submitted. Thank you.
 js-provide-a-reason = Please provide a reason.
@@ -756,7 +740,6 @@ js-delete-product-confirm = Delete
 js-material-links = Material links
 js-photos = Photos
 js-reviews = Reviews
-js-product-archived = Product archived — its reviews were kept.
 js-product-delete-blocked =
     This product has { $count } review(s). Deleting it would leave them reviewing
     nothing, so permanent deletion is blocked. Archive it instead — it disappears
@@ -764,8 +747,6 @@ js-product-delete-blocked =
 js-product-delete-permanent-warning =
     Nothing references this product, so it can be removed for good. Its images are
     released from storage at the same time. This cannot be undone.
-js-product-deleted = Product deleted.
-js-product-updated = Product updated.
 js-product-added-photos-failed =
     The product was added, but some photos couldn't be uploaded. You can add them
     later once it's approved.
@@ -780,8 +761,6 @@ js-write-a-review = Write a review
 js-new-post = New post
 js-publish = Publish
 js-publish-review = Publish review
-js-add-a-product = Add a product
-js-suggest-a-product = Suggest a product
 
 # Product type & material category labels, mirroring the Tera macros
 js-product-type-furniture = Furniture
@@ -839,6 +818,10 @@ js-type-to-search = Type to search…
 js-search = Search
 js-no-matches = No matches
 
+# Homepage product shelf. The count is how many cards the current breakpoint
+# hides, so it is measured in the browser rather than rendered by the server.
+js-show-more-products = Show { $count } more
+
 # Thread page confirmations & failures
 js-delete-post-title = Delete Post
 js-delete-post-body = Delete this post? This cannot be undone.
@@ -863,3 +846,11 @@ js-scroll-for-more = Scroll for more…
 js-cannot-react-own-post = You can't react to your own post.
 js-react-trust-insufficient = Your account needs to be verified to react.
 js-account-suspended = Your account is suspended.
+
+## ─── Search filters ──────────────────────────────────────────────────────────
+# Each facet control's default option is its own NAME, not "All …". Four
+# dropdowns that all begin with the same word cannot be scanned — the eye has to
+# read to the end of each to tell them apart.
+ui-filter-by = Filter by:
+ui-active-filters = Active filters
+ui-clear-all-filters = Clear all

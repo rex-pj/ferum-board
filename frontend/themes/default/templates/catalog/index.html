@@ -7,86 +7,136 @@
 {% block content %}
 {% include "default/templates/partials/catalog_nav.html" %}
 
-{# ── Filters ── #}
-<div class="fr-panel">
-  <div class="fr-panel-body">
-    <form method="get" action="/catalog" class="fr-filter-bar">
-      <input type="search" name="q" value="{{ search_query | default(value='') }}"
-             class="form-control form-control-sm" style="max-width:220px" placeholder="{{ t(k='ui-search-products') }}">
-      <select name="type" class="form-select form-select-sm w-auto">
-        <option value="">{{ t(k="ui-all-types") }}</option>
-        <option value="furniture" {% if active_type == "furniture" %}selected{% endif %}>{{ t(k="ui-furniture") }}</option>
-        <option value="material" {% if active_type == "material" %}selected{% endif %}>{{ t(k="ui-material") }}</option>
-        <option value="room" {% if active_type == "room" %}selected{% endif %}>{{ t(k="ui-room") }}</option>
-      </select>
-      <select name="brand_id" class="form-select form-select-sm w-auto" aria-label="{{ t(k='ui-filter-by-brand') }}">
-        <option value="">{{ t(k="ui-all-brands") }}</option>
-        {% for b in brands %}
-          <option value="{{ b.id }}" {% if active_brand == b.id %}selected{% endif %}>{{ b.name }}</option>
-        {% endfor %}
-      </select>
-      <select name="material_id" class="form-select form-select-sm w-auto">
-        <option value="">{{ t(k="ui-all-materials") }}</option>
-        {% for mat in materials %}
-          <option value="{{ mat.id }}" {% if active_material == mat.id %}selected{% endif %}>{{ mat.name }}</option>
-        {% endfor %}
-      </select>
-      <select name="sort" class="form-select form-select-sm w-auto" aria-label="{{ t(k='ui-sort') }}">
-        <option value="newest" {% if not active_sort or active_sort == "newest" %}selected{% endif %}>{{ t(k="ui-newest") }}</option>
-        <option value="top_rated" {% if active_sort == "top_rated" %}selected{% endif %}>{{ t(k="ui-top-rated") }}</option>
-        <option value="most_reviewed" {% if active_sort == "most_reviewed" %}selected{% endif %}>{{ t(k="ui-most-reviewed") }}</option>
-      </select>
-      <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="fa-solid fa-filter me-1" aria-hidden="true"></i>{{ t(k="ui-filter") }}</button>
-    </form>
+{# ── Filters ── the same refine pattern as the search page (self-labelled
+   selects that submit on change, a visually distinct sort, removable chips, and
+   a mobile disclosure), so the two filter surfaces read as one design. #}
+<form id="catalogForm" method="get" action="/catalog" x-data="{ open: false }">
+  {# The same field + accent submit as the search page (.fr-search-field /
+     .fr-search-submit), so the two search surfaces read as one. No autofocus:
+     this is a browse page, so the field must not steal focus from the catalogue.
+     It stays visible on every width — unlike the selects it cannot submit on
+     change, so it submits on Enter and via its button, and a searcher on a phone
+     must not have to open a filter panel to type. #}
+  <div class="fr-search-field mb-3">
+    <input type="search" name="q" value="{{ search_query | default(value='') }}"
+           placeholder="{{ t(k='ui-search-products') }}" aria-label="{{ t(k='ui-search-products') }}">
+    <button type="submit" class="fr-search-submit">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <span>{{ t(k="ui-search") }}</span>
+    </button>
+  </div>
+
+  <div class="fr-search-refine">
+    {# On a phone the selects collapse behind this toggle, which carries the
+       active-filter count — hiding controls is fine, hiding that some are set is
+       not. #}
+    <button type="button" class="fr-refine-toggle d-md-none" @click="open = !open"
+            :aria-expanded="open ? 'true' : 'false'" aria-controls="catalogRefine">
+      <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+      <span>{{ t(k="ui-filter") }}{% if filter_chips %} ({{ filter_chips | length }}){% endif %}</span>
+    </button>
+
+    <div id="catalogRefine" class="fr-refine-controls" :class="{ 'is-open': open }">
+      {# Each select's default option is its own name ("Loại", "Thương hiệu"),
+         not "Tất cả …" — four controls that all begin with the same word cannot
+         be scanned. Same labels as the search page's product facets. Each
+         submits on change: pick, see the count move, pick again. #}
+      {# Facet order mirrors the search page: catalogue category leads (it is the
+         primary browse axis), then type, brand, material. Sort is NOT here — it
+         is ordering, not filtering, so it lives on the results header below,
+         exactly as on search. #}
+      <div class="fr-refine-filters" role="group" aria-label="{{ t(k='ui-filter-by') }}">
+        {# Catalogue category (Sofa, Ghế, Bàn), not the forum tree. Products left
+           unfiled are excluded when a category is picked — an unfiled product is
+           genuinely in no category, so showing it under every one would make the
+           filter unable to exclude anything. #}
+        {% if catalog_categories %}
+        <select name="category_id" class="form-select form-select-sm w-auto{% if active_category_id %} is-active{% endif %}"
+                @change="$el.form.submit()" aria-label="{{ t(k='ui-product-category') }}">
+          <option value="">{{ t(k="ui-product-category") }}</option>
+          {% for c in catalog_categories %}
+            <option value="{{ c.id }}" {% if active_category_id == c.id %}selected{% endif %}>{% if c.is_child %}— {% endif %}{{ c.name }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        <select name="type" class="form-select form-select-sm w-auto{% if active_type %} is-active{% endif %}"
+                @change="$el.form.submit()" aria-label="{{ t(k='ui-type') }}">
+          <option value="">{{ t(k="ui-type") }}</option>
+          <option value="furniture" {% if active_type == "furniture" %}selected{% endif %}>{{ t(k="ui-furniture") }}</option>
+          <option value="material" {% if active_type == "material" %}selected{% endif %}>{{ t(k="ui-material") }}</option>
+          <option value="room" {% if active_type == "room" %}selected{% endif %}>{{ t(k="ui-room") }}</option>
+        </select>
+        <select name="brand_id" class="form-select form-select-sm w-auto{% if active_brand %} is-active{% endif %}"
+                @change="$el.form.submit()" aria-label="{{ t(k='ui-brand') }}">
+          <option value="">{{ t(k="ui-brand") }}</option>
+          {% for b in brands %}
+            <option value="{{ b.id }}" {% if active_brand == b.id %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+        <select name="material_id" class="form-select form-select-sm w-auto{% if active_material %} is-active{% endif %}"
+                @change="$el.form.submit()" aria-label="{{ t(k='ui-material') }}">
+          <option value="">{{ t(k="ui-material") }}</option>
+          {% for mat in materials %}
+            <option value="{{ mat.id }}" {% if active_material == mat.id %}selected{% endif %}>{{ mat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+</form>
+
+{# Active filters, each removable in one click — the same chips as the search
+   page, because four dropdowns cannot answer "what is narrowing this page?" at a
+   glance. #}
+{% if filter_chips %}
+<div class="fr-search-chips" role="group" aria-label="{{ t(k='ui-active-filters') }}">
+  {% for chip in filter_chips %}
+    <a href="{{ chip.remove_url }}" class="fr-search-catchip">
+      {% if chip.kind == "code" %}{{ m::product_type_label(code=chip.label) }}{% else %}{{ chip.label }}{% endif %}
+      <i class="fa-solid fa-xmark fa-xs" aria-hidden="true"></i>
+      <span class="visually-hidden">{{ t(k="ui-clear-filter") }}</span>
+    </a>
+  {% endfor %}
+  {% if filter_chips | length > 1 %}
+    <a href="/catalog" class="fr-search-clear">{{ t(k="ui-clear-all-filters") }}</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if products %}
+{# Results header: count on the left, sort on the right — the same line and the
+   same borderless sort control as the search page. The sort sits OUTSIDE the
+   filter form above, so it associates by id (form="catalogForm") and carries its
+   own x-data for Alpine, exactly as the search page's sort does. #}
+<div class="fr-search-count d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <div><strong>{{ total }}</strong> {{ t(k="ui-products-label", count=total) }}</div>
+  <div class="fr-search-sort" x-data>
+    <label class="fr-search-filter-label" for="catalogSort">{{ t(k="ui-sort") }}:</label>
+    <select id="catalogSort" name="sort" form="catalogForm" class="fr-sort-select" @change="$el.form.submit()">
+      <option value="newest" {% if not active_sort or active_sort == "newest" %}selected{% endif %}>{{ t(k="ui-newest") }}</option>
+      <option value="top_rated" {% if active_sort == "top_rated" %}selected{% endif %}>{{ t(k="ui-top-rated") }}</option>
+      <option value="most_reviewed" {% if active_sort == "most_reviewed" %}selected{% endif %}>{{ t(k="ui-most-reviewed") }}</option>
+    </select>
   </div>
 </div>
 
-{% if products %}
 <div class="row g-3">
   {% for p in products %}
   <div class="col-6 col-md-4 col-lg-3">
-    <a href="/catalog/{{ p.slug }}" class="fr-product-card">
-      <div class="fr-product-thumb">
-        {% if p.primary_image_key %}
-          <img src="/files/{{ p.primary_image_key }}" alt="{{ p.name }}">
-        {% else %}
-          <i class="fa-solid fa-couch fa-2x opacity-25" aria-hidden="true"></i>
-        {% endif %}
-      </div>
-      <div class="fr-product-card-body">
-        <div class="fr-product-name">{{ p.name }}</div>
-        <div class="fr-product-price">
-          {% if p.price_min %}
-            {{ p.price_min | thousands }}₫{% if p.price_max and p.price_max != p.price_min %} – {{ p.price_max | thousands }}₫{% endif %}
-          {% else %}<span class="text-muted fw-normal">{{ t(k="ui-price-on-request") }}</span>{% endif %}
-        </div>
-        {# Rating score — the review platform's primary signal #}
-        <div class="fr-rating-line mt-1">
-          {% if p.review_count and p.review_count > 0 and p.avg_overall %}
-            <span class="text-warning"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-            <span class="fw-semibold text-body">{{ p.avg_overall | round(precision=1) }}</span>
-            <span class="text-muted">({{ p.review_count }})</span>
-          {% else %}
-            <span class="text-muted"><i class="fa-regular fa-star me-1" aria-hidden="true"></i>{{ t(k="ui-no-reviews-yet") }}</span>
-          {% endif %}
-        </div>
-        <div class="mt-1">
-          <span class="fr-review-chip">{{ m::product_type_label(code=p.product_type) }}</span>
-          {% if p.style %}<span class="fr-product-meta ms-1">{{ p.style }}</span>{% endif %}
-        </div>
-      </div>
-    </a>
+    {{ m::product_card(p=p) }}
   </div>
   {% endfor %}
 </div>
 
+{# filter_params carries every active filter. Without it the pager dropped them
+   all, so page 2 of a filtered catalogue showed an unrelated set. The total now
+   lives in the results header above, so the pager is just prev/next. #}
 <div class="d-flex justify-content-between align-items-center mt-3">
   {% if has_prev %}
-    <a href="/catalog?page={{ page - 1 }}" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-previous") }}</a>
+    <a href="/catalog?page={{ page - 1 }}{{ filter_params }}" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-previous") }}</a>
   {% else %}<span></span>{% endif %}
-  <span class="text-muted small">{{ total }} {{ t(k="ui-products-label", count=total) }}</span>
   {% if has_next %}
-    <a href="/catalog?page={{ page + 1 }}" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-next") }}</a>
+    <a href="/catalog?page={{ page + 1 }}{{ filter_params }}" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-next") }}</a>
   {% else %}<span></span>{% endif %}
 </div>
 {% else %}

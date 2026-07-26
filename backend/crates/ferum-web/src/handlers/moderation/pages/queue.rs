@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::handlers::admin::{render_admin, site_ctx};
-use crate::handlers::pages::{PageError, require_page_auth};
+use crate::handlers::pages::{post_policy_str, view_policy_str, PageError, require_page_auth};
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CategoryCtx, CurrentUserCtx, PaginationCtx, QueuePostCtx};
 
@@ -92,8 +92,10 @@ pub async fn queue(
             description: c.description,
             color: c.color,
             thread_count: 0,
-            view_policy: format!("{:?}", c.view_policy).to_lowercase(),
-            post_policy: format!("{:?}", c.post_policy).to_lowercase(),
+            // The shared helpers, not `{:?}`: Debug yields "membersonly"/"staffonly",
+            // which no template compares against.
+            view_policy: view_policy_str(&c.view_policy),
+            post_policy: post_policy_str(&c.post_policy),
             can_post: false,
         })
         .collect();

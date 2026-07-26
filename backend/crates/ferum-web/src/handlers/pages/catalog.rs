@@ -32,6 +32,10 @@ pub struct CatalogQuery {
     pub material_id: Option<Uuid>,
     #[serde(default, deserialize_with = "crate::view_models::product::empty_string_as_none_uuid")]
     pub brand_id: Option<Uuid>,
+    /// A category UUID, or the literal `none` for unfiled products. Not a
+    /// `Uuid` because that third state is the one a curator needs — see
+    /// `resolve_product_category_filter`.
+    pub category_id: Option<String>,
     pub q: Option<String>,
     pub sort: Option<String>,
 }
@@ -49,11 +53,19 @@ pub async fn catalog_index(
         product_type: q.product_type.as_deref().and_then(parse_product_type),
         status: Some(ProductStatus::Published),
         brand_id: q.brand_id,
-        category_id: None,
+        // Same resolver as search and the admin list, so "category" means the
+        // same thing — including subtree expansion — wherever it is offered.
+        category: crate::utils::resolve_product_category_filter(&state, q.category_id.as_deref())
+            .await,
         material_id: q.material_id,
         query: q.q.clone(),
         sort: q.sort.as_deref().map(parse_product_sort).unwrap_or_default(),
         include_own: None,
+        // No floor even under `?sort=top_rated`: the catalogue is a complete
+        // index, and the Bayesian shrinkage already keeps thinly-reviewed
+        // products from topping it. Hiding them here would make products the
+        // reader navigated to unreachable.
+        min_review_count: None,
     };
     let (products, total) = state.product.list(filter, page, PER_PAGE).await?;
     let materials = state.product.list_materials(None).await?;
@@ -71,14 +83,13 @@ pub async fn catalog_index(
         "products",
         &products.into_iter().map(ProductResponse::from).collect::<Vec<_>>(),
     );
-    ctx.insert(
-        "materials",
-        &materials.into_iter().map(MaterialResponse::from).collect::<Vec<_>>(),
-    );
-    ctx.insert(
-        "brands",
-        &brands.into_iter().map(BrandResponse::from).collect::<Vec<_>>(),
-    );
+    // Kept (not just inserted) so the chip builder below can name the active
+    // brand/material without a second query.
+    let materials_resp: Vec<MaterialResponse> =
+        materials.into_iter().map(MaterialResponse::from).collect();
+    let brands_resp: Vec<BrandResponse> = brands.into_iter().map(BrandResponse::from).collect();
+    ctx.insert("materials", &materials_resp);
+    ctx.insert("brands", &brands_resp);
     ctx.insert("total", &total);
     ctx.insert("page", &page);
     ctx.insert("has_prev", &(page > 1));
@@ -87,8 +98,106 @@ pub async fn catalog_index(
     ctx.insert("active_material", &q.material_id.map(|u| u.to_string()));
     ctx.insert("active_brand", &q.brand_id.map(|u| u.to_string()));
     ctx.insert("active_sort", &q.sort);
+    ctx.insert("active_category_id", &q.category_id);
     ctx.insert("search_query", &q.q);
     ctx.insert("catalog_tab", "products");
+
+    // The catalogue taxonomy (Sofa, Ghế, Bàn …), not the forum's discussion
+    // tree. Same list the search page offers, so the two agree. Kept raw for the
+    // chip builder to name the active category.
+    let categories_raw = state.product.list_categories().await.unwrap_or_default();
+    let categories: Vec<serde_json::Value> = categories_raw
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "id": c.id.to_string(),
+                "name": c.name.clone(),
+                "icon": c.icon.clone(),
+                "is_child": c.parent_id.is_some(),
+            })
+        })
+        .collect();
+    ctx.insert("catalog_categories", &categories);
+
+    // Active narrowing filters, each a removable chip — same shape and template
+    // the search page uses, so the two read alike. Sort is ordering, not
+    // filtering, so it is preserved across every removal rather than chipped.
+    // `type` travels as a code resolved through the shared product_type_label
+    // macro; the rest carry a resolved name.
+    let mut active_filters: Vec<(&str, String, String, String)> = Vec::new();
+    if let Some(t) = q.product_type.as_deref().filter(|s| !s.is_empty()) {
+        active_filters.push(("type", t.to_string(), "code".into(), t.to_string()));
+    }
+    if let Some(bid) = q.brand_id {
+        if let Some(b) = brands_resp.iter().find(|b| b.id == bid) {
+            active_filters.push(("brand_id", bid.to_string(), "name".into(), b.name.clone()));
+        }
+    }
+    if let Some(mid) = q.material_id {
+        if let Some(m) = materials_resp.iter().find(|m| m.id == mid) {
+            active_filters.push(("material_id", mid.to_string(), "name".into(), m.name.clone()));
+        }
+    }
+    // Only a real category is chipped. The "none" (unfiled) state has no select
+    // option and reaches here only via a crafted URL, so — like the search page —
+    // it is left unchipped rather than shown as a filter that cannot be named.
+    if let Some(cid) = q.category_id.as_deref().filter(|s| !s.is_empty() && *s != "none") {
+        if let Some(c) = categories_raw.iter().find(|c| c.id.to_string() == cid) {
+            active_filters.push(("category_id", cid.to_string(), "name".into(), c.name.clone()));
+        }
+    }
+
+    let chips: Vec<serde_json::Value> = active_filters
+        .iter()
+        .map(|(key, _, kind, label)| {
+            let mut parts: Vec<String> = Vec::new();
+            if let Some(query) = q.q.as_deref().filter(|s| !s.trim().is_empty()) {
+                parts.push(format!("q={}", urlencoding::encode(query)));
+            }
+            for (other_key, other_val, _, _) in &active_filters {
+                if other_key != key {
+                    parts.push(format!("{}={}", other_key, urlencoding::encode(other_val)));
+                }
+            }
+            // Ordering survives every filter removal.
+            if let Some(s) = q.sort.as_deref().filter(|s| !s.is_empty()) {
+                parts.push(format!("sort={}", urlencoding::encode(s)));
+            }
+            serde_json::json!({
+                "kind": kind,
+                "label": label,
+                "remove_url": format!("/catalog?{}", parts.join("&")),
+            })
+        })
+        .collect();
+    ctx.insert("filter_chips", &chips);
+
+    // Every active filter, as a query-string fragment for the pager.
+    //
+    // The prev/next links previously carried nothing but `page`, so paging a
+    // filtered catalogue silently dropped the filter and page 2 showed an
+    // unrelated set. Assembled here rather than in the template so there is one
+    // place that has to know the parameter names.
+    let mut params: Vec<String> = Vec::new();
+    if let Some(v) = q.q.as_deref().filter(|s| !s.trim().is_empty()) {
+        params.push(format!("&q={}", urlencoding::encode(v)));
+    }
+    if let Some(v) = q.product_type.as_deref().filter(|s| !s.is_empty()) {
+        params.push(format!("&type={}", urlencoding::encode(v)));
+    }
+    if let Some(v) = q.brand_id {
+        params.push(format!("&brand_id={v}"));
+    }
+    if let Some(v) = q.material_id {
+        params.push(format!("&material_id={v}"));
+    }
+    if let Some(v) = q.category_id.as_deref().filter(|s| !s.is_empty()) {
+        params.push(format!("&category_id={}", urlencoding::encode(v)));
+    }
+    if let Some(v) = q.sort.as_deref().filter(|s| !s.is_empty()) {
+        params.push(format!("&sort={}", urlencoding::encode(v)));
+    }
+    ctx.insert("filter_params", &params.join(""));
     ctx.insert(
         "can_submit_product",
         &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),

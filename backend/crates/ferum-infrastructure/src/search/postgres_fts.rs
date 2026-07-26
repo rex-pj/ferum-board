@@ -9,8 +9,13 @@ fn sanitize_headline(html: String) -> String {
         .to_string()
 }
 
-use ferum_application::ports::{SearchHit, SearchQuery, SearchResults, SearchService};
+use ferum_application::ports::{
+    ProductSearchSort, SearchHit, SearchKind, SearchQuery, SearchResults, SearchService,
+    ThreadSearchSort,
+};
 use ferum_application::shared::AppError;
+use ferum_domain::models::product::ProductType;
+use ferum_domain::repositories::product_repository::bayesian;
 
 pub struct PostgresFtsService {
     db: DatabaseConnection,
@@ -24,8 +29,8 @@ impl PostgresFtsService {
 
 #[derive(Debug, FromQueryResult)]
 struct FtsRow {
-    thread_id: Uuid,
-    thread_slug: String,
+    id: Uuid,
+    slug: String,
     title: String,
     excerpt: Option<String>,
 }
@@ -35,94 +40,338 @@ struct CountRow {
     count: i64,
 }
 
-#[async_trait]
-impl SearchService for PostgresFtsService {
-    async fn search(&self, query: SearchQuery) -> Result<SearchResults, AppError> {
-        if query.q.trim().is_empty() {
-            return Ok(SearchResults {
-                hits: vec![],
-                total: 0,
-            });
-        }
+/// A ready-to-execute pair of statements: the page of rows, and the size of the
+/// full match set. Built per kind so `search` stays a thin dispatcher.
+struct Plan {
+    data_sql: String,
+    count_sql: String,
+    /// Values for `count_sql`. `data_sql` takes these plus LIMIT and OFFSET.
+    count_values: Vec<sea_orm::Value>,
+    limit: i64,
+    offset: i64,
+}
 
-        // Build prefix-match tsquery: "hello world" → "hello:* & world:*"
-        let tsquery = query
-            .q
-            .trim()
-            .split_whitespace()
-            .map(|w| format!("{}:*", w))
-            .collect::<Vec<_>>()
-            .join(" & ");
+impl Plan {
+    fn data_stmt(&self) -> Statement {
+        let mut values = self.count_values.clone();
+        values.push(self.limit.into());
+        values.push(self.offset.into());
+        Statement::from_sql_and_values(DbBackend::Postgres, &self.data_sql, values)
+    }
 
-        let offset = (query.page.saturating_sub(1)) * query.per_page;
+    fn count_stmt(&self) -> Statement {
+        Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            &self.count_sql,
+            self.count_values.clone(),
+        )
+    }
+}
 
-        // $1 = tsquery string (reused for match, rank, headline)
-        // $2 = category_id filter (optional, appended below)
-        // last two params = LIMIT, OFFSET
-        let (cat_clause, mut values): (String, Vec<sea_orm::Value>) = if query.category_ids.is_empty() {
-            (String::new(), vec![tsquery.clone().into()])
-        } else {
-            let placeholders = query.category_ids
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("${}", i + 2))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let mut vals: Vec<sea_orm::Value> = vec![tsquery.clone().into()];
-            for id in &query.category_ids {
-                vals.push((*id).into());
-            }
-            (format!("AND t.category_id IN ({})", placeholders), vals)
-        };
+/// Builds a prefix-match tsquery: `sofa da` → `sofa:* & da:*`.
+///
+/// Terms are stripped of everything but alphanumerics and marks before they are
+/// interpolated, because `to_tsquery` parses its input as an expression — an
+/// unescaped `&`, `|`, `!` or `(` in user text is a syntax error at best and a
+/// query-shape injection at worst. `f_unaccent` is applied by Postgres on both
+/// sides, so a query typed without tone marks still matches an accented title.
+fn build_tsquery(raw: &str) -> Option<String> {
+    let terms: Vec<String> = raw
+        .split_whitespace()
+        .map(|w| {
+            w.chars()
+                .filter(|c| c.is_alphanumeric() || *c == '_')
+                .collect::<String>()
+        })
+        .filter(|w| !w.is_empty())
+        .map(|w| format!("{}:*", w))
+        .collect();
 
-        let limit_idx = values.len() + 1;
-        let offset_idx = values.len() + 2;
-        values.push((query.per_page as i64).into());
-        values.push((offset as i64).into());
+    if terms.is_empty() {
+        None
+    } else {
+        Some(terms.join(" & "))
+    }
+}
 
-        // Hide review threads whose product is still a draft (matches the public
-        // feed listings — a pending product's review is unlisted until approval).
-        let product_clause = " AND (t.product_id IS NULL OR EXISTS (SELECT 1 FROM products pr WHERE pr.id = t.product_id AND pr.status = 'published'))";
+/// Threads: title match, excluding deleted threads and reviews of products that
+/// are still drafts (mirrors the public feed — a pending product's review is
+/// unlisted until approval). Category visibility is enforced by the caller
+/// supplying the allowed set; an empty set means no hits at all.
+fn plan_threads(tsquery: &str, query: &SearchQuery) -> Option<Plan> {
+    if query.visible_category_ids.is_empty() {
+        return None;
+    }
 
-        let data_sql = format!(
+    let mut values: Vec<sea_orm::Value> = vec![tsquery.to_owned().into()];
+    let placeholders = query
+        .visible_category_ids
+        .iter()
+        .enumerate()
+        .map(|(i, _)| format!("${}", i + 2))
+        .collect::<Vec<_>>()
+        .join(", ");
+    for id in &query.visible_category_ids {
+        values.push((*id).into());
+    }
+
+    let where_sql = format!(
+        "WHERE to_tsvector('simple', f_unaccent(t.title)) @@ to_tsquery('simple', f_unaccent($1)) \
+           AND t.deleted_at IS NULL \
+           AND t.status != 'deleted'::thread_status \
+           AND t.category_id IN ({placeholders}) \
+           AND (t.product_id IS NULL OR EXISTS ( \
+                   SELECT 1 FROM products pr \
+                   WHERE pr.id = t.product_id AND pr.status = 'published'))"
+    );
+
+    let limit_idx = values.len() + 1;
+    let offset_idx = values.len() + 2;
+
+    // Every ordering ends with `created_at DESC` as a deterministic tiebreak, so
+    // paging is total: without it two equally-ranked (or equal reply_count)
+    // threads can swap between pages and the reader sees one twice.
+    let order_by = match query.thread_sort {
+        ThreadSearchSort::Relevance => "ts_rank(to_tsvector('simple', f_unaccent(t.title)), \
+             to_tsquery('simple', f_unaccent($1))) DESC, t.created_at DESC",
+        ThreadSearchSort::Newest => "t.created_at DESC",
+        ThreadSearchSort::MostReplies => "t.reply_count DESC, t.created_at DESC",
+    };
+
+    Some(Plan {
+        data_sql: format!(
             r#"
             SELECT
-                t.id         AS thread_id,
-                t.slug       AS thread_slug,
+                t.id   AS id,
+                t.slug AS slug,
                 t.title,
                 ts_headline(
                     'simple', t.title,
-                    to_tsquery('simple', $1),
+                    to_tsquery('simple', f_unaccent($1)),
                     'MaxFragments=1,MinWords=6,MaxWords=20'
-                )            AS excerpt
+                )      AS excerpt
             FROM threads t
-            WHERE to_tsvector('simple', t.title) @@ to_tsquery('simple', $1)
-              AND t.deleted_at IS NULL
-              AND t.status != 'deleted'::thread_status
-              {cat_clause}{product_clause}
-            ORDER BY ts_rank(to_tsvector('simple', t.title), to_tsquery('simple', $1)) DESC
+            {where_sql}
+            ORDER BY {order_by}
             LIMIT ${limit_idx} OFFSET ${offset_idx}
             "#
-        );
+        ),
+        count_sql: format!("SELECT COUNT(*)::BIGINT AS count FROM threads t {where_sql}"),
+        count_values: values,
+        limit: query.per_page as i64,
+        offset: ((query.page.saturating_sub(1)) * query.per_page) as i64,
+    })
+}
 
-        let count_sql = format!(
+fn product_type_str(t: ProductType) -> &'static str {
+    match t {
+        ProductType::Furniture => "furniture",
+        ProductType::Material => "material",
+        ProductType::Room => "room",
+    }
+}
+
+/// Brands whose name matches the query, as a subquery over `idx_brands_fts`.
+///
+/// A searcher types "Nhà Xinh" without knowing or caring that the brand lives in
+/// another table. This used to be handled by denormalising the brand name into
+/// `products.search_vector`, which meant a rename had to fan out across every
+/// product that brand owned; reaching the real table instead means there is
+/// nothing to keep in sync.
+const BRAND_MATCH_SUBQUERY: &str = "SELECT b2.id FROM brands b2 \
+     WHERE to_tsvector('simple', f_unaccent(b2.name)) @@ to_tsquery('simple', f_unaccent($1))";
+
+/// What a brand match adds to a product's relevance score.
+///
+/// Roughly what a single lexeme at weight B contributed back when the brand name
+/// was part of the vector, so the intended ordering survives the change: a hit
+/// on the product's own name still outranks a hit on its brand, and a brand-only
+/// hit still outranks nothing. Without a term of its own a brand-only match
+/// would score exactly 0 and the Relevance sort would order those hits by
+/// nothing at all.
+const BRAND_MATCH_RANK_BONUS: f32 = 0.25;
+
+/// The `ORDER BY` for a product result page.
+///
+/// Every ordering falls back to `ts_rank` and then `created_at`, so the sort is
+/// total: without a deterministic tiebreak, two products with the same rating
+/// can swap places between page 1 and page 2 and the reader sees one twice
+/// while never seeing the other.
+///
+/// `TopRated` uses the same Bayesian shrinkage as the catalogue
+/// (`ProductListFilter`'s `bayesian` module) rather than a raw average — one
+/// 5★ review must not outrank a 4.6★ backed by two hundred. The `CASE` keeps
+/// unrated products NULL so they sort last instead of inheriting the 3.5 prior
+/// and landing above products that genuinely scored below it.
+fn product_order_by(sort: ProductSearchSort, rank_expr: &str) -> String {
+    match sort {
+        ProductSearchSort::Relevance => format!("{rank_expr} DESC, p.created_at DESC"),
+        ProductSearchSort::Newest => format!("p.created_at DESC, {rank_expr} DESC"),
+        ProductSearchSort::MostReviewed => format!(
+            "prs.review_count DESC NULLS LAST, {rank_expr} DESC, p.created_at DESC"
+        ),
+        ProductSearchSort::TopRated => format!(
+            "CASE WHEN COALESCE(prs.review_count, 0) > 0 \
+             THEN (prs.avg_overall * prs.review_count + {mean} * {weight}) \
+                  / (prs.review_count + {weight}) \
+             END DESC NULLS LAST, \
+             prs.review_count DESC NULLS LAST, {rank_expr} DESC, p.created_at DESC",
+            mean = bayesian::PRIOR_MEAN,
+            weight = bayesian::PRIOR_WEIGHT,
+        ),
+    }
+}
+
+/// Products: weighted vector match over name / brand / style / origin /
+/// description, narrowed by the catalogue facets. Only published products are
+/// public; a submitter additionally sees their own drafts, matching
+/// `ProductListFilter::include_own`.
+fn plan_products(tsquery: &str, query: &SearchQuery) -> Plan {
+    let mut values: Vec<sea_orm::Value> = vec![tsquery.to_owned().into()];
+    let mut clauses: Vec<String> = Vec::new();
+
+    match query.viewer_id {
+        Some(viewer) => {
+            values.push(viewer.into());
+            clauses.push(format!(
+                "AND (p.status = 'published' OR p.created_by_id = ${})",
+                values.len()
+            ));
+        }
+        None => clauses.push("AND p.status = 'published'".to_string()),
+    }
+
+    if !query.in_category_ids.is_empty() {
+        let placeholders = query
+            .in_category_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("${}", values.len() + 1 + i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        for id in &query.in_category_ids {
+            values.push((*id).into());
+        }
+        // No `OR p.category_id IS NULL`: an unfiled product is not in the
+        // selected category, and quietly including it would mean the filter
+        // never actually excludes anything.
+        clauses.push(format!("AND p.category_id IN ({placeholders})"));
+    }
+
+    if let Some(t) = query.facets.product_type {
+        values.push(product_type_str(t).into());
+        clauses.push(format!("AND p.product_type = ${}::product_type", values.len()));
+    }
+    if let Some(brand_id) = query.facets.brand_id {
+        values.push(brand_id.into());
+        clauses.push(format!("AND p.brand_id = ${}", values.len()));
+    }
+    if let Some(material_id) = query.facets.material_id {
+        values.push(material_id.into());
+        clauses.push(format!(
+            "AND EXISTS (SELECT 1 FROM product_materials pm \
+                         WHERE pm.product_id = p.id AND pm.material_id = ${})",
+            values.len()
+        ));
+    }
+
+    // Two independently indexed conditions, ORed: the product's own vector, and
+    // "this product belongs to a brand whose name matches". The brand half is a
+    // semi-join rather than `OR b.name @@ q` over a join because an OR spanning
+    // two tables cannot use either index — Postgres would sequentially scan
+    // `products`. In this shape it can BitmapOr the GIN scan with a brand_id
+    // lookup. The brand name is not copied into the product's vector, so a brand
+    // rename takes effect on the next search with nothing to re-index.
+    let where_sql = format!(
+        "WHERE (p.search_vector @@ to_tsquery('simple', f_unaccent($1)) \
+                OR p.brand_id IN ({BRAND_MATCH_SUBQUERY})) {}",
+        clauses.join(" ")
+    );
+
+    // The rating rollup is joined for every sort, not just the rating-based
+    // ones: it is a 1:1 rollup so it cannot multiply rows, and branching the
+    // FROM clause on the sort would make the count and data queries diverge.
+    // `brands` is joined for ranking only — the WHERE clause above must stay
+    // free of it so `count_sql`, which has no joins, can share it.
+    let rank_expr = format!(
+        "(ts_rank(p.search_vector, to_tsquery('simple', f_unaccent($1))) \
+          + CASE WHEN to_tsvector('simple', f_unaccent(coalesce(b.name, ''))) \
+                      @@ to_tsquery('simple', f_unaccent($1)) \
+                 THEN {BRAND_MATCH_RANK_BONUS} ELSE 0 END)"
+    );
+    let order_by = product_order_by(query.facets.sort, &rank_expr);
+
+    let limit_idx = values.len() + 1;
+    let offset_idx = values.len() + 2;
+
+    Plan {
+        // The excerpt is the description, headlined — it is the only prose a
+        // product has. NULL when there is none; the card falls back to price
+        // and rating, which is what a product card leads with anyway.
+        data_sql: format!(
             r#"
-            SELECT COUNT(*)::BIGINT AS count
-            FROM threads t
-            WHERE to_tsvector('simple', t.title) @@ to_tsquery('simple', $1)
-              AND t.deleted_at IS NULL
-              AND t.status != 'deleted'::thread_status
-              {cat_clause}{product_clause}
+            SELECT
+                p.id   AS id,
+                p.slug AS slug,
+                p.name AS title,
+                ts_headline(
+                    'simple', coalesce(p.description_md, ''),
+                    to_tsquery('simple', f_unaccent($1)),
+                    'MaxFragments=1,MinWords=6,MaxWords=24'
+                )      AS excerpt
+            FROM products p
+            LEFT JOIN product_rating_stats prs ON prs.product_id = p.id
+            LEFT JOIN brands b ON b.id = p.brand_id
+            {where_sql}
+            ORDER BY {order_by}
+            LIMIT ${limit_idx} OFFSET ${offset_idx}
             "#
-        );
+        ),
+        count_sql: format!("SELECT COUNT(*)::BIGINT AS count FROM products p {where_sql}"),
+        count_values: values,
+        limit: query.per_page as i64,
+        offset: ((query.page.saturating_sub(1)) * query.per_page) as i64,
+    }
+}
 
-        // Run data + count queries concurrently
-        let data_stmt = Statement::from_sql_and_values(DbBackend::Postgres, &data_sql, values.clone());
-        let count_stmt = Statement::from_sql_and_values(DbBackend::Postgres, &count_sql, values[..values.len() - 2].to_vec());
+const EMPTY: SearchResults = SearchResults {
+    hits: Vec::new(),
+    total: 0,
+};
 
+#[async_trait]
+impl SearchService for PostgresFtsService {
+    async fn search(&self, query: SearchQuery) -> Result<SearchResults, AppError> {
+        let Some(tsquery) = build_tsquery(query.q.trim()) else {
+            return Ok(EMPTY);
+        };
+
+        let plan = match query.kind {
+            SearchKind::Thread => match plan_threads(&tsquery, &query) {
+                Some(p) => p,
+                None => return Ok(EMPTY),
+            },
+            SearchKind::Product => plan_products(&tsquery, &query),
+        };
+
+        if query.count_only {
+            let count_row = CountRow::find_by_statement(plan.count_stmt())
+                .one(&self.db)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, q = %query.q, "fts_count_failed");
+                    AppError::from(e)
+                })?;
+            return Ok(SearchResults {
+                hits: vec![],
+                total: count_row.and_then(|r| u64::try_from(r.count).ok()).unwrap_or(0),
+            });
+        }
+
+        // Rows and total run concurrently — neither depends on the other.
         let (rows, count_row) = tokio::try_join!(
-            FtsRow::find_by_statement(data_stmt).all(&self.db),
-            CountRow::find_by_statement(count_stmt).one(&self.db),
+            FtsRow::find_by_statement(plan.data_stmt()).all(&self.db),
+            CountRow::find_by_statement(plan.count_stmt()).one(&self.db),
         )
         .map_err(|e| {
             tracing::error!(error = %e, q = %query.q, "fts_search_failed");
@@ -134,11 +383,16 @@ impl SearchService for PostgresFtsService {
         let hits = rows
             .into_iter()
             .map(|r| SearchHit {
-                thread_id: r.thread_id,
-                thread_slug: r.thread_slug,
+                kind: query.kind,
+                id: r.id,
+                slug: r.slug,
                 title: r.title,
-                // ts_headline wraps matched terms in <b>; strip everything else to prevent XSS.
-                excerpt: r.excerpt.map(sanitize_headline),
+                // ts_headline wraps matched terms in <b>; strip everything else
+                // to prevent XSS, and drop an excerpt that carries no text.
+                excerpt: r
+                    .excerpt
+                    .map(sanitize_headline)
+                    .filter(|s| !s.trim().is_empty()),
             })
             .collect();
 

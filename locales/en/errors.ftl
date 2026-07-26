@@ -73,6 +73,7 @@ error-invalid-view-policy = That's not a valid visibility setting.
 error-invalid-post-policy = That's not a valid posting setting.
 error-invalid-reaction-kind = That's not a reaction you can use.
 error-invalid-status = That's not a valid status.
+error-invalid-smtp-port = The SMTP port must be a whole number between 1 and 65535.
 
 ## ─── Reports & moderation ────────────────────────────────────────────────────
 
@@ -111,6 +112,14 @@ error-logo-too-large = The logo must be { $limit_mb } MB or smaller.
 error-logo-invalid-type = The logo must be a JPEG, PNG, WebP, or GIF image.
 error-favicon-too-large = The favicon must be { $limit_kb } KB or smaller.
 error-favicon-invalid-type = The favicon must be an ICO, PNG, GIF, or JPEG image. SVG isn't allowed.
+error-hero-image-too-large = Each homepage hero image must be { $limit_mb } MB or smaller.
+error-hero-image-invalid-type = A hero image must be a JPEG, PNG, WebP, or GIF image.
+error-hero-tiles-full = The homepage hero holds { $limit } images. Remove one before adding another.
+error-hero-image-unknown = That image isn't one of the uploaded hero images. Reload the page and try again.
+error-hero-image-duplicate = The same image can't be used for two hero tiles.
+error-hero-link-invalid = A hero link must start with / or with http:// or https://.
+error-hero-link-too-long = A hero link must be { $limit } characters or fewer.
+error-hero-caption-too-long = A hero caption must be { $limit } characters or fewer.
 
 ## ─── Preferences ─────────────────────────────────────────────────────────────
 
@@ -132,8 +141,11 @@ error-media-capability-not-granted = This plugin isn't allowed to upload media.
 error-rpc-action-not-granted = This plugin action isn't available.
 error-sql-not-allowed = This database operation isn't allowed.
 error-multiple-sql-statements = Only one database statement can run at a time.
+error-sql-quoted-identifiers-not-allowed = Quoted identifiers aren't allowed in plugin queries. Refer to your own tables by name, without quotes.
+error-payload-too-large = That request was too large. If you're uploading a file, use the upload button rather than pasting the file's contents.
 error-archive-unsafe-path = This package contains an unsafe file path and was rejected.
 error-package-too-large = That package is too large. The limit is { $limit_mb } MB.
+error-seed-data-unavailable = This build was compiled without the example data set, so it cannot be created. Finish setup with the box unticked — the forum works exactly the same, just without demo content.
 error-invalid-granted-capabilities = The plugin capability settings aren't valid.
 error-plugin-manifest-missing-meta = plugin.toml is missing its [meta] section.
 error-plugin-manifest-missing-id = plugin.toml is missing meta.id.

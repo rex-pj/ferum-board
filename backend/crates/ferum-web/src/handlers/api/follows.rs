@@ -61,8 +61,7 @@ pub async fn list_followers(
     Path(user_id): Path<Uuid>,
     Query(query): Query<FollowListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let page = query.page.unwrap_or(1).max(1);
-    let per_page = query.per_page.unwrap_or(20).clamp(1, 50);
+    let (page, per_page) = crate::utils::paginate(query.page, query.per_page, 20, 50);
 
     let (pairs, total) = state.follow.list_followers(user_id, page, per_page).await?;
     let items: Vec<FollowResponse> = pairs
@@ -78,8 +77,7 @@ pub async fn list_following(
     Path(user_id): Path<Uuid>,
     Query(query): Query<FollowListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let page = query.page.unwrap_or(1).max(1);
-    let per_page = query.per_page.unwrap_or(20).clamp(1, 50);
+    let (page, per_page) = crate::utils::paginate(query.page, query.per_page, 20, 50);
 
     let (pairs, total) = state.follow.list_following(user_id, page, per_page).await?;
     let items: Vec<FollowResponse> = pairs

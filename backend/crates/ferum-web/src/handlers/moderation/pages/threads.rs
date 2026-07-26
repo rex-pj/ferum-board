@@ -50,6 +50,8 @@ pub async fn threads(
                 is_review: t.category_slug == ferum_application::usecases::category_usecase::REVIEWS_CATEGORY_SLUG,
                 review_overall: None,
                 review_product_image: None,
+                review_product_name: None,
+                review_product_slug: None,
             category_name: t.category_name.clone().unwrap_or_default(),
             reply_count: t.reply_count,
             view_count: t.view_count,

@@ -78,33 +78,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        manager.exec_stmt(
-            Query::insert()
-                .into_table(Themes::Table)
-                .columns([
-                    Themes::Slug,
-                    Themes::Name,
-                    Themes::Author,
-                    Themes::Version,
-                    Themes::Description,
-                    Themes::ParentSlug,
-                    Themes::IsSystem,
-                    Themes::IsActive,
-                ])
-                .values_panic([
-                    "default".into(),
-                    "Default".into(),
-                    "Ferum Board".into(),
-                    "1.0.0".into(),
-                    "Built-in default theme".into(),
-                    "default".into(),
-                    true.into(),
-                    true.into(),
-                ])
-                .on_conflict(OnConflict::column(Themes::Slug).do_nothing().to_owned())
-                .to_owned(),
-        ).await?;
-
+        // The built-in `default` theme row is seeded by PgSystemSeedService.
         Ok(())
     }
 

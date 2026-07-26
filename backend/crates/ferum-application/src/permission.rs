@@ -336,8 +336,4 @@ impl PermissionChecker {
             Ok(())
         }
     }
-
-    pub fn require_auth(user: Option<&AuthUser>) -> Result<&AuthUser, AppError> {
-        user.ok_or(AppError::Unauthorized)
-    }
 }

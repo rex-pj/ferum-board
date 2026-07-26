@@ -87,6 +87,7 @@ error-best-answer-wrong-thread = Câu trả lời hay nhất phải là một b�
 error-post-not-pending-approval = Bài viết này không đang chờ duyệt.
 error-invalid-reaction-kind = Đây không phải là cảm xúc bạn có thể dùng.
 error-invalid-status = Đây không phải là trạng thái hợp lệ.
+error-invalid-smtp-port = Cổng SMTP phải là số nguyên từ 1 đến 65535.
 
 ## ─── Báo cáo ─────────────────────────────────────────────────────────────────
 
@@ -132,6 +133,14 @@ error-logo-too-large = Logo phải nhỏ hơn hoặc bằng { $limit_mb } MB.
 error-logo-invalid-type = Logo phải là ảnh JPEG, PNG, WebP hoặc GIF.
 error-favicon-too-large = Favicon phải nhỏ hơn hoặc bằng { $limit_kb } KB.
 error-favicon-invalid-type = Favicon phải là ảnh ICO, PNG, GIF hoặc JPEG. Không chấp nhận SVG.
+error-hero-image-too-large = Mỗi ảnh hero trang chủ phải nhỏ hơn hoặc bằng { $limit_mb } MB.
+error-hero-image-invalid-type = Ảnh hero phải là ảnh JPEG, PNG, WebP hoặc GIF.
+error-hero-tiles-full = Hero trang chủ chỉ chứa { $limit } ảnh. Hãy xoá bớt một ảnh trước khi thêm.
+error-hero-image-unknown = Ảnh này không nằm trong số ảnh hero đã tải lên. Hãy tải lại trang và thử lại.
+error-hero-image-duplicate = Không thể dùng cùng một ảnh cho hai ô hero.
+error-hero-link-invalid = Liên kết hero phải bắt đầu bằng / hoặc http:// hoặc https://.
+error-hero-link-too-long = Liên kết hero phải có tối đa { $limit } ký tự.
+error-hero-caption-too-long = Chú thích hero phải có tối đa { $limit } ký tự.
 
 ## ─── Hồ sơ & tùy chọn ────────────────────────────────────────────────────────
 
@@ -160,12 +169,15 @@ error-media-capability-not-granted = Plugin này không được phép tải ả
 error-rpc-action-not-granted = Thao tác này của plugin không khả dụng.
 error-sql-not-allowed = Thao tác cơ sở dữ liệu này không được phép.
 error-multiple-sql-statements = Mỗi lần chỉ được chạy một câu lệnh cơ sở dữ liệu.
+error-sql-quoted-identifiers-not-allowed = Truy vấn của plugin không được dùng định danh trong dấu nháy kép. Hãy gọi thẳng tên bảng của plugin, không kèm dấu nháy.
+error-payload-too-large = Yêu cầu này quá lớn. Nếu bạn đang tải tệp lên, hãy dùng nút tải lên thay vì dán trực tiếp nội dung tệp.
 error-archive-unsafe-path = Gói này chứa đường dẫn tệp không an toàn và đã bị từ chối.
 error-archive-path-traversal = Gói này chứa mục vượt cấp thư mục và đã bị từ chối.
 error-archive-entry-escapes-dir =
     Gói này cố ghi ra ngoài thư mục của chính nó và đã bị từ chối.
 error-archive-missing-manifest = Gói này không có plugin.toml ở thư mục gốc.
 error-package-too-large = Gói này quá lớn. Giới hạn là { $limit_mb } MB.
+error-seed-data-unavailable = Bản build này không kèm bộ dữ liệu mẫu nên không thể tạo. Hãy bỏ chọn ô đó rồi hoàn tất cài đặt — diễn đàn vẫn hoạt động y hệt, chỉ là không có nội dung demo.
 error-invalid-granted-capabilities = Thiết lập quyền của plugin không hợp lệ.
 error-plugin-manifest-missing-meta = plugin.toml thiếu mục [meta].
 error-plugin-manifest-missing-id = plugin.toml thiếu meta.id.

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use uuid::Uuid;
@@ -12,11 +13,15 @@ use crate::validators::validate_image_magic;
 use ferum_domain::models::brand::{Brand, NewBrand, UpdateBrand};
 use ferum_domain::models::material::{Material, NewMaterial, UpdateMaterial};
 use ferum_domain::models::product::{NewProduct, Product, ProductStatus};
+use ferum_domain::models::product_category::{
+    NewProductCategory, ProductCategory, UpdateProductCategory,
+};
 use ferum_domain::models::product_media::{NewProductMedia, ProductMedia};
 use ferum_domain::repositories::brand_repository::BrandRepository;
 use ferum_domain::repositories::material_repository::MaterialRepository;
 use ferum_domain::repositories::product_repository::{
-    ProductDependents, ProductListFilter, ProductListItem, ProductRepository, UpdateProduct,
+    AutoAssignReport, ProductCategoryRepository, ProductDependents, ProductListFilter,
+    ProductListItem, ProductRepository, ReviewedProduct, UpdateProduct,
 };
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::AuthUser;
@@ -29,8 +34,33 @@ const MAX_PRODUCT_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 /// crowd-sourced submission path, where any Basic member can attach photos.
 const MAX_PRODUCT_MEDIA: usize = 12;
 
+/// Fold keywords the way the matcher's SQL does: trimmed, lowercased, blanks
+/// dropped, duplicates removed.
+///
+/// The SQL compares against `lower(f_unaccent(name))`, so a keyword stored as
+/// "Ghế" could never match anything — it would sit in the table looking correct
+/// and silently do nothing. Normalising on write means what an admin sees is
+/// what the matcher uses. Accents are left for Postgres to fold, so the stored
+/// value stays readable.
+fn normalise_keyword_list(keywords: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::with_capacity(keywords.len());
+    for k in keywords {
+        let k = k.trim().to_lowercase();
+        if !k.is_empty() && !out.contains(&k) {
+            out.push(k);
+        }
+    }
+    out
+}
+
+fn normalise_keywords(mut category: NewProductCategory) -> NewProductCategory {
+    category.match_keywords = normalise_keyword_list(category.match_keywords);
+    category
+}
+
 pub struct ProductUseCase {
     pub products: Arc<dyn ProductRepository>,
+    pub categories: Arc<dyn ProductCategoryRepository>,
     pub materials: Arc<dyn MaterialRepository>,
     pub brands: Arc<dyn BrandRepository>,
     pub stored_files: Arc<dyn StoredFileRepository>,
@@ -40,12 +70,87 @@ pub struct ProductUseCase {
 impl ProductUseCase {
     pub fn new(
         products: Arc<dyn ProductRepository>,
+        categories: Arc<dyn ProductCategoryRepository>,
         materials: Arc<dyn MaterialRepository>,
         brands: Arc<dyn BrandRepository>,
         stored_files: Arc<dyn StoredFileRepository>,
         jobs: Arc<dyn JobQueue>,
     ) -> Self {
-        Self { products, materials, brands, stored_files, jobs }
+        Self { products, categories, materials, brands, stored_files, jobs }
+    }
+
+    // ─── Product categories ───────────────────────────────────────────────────
+    //
+    // The catalogue's own taxonomy (Sofa, Ghế, Bàn …), distinct from the forum's
+    // discussion categories. Reads are public — the tree is a browse control on
+    // every catalogue page — while every write is a curator action.
+
+    pub async fn list_categories(&self) -> Result<Vec<ProductCategory>, AppError> {
+        self.categories.list().await
+    }
+
+    /// Categories with how many products sit under each, plus the unfiled count
+    /// under `None`. Admin-only: the unfiled number is a work queue, not
+    /// something a reader needs.
+    pub async fn category_counts(
+        &self,
+        actor: &AuthUser,
+    ) -> Result<(Vec<ProductCategory>, HashMap<Option<Uuid>, u64>), AppError> {
+        PermissionChecker::can_manage_products(actor)?;
+        let (categories, counts) =
+            tokio::try_join!(self.categories.list(), self.categories.product_counts())?;
+        Ok((categories, counts))
+    }
+
+    pub async fn create_category(
+        &self,
+        actor: &AuthUser,
+        category: NewProductCategory,
+    ) -> Result<ProductCategory, AppError> {
+        PermissionChecker::can_manage_products(actor)?;
+        self.categories.create(normalise_keywords(category)).await
+    }
+
+    pub async fn update_category(
+        &self,
+        actor: &AuthUser,
+        id: Uuid,
+        mut patch: UpdateProductCategory,
+    ) -> Result<ProductCategory, AppError> {
+        PermissionChecker::can_manage_products(actor)?;
+
+        // A category cannot be its own parent; the tree is two levels and a
+        // cycle would make any recursive walk of it hang.
+        if patch.parent_id == Some(Some(id)) {
+            return Err(AppError::UnprocessableEntity(
+                "category_cannot_be_its_own_parent".into(),
+            ));
+        }
+        if let Some(keywords) = patch.match_keywords.take() {
+            patch.match_keywords = Some(normalise_keyword_list(keywords));
+        }
+        self.categories.update(id, patch).await
+    }
+
+    pub async fn delete_category(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
+        PermissionChecker::can_manage_products(actor)?;
+        self.categories.delete(id).await
+    }
+
+    /// Files every unfiled product the keyword matcher can identify.
+    ///
+    /// `dry_run` reports the blast radius without writing — the admin UI shows
+    /// that first, because a bulk write over the whole catalogue is not
+    /// something to trigger blind. Products no keyword matches are left unfiled
+    /// rather than swept into a catch-all: an honest blank beats a wrong label,
+    /// and the leftover count is the size of the manual queue.
+    pub async fn auto_assign_categories(
+        &self,
+        actor: &AuthUser,
+        dry_run: bool,
+    ) -> Result<AutoAssignReport, AppError> {
+        PermissionChecker::can_manage_products(actor)?;
+        self.categories.auto_assign_categories(dry_run).await
     }
 
     // ─── Materials ────────────────────────────────────────────────────────────
@@ -157,13 +262,14 @@ impl ProductUseCase {
         self.products.list_media(product_id).await
     }
 
-    /// Batch: `review_thread_id → product cover image key` (published products
-    /// only) — a thumbnail fallback for review cards. No N+1.
-    pub async fn review_thumbnails(
+    /// Batch: `review_thread_id → the product it reviews` (published products
+    /// only) — gives review cards a thumbnail fallback and lets them name and
+    /// link their subject. No N+1.
+    pub async fn reviewed_products(
         &self,
         thread_ids: &[Uuid],
-    ) -> Result<std::collections::HashMap<Uuid, String>, AppError> {
-        self.products.primary_image_by_threads(thread_ids).await
+    ) -> Result<std::collections::HashMap<Uuid, ReviewedProduct>, AppError> {
+        self.products.reviewed_product_by_threads(thread_ids).await
     }
 
     pub async fn list_material_ids(&self, product_id: Uuid) -> Result<Vec<Uuid>, AppError> {

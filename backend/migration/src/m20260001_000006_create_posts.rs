@@ -157,9 +157,11 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
+        // Unaccented for the same reason as the thread index: a post-content
+        // search must fold diacritics on both sides or match nothing.
         conn.execute_unprepared(
             "CREATE INDEX idx_posts_fts ON posts \
-             USING GIN(to_tsvector('simple', content_md))",
+             USING GIN(to_tsvector('simple', f_unaccent(content_md)))",
         )
         .await?;
 

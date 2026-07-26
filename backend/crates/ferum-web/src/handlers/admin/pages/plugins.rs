@@ -6,9 +6,10 @@ use tera::Context;
 
 use super::super::{render_admin, require_admin, site_ctx};
 use crate::app_state::AppState;
-use crate::handlers::pages::{PageError, require_page_auth};
+use crate::handlers::pages::{client_facing_error, PageError, require_page_auth};
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CurrentUserCtx, PluginDetailCtx, PluginLogCtx};
+use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
 use ferum_infrastructure::plugins::package_extractor;
 
 #[derive(Serialize)]
@@ -64,19 +65,35 @@ pub async fn upload_plugin(
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
 
+    // Everything that can go wrong from here to the manifest is the *admin's*
+    // file being wrong, not the server failing: a zip that will not open, a
+    // theme archive picked instead of a plugin, a plugin.toml missing a field.
+    // Each of those already has a sentence in the error catalog, so they answer
+    // 400 with that sentence rather than 500 with the generic error page — which
+    // is what an admin got when they uploaded a `.zip` theme here and were told
+    // only "Internal Server Error".
+    let locale = &req_locale.locale;
+
     let mut pkg_bytes: Option<bytes::Bytes> = None;
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| PageError::Internal(anyhow::anyhow!("Multipart error: {}", e)))?
+        .map_err(|e| PageError::BadRequest(format!("Malformed upload: {e}")))?
     {
         if field.name() == Some("file") {
             let data = field
                 .bytes()
                 .await
-                .map_err(|e| PageError::Internal(anyhow::anyhow!("Read error: {}", e)))?;
-            if data.len() > 50 * 1024 * 1024 {
-                return Err(PageError::Internal(anyhow::anyhow!("Package exceeds 50 MB limit")));
+                .map_err(|e| PageError::BadRequest(format!("Upload could not be read: {e}")))?;
+            if data.len() > MAX_PLUGIN_PACKAGE_BYTES {
+                return Err(client_facing_error(
+                    &state,
+                    locale,
+                    ferum_application::shared::AppError::invalid_with(
+                        "package_too_large",
+                        [("limit_mb", (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into())],
+                    ),
+                ));
             }
             pkg_bytes = Some(data);
             break;
@@ -84,21 +101,21 @@ pub async fn upload_plugin(
     }
 
     let pkg_bytes = pkg_bytes
-        .ok_or_else(|| PageError::Internal(anyhow::anyhow!("No file field in upload")))?;
+        .ok_or_else(|| PageError::BadRequest("No file was included in the upload.".into()))?;
 
     let plugins_dir = std::path::PathBuf::from(&state.plugins_dir);
     let tmp_slug = format!("__tmp_review_{}", uuid::Uuid::new_v4().simple());
     let extracted = ferum_infrastructure::plugins::package_extractor::extract(
         &pkg_bytes, &plugins_dir, &tmp_slug,
     )
-    .map_err(|e| PageError::Internal(anyhow::anyhow!("Extract failed: {:?}", e)))?;
+    .map_err(|e| client_facing_error(&state, locale, e))?;
 
     let manifest = ferum_infrastructure::plugins::manifest_loader::load_from_dir(&extracted)
         .map_err(|e| {
             let _ = ferum_infrastructure::plugins::package_extractor::remove_plugin_dir(
                 &extracted.to_string_lossy(),
             );
-            PageError::Internal(anyhow::anyhow!("Manifest parse failed: {:?}", e))
+            client_facing_error(&state, locale, e)
         })?;
 
     let _ = ferum_infrastructure::plugins::package_extractor::remove_plugin_dir(
@@ -189,32 +206,44 @@ pub async fn upload_plugin(
 pub async fn install_plugin(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
 
+    let locale = &req_locale.locale;
     let mut pkg_bytes: Option<bytes::Bytes> = None;
     let mut granted_capabilities = serde_json::json!({});
 
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| PageError::Internal(anyhow::anyhow!("Multipart error: {}", e)))?
+        .map_err(|e| PageError::BadRequest(format!("Malformed upload: {e}")))?
     {
         match field.name() {
             Some("file") => {
-                let data = field
-                    .bytes()
-                    .await
-                    .map_err(|e| PageError::Internal(anyhow::anyhow!("Read error: {}", e)))?;
+                let data = field.bytes().await.map_err(|e| {
+                    PageError::BadRequest(format!("Upload could not be read: {e}"))
+                })?;
+                // The review step enforces this too, but install is reachable on
+                // its own (the form posts directly), so it cannot rely on that.
+                if data.len() > MAX_PLUGIN_PACKAGE_BYTES {
+                    return Err(client_facing_error(
+                        &state,
+                        locale,
+                        ferum_application::shared::AppError::invalid_with(
+                            "package_too_large",
+                            [("limit_mb", (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into())],
+                        ),
+                    ));
+                }
                 pkg_bytes = Some(data);
             }
             Some("granted_capabilities") => {
-                let text = field
-                    .text()
-                    .await
-                    .map_err(|e| PageError::Internal(anyhow::anyhow!("Read error: {}", e)))?;
+                let text = field.text().await.map_err(|e| {
+                    PageError::BadRequest(format!("Upload could not be read: {e}"))
+                })?;
                 granted_capabilities =
                     serde_json::from_str(&text).unwrap_or(serde_json::json!({}));
             }
@@ -222,8 +251,8 @@ pub async fn install_plugin(
         }
     }
 
-    let pkg_bytes =
-        pkg_bytes.ok_or_else(|| PageError::Internal(anyhow::anyhow!("No file field")))?;
+    let pkg_bytes = pkg_bytes
+        .ok_or_else(|| PageError::BadRequest("No file was included in the upload.".into()))?;
 
     let plugins_dir = std::path::PathBuf::from(&state.plugins_dir);
 
@@ -232,12 +261,16 @@ pub async fn install_plugin(
         let path = ferum_infrastructure::plugins::package_extractor::extract(
             &pkg_bytes, &plugins_dir, &tmp,
         )
-        .map_err(|e| PageError::Internal(anyhow::anyhow!("{:?}", e)))?;
-        let m = ferum_infrastructure::plugins::manifest_loader::load_from_dir(&path)
-            .map_err(|e| PageError::Internal(anyhow::anyhow!("{:?}", e)))?;
-        let _ = ferum_infrastructure::plugins::package_extractor::remove_plugin_dir(
-            &path.to_string_lossy(),
-        );
+        .map_err(|e| client_facing_error(&state, locale, e))?;
+        // Remove the scratch copy on the failure path too: a manifest that will
+        // not parse used to leave `__tmp_install_*` behind on every retry.
+        let m = ferum_infrastructure::plugins::manifest_loader::load_from_dir(&path).map_err(
+            |e| {
+                let _ = package_extractor::remove_plugin_dir(&path.to_string_lossy());
+                client_facing_error(&state, locale, e)
+            },
+        )?;
+        let _ = package_extractor::remove_plugin_dir(&path.to_string_lossy());
         m
     };
 
@@ -246,7 +279,7 @@ pub async fn install_plugin(
         &plugins_dir,
         &manifest.id,
     )
-    .map_err(|e| PageError::Internal(anyhow::anyhow!("{:?}", e)))?;
+    .map_err(|e| client_facing_error(&state, locale, e))?;
 
     let plugin_id = manifest.id.clone();
     state
@@ -264,7 +297,7 @@ pub async fn install_plugin(
         .await
         .map_err(|e| {
             let _ = package_extractor::remove_plugin_dir(&install_path.to_string_lossy());
-            PageError::Internal(anyhow::anyhow!("{:?}", e))
+            client_facing_error(&state, locale, e)
         })?;
 
     Ok(axum::response::Redirect::to(&format!(
@@ -286,27 +319,16 @@ pub async fn plugins(
     let plugins_ctx: Vec<PluginRowCtx> = plugins
         .into_iter()
         .map(|p| {
-            use ferum_domain::models::plugin::{PluginStatus, PluginTier};
+            // `as_str()` on both, never a local match: admin/plugins.html compares
+            // against the lowercase wire values, as do the detail page and the JSON
+            // responses. A TitleCase tier here silently loses the badge.
             PluginRowCtx {
                 id: p.id.to_string(),
                 slug: p.slug.clone(),
                 name: p.name.clone(),
                 version: p.version.clone(),
-                tier: match p.tier {
-                    PluginTier::Manifest => "Manifest",
-                    PluginTier::Script => "Script",
-                    PluginTier::Service => "Service",
-                }
-                .to_string(),
-                status: match p.status {
-                    PluginStatus::Installing => "installing",
-                    PluginStatus::Active => "active",
-                    PluginStatus::Inactive => "inactive",
-                    PluginStatus::Error => "error",
-                    PluginStatus::Disabled => "disabled",
-                    PluginStatus::Uninstalling => "uninstalling",
-                }
-                .to_string(),
+                tier: p.tier.as_str().to_string(),
+                status: p.status.as_str().to_string(),
             }
         })
         .collect();

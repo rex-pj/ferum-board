@@ -18,15 +18,26 @@ use ferum_domain::{AppError, AuthUser};
 use ferum_test_support::fixtures::{ids, make_product, AuthUserBuilder};
 use ferum_test_support::mocks::{
     brand_repository::MockBrandRepository, job_queue::MockJobQueue,
-    material_repository::MockMaterialRepository, product_repository::MockProductRepository,
+    material_repository::MockMaterialRepository,
+    product_category_repository::{MockProductCategoryRepository, NoopProductCategoryRepository},
+    product_repository::MockProductRepository,
     stored_file_repository::NoopStoredFileRepository,
 };
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
 fn build(products: MockProductRepository) -> ProductUseCase {
+    build_with_categories(products, NoopProductCategoryRepository)
+}
+
+fn build_with_categories(
+    products: MockProductRepository,
+    categories: impl ferum_domain::repositories::product_repository::ProductCategoryRepository
+        + 'static,
+) -> ProductUseCase {
     ProductUseCase::new(
         Arc::new(products),
+        Arc::new(categories),
         Arc::new(MockMaterialRepository::new()),
         Arc::new(MockBrandRepository::new()),
         Arc::new(NoopStoredFileRepository),

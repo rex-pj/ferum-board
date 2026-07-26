@@ -139,6 +139,99 @@
         </div>
       </div>
 
+      {# ── Homepage hero ─────────────────────────────────────────────
+         Curated photography for the homepage masthead. Only themes that render a
+         hero mosaic use it (the bundled ferum-review theme does); on a theme that
+         does not, the setting is simply inert rather than broken.
+
+         No `cfg-` prefix on these inputs, deliberately: saveSettings() sweeps up
+         every [id^="cfg-"] field on the page into the generic config PUT, and this
+         list must not travel that route — its images are reference-counted, so it
+         is written only through its own endpoints. #}
+      <div class="col-12">
+        <div class="card" x-data="heroTilesPanel()">
+          <div class="card-header fw-semibold d-flex align-items-center justify-content-between">
+            <span>{{ t(k="adm-homepage-hero") }}</span>
+            <span class="text-muted small" x-text="tiles.length + ' / ' + max"></span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted small">{{ t(k="adm-homepage-hero-help") }}</p>
+
+            <div class="alert alert-danger py-2 px-3 small" x-show="error" x-text="error" style="display:none"></div>
+            <div class="alert alert-success py-2 px-3 small" x-show="saved" style="display:none">
+              {{ t(k="adm-hero-saved") }}
+            </div>
+
+            <div class="text-muted small" x-show="loading">
+              <i class="fa-solid fa-spinner fa-spin me-1"></i>{{ t(k="adm-loading") }}
+            </div>
+
+            <div class="text-muted small border rounded p-3"
+                 x-show="!loading && tiles.length === 0" style="display:none">
+              {{ t(k="adm-hero-empty") }}
+            </div>
+
+            <template x-for="(tile, i) in tiles" :key="tile.image_url">
+              <div class="d-flex gap-3 align-items-start border rounded p-2 mb-2">
+                <img :src="tile.image_url" alt="" class="rounded flex-shrink-0"
+                     style="width:96px;height:72px;object-fit:cover">
+                <div class="flex-grow-1 min-width-0">
+                  <div class="row g-2">
+                    <div class="col-md-6">
+                      <label class="form-label small mb-1">{{ t(k="adm-hero-caption") }}</label>
+                      <input type="text" class="form-control form-control-sm"
+                             maxlength="120" x-model="tile.caption"
+                             :placeholder="'{{ t(k='adm-hero-caption-placeholder') }}'">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small mb-1">{{ t(k="adm-hero-link") }}</label>
+                      <input type="text" class="form-control form-control-sm"
+                             x-model="tile.link" placeholder="/catalog/oak-floor">
+                    </div>
+                  </div>
+                </div>
+                <div class="d-flex flex-column gap-1 flex-shrink-0">
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          :disabled="i === 0 || busy" @click="move(i, -1)"
+                          :aria-label="'{{ t(k='adm-move-up') }}'">
+                    <i class="fa-solid fa-arrow-up"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          :disabled="i === tiles.length - 1 || busy" @click="move(i, 1)"
+                          :aria-label="'{{ t(k='adm-move-down') }}'">
+                    <i class="fa-solid fa-arrow-down"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-danger"
+                          :disabled="busy" @click="removeTile(i)"
+                          :aria-label="'{{ t(k='adm-remove') }}'">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <div class="d-flex gap-2 align-items-center flex-wrap mt-3">
+              <label class="btn btn-sm btn-outline-secondary mb-0" for="hero-file-input"
+                     :class="(tiles.length >= max || busy) ? 'disabled' : ''">
+                <i class="fa-solid fa-arrow-up-from-bracket me-1"></i>{{ t(k="adm-hero-add-image") }}
+              </label>
+              <input type="file" id="hero-file-input" accept="image/*" class="d-none"
+                     :disabled="tiles.length >= max || busy" @change="addImage($event.target)">
+              <button type="button" class="btn btn-sm btn-primary"
+                      :disabled="busy" @click="save()">
+                {{ t(k="adm-hero-save") }}
+              </button>
+              <span class="text-muted small" x-show="busy" style="display:none">
+                <i class="fa-solid fa-spinner fa-spin"></i>
+              </span>
+            </div>
+            <div class="text-muted mt-2" style="font-size:.72rem">
+              {{ t(k="adm-hero-formats") }}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {# ── Site Identity ─────────────────────────────────────────── #}
       <div class="col-12">
         <div class="card">

@@ -2,14 +2,14 @@ use sea_orm_migration::prelude::*;
 
 use crate::enums::{product_status::ProductStatusEnum, product_type::ProductTypeEnum};
 use crate::m20260001_000002_create_users::Users;
-use crate::m20260001_000004_create_categories::Categories;
 use crate::m20260001_000022_create_brands::Brands;
+use crate::m20260001_000024_create_product_categories::ProductCategories;
 
 pub struct Migration;
 
 impl MigrationName for Migration {
     fn name(&self) -> &str {
-        "m20260001_000024_create_products"
+        "m20260001_000025_create_products"
     }
 }
 
@@ -71,6 +71,11 @@ impl MigrationTrait for Migration {
                             .extra("DEFAULT 'draft'"),
                     )
                     .col(ColumnDef::new(Products::BrandId).uuid().null())
+                    // The *catalogue* taxonomy (Sofa, Ghế, Bàn…), not the
+                    // forum's tree of discussion topics. No forum category is a
+                    // sensible home for a sofa, so pointing this at `categories`
+                    // guaranteed the column stayed NULL and every filter built
+                    // on it returned nothing.
                     .col(ColumnDef::new(Products::CategoryId).uuid().null())
                     .col(ColumnDef::new(Products::Style).text().null())
                     .col(ColumnDef::new(Products::PriceMin).integer().null())
@@ -111,9 +116,9 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_products_category_id")
+                            .name("fk_products_product_category")
                             .from(Products::Table, Products::CategoryId)
-                            .to(Categories::Table, Categories::Id)
+                            .to(ProductCategories::Table, ProductCategories::Id)
                             .on_delete(ForeignKeyAction::SetNull),
                     )
                     .foreign_key(

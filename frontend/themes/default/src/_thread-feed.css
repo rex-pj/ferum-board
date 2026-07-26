@@ -239,3 +239,343 @@
 .fr-post-op {
   border-left: 3px solid var(--ferum-primary) !important;
 }
+
+/* ── Search page ─────────────────────────────────────────────────
+   Search results reuse .fr-feed / .fr-thread-row, so their styling lives with
+   the feed; these are the page-specific bits (the search field, the quiet filter
+   row, and the removable active-category chip). */
+.fr-search-head { margin-bottom: 1.5rem; }
+
+/* Field + trailing submit button, mirroring the masthead search (.fr-hero-search):
+   input and button are separate, with a gap, so the two search surfaces on the
+   site read as one idiom. */
+.fr-search-field {
+  display: flex;
+  gap: 0.5rem;
+  height: 48px;
+}
+.fr-search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fr-search-field input:focus {
+  border-color: var(--ferum-primary);
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
+}
+.fr-search-field input::placeholder { color: var(--bs-tertiary-color); }
+/* The browser's native search-clear "×" clashes with the theme — remove it. */
+.fr-search-field input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Submit — a restrained fill sized to the field, always an obvious tap target.
+   Each theme recolours it to its own accent (see ferum-review's override);
+   default uses the site primary. */
+.fr-search-submit {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 1.15rem;
+  border: 1px solid var(--ferum-primary);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--ferum-primary);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fr-search-submit:hover {
+  background: var(--ferum-primary-dark);
+  border-color: var(--ferum-primary-dark);
+  color: #fff;
+}
+
+/* Filter — secondary, quiet; it is not the point of the page. */
+.fr-search-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.65rem;
+}
+.fr-search-filter-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--bs-tertiary-color);
+  white-space: nowrap;
+}
+.fr-search-filter .form-select { max-width: 240px; }
+/* The product tab carries four controls plus a button; they wrap on a phone
+   rather than shrinking each select below a usable width. */
+.fr-search-filter .form-select.w-auto { max-width: 100%; }
+
+/* Refine toolbar — sits under the tab strip, because the tab decides which of
+   these controls exist. */
+.fr-search-refine { margin-bottom: 1rem; }
+
+.fr-refine-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.fr-refine-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.fr-refine-filters .form-select {
+  max-width: 100%;
+  border-color: var(--bs-border-color);
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 0.8125rem;
+  border-radius: var(--bs-border-radius);
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.fr-refine-filters .form-select:hover {
+  border-color: color-mix(in srgb, var(--bs-secondary-color) 40%, var(--bs-border-color));
+  background-color: var(--bs-tertiary-bg);
+}
+.fr-refine-filters .form-select:focus {
+  border-color: var(--ferum-primary);
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
+}
+.fr-refine-filters .form-select.is-active {
+  border-color: var(--ferum-primary);
+  background-color: color-mix(in srgb, var(--ferum-primary) 6%, var(--bs-body-bg));
+  color: var(--ferum-primary);
+  font-weight: 600;
+}
+
+/* Sorting is contextually tied to the results grid header */
+.fr-search-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  line-height: 1;
+}
+.fr-search-filter-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.fr-sort-select {
+  display: inline-block;
+  width: auto;
+  border: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0.15rem 1.15rem 0.15rem 0.2rem !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%234b5563' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.1rem center !important;
+  background-size: 10px 10px !important;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  cursor: pointer;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  transition: color 0.15s ease;
+}
+.fr-sort-select:hover {
+  color: var(--ferum-primary);
+}
+.fr-sort-select:focus {
+  outline: none;
+  color: var(--ferum-primary);
+}
+
+[data-bs-theme="dark"] .fr-sort-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+}
+
+/* On a phone four dropdowns push the results a screen and a half down, so they
+   collapse behind a disclosure. The toggle carries the active count: hiding
+   controls is fine, hiding the fact that some are *set* is not. */
+.fr-refine-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+@media (max-width: 767.98px) {
+  .fr-refine-controls { display: none; }
+  .fr-refine-controls.is-open {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+    padding: 0.875rem;
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  }
+  .fr-refine-filters {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    width: 100%;
+  }
+  .fr-refine-filters .form-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 42px; /* Thumb-friendly touch target */
+    font-size: 0.875rem;
+    border-radius: var(--bs-border-radius);
+    background-color: var(--bs-body-bg);
+  }
+  .fr-search-sort {
+    margin-top: 0.25rem;
+  }
+}
+
+/* Active filters, as removable pills. The row exists because four dropdowns
+   cannot answer "what is narrowing this page?" at a glance. */
+.fr-search-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: -0.5rem 0 1rem;
+}
+
+/* Quiet escape hatch next to the filter bar. A text link, not a button: it
+   undoes a choice, it is not a fifth control competing with the four above. */
+.fr-search-clear {
+  font-size: 0.82rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  align-self: center;
+}
+.fr-search-clear:hover { color: var(--ferum-primary); text-decoration: underline; }
+
+.fr-search-count { font-size: 0.9rem; color: var(--bs-secondary-color); }
+
+/* Active category as a removable pill; doubles as the clear-filter control. */
+.fr-search-catchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  background: var(--bs-secondary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+.fr-search-catchip:hover { color: var(--ferum-primary); border-color: var(--ferum-primary); }
+
+/* Result-kind tabs ─────────────────────────────────────────────
+   Products and discussions are separate result sets, never interleaved, so the
+   switch between them is a real navigation control rather than a filter chip.
+   The count on each tab is the load-bearing part: it tells you what is on the
+   tab you are not looking at. Horizontally scrollable so three tabs plus counts
+   never wrap on a narrow phone. */
+.fr-search-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.fr-search-tabs::-webkit-scrollbar { display: none; }
+.fr-search-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* 44px min tap target (NF-UX-02) without padding the row out of proportion. */
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border-bottom: 2px solid transparent;
+  color: var(--bs-secondary-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+.fr-search-tab:hover { color: var(--bs-body-color); }
+.fr-search-tab.active {
+  color: var(--ferum-primary);
+  border-bottom-color: var(--ferum-primary);
+}
+.fr-search-tab-count {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-secondary-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.fr-search-tab.active .fr-search-tab-count {
+  background: rgba(var(--bs-primary-rgb), 0.14);
+  color: var(--ferum-primary);
+}
+
+/* Section header for the mixed "All" view: names the block and offers the way
+   into the full set, so the preview row never looks like the whole answer. */
+.fr-search-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.fr-search-section-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+/* Count beside the section title on the "All" view, so every section states its
+   size whether or not it also has a "see all" link. */
+.fr-search-section-count {
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--bs-tertiary-color);
+}
+.fr-search-section-more {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ferum-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.fr-search-section-more:hover { text-decoration: underline; }

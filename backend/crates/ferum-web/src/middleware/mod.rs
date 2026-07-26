@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod body_limit;
 pub mod csrf;
 pub mod locale;
 pub mod rate_limit;

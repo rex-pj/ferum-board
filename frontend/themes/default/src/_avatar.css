@@ -15,9 +15,7 @@
 }
 .fr-avatar--24 { width: 24px; height: 24px; font-size: 10px;    border-radius: 50%; }
 .fr-avatar--32 { width: 32px; height: 32px; font-size: 12px;    border-radius: 50%; }
-.fr-avatar--40 { width: 40px; height: 40px; font-size: 16px;    border-radius: 50%; }
 .fr-avatar--80 { width: 80px; height: 80px; font-size: 28px;    border-radius: 50%; }
-.fr-avatar--96 { width: 96px; height: 96px; font-size: 2.25rem; border-radius: 50%; border: 4px solid var(--bs-body-bg); }
 /* ── Extra avatar sizes ───────────────────────────────────────── */
 .fr-avatar--22 { width: 22px; height: 22px; font-size:  9px; border-radius: 50%; }
 .fr-avatar--28 { width: 28px; height: 28px; font-size: 11px; border-radius: 50%; }

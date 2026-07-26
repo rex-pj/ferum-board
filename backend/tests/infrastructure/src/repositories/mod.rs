@@ -6,6 +6,8 @@
 #[cfg(test)] mod permission_repository;
 #[cfg(test)] mod plugin_repository;
 #[cfg(test)] mod post_repository;
+#[cfg(test)] mod product_category_repository;
+#[cfg(test)] mod product_repository;
 #[cfg(test)] mod reaction_repository;
 #[cfg(test)] mod report_repository;
 #[cfg(test)] mod role_permission_cache;

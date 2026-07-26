@@ -19,8 +19,7 @@ pub async fn list_audit_log(
     let actor = auth_user.require_auth()?;
     PermissionChecker::can_view_reports(actor, None)?;
 
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(30).min(100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 30, 100);
 
     let (logs, total) = state
         .moderation

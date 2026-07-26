@@ -52,26 +52,9 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        manager.exec_stmt(
-            Query::insert()
-                .into_table(SiteConfig::Table)
-                .columns([SiteConfig::Key, SiteConfig::Value])
-                .values_panic(["site_name".into(), "Ferum Board".into()])
-                .values_panic(["site_slogan".into(), "".into()])
-                .values_panic(["site_tagline".into(), "A modern self-hosted forum".into()])
-                .values_panic(["logo_url".into(), "".into()])
-                .values_panic(["favicon_url".into(), "".into()])
-                .values_panic(["primary_color".into(), "#0d6efd".into()])
-                .values_panic(["registration_open".into(), "true".into()])
-                .values_panic(["keyword_blacklist".into(), "".into()])
-                .values_panic(["smtp_host".into(), "".into()])
-                .values_panic(["smtp_port".into(), "587".into()])
-                .values_panic(["smtp_user".into(), "".into()])
-                .values_panic(["post_approval_enabled".into(), "false".into()])
-                .values_panic(["post_approval_min_trust".into(), "new".into()])
-                .to_owned(),
-        ).await?;
-
+        // Default values are seeded by PgSystemSeedService, not here: the set of
+        // keys the app reads grows with the app, and half of them were missing
+        // from this list. See ferum-infrastructure/src/system_seed_service.rs.
         Ok(())
     }
 

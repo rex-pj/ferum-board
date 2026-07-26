@@ -40,8 +40,7 @@ pub async fn user_profile(
         }
     };
 
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
     let (threads, total) = state.thread.list_by_author(auth_user.as_ref(), user.id, page, per_page).await?;
 
     let profile = UserProfileCtx {

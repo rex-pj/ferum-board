@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::middleware::AuthUser;
 
@@ -92,7 +92,12 @@ pub struct PaginationCtx {
 
 impl PaginationCtx {
     pub fn new(page: u64, per_page: u64, total: u64, extra_params: String) -> Self {
-        let total_pages = (total + per_page - 1) / per_page.max(1);
+        // `per_page` is clamped before the arithmetic, not just in the divisor:
+        // with per_page = 0 (`?per_page=0`) and total = 0, `total + per_page - 1`
+        // underflows u64 — a panic in debug, u64::MAX in release. Handlers clamp
+        // their query params too; this is the backstop for every call site.
+        let per_page = per_page.max(1);
+        let total_pages = (total + per_page - 1) / per_page;
         Self {
             page,
             per_page,
@@ -129,6 +134,11 @@ pub struct ThreadCtx {
     /// Reviewed product's cover image key — a card thumbnail fallback for reviews
     /// that have no thumbnail of their own.
     pub review_product_image: Option<String>,
+    /// Reviewed product's name and slug, so a review card can say what it is a
+    /// review *of* and link straight to the product instead of leaving the reader
+    /// to infer the connection from the title.
+    pub review_product_name: Option<String>,
+    pub review_product_slug: Option<String>,
     pub reply_count: i32,
     pub view_count: i32,
     pub is_pinned: bool,
@@ -324,6 +334,24 @@ pub struct DashboardStatsCtx {
     pub oldest_pending_report_hours: Option<u64>,
 }
 
+/// Serializable product result for the search page. Mirrors the fields the
+/// catalogue card macro reads, so search and browse render the identical card
+/// rather than two that drift apart.
+#[derive(Serialize, Clone)]
+pub struct SearchProductCtx {
+    pub slug: String,
+    pub name: String,
+    pub excerpt: Option<String>,
+    pub product_type: String,
+    pub style: Option<String>,
+    pub primary_image_key: Option<String>,
+    pub price_min: Option<i32>,
+    pub price_max: Option<i32>,
+    pub currency: String,
+    pub review_count: i32,
+    pub avg_overall: Option<f64>,
+}
+
 /// Serializable search result hit for the search page.
 #[derive(Serialize, Clone)]
 pub struct SearchHitCtx {
@@ -396,6 +424,52 @@ pub struct NavCategoryCtx {
     pub name: String,
     pub color: Option<String>,
     pub children: Vec<NavCategoryCtx>,
+}
+
+/// One admin-curated tile in the homepage masthead mosaic.
+///
+/// This is both the shape persisted as JSON in the `home_hero_tiles` site_config
+/// key and the shape handed to the template, deliberately: a second near-identical
+/// struct to convert between would be two places to forget a field.
+///
+/// Curation exists because the automatic fallback — pulling `primary_image_key`
+/// off the top-rated products — cannot judge a photograph. When an operator has
+/// set tiles here they win outright; when the list is empty the homepage reverts
+/// to the automatic selection, so a fresh install still gets a populated masthead.
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct HeroTileCtx {
+    /// CAS URL (`/files/<key>`) of the uploaded image. The upload endpoint is the
+    /// only writer, which is what lets the save endpoint treat any URL it has not
+    /// seen before as an injection attempt.
+    pub image_url: String,
+    /// Where the tile navigates. Empty means "render the photo, don't link it" —
+    /// validated by `is_safe_external_link`, never rendered raw from user input.
+    #[serde(default)]
+    pub link: String,
+    /// Overlay text. Doubles as the link's accessible name when `link` is set.
+    #[serde(default)]
+    pub caption: String,
+}
+
+/// One row of the homepage "latest reviews" panel.
+///
+/// Deliberately carries both the product and the reviewer: the product is what the
+/// reader is deciding about, and the reviewer is what makes the panel read as a
+/// living community rather than a feed of ratings. `product_slug` is `None` only
+/// if the product row vanished between the two queries that build this — the
+/// template falls back to linking the review thread itself.
+#[derive(Serialize, Clone)]
+pub struct LatestReviewCtx {
+    /// Review thread slug — the link target, and the fallback when the product is gone.
+    pub slug: String,
+    pub product_name: Option<String>,
+    pub product_slug: Option<String>,
+    pub author_username: String,
+    pub author_display_name: String,
+    pub author_avatar_url: Option<String>,
+    /// Overall score 1–5. `None` when the thread has no rating row yet.
+    pub overall: Option<i16>,
+    pub created_at: String,
 }
 
 /// User profile context.

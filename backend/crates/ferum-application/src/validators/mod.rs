@@ -35,6 +35,31 @@ pub fn validate_slug_format(s: &str) -> bool {
         && !s.ends_with('-')
 }
 
+/// Whether an operator-supplied navigation target is safe to render as an `href`.
+///
+/// Accepts an in-site absolute path (`/catalog/oak-floor`) or an explicit
+/// http(s) URL, and nothing else. The rejections are the point:
+///
+///   * `javascript:` / `data:` / `vbscript:` — these execute in the visitor's
+///     page. Tera escapes the *text* of an attribute but cannot make a dangerous
+///     scheme safe, so the scheme has to be refused at the point it is stored.
+///   * protocol-relative `//evil.example` — reads as a path but resolves to a
+///     third-party origin, which is why the leading `//` is excluded explicitly
+///     rather than being caught by the `starts_with('/')` arm.
+///
+/// An empty link is allowed and means "not clickable" — the caller decides
+/// whether that is meaningful for its surface.
+pub fn is_safe_external_link(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return true;
+    }
+    if s.starts_with("//") {
+        return false;
+    }
+    s.starts_with('/') || s.starts_with("http://") || s.starts_with("https://")
+}
+
 /// Validate an image by inspecting its magic bytes.
 /// Returns true for JPEG, PNG, GIF, and WebP.
 pub fn validate_image_magic(data: &[u8]) -> bool {

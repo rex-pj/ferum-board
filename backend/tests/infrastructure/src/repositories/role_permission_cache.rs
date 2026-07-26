@@ -20,7 +20,7 @@ use crate::common::{insert_role, insert_user, insert_category, TestDb};
 
 #[tokio::test]
 async fn load_succeeds_on_fresh_schema() {
-    // Migrations seed permissions; LEFT JOIN must not error on first load.
+    // The system seeder writes permissions; LEFT JOIN must not error on first load.
     let db = TestDb::new("rpc_load_fresh").await;
     let cache = RolePermissionCache::new(db.conn.clone());
     cache.load().await.expect("load() on fresh migrated DB");

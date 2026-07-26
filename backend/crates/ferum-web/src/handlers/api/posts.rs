@@ -18,8 +18,7 @@ pub async fn list_posts(
     Path(thread_id): Path<Uuid>,
     Query(q): Query<PostListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let (posts, total) = state
         .post
@@ -122,31 +121,8 @@ pub async fn upload_attachment(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let mut file_bytes: Option<bytes::Bytes> = None;
-    let mut content_type = "application/octet-stream".to_string();
-
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-            file_bytes = Some(
-                field
-                    .bytes()
-                    .await
-                    .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?,
-            );
-            break;
-        }
-    }
-
-    let data = file_bytes
-        .ok_or_else(|| AppError::UnprocessableEntity("Missing file field".to_string()))?;
+    // Validation stays in the use case: it owns the attachment limits.
+    let (data, content_type) = crate::utils::read_file_field(&mut multipart, "file").await?;
     let url = state.post.upload_attachment(actor, data, content_type).await?;
 
     Ok(Json(DataResponse::new(serde_json::json!({ "url": url }))))

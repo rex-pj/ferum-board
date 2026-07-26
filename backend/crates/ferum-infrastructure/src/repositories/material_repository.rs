@@ -43,13 +43,6 @@ impl MaterialRepository for PgMaterialRepository {
         Ok(to_domain(model.insert(&self.db).await?))
     }
 
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<Material>, AppError> {
-        Ok(materials::Entity::find_by_id(id)
-            .one(&self.db)
-            .await?
-            .map(to_domain))
-    }
-
     async fn find_by_slug<'a>(&self, slug: &'a str) -> Result<Option<Material>, AppError> {
         Ok(materials::Entity::find()
             .filter(materials::Column::Slug.eq(slug))

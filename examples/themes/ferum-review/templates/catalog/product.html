@@ -21,15 +21,28 @@
   JS CONTRACT — ferum-page-product.js drives the gallery and requires exactly:
     #pdp-main-image (with data-name), #pdp-thumbs, [data-full], [data-caption]
   These are reproduced verbatim from the default template.
+
+  KEEP IN SYNC WITH default/templates/catalog/product.html
+  Everything outside the Details column (gallery, rating panel, description,
+  review-summary highlights, reviews list/filter, curator menu/dialogs,
+  scripts) is copied verbatim from the default theme, not reinvented — a fix
+  or i18n key added there needs the same edit made here.
+
+  THIS FILE IS THE SOURCE OF TRUTH for the ferum-review theme. It is packaged
+  into examples/themes/ferum-review-1.0.0.zip and installed from there into
+  frontend/themes/ferum-review/ via the admin theme-upload flow. Editing the
+  installed copy directly is a dead end — the next reinstall of this zip
+  overwrites it back to whatever is here. Edit this file, then repackage the
+  zip and reinstall (or copy this file over the installed one) to deploy.
 #}
 
 {% block title %}{{ product.name }} — {{ site.name }}{% endblock %}
 {% block description %}{{ product.description_md | default(value=product.name) | truncate(length=160) }}{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb" class="mb-3">
+<nav aria-label="{{ t(k='ui-breadcrumb') }}" class="mb-3">
   <ol class="breadcrumb mb-0">
-    <li class="breadcrumb-item"><a href="/catalog">Products</a></li>
+    <li class="breadcrumb-item"><a href="/catalog">{{ t(k="ui-products") }}</a></li>
     <li class="breadcrumb-item active">{{ product.name }}</li>
   </ol>
 </nav>
@@ -46,12 +59,12 @@
       {% else %}
         <div class="text-center">
           <i class="fa-solid fa-couch fa-2x opacity-25 d-block mb-2" aria-hidden="true"></i>
-          <span class="small">No product images yet</span>
+          <span class="small">{{ t(k="ui-no-product-images-yet") }}</span>
         </div>
       {% endif %}
     </div>
     {% if product.media | length > 1 %}
-      <div id="pdp-thumbs" class="pdp-thumbs" role="group" aria-label="Product images">
+      <div id="pdp-thumbs" class="pdp-thumbs" role="group" aria-label="{{ t(k='ui-product-images') }}">
         {% for md in product.media %}
           <button type="button" class="pdp-thumb"
                   data-full="/files/{{ md.storage_key }}"
@@ -66,59 +79,70 @@
 
   {# ── Details ── #}
   <div class="col-md-7">
-    <h1 class="h4 fw-bold mb-1">
-      {{ product.name }}
-      <span class="fr-review-chip align-middle">{{ m::product_type_label(t=product.product_type) }}</span>
-    </h1>
+    <div class="d-flex align-items-start justify-content-between gap-2">
+      {# No product_type badge on the title here (unlike the default theme) —
+         this theme already surfaces it as the "Category" row in the fr-spec
+         grid below. Repeating it next to the title would be a second,
+         competing badge, and for product_type=material it would collide
+         head-on with the "Materials" section label further down: both render
+         as the same Vietnamese word ("Chất liệu") for two different concepts
+         (the product's category vs. its material composition). #}
+      <h1 class="h4 fw-bold mb-1">{{ product.name }}</h1>
+      {% include "default/templates/partials/product_curator_menu.html" %}
+    </div>
+
+    {% include "default/templates/partials/product_curator_actions.html" %}
 
     <div class="fs-5 fw-semibold mb-3">
       {% if product.price_min %}
         {{ product.price_min | thousands }}₫{% if product.price_max and product.price_max != product.price_min %} – {{ product.price_max | thousands }}₫{% endif %}
-      {% else %}<span class="text-muted">Price on request</span>{% endif %}
+      {% else %}<span class="text-muted">{{ t(k="ui-price-on-request") }}</span>{% endif %}
     </div>
 
     {# ── Spec table — same data, laid out as a comparable key/value grid ── #}
     <dl class="fr-spec">
       {% if product.brand %}
         <div class="fr-spec-item">
-          <dt class="fr-spec-label">Brand</dt>
+          <dt class="fr-spec-label">{{ t(k="ui-brand") }}</dt>
           <dd class="fr-spec-value">
             {% if product.brand.logo_url %}
               <img src="{{ product.brand.logo_url }}" alt="" class="fr-spec-brand-logo">
             {% endif %}
             <a href="/catalog?brand_id={{ product.brand.id }}">{{ product.brand.name }}</a>
             {% if product.brand.is_verified %}
-              <i class="fa-solid fa-circle-check fr-spec-verified" title="Verified" aria-label="Verified"></i>
+              <i class="fa-solid fa-circle-check fr-spec-verified" title="{{ t(k='ui-verified') }}" aria-label="{{ t(k='ui-verified') }}"></i>
             {% endif %}
           </dd>
         </div>
       {% endif %}
 
       <div class="fr-spec-item">
-        <dt class="fr-spec-label">Category</dt>
-        <dd class="fr-spec-value">{{ m::product_type_label(t=product.product_type) }}</dd>
+        <dt class="fr-spec-label">{{ t(k="ui-category") }}</dt>
+        <dd class="fr-spec-value">{{ m::product_type_label(code=product.product_type) }}</dd>
       </div>
 
       {% if product.origin %}
         <div class="fr-spec-item">
-          <dt class="fr-spec-label">Origin</dt>
+          <dt class="fr-spec-label">{{ t(k="ui-origin") }}</dt>
           <dd class="fr-spec-value">{{ product.origin }}</dd>
         </div>
       {% endif %}
 
       {% if product.style %}
         <div class="fr-spec-item">
-          <dt class="fr-spec-label">Style</dt>
+          <dt class="fr-spec-label">{{ t(k="ui-style") }}</dt>
           <dd class="fr-spec-value">{{ product.style }}</dd>
         </div>
       {% endif %}
 
       {% if product.materials %}
         <div class="fr-spec-item fr-spec-item--wide">
-          <dt class="fr-spec-label">Materials</dt>
+          <dt class="fr-spec-label">{{ t(k="ui-materials") }}</dt>
           <dd class="fr-spec-value">
             {% for mat in product.materials %}
-              <span class="fr-review-chip">{{ mat.name }}</span>
+              {# Consistent with the default theme's product page: /catalog?material_id=
+                 is a real, working filter. #}
+              <a href="/catalog?material_id={{ mat.id }}" class="fr-review-chip fr-review-chip--link text-decoration-none">{{ mat.name }}</a>
             {% endfor %}
           </dd>
         </div>
@@ -128,20 +152,20 @@
     {% if product.rating_stats and product.rating_stats.review_count > 0 %}
       {{ m::product_rating_panel(stats=product.rating_stats, distribution=rating_distribution, min_reviews=stats_min_reviews) }}
     {% else %}
-      <div class="text-muted small mb-3">No reviews yet — be the first.</div>
+      <div class="text-muted small mb-3">{{ t(k="ui-no-reviews-yet-be-the-first") }}</div>
     {% endif %}
 
     <div class="d-grid mt-3">
     {% if my_review_slug %}
       {# One review per person per product — link back to the existing review instead
          of inviting a new one and returning 409 after the form is filled in. #}
-      <a href="/forum/t/{{ my_review_slug }}" class="btn btn-outline-primary btn-lg"><i class="fa-solid fa-pen-to-square me-2" aria-hidden="true"></i>View your review</a>
-      <div class="text-muted small text-center mt-2">You have already reviewed this product. Edit your existing review to update it.</div>
+      <a href="/forum/t/{{ my_review_slug }}" class="btn btn-outline-primary btn-lg"><i class="fa-solid fa-pen-to-square me-2" aria-hidden="true"></i>{{ t(k="ui-view-your-review") }}</a>
+      <div class="text-muted small text-center mt-2">{{ t(k="ui-you-have-already-reviewed-this-product") }}</div>
     {% elif current_user %}
-      <a href="/new-thread?product={{ product.slug }}" class="btn btn-accent btn-lg"><i class="fa-solid fa-pen me-2" aria-hidden="true"></i>Write a review</a>
+      <a href="/new-thread?product={{ product.slug }}" class="btn btn-accent btn-lg"><i class="fa-solid fa-pen me-2" aria-hidden="true"></i>{{ t(k="ui-write-a-review") }}</a>
     {% else %}
       {% set review_next = "/new-thread?product=" ~ product.slug %}
-      <a href="/login?next={{ review_next | urlencode }}" class="btn btn-outline-primary btn-lg">Log in to review</a>
+      <a href="/login?next={{ review_next | urlencode }}" class="btn btn-outline-primary btn-lg">{{ t(k="ui-log-in-to-review") }}</a>
     {% endif %}
     </div>
   </div>
@@ -149,7 +173,7 @@
 
 {% if product.description_md %}
   <div class="mt-4">
-    <h2 class="h6 fw-bold">About this product</h2>
+    <h2 class="h6 fw-bold">{{ t(k="ui-about-this-product") }}</h2>
     <div class="text-body" style="white-space:pre-wrap">{{ product.description_md }}</div>
   </div>
 {% endif %}
@@ -182,23 +206,23 @@
 
   {% if best_label %}
   <div class="fr-panel fr-highlights mt-4">
-    <div class="fr-panel-header"><i class="fa-solid fa-bolt text-warning me-1" aria-hidden="true"></i>Review summary</div>
+    <div class="fr-panel-header"><i class="fa-solid fa-bolt text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-review-summary") }}</div>
     <div class="fr-panel-body d-flex flex-wrap align-items-center gap-3">
       <div class="text-center px-2" style="min-width:5.5rem">
         <div class="display-6 fw-bold lh-1 text-warning">{{ product.rating_stats.avg_overall | round(precision=1) }}</div>
-        <div class="text-muted small mt-1">out of 5 · {{ product.rating_stats.review_count }} reviews</div>
+        <div class="text-muted small mt-1">{{ t(k="ui-out-of-5") }} · {{ product.rating_stats.review_count }} {{ t(k="ui-reviews-label", count=product.rating_stats.review_count) }}</div>
       </div>
       <div class="vr d-none d-sm-block"></div>
       <div class="d-flex flex-wrap gap-2 flex-grow-1">
         <div class="fr-highlight-pill bg-success-subtle text-success-emphasis border border-success-subtle">
           <i class="fa-solid fa-thumbs-up" aria-hidden="true"></i>
-          <span>Strongest:</span><strong>{{ best_label }}</strong>
+          <span>{{ t(k="ui-strongest") }}</span><strong>{{ best_label }}</strong>
           <span class="fr-highlight-val">{{ best_val | round(precision=1) }}</span>
         </div>
         {% if worst_label and worst_label != best_label and worst_val < best_val %}
         <div class="fr-highlight-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle">
           <i class="fa-solid fa-arrow-trend-down" aria-hidden="true"></i>
-          <span>Weakest:</span><strong>{{ worst_label }}</strong>
+          <span>{{ t(k="ui-weakest") }}</span><strong>{{ worst_label }}</strong>
           <span class="fr-highlight-val">{{ worst_val | round(precision=1) }}</span>
         </div>
         {% endif %}
@@ -212,22 +236,26 @@
 <div class="mt-4">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
     <h2 class="h6 fw-bold mb-0">
-      Reviews
+      {{ t(k="ui-reviews") }}
       {% if product.rating_stats and product.rating_stats.review_count > 0 %}<span class="text-muted fw-normal">({{ product.rating_stats.review_count }})</span>{% endif %}
     </h2>
     {% if product.rating_stats and product.rating_stats.review_count > 0 %}
     {# Sort / filter — plain GET form (CSP forbids inline on* handlers) #}
     <form method="get" class="fr-filter-bar">
-      <select name="rsort" class="form-select form-select-sm w-auto" aria-label="Sort reviews">
-        <option value="newest" {% if not active_rsort or active_rsort == "newest" %}selected{% endif %}>Newest</option>
-        <option value="highest" {% if active_rsort == "highest" %}selected{% endif %}>Highest rated</option>
-        <option value="lowest" {% if active_rsort == "lowest" %}selected{% endif %}>Lowest rated</option>
+      <select name="rsort" class="form-select form-select-sm w-auto" aria-label="{{ t(k='ui-sort-reviews') }}">
+        <option value="newest" {% if not active_rsort or active_rsort == "newest" %}selected{% endif %}>{{ t(k="ui-newest") }}</option>
+        <option value="highest" {% if active_rsort == "highest" %}selected{% endif %}>{{ t(k="ui-highest-rated") }}</option>
+        <option value="lowest" {% if active_rsort == "lowest" %}selected{% endif %}>{{ t(k="ui-lowest-rated") }}</option>
       </select>
       <div class="form-check mb-0">
         <input class="form-check-input" type="checkbox" id="rv-verified" name="verified" value="1" {% if verified_only %}checked{% endif %}>
-        <label class="form-check-label small" for="rv-verified">Verified purchases only</label>
+        <label class="form-check-label small" for="rv-verified">{{ t(k="ui-verified-purchases-only") }}</label>
       </div>
-      <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
+      {# ferum-page-product.js resubmits the form as soon as JS confirms it can
+         (select/checkbox "change"), then adds .fr-filter-bar--auto to hide this
+         button via CSS. Without JS the class is never added, so the button
+         stays visible and the form keeps working exactly as before. #}
+      <button type="submit" class="btn btn-sm btn-outline-secondary">{{ t(k="ui-apply") }}</button>
     </form>
     {% endif %}
   </div>
@@ -246,7 +274,7 @@
           {% endif %}
           {% if rv.verified_purchase %}
             <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle" style="font-size:.65rem">
-              <i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>Verified purchase
+              <i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>{{ t(k="ui-verified-purchase") }}
             </span>
           {% endif %}
         </div>
@@ -254,26 +282,36 @@
         {% if rv.excerpt %}<div class="text-muted small">{{ rv.excerpt }}</div>{% endif %}
         {% if rv.durability or rv.materials or rv.comfort or rv.aesthetics or rv.value_for_money %}
           <div class="d-flex flex-wrap gap-1 mt-1">
-            {% if rv.durability %}<span class="fr-review-chip">Durability {{ rv.durability }}</span>{% endif %}
-            {% if rv.materials %}<span class="fr-review-chip">Materials {{ rv.materials }}</span>{% endif %}
-            {% if rv.comfort %}<span class="fr-review-chip">Comfort {{ rv.comfort }}</span>{% endif %}
-            {% if rv.aesthetics %}<span class="fr-review-chip">Aesthetics {{ rv.aesthetics }}</span>{% endif %}
-            {% if rv.value_for_money %}<span class="fr-review-chip">Value {{ rv.value_for_money }}</span>{% endif %}
+            {% if rv.durability %}<span class="fr-review-chip">{{ t(k="ui-durability") }} {{ rv.durability }}</span>{% endif %}
+            {% if rv.materials %}<span class="fr-review-chip">{{ t(k="ui-materials") }} {{ rv.materials }}</span>{% endif %}
+            {% if rv.comfort %}<span class="fr-review-chip">{{ t(k="ui-comfort") }} {{ rv.comfort }}</span>{% endif %}
+            {% if rv.aesthetics %}<span class="fr-review-chip">{{ t(k="ui-aesthetics") }} {{ rv.aesthetics }}</span>{% endif %}
+            {% if rv.value_for_money %}<span class="fr-review-chip">{{ t(k="ui-value") }} {{ rv.value_for_money }}</span>{% endif %}
           </div>
         {% endif %}
       </a>
       {% endfor %}
     </div>
   {% elif product.rating_stats and product.rating_stats.review_count > 0 %}
-    <p class="text-muted small">No reviews match this filter.</p>
+    <p class="text-muted small">{{ t(k="ui-no-reviews-match-this-filter") }}</p>
   {% else %}
-    <p class="text-muted small">No reviews yet.
-      {% if current_user %}<a href="/new-thread?product={{ product.slug }}">Be the first.</a>{% endif %}
+    <p class="text-muted small">{{ t(k="ui-no-reviews-yet-period") }}
+      {% if current_user %}<a href="/new-thread?product={{ product.slug }}">{{ t(k="ui-be-the-first") }}</a>{% endif %}
     </p>
   {% endif %}
 </div>
+
+{# Edit / delete dialogs pulled from the default theme rather than copied. This
+   override exists to regroup the spec block, not to own a second set of forms —
+   including them keeps the two themes on one copy. #}
+{% include "default/templates/partials/product_manage_dialogs.html" %}
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/ferum-page-product.js?v={{ asset_version() }}" defer></script>
+{# Editor-only bundle — never shipped to the 70% of traffic that just reads. #}
+{% if can_edit_product %}
+<script src="/static/js/ferum-product-manage.js?v={{ asset_version() }}" defer
+        data-product-id="{{ product.id }}" data-product-name="{{ product.name }}"></script>
+{% endif %}
 {% endblock %}

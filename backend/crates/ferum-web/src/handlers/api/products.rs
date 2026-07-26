@@ -10,8 +10,9 @@ use validator::Validate;
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::product::{
-    parse_product_sort, parse_product_type, BrandResponse, MaterialResponse, ProductDetailResponse,
-    ProductListQuery, ProductMediaResponse, ProductResponse, SubmitProductRequest,
+    parse_product_sort, parse_product_type, BrandResponse, MaterialResponse,
+    ProductCategoryResponse, ProductDetailResponse, ProductListQuery, ProductMediaResponse,
+    ProductResponse, SubmitProductRequest,
 };
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
 use ferum_application::shared::AppError;
@@ -26,20 +27,22 @@ pub async fn list_products(
     Extension(auth_user): Extension<Option<AuthUser>>,
     Query(q): Query<ProductListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let filter = ProductListFilter {
         product_type: q.product_type.as_deref().and_then(parse_product_type),
         // Public browse never exposes drafts or archived products…
         status: Some(ProductStatus::Published),
         brand_id: q.brand_id,
-        category_id: q.category_id,
+        category: crate::utils::resolve_product_category_filter(&state, q.category_id.as_deref()).await,
         material_id: q.material_id,
         query: q.q.clone(),
         sort: q.sort.as_deref().map(parse_product_sort).unwrap_or_default(),
         // …except the caller's own submissions.
         include_own: auth_user.as_ref().map(|u| u.id),
+        // Browsing is not a quality claim — an unreviewed product still belongs
+        // in the list. Only the homepage's "top rated" shelf applies a floor.
+        min_review_count: None,
     };
 
     let (products, total) = state.product.list(filter, page, per_page).await?;
@@ -196,6 +199,23 @@ pub async fn list_materials(
         materials
             .into_iter()
             .map(MaterialResponse::from)
+            .collect::<Vec<_>>(),
+    )))
+}
+
+/// GET /api/product-categories — the catalogue taxonomy, for browse filters.
+///
+/// Public and unauthenticated: the tree is a navigation control on every
+/// catalogue page. Counts are not included — those are a curation signal and
+/// live on the admin endpoint.
+pub async fn list_product_categories(
+    State(state): State<AppState>,
+) -> HandlerResult<impl IntoResponse> {
+    let categories = state.product.list_categories().await?;
+    Ok(Json(DataResponse::new(
+        categories
+            .into_iter()
+            .map(ProductCategoryResponse::from)
             .collect::<Vec<_>>(),
     )))
 }

@@ -1,4 +1,6 @@
-use ferum_web::handlers::admin::api::reports::AuditLogQuery;
+// Canonical definition. The admin handler used to declare an identical struct of
+// its own; both audit-log endpoints now share this one.
+use ferum_web::view_models::report::AuditLogQuery;
 use uuid::Uuid;
 
 // ─── AuditLogQuery ────────────────────────────────────────────────────────────

@@ -44,7 +44,7 @@ async fn upsert_and_find_by_slug() {
 
 #[tokio::test]
 async fn upsert_idempotent_on_same_slug() {
-    // Migrations seed a "default" theme; track initial count so the assertion
+    // The system seeder writes a "default" theme; track initial count so the assertion
     // is independent of how many system themes the migration adds.
     let db = TestDb::new("theme_upsert_idempotent").await;
     let repo = PgThemeRepository::new(db.conn.clone());

@@ -461,13 +461,13 @@ time {
   padding-bottom: 0.55rem;
 }
 
-/* Two search fields were visible at once — one in the bar, one in the masthead.
-   Duplicated primary affordances make the user pick, which is a cost with no
-   benefit. On pages carrying a masthead the bar yields; everywhere else it is
-   the only search. Browsers without :has() simply keep both, as before. */
-body:has(.fr-hero) .fr-topbar .fr-topbar-search {
-  display: none;
-}
+/* The topbar search stays visible on desktop everywhere, homepage included. An
+   earlier rule hid it on masthead pages to avoid two search fields at once, but
+   the topbar bar is the persistent, sticky one and the masthead's scrolls away —
+   the agreement is desktop always shows the bar, mobile collapses it to a toggle
+   (that behaviour lives in the default theme's mobile rules). The brief overlap
+   with the masthead search at the very top of the homepage is accepted; they sit
+   in different zones (header vs. content) and do not read as duplication. */
 /* Buttons living inside a label row must not inherit the uppercase tracking */
 .fr-cat-header .btn,
 .fr-cat-header .badge {
@@ -654,8 +654,26 @@ body:has(.fr-hero) .fr-topbar .fr-topbar-search {
 .fr-footer .fr-footer-copy {
   color: rgba(255, 255, 255, 0.45);
 }
-.fr-footer .fr-brand-name {
+/* The footer brand name. This theme keeps the footer dark in BOTH colour
+   schemes, so it cannot inherit the default theme's colours, which assume the
+   footer sits on the same surface as the page:
+
+     resting  .fr-footer-brand-name  → var(--bs-body-color) = #1e293b in light
+              mode, which is 1.23:1 on this footer's #0f172a — invisible.
+     hover    .fr-footer-brand:hover → var(--ferum-primary), and in light mode
+              this theme sets --ferum-primary to --fr-slate-900, the footer's
+              own background: 1:1, the text disappears entirely on hover.
+
+   Note the class: the footer's span is `.fr-footer-brand-name`. An earlier rule
+   here targeted `.fr-brand-name`, which only ever exists in the topbar, so it
+   matched nothing and the default's dark colour won. Both states are pinned to
+   literal values below rather than palette variables, because the whole failure
+   above came from variables that track the *page* surface, not this one. */
+.fr-footer .fr-footer-brand-name {
   color: #ffffff;
+}
+.fr-footer .fr-footer-brand:hover .fr-footer-brand-name {
+  color: var(--fr-amber-400);
 }
 .fr-footer .fr-brand-mark {
   background: var(--fr-accent);
@@ -727,7 +745,6 @@ body:has(.fr-hero) .fr-topbar .fr-topbar-search {
   display: flex;
   gap: 0.5rem;
   max-width: 34rem;
-  margin-bottom: 1.2rem;
 }
 .fr-hero-search input {
   flex: 1;
@@ -759,28 +776,237 @@ body:has(.fr-hero) .fr-topbar .fr-topbar-search {
   }
 }
 
-.fr-hero-actions {
+/* Mobile: the masthead is the whole first screen otherwise, pushing the products
+   and the feed — the reason someone came — entirely below the fold. Tightened so
+   the thesis still lands but real content starts within the first screen. Nothing
+   is removed; the eyebrow/title/sub keep their hierarchy, just less air. */
+@media (max-width: 575.98px) {
+  .fr-hero {
+    padding-bottom: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .fr-hero-eyebrow {
+    margin-bottom: 0.65rem;
+  }
+  .fr-hero-title {
+    margin-bottom: 0.55rem;
+  }
+  .fr-hero-sub {
+    margin-bottom: 1rem;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+}
+
+/* ── Split masthead + photo mosaic ─────────────────────────────────────────────
+   The two-column layout is opt-in via .fr-hero--split, added by the template only
+   when there are ≥2 real product photos to fill the right column. Without the
+   modifier .fr-hero stays the single-column block defined above, so a young board
+   with no photography is unaffected. */
+@media (min-width: 768px) {
+  /* Both columns are stretched to the SAME grid row, so the copy and the mosaic
+     share one top edge and one bottom edge by construction — not by two
+     independently-sized boxes happening to come out the same height.
+
+     The previous value was `align-items: center`, which sized each column to its
+     own content and centred them against each other. Every height input there is
+     data: a longer site tagline, a translation that wraps the title to three
+     lines, 2 photos instead of 4. Whatever the difference was on the day, half of
+     it appeared above and half below, leaving the search field hanging past the
+     bottom of the last photo (and the eyebrow starting above the first one).
+     Stretching removes the variable rather than tuning it. */
+  .fr-hero--split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: stretch;
+  }
+  /* Text reads from the top of the column; the search field is pushed to the
+     bottom by the auto margin so it lands exactly on the mosaic's bottom edge.
+     `.fr-hero-sub`'s own margin-bottom stays the minimum gap — the auto margin
+     only ever adds to it, so a short copy block never lets the form drift up
+     against the paragraph. */
+  .fr-hero--split .fr-hero-copy {
+    display: flex;
+    flex-direction: column;
+  }
+  .fr-hero--split .fr-hero-search {
+    margin-top: auto;
+  }
+  /* The mosaic now takes its height from the row instead of from tile
+     aspect-ratio, and splits it evenly across however many rows the tile count
+     produced. min-height is the floor for the opposite case — a short tagline
+     with a two-line sub would otherwise squash the photos into a letterbox
+     strip. When the floor binds it is the mosaic that sets the row height and
+     the copy stretches to it; the two edges coincide either way. */
+  .fr-hero--split .fr-hero-gallery {
+    height: 100%;
+    min-height: 20rem;
+    grid-auto-rows: 1fr;
+  }
+  /* Height comes from the stretched row, so the fixed 4/3 box has to go or it
+     would fight it. Photos are cropped by `object-fit: cover`, never distorted. */
+  .fr-hero--split .fr-hero-tile {
+    aspect-ratio: auto;
+    min-height: 0;
+  }
+  /* Exactly two tiles is the one count where filling a full-height row side by
+     side turns landscape product photography into two narrow portraits. Stacked,
+     the same height reads as two banners instead. 3 and 4 already occupy two
+     rows, and 1 (curated-only) already spans the full width. */
+  .fr-hero--split .fr-hero-gallery:has(> .fr-hero-tile:nth-child(2):last-child) {
+    grid-template-columns: 1fr;
+  }
+}
+.fr-hero-copy {
+  min-width: 0; /* let the search field and sub-text shrink inside the grid track */
+}
+
+.fr-hero-gallery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+/* Odd counts would otherwise leave a hole in the grid. Promote the odd tile out to
+   a full-width band so the mosaic always reads as a finished block. 2 and 4 tiles
+   tile evenly and need no special case.
+   A single tile only occurs in curated mode — the automatic source requires ≥2. */
+.fr-hero-gallery > .fr-hero-tile:only-child,
+.fr-hero-gallery > .fr-hero-tile:nth-child(3):last-child {
+  grid-column: 1 / -1;
+}
+.fr-hero-tile {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--fr-surface-sunken);
+  box-shadow: var(--bs-box-shadow-sm);
+}
+.fr-hero-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s var(--fr-ease);
+}
+.fr-hero-tile:hover img {
+  transform: scale(1.05);
+}
+/* Product name over a bottom scrim — always present (so it is the link's
+   accessible name), legible over any photo. */
+.fr-hero-tile-name {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.4rem 0.65rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #fff;
+  background: linear-gradient(to top, rgba(2, 6, 23, 0.74), rgba(2, 6, 23, 0));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-hero-tile img {
+    transition: none;
+  }
+  .fr-hero-tile:hover img {
+    transform: none;
+  }
+}
+/* On a phone the mosaic would be the whole first screen, pushing the feed out of
+   sight — the same reason the quick links are dropped above. The copy + search
+   carry the masthead alone; the photography returns at ≥768px. */
+@media (max-width: 767.98px) {
+  .fr-hero-gallery {
+    display: none;
+  }
+}
+
+/* ── Browse-by-type strip ──────────────────────────────────────────────────────
+   Three category doors under the masthead: icon chip, one-word label, a chevron
+   that leans in on hover. Cards, not buttons — they are navigation, and the amber
+   is spent on the icon chip and the hover rule, never a full fill. */
+.fr-typenav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.fr-typenav-tile {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.55rem 1.35rem;
-}
-.fr-hero-link {
-  font-size: 0.875rem;
-  font-weight: 550;
-  color: var(--bs-secondary-color);
+  gap: 0.85rem;
+  min-height: var(--fr-tap-target);
+  padding: 0.85rem 1.05rem;
+  color: var(--bs-body-color);
   text-decoration: none;
-  border-bottom: 1px solid transparent;
-  transition: color 0.15s var(--fr-ease), border-color 0.15s var(--fr-ease);
+  background: var(--fr-surface);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-lg);
+  box-shadow: var(--bs-box-shadow-sm);
+  transition: border-color 0.15s var(--fr-ease), box-shadow 0.15s var(--fr-ease),
+    transform 0.15s var(--fr-ease);
 }
-.fr-hero-link:hover {
-  color: var(--fr-accent-text);
-  border-bottom-color: var(--fr-accent);
-  text-decoration: none;
+.fr-typenav-tile:hover {
+  color: var(--bs-body-color);
+  border-color: var(--fr-accent);
+  box-shadow: var(--bs-box-shadow);
+  transform: translateY(-1px);
 }
-.fr-hero-link--strong {
-  color: var(--bs-emphasis-color);
+.fr-typenav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.05rem;
+  color: var(--bs-warning-text-emphasis);
+  background: var(--bs-warning-bg-subtle);
+  border-radius: 50%;
+}
+.fr-typenav-label {
+  flex-grow: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
   font-weight: 650;
+}
+.fr-typenav-go {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--bs-tertiary-color);
+  transition: transform 0.15s var(--fr-ease), color 0.15s var(--fr-ease);
+}
+.fr-typenav-tile:hover .fr-typenav-go {
+  color: var(--fr-accent-text);
+  transform: translateX(3px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-typenav-tile,
+  .fr-typenav-go {
+    transition: none;
+  }
+  .fr-typenav-tile:hover {
+    transform: none;
+  }
+  .fr-typenav-tile:hover .fr-typenav-go {
+    transform: none;
+  }
+}
+/* One word per tile fits three-up down to a small tablet; below that they stack so
+   the icon + label never crush. */
+@media (max-width: 575.98px) {
+  .fr-typenav {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
 }
 
 /* ============================================================================
@@ -948,13 +1174,25 @@ body:has(.fr-hero) .fr-topbar .fr-topbar-search {
   line-height: 1.35;
 }
 @media (max-width: 575.98px) {
-  .fr-shelf-card {
-    flex-basis: 190px;
-  }
+  /* The shelf is a 2-column wrapping grid on mobile (layout lives in the default
+     theme's .fr-shelf rules; this only tunes ferum-review's card chrome for the
+     narrower cards). Trimmed padding and a slightly smaller title keep each card
+     near a thumb-friendly height so two columns of them don't run tall. */
   .fr-shelf {
-    padding: 1rem 1.15rem !important;
+    gap: 0.6rem;
+    padding: 0.85rem 0.9rem !important;
+  }
+  .fr-shelf-card .card-body {
+    padding: 0.6rem 0.65rem 0.7rem !important;
+  }
+  .fr-shelf-card .fw-semibold {
+    font-size: 0.875rem !important;
   }
 }
+
+/* The shelf's grid, its one-row resting size and the show-more control at its
+   foot all live in the default theme and are inherited unchanged — this theme
+   only re-skins the cards above. */
 
 .fr-product-card {
   border-radius: var(--bs-border-radius-lg);
@@ -1307,6 +1545,20 @@ body:has(.fr-hero) .fr-topbar .fr-topbar-search {
 .btn-lg {
   font-size: 1rem;
   padding: 0.75rem 1.5rem;
+}
+
+/* Search page submit — recoloured to the amber accent so it matches the masthead
+   search button (which is .btn-accent), rather than the default theme's slate
+   primary. Amber fill + slate text is the same accessible pairing as .btn-accent. */
+.fr-search-submit {
+  background: var(--fr-accent);
+  border-color: var(--fr-accent);
+  color: var(--fr-slate-900);
+}
+.fr-search-submit:hover {
+  background: var(--fr-amber-700);
+  border-color: var(--fr-amber-700);
+  color: #fff;
 }
 
 :focus-visible {

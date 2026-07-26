@@ -76,8 +76,17 @@
   var _confirmEl      = null;
   var _confirmResolve = null;
 
+  // Escapes quotes as well as angle brackets. Every current call site happens to
+  // interpolate into element content, where `& < >` alone would be enough — but
+  // this is exported as a general-purpose helper, and the first time someone
+  // writes data-x="<escaped>" a bare `"` would break out of the attribute and
+  // turn any user-controlled name into stored XSS. Escaping all five is the only
+  // version that is correct in both contexts.
+  var HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function escapeHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return HTML_ESCAPES[c];
+    });
   }
 
   function ensureConfirmModal() {
@@ -286,8 +295,6 @@
         });
       }
     }
-    win.toggleMobileSidebar = toggleSidebar;
-
     document.querySelectorAll('[data-action="toggle-sidebar"]').forEach(function (el) {
       el.addEventListener('click', toggleSidebar);
     });
@@ -296,6 +303,46 @@
       if (e.key === 'Escape') {
         var overlay = document.getElementById('mobileSidebar');
         if (overlay && overlay.classList.contains('is-open')) toggleSidebar();
+      }
+    });
+  }
+
+  // ── Mobile search toggle ──────────────────────────────────────────
+  // The topbar search is inline on desktop and collapsed to an icon button on
+  // mobile. Tapping the button drops the search bar from under the sticky header
+  // (CSS keys off `.search-open` on `.fr-topbar`). Closes on Escape, on submit,
+  // and on any tap outside the bar. No-ops on desktop where the button is hidden.
+  function initSearchToggle() {
+    var topbar = document.querySelector('.fr-topbar');
+    var toggle = document.querySelector('[data-action="toggle-search"]');
+    if (!topbar || !toggle) return;
+    var form = document.getElementById('topbarSearch');
+    var input = form ? form.querySelector('input[type="search"]') : null;
+    var icon = toggle.querySelector('i');
+
+    function setOpen(open) {
+      topbar.classList.toggle('search-open', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (icon) {
+        icon.classList.toggle('fa-magnifying-glass', !open);
+        icon.classList.toggle('fa-xmark', open);
+      }
+      if (open && input) input.focus();
+    }
+
+    toggle.addEventListener('click', function (e) {
+      e.stopPropagation();
+      setOpen(!topbar.classList.contains('search-open'));
+    });
+    // A tap inside the bar must not close it; only an outside tap does.
+    if (form) form.addEventListener('click', function (e) { e.stopPropagation(); });
+    document.addEventListener('click', function () {
+      if (topbar.classList.contains('search-open')) setOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && topbar.classList.contains('search-open')) {
+        setOpen(false);
+        toggle.focus();
       }
     });
   }
@@ -382,6 +429,7 @@
   onReady(initThemeToggle);
   onReady(initNavActive);
   onReady(initMobileSidebar);
+  onReady(initSearchToggle);
   onReady(initLogout);
   onReady(initLoginReturnUrl);
   onReady(initTooltips);

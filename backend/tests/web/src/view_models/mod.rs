@@ -1,6 +1,36 @@
 mod validators;
 
+use ferum_web::view_models::page_context::PaginationCtx;
 use ferum_web::view_models::{DataResponse, PagedResponse};
+
+// ─── PaginationCtx arithmetic ─────────────────────────────────────────────────
+
+/// `?per_page=0` used to underflow `total + per_page - 1` on an empty result set:
+/// a panic in debug, `u64::MAX` in release. Handlers clamp their query params, but
+/// the constructor is the backstop for all 16 call sites.
+#[test]
+fn pagination_survives_zero_per_page_with_no_rows() {
+    let p = PaginationCtx::simple(1, 0, 0);
+    assert_eq!(p.total_pages, 0);
+    assert!(!p.has_next);
+    assert!(!p.has_prev);
+}
+
+#[test]
+fn pagination_zero_per_page_does_not_report_absurd_page_count() {
+    let p = PaginationCtx::simple(1, 0, 42);
+    assert_eq!(p.total_pages, 42, "a zero per_page is treated as 1 per page");
+}
+
+#[test]
+fn pagination_rounds_partial_last_page_up() {
+    let p = PaginationCtx::simple(1, 20, 41);
+    assert_eq!(p.total_pages, 3);
+    assert!(p.has_next);
+}
+
+// `blank_as_none_uuid` is exercised through the real `SearchQuery` that uses it,
+// in `handlers::api::search`.
 
 // ─── DataResponse JSON shape ──────────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::Json;
 use uuid::Uuid;
+use validator::Validate;
 
 use ferum_application::usecases::role_usecase::{AssignRoleCmd, CreateRoleCmd, UpdateRoleCmd};
 use crate::app_state::AppState;
@@ -12,9 +13,21 @@ use crate::view_models::role::{
 };
 use crate::view_models::{DataResponse, HandlerResult};
 
+/// GET /api/admin/roles — the admin roster.
+///
+/// `RoleUseCase::list_roles` is deliberately unauthenticated: public profile
+/// pages call it to render role badges (`handlers/api/users.rs`). That makes it
+/// the wrong place for a permission check, so the check lives here instead —
+/// this route is the *admin* view of the same data and must not be readable by
+/// anonymous callers, which it was until now. Every sibling handler in this file
+/// already gates on `can_manage_roles` via its use case; this one had no actor
+/// at all.
 pub async fn list_roles(
     State(state): State<AppState>,
+    axum::Extension(auth_user): axum::Extension<Option<AuthUser>>,
 ) -> HandlerResult<impl IntoResponse> {
+    let actor = auth_user.as_ref().ok_or(ferum_application::shared::AppError::Unauthorized)?;
+    ferum_application::permission::PermissionChecker::can_manage_roles(actor)?;
     let roles = state.role.list_roles().await?;
     Ok(Json(DataResponse::new(
         roles.into_iter().map(RoleResponse::from).collect::<Vec<_>>(),
@@ -26,6 +39,8 @@ pub async fn create_role(
     axum::Extension(auth_user): axum::Extension<Option<AuthUser>>,
     Json(body): Json<CreateRoleRequest>,
 ) -> HandlerResult<impl IntoResponse> {
+    body.validate()
+        .map_err(|e| ferum_application::shared::AppError::UnprocessableEntity(e.to_string()))?;
     let actor = auth_user.as_ref().ok_or(ferum_application::shared::AppError::Unauthorized)?;
     let role = state
         .role
@@ -49,6 +64,8 @@ pub async fn update_role(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateRoleRequest>,
 ) -> HandlerResult<impl IntoResponse> {
+    body.validate()
+        .map_err(|e| ferum_application::shared::AppError::UnprocessableEntity(e.to_string()))?;
     let actor = auth_user.as_ref().ok_or(ferum_application::shared::AppError::Unauthorized)?;
     let role = state
         .role

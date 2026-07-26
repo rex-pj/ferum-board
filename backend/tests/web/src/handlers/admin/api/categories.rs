@@ -91,3 +91,41 @@ fn assign_moderator_invalid_uuid_fails() {
         serde_json::from_str(r#"{"user_id":"not-a-uuid"}"#);
     assert!(result.is_err());
 }
+
+// ─── Policy parsing round-trip ────────────────────────────────────────────────
+
+/// `CategoryResponse` serializes `PostPolicy::Moderated` as "moderated", so the
+/// parser has to accept it: a client that GETs a moderated category and PATCHes
+/// it back was previously rejected with the API's own output.
+#[test]
+fn parse_post_policy_accepts_every_value_the_api_emits() {
+    for value in ["members", "trusted", "staff_only", "closed", "moderated"] {
+        assert!(
+            ferum_web::view_models::category::parse_post_policy(value).is_some(),
+            "post_policy {value:?} must round-trip"
+        );
+    }
+}
+
+#[test]
+fn parse_post_policy_rejects_unknown_value() {
+    assert!(ferum_web::view_models::category::parse_post_policy("everyone").is_none());
+}
+
+#[test]
+fn parse_view_policy_accepts_every_value_the_api_emits() {
+    for value in ["public", "members_only", "staff_only"] {
+        assert!(
+            ferum_web::view_models::category::parse_view_policy(value).is_some(),
+            "view_policy {value:?} must round-trip"
+        );
+    }
+}
+
+/// Debug formatting yields "membersonly"/"staffonly", which no template or parser
+/// matches. Guards against a handler reaching for `format!("{:?}")` again.
+#[test]
+fn view_policy_debug_casing_is_not_the_wire_format() {
+    assert!(ferum_web::view_models::category::parse_view_policy("membersonly").is_none());
+    assert!(ferum_web::view_models::category::parse_view_policy("staffonly").is_none());
+}

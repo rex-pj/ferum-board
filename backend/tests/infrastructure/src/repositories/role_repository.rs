@@ -17,7 +17,7 @@ fn new_role(slug: &str) -> NewRole {
 
 #[tokio::test]
 async fn list_returns_seeded_system_roles() {
-    // Migrations seed admin / moderator / member as system roles.
+    // The system seeder writes admin / moderator / member as system roles.
     let db = TestDb::new("role_list_empty").await;
     let repo = PgRoleRepository::new(db.conn.clone());
     let roles = repo.list().await.expect("list");
@@ -86,7 +86,7 @@ async fn delete_non_system_role_succeeds() {
 
 #[tokio::test]
 async fn list_returns_all_created_roles() {
-    // Migrations seed 3 system roles; we add 2 more and verify they appear.
+    // The system seeder writes 3 system roles; we add 2 more and verify they appear.
     let db = TestDb::new("role_list_all").await;
     let repo = PgRoleRepository::new(db.conn.clone());
     repo.create(new_role("r1")).await.expect("create r1");

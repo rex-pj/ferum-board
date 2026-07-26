@@ -88,3 +88,34 @@ fn xff_multi_hop_uses_first_ip() {
 
     assert_eq!(guest_fingerprint(&h1), guest_fingerprint(&h2));
 }
+
+// ─── Auth cookie attributes ──────────────────────────────────────────────────
+// `SameSite=Lax` is load-bearing CSRF protection: there is no CSRF token in this
+// codebase, so if the cookie is ever relaxed to `SameSite=None` the Origin check
+// in middleware/csrf.rs becomes the only defence and a real token is required.
+// These tests exist to make that change loud instead of silent.
+
+#[test]
+fn auth_cookie_is_httponly_and_samesite_lax() {
+    let c = ferum_web::utils::build_auth_cookie("token", "abc", "/", 3600, false);
+    assert!(c.contains("HttpOnly"), "auth cookie must stay HttpOnly: {c}");
+    assert!(c.contains("SameSite=Lax"), "auth cookie must stay SameSite=Lax: {c}");
+    assert!(!c.contains("SameSite=None"), "SameSite=None removes CSRF protection: {c}");
+}
+
+#[test]
+fn auth_cookie_sets_secure_only_over_https() {
+    let insecure = ferum_web::utils::build_auth_cookie("token", "abc", "/", 3600, false);
+    assert!(!insecure.contains("Secure"), "plain HTTP dev must not set Secure: {insecure}");
+
+    let secure = ferum_web::utils::build_auth_cookie("token", "abc", "/", 3600, true);
+    assert!(secure.contains("; Secure"), "HTTPS deploys must set Secure: {secure}");
+}
+
+#[test]
+fn refresh_cookie_is_scoped_to_auth_endpoints() {
+    // Path scoping keeps the refresh token off every ordinary request, so it is
+    // only ever sent where it is actually redeemed.
+    let c = ferum_web::utils::build_auth_cookie("refresh_token", "r", "/api/auth", 604_800, true);
+    assert!(c.contains("Path=/api/auth"), "refresh cookie must stay scoped: {c}");
+}

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
-use crate::view_models::report::{ReportListQuery, ReportResponse};
+use crate::view_models::report::{AuditLogQuery, ReportListQuery, ReportResponse};
 use crate::view_models::{HandlerResult, PagedResponse};
 use ferum_domain::models::report::ReportStatus;
 
@@ -17,8 +17,7 @@ pub async fn list_reports(
     Query(q): Query<ReportListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).min(100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
 
     let status = q.status.as_deref().and_then(|s| match s {
         "pending" => Some(ReportStatus::Pending),
@@ -39,14 +38,6 @@ pub async fn list_reports(
     )))
 }
 
-#[derive(serde::Deserialize)]
-pub struct AuditLogQuery {
-    pub page: Option<u64>,
-    pub per_page: Option<u64>,
-    pub actor_id: Option<Uuid>,
-    pub target_type: Option<String>,
-}
-
 pub async fn list_audit_log(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
@@ -54,8 +45,7 @@ pub async fn list_audit_log(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(30);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 30, 100);
 
     let (logs, total) = state
         .admin

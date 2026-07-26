@@ -669,6 +669,8 @@ body {
   padding: 0 1rem;
   max-width: 1440px;
   margin-inline: auto;
+  /* Anchor for the mobile search dropdown (below), which is position:absolute. */
+  position: relative;
 }
 
 /* .fr-topbar-brand already lives in _navbar.css */
@@ -721,6 +723,29 @@ body {
 }
 
 .fr-topbar-search-btn:hover .fr-topbar-search-icon { color: var(--bs-body-color); }
+
+/* Mobile search. Below lg the inline pill cannot share the row with brand +
+   actions, so it collapses to the icon button in the actions row (.fr-topbar-
+   search-toggle, d-lg-none in nav.html). Tapping it adds .search-open to the
+   topbar (initSearchToggle in ferum-utils.js), which drops the field as a
+   full-width bar under the sticky header. Without this block the field stays
+   inline and gets crushed next to the toggle — the bug where both showed at once. */
+
+@media (max-width: 991.98px) {
+  .fr-topbar-search {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+    margin: 0;
+    height: 40px;
+    display: none;
+    z-index: 1035;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  }
+  .fr-topbar.search-open .fr-topbar-search { display: flex; }
+}
 
 .fr-topbar-actions {
   display: flex;
@@ -1149,6 +1174,391 @@ a.fr-panel-row:hover {
   border-left: 3px solid var(--ferum-primary) !important;
 }
 
+/* ── Search page ─────────────────────────────────────────────────
+   Search results reuse .fr-feed / .fr-thread-row, so their styling lives with
+   the feed; these are the page-specific bits (the search field, the quiet filter
+   row, and the removable active-category chip). */
+
+.fr-search-head { margin-bottom: 1.5rem; }
+
+/* Field + trailing submit button, mirroring the masthead search (.fr-hero-search):
+   input and button are separate, with a gap, so the two search surfaces on the
+   site read as one idiom. */
+
+.fr-search-field {
+  display: flex;
+  gap: 0.5rem;
+  height: 48px;
+}
+
+.fr-search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.fr-search-field input:focus {
+  border-color: var(--ferum-primary);
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
+}
+
+.fr-search-field input::placeholder { color: var(--bs-tertiary-color); }
+
+/* The browser's native search-clear "×" clashes with the theme — remove it. */
+
+.fr-search-field input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Submit — a restrained fill sized to the field, always an obvious tap target.
+   Each theme recolours it to its own accent (see ferum-review's override);
+   default uses the site primary. */
+
+.fr-search-submit {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 1.15rem;
+  border: 1px solid var(--ferum-primary);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--ferum-primary);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.fr-search-submit:hover {
+  background: var(--ferum-primary-dark);
+  border-color: var(--ferum-primary-dark);
+  color: #fff;
+}
+
+/* Filter — secondary, quiet; it is not the point of the page. */
+
+.fr-search-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.65rem;
+}
+
+.fr-search-filter-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--bs-tertiary-color);
+  white-space: nowrap;
+}
+
+.fr-search-filter .form-select { max-width: 240px; }
+
+/* The product tab carries four controls plus a button; they wrap on a phone
+   rather than shrinking each select below a usable width. */
+
+.fr-search-filter .form-select.w-auto { max-width: 100%; }
+
+/* Refine toolbar — sits under the tab strip, because the tab decides which of
+   these controls exist. */
+
+.fr-search-refine { margin-bottom: 1rem; }
+
+.fr-refine-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.fr-refine-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.fr-refine-filters .form-select {
+  max-width: 100%;
+  border-color: var(--bs-border-color);
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 0.8125rem;
+  border-radius: var(--bs-border-radius);
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fr-refine-filters .form-select:hover {
+  border-color: color-mix(in srgb, var(--bs-secondary-color) 40%, var(--bs-border-color));
+  background-color: var(--bs-tertiary-bg);
+}
+
+.fr-refine-filters .form-select:focus {
+  border-color: var(--ferum-primary);
+  box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.12);
+}
+
+.fr-refine-filters .form-select.is-active {
+  border-color: var(--ferum-primary);
+  background-color: color-mix(in srgb, var(--ferum-primary) 6%, var(--bs-body-bg));
+  color: var(--ferum-primary);
+  font-weight: 600;
+}
+
+/* Sorting is contextually tied to the results grid header */
+
+.fr-search-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  line-height: 1;
+}
+
+.fr-search-filter-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.fr-sort-select {
+  display: inline-block;
+  width: auto;
+  border: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0.15rem 1.15rem 0.15rem 0.2rem !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%234b5563' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.1rem center !important;
+  background-size: 10px 10px !important;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  cursor: pointer;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  transition: color 0.15s ease;
+}
+
+.fr-sort-select:hover {
+  color: var(--ferum-primary);
+}
+
+.fr-sort-select:focus {
+  outline: none;
+  color: var(--ferum-primary);
+}
+
+[data-bs-theme="dark"] .fr-sort-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+}
+
+/* On a phone four dropdowns push the results a screen and a half down, so they
+   collapse behind a disclosure. The toggle carries the active count: hiding
+   controls is fine, hiding the fact that some are *set* is not. */
+
+.fr-refine-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@media (max-width: 767.98px) {
+  .fr-refine-controls { display: none; }
+  .fr-refine-controls.is-open {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+    padding: 0.875rem;
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  }
+  .fr-refine-filters {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    width: 100%;
+  }
+  .fr-refine-filters .form-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 42px; /* Thumb-friendly touch target */
+    font-size: 0.875rem;
+    border-radius: var(--bs-border-radius);
+    background-color: var(--bs-body-bg);
+  }
+  .fr-search-sort {
+    margin-top: 0.25rem;
+  }
+}
+
+/* Active filters, as removable pills. The row exists because four dropdowns
+   cannot answer "what is narrowing this page?" at a glance. */
+
+.fr-search-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: -0.5rem 0 1rem;
+}
+
+/* Quiet escape hatch next to the filter bar. A text link, not a button: it
+   undoes a choice, it is not a fifth control competing with the four above. */
+
+.fr-search-clear {
+  font-size: 0.82rem;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  align-self: center;
+}
+
+.fr-search-clear:hover { color: var(--ferum-primary); text-decoration: underline; }
+
+.fr-search-count { font-size: 0.9rem; color: var(--bs-secondary-color); }
+
+/* Active category as a removable pill; doubles as the clear-filter control. */
+
+.fr-search-catchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  background: var(--bs-secondary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.fr-search-catchip:hover { color: var(--ferum-primary); border-color: var(--ferum-primary); }
+
+/* Result-kind tabs ─────────────────────────────────────────────
+   Products and discussions are separate result sets, never interleaved, so the
+   switch between them is a real navigation control rather than a filter chip.
+   The count on each tab is the load-bearing part: it tells you what is on the
+   tab you are not looking at. Horizontally scrollable so three tabs plus counts
+   never wrap on a narrow phone. */
+
+.fr-search-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.fr-search-tabs::-webkit-scrollbar { display: none; }
+
+.fr-search-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* 44px min tap target (NF-UX-02) without padding the row out of proportion. */
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border-bottom: 2px solid transparent;
+  color: var(--bs-secondary-color);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.fr-search-tab:hover { color: var(--bs-body-color); }
+
+.fr-search-tab.active {
+  color: var(--ferum-primary);
+  border-bottom-color: var(--ferum-primary);
+}
+
+.fr-search-tab-count {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-secondary-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.fr-search-tab.active .fr-search-tab-count {
+  background: rgba(var(--bs-primary-rgb), 0.14);
+  color: var(--ferum-primary);
+}
+
+/* Section header for the mixed "All" view: names the block and offers the way
+   into the full set, so the preview row never looks like the whole answer. */
+
+.fr-search-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.fr-search-section-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+/* Count beside the section title on the "All" view, so every section states its
+   size whether or not it also has a "see all" link. */
+
+.fr-search-section-count {
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--bs-tertiary-color);
+}
+
+.fr-search-section-more {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ferum-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.fr-search-section-more:hover { text-decoration: underline; }
+
 /* ── Post content ─────────────────────────────────────────────── */
 
 .post-content {
@@ -1233,8 +1643,6 @@ a.fr-panel-row:hover {
 .post-content th { background: var(--bs-secondary-bg); font-weight: 600; }
 
 /* Best answer highlight */
-
-.post-best-answer { border-left: 3px solid #10b981 !important; }
 
 .fr-post-best-answer {
   border-left: 4px solid #10b981 !important;
@@ -1872,28 +2280,6 @@ html, body { height: 100%; margin: 0; }
   flex-shrink: 0;
 }
 
-.adm-brand-logo {
-  width: 30px;
-  height: 30px;
-  border-radius: .375rem;
-  background: var(--bs-primary, #0d6efd);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: .85rem;
-  flex-shrink: 0;
-}
-
-.adm-brand-logo-img {
-  width: 30px;
-  height: 30px;
-  object-fit: contain;
-  border-radius: .375rem;
-  flex-shrink: 0;
-}
-
 .adm-brand-text {
   display: flex;
   flex-direction: column;
@@ -2048,6 +2434,51 @@ html, body { height: 100%; margin: 0; }
 }
 
 .adm-theme-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── Theme card actions ─────────────────────────────────────── */
+
+/* Every control in the footer is a 44px tap target (NF-UX-02). */
+
+.adm-theme-actions .btn,
+.adm-theme-actions .adm-theme-status {
+  min-height: 44px;
+}
+
+.adm-theme-actions .adm-icon-btn {
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The active theme states its status as text, never as a button: the footer
+   of an active card has no action to offer, and a control shaped like a button
+   that cannot be pressed reads as a broken button. */
+
+.adm-theme-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .875rem;
+  font-weight: 600;
+  color: var(--bs-success-text-emphasis);
+}
+
+/* Inert but still focusable. `disabled` would drop the control out of the tab
+   order, so the tooltip explaining *why* it is unavailable would never reach
+   keyboard or screen-reader users — the only ones who cannot hover to see it. */
+
+.adm-theme-actions .adm-icon-btn[aria-disabled="true"] {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* The file input is visually hidden but focusable, so the label styled as a
+   button needs to render the focus ring on the input's behalf. */
+
+.adm-theme-actions input:focus-visible + .btn {
+  box-shadow: 0 0 0 .25rem rgba(var(--bs-primary-rgb), .25);
+}
 
 /* ── Dashboard stat icon ────────────────────────────────────── */
 
@@ -2228,11 +2659,7 @@ html, body { height: 100%; margin: 0; }
 
 .fr-avatar--32 { width: 32px; height: 32px; font-size: 12px;    border-radius: 50%; }
 
-.fr-avatar--40 { width: 40px; height: 40px; font-size: 16px;    border-radius: 50%; }
-
 .fr-avatar--80 { width: 80px; height: 80px; font-size: 28px;    border-radius: 50%; }
-
-.fr-avatar--96 { width: 96px; height: 96px; font-size: 2.25rem; border-radius: 50%; border: 4px solid var(--bs-body-bg); }
 
 /* ── Extra avatar sizes ───────────────────────────────────────── */
 
@@ -2817,20 +3244,141 @@ body,
   }
 }
 
-/* ── Home: horizontal product shelf ("top rated") ─────────────────── */
+/* ── Home: product shelf ("top rated") ────────────────────────────────
+   A responsive grid at every width — it wraps, it never scrolls sideways.
+
+   At rest the shelf is clipped to one row plus a slice of the next, by height —
+   NOT by hiding overflow cards with `:nth-child`. Two reasons the height clip
+   won:
+
+   1. The visible slice IS the affordance. A row cut mid-card tells the reader
+      there is more far better than any button can, because they see the product
+      images continue past the fold. Cards removed with `display:none` leave a
+      clean edge that looks like the end of the content.
+   2. `display:none` made the count state-dependent. JS had to measure which
+      cards were hidden, which only works while collapsed — and measuring at the
+      wrong moment during a collapse zeroed the count and made the control
+      vanish. With a height clip every card is always in flow, so the count is
+      just `cards - columns`: true in either state, impossible to race.
+
+   The clip height is set inline by productShelf() (ferum-page-home.js) from
+   measured geometry, since row height depends on the card's content and images.
+   Without JS no clip is applied and the whole grid shows — content is never
+   locked away behind a script that failed to load. */
 
 .fr-shelf {
-  display: flex;
-  gap: 0.5rem;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.fr-shelf-card { flex: 0 0 190px; scroll-snap-align: start; }
+.fr-shelf-card { flex: initial; }
 
-@media (max-width: 575.98px) { .fr-shelf-card { flex-basis: 150px; } }
+@media (min-width: 768px) {
+  .fr-shelf { gap: 0.75rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (min-width: 992px) {
+  .fr-shelf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1400px) {
+  .fr-shelf { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* Collapsed — overflow cards are removed from flow, not clipped.
+   productShelf() puts this class on every card from index `columns` onward, so
+   the shelf resolves to exactly one row with no arithmetic involved. Clipping
+   the container to a measured height was tried first and leaked a few pixels of
+   the next row above the control: that cut is a sum of row height, paddings and
+   gap, all of which shift per breakpoint and carry subpixel error, so it was
+   only ever approximately right. This is exact everywhere.
+
+   Deliberately no fade/peek either. The button below already says there is more
+   AND says how many, so a fading slice was a second, weaker voice for the same
+   message — and it made the shelf look broken whenever the next row held a
+   single card beside empty columns. */
+
+/* Two classes on purpose. The card also carries Bootstrap's `.card`, which sets
+   `display:flex` at the same specificity — so a single-class rule here would win
+   only because this sheet happens to load after bootstrap.min.css. That is a
+   coincidence of link order, not a guarantee, and a theme that loads its own CSS
+   differently would silently un-hide every overflow card. */
+
+.fr-shelf .fr-shelf-card--hidden {
+  display: none;
+}
+
+/* ── Show-more control ────────────────────────────────────────────────
+   Sits at the bottom edge of the shelf, on the seam where the grid is cut off,
+   so the arrow points at the rows it reveals. It deliberately does NOT live in
+   the section header: a chevron up there is already spoken for — /forum uses it
+   to collapse a section — and the same icon meaning two different things in one
+   app is worse than no icon at all.
+
+   The control removes itself when the catalogue is smaller than one row (see
+   productShelf() in ferum-page-home.js), so it never offers to reveal nothing. */
+
+.fr-shelf-more { display: block; }
+
+/* A full-width strip, not a bordered chip. The chip version carried the same
+   `btn-outline-secondary` chrome as "view all" in the header — two identical
+   buttons in one panel meaning different things (expand in place vs. leave the
+   page), which costs the reader a beat to tell apart every time.
+   Dropping to a ghost strip settles it: the header keeps the only bordered
+   button, and this reads as "the bottom edge of this panel is actionable".
+   It also lands the biggest possible target on the shortest path — directly
+   under the fade, spanning the panel — without putting the click handler ON the
+   faded row, whose cards are real product links that a handler there would
+   hijack. Carries no `btn` class, so every visual comes from here. */
+
+.fr-shelf-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--fr-tap-target, 44px);
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-top: 1px solid var(--bs-border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--bs-secondary-color);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.fr-shelf-more-btn:hover {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+}
+
+/* Inset so the ring is not clipped by .fr-feed's overflow:hidden. */
+
+.fr-shelf-more-btn:focus-visible {
+  outline: 2px solid var(--ferum-primary);
+  outline-offset: -2px;
+}
+
+.fr-shelf-more-icon { transition: transform 0.2s; }
+
+.fr-shelf-more-icon--up { transform: rotate(180deg); }
+
+/* The product name is the differentiator and its tail carries the variant
+   ("… bọc nỉ Scandinavian 3 chỗ"), so it gets two lines rather than one
+   truncated one. Two is a cap, not a reservation: a short name stays short. */
+
+.fr-shelf-card-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* ── Home: market-data stat band ──────────────────────────────────── */
 

@@ -51,9 +51,7 @@ body {
   background-attachment: fixed;
 }
 
-h1, h2, h3, h4, h5, h6,
-.navbar-brand,
-.fr-nav-brand {
+h1, h2, h3, h4, h5, h6 {
   font-family: var(--fsm-font-serif);
   letter-spacing: .01em;
 }
@@ -66,11 +64,6 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* ── Navigation / sidebar / cards ────────────────────────────────────────── */
-.fr-nav {
-  background-color: #fbf8ef !important;
-  border-bottom: 1px solid var(--fsm-border) !important;
-}
-
 .fr-sidebar-left {
   background-color: var(--fsm-washi-alt);
   border-right-color: var(--fsm-border);

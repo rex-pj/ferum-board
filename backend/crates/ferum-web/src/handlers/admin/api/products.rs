@@ -8,10 +8,11 @@ use validator::Validate;
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::product::{
-    parse_product_sort, parse_product_status, parse_product_type, BrandResponse,
-    CreateBrandRequest, CreateMaterialRequest, CreateProductRequest, MaterialResponse,
-    ProductDependentsResponse, ProductListQuery, ProductMediaResponse, ProductResponse,
-    SetMaterialsRequest, UpdateBrandRequest, UpdateMaterialRequest, UpdateProductRequest,
+    parse_product_sort, parse_product_status, parse_product_type, AutoAssignResponse,
+    BrandResponse, CreateBrandRequest, CreateMaterialRequest, CreateProductCategoryRequest,
+    CreateProductRequest, MaterialResponse, ProductCategoryResponse, ProductDependentsResponse,
+    ProductListQuery, ProductMediaResponse, ProductResponse, SetMaterialsRequest,
+    UpdateBrandRequest, UpdateMaterialRequest, UpdateProductCategoryRequest, UpdateProductRequest,
 };
 use crate::view_models::{DataResponse, HandlerResult, PagedResponse};
 use ferum_application::permission::PermissionChecker;
@@ -19,6 +20,7 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::brand::{NewBrand, UpdateBrand};
 use ferum_domain::models::material::{NewMaterial, UpdateMaterial};
 use ferum_domain::models::product::NewProduct;
+use ferum_domain::models::product_category::{NewProductCategory, UpdateProductCategory};
 use ferum_domain::repositories::product_repository::{ProductListFilter, UpdateProduct};
 
 /// GET /api/admin/products — full catalog, any status (requires product.manage).
@@ -30,17 +32,18 @@ pub async fn list_products(
     let user = auth_user.require_auth()?;
     PermissionChecker::can_manage_products(user)?;
 
-    let page = q.page.unwrap_or(1).max(1);
-    let per_page = q.per_page.unwrap_or(20).clamp(1, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
     let filter = ProductListFilter {
         product_type: q.product_type.as_deref().and_then(parse_product_type),
         status: q.status.as_deref().and_then(parse_product_status),
         brand_id: q.brand_id,
-        category_id: q.category_id,
+        category: crate::utils::resolve_product_category_filter(&state, q.category_id.as_deref()).await,
         material_id: q.material_id,
         query: q.q.clone(),
         sort: q.sort.as_deref().map(parse_product_sort).unwrap_or_default(),
         include_own: None,
+        // Admin listing must show the whole catalogue, including unreviewed rows.
+        min_review_count: None,
     };
 
     let (products, total) = state.product.list(filter, page, per_page).await?;
@@ -256,6 +259,7 @@ pub async fn create_brand(
                 logo_url: None,
                 website: body.website,
                 country: body.country,
+                is_verified: body.is_verified,
                 owner_user_id: None,
             },
         )
@@ -367,4 +371,130 @@ pub async fn delete_brand(
     let user = auth_user.require_auth()?;
     state.product.delete_brand(user, id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ─── Product categories ────────────────────────────────────────────────────────
+//
+// The catalogue's own taxonomy (Sofa, Ghế, Bàn …). Distinct from
+// `/api/admin/categories`, which manages the forum's discussion tree — the two
+// answer different questions and a sofa belongs in exactly one of them.
+
+/// GET /api/admin/product-categories — the taxonomy with per-category product
+/// counts, plus the unfiled count. Unfiled is the curator's work queue, so it
+/// rides along rather than needing a second call.
+pub async fn list_product_categories(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    let (categories, counts) = state.product.category_counts(user).await?;
+
+    let items: Vec<ProductCategoryResponse> = categories
+        .into_iter()
+        .map(|c| {
+            let count = counts.get(&Some(c.id)).copied().unwrap_or(0);
+            ProductCategoryResponse { product_count: count, ..c.into() }
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({
+        "data": items,
+        "meta": { "unfiled": counts.get(&None).copied().unwrap_or(0) },
+    })))
+}
+
+/// POST /api/admin/product-categories
+pub async fn create_product_category(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Json(body): Json<CreateProductCategoryRequest>,
+) -> HandlerResult<impl IntoResponse> {
+    body.validate()
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+    let user = auth_user.require_auth()?;
+
+    let created = state
+        .product
+        .create_category(
+            user,
+            NewProductCategory {
+                id: Uuid::new_v4(),
+                slug: body.slug,
+                name: body.name,
+                parent_id: body.parent_id,
+                position: body.position,
+                icon: body.icon,
+                match_keywords: body.match_keywords,
+            },
+        )
+        .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(DataResponse::new(ProductCategoryResponse::from(created))),
+    ))
+}
+
+/// PATCH /api/admin/product-categories/:id — slug is immutable (stable key).
+pub async fn update_product_category(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<UpdateProductCategoryRequest>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    let updated = state
+        .product
+        .update_category(
+            user,
+            id,
+            UpdateProductCategory {
+                name: body.name,
+                parent_id: body.parent_id,
+                position: body.position,
+                icon: body.icon,
+                match_keywords: body.match_keywords,
+            },
+        )
+        .await?;
+    Ok(Json(DataResponse::new(ProductCategoryResponse::from(updated))))
+}
+
+/// DELETE /api/admin/product-categories/:id — products fall back to unfiled.
+pub async fn delete_product_category(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Path(id): Path<Uuid>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    state.product.delete_category(user, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /api/admin/product-categories/auto-assign — file every unfiled product
+/// the keyword matcher can identify.
+///
+/// Defaults to a dry run. A bulk write across the whole catalogue is not
+/// something to trigger by accident, so applying it takes an explicit
+/// `?apply=1`; without it the caller gets the numbers and nothing changes.
+pub async fn auto_assign_product_categories(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
+    Query(q): Query<AutoAssignQuery>,
+) -> HandlerResult<impl IntoResponse> {
+    let user = auth_user.require_auth()?;
+    let dry_run = q.apply.as_deref() != Some("1");
+    let report = state.product.auto_assign_categories(user, dry_run).await?;
+
+    Ok(Json(DataResponse::new(AutoAssignResponse {
+        assigned: report.assigned,
+        unmatched: report.unmatched,
+        dry_run,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct AutoAssignQuery {
+    /// `"1"` applies the assignment; anything else (including absent) previews.
+    pub apply: Option<String>,
 }

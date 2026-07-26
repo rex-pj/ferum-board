@@ -104,8 +104,14 @@ pub async fn logout(
     headers: HeaderMap,
 ) -> HandlerResult<impl IntoResponse> {
     if let Some(user) = auth_user {
-        if let Some(token) = extract_refresh_cookie(&headers) {
-            state.auth.logout(user.id, &token).await?;
+        // Revoke the access token unconditionally. Previously this whole block
+        // was nested inside the refresh-cookie check, so a logout sent without
+        // that cookie — expired, or a client holding only the access token —
+        // cleared cookies browser-side and revoked nothing at all: the access
+        // token stayed valid for the rest of its lifetime.
+        match extract_refresh_cookie(&headers) {
+            Some(token) => state.auth.logout(user.id, &token).await?,
+            None => state.auth.logout_all(user.id).await?,
         }
     }
 

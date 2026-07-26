@@ -130,6 +130,107 @@
     }).catch(function () { showSettingsAlert(Ferum.t('js-network-error'), 'danger'); });
   };
 
+  // ── Homepage hero mosaic (Alpine component) ───────────────────────
+  // Exposed as a plain global for the same reason as webhooksPanel below: Alpine
+  // resolves x-data="heroTilesPanel()" without depending on script load order.
+  //
+  // Persistence split: structural changes (add / remove / reorder) save
+  // immediately, because a half-applied structure is confusing and the images are
+  // reference-counted server-side. Caption and link text saves when the operator
+  // presses Save, so typing isn't a request per keystroke.
+  window.heroTilesPanel = function () {
+    return {
+      tiles: [], loading: true, busy: false, error: '', saved: false, max: 4,
+
+      init: function () {
+        var self = this;
+        // The list travels inside the generic config payload as a JSON string.
+        // Anything unparseable degrades to "no tiles" rather than a broken panel —
+        // the operator can then just build the list again and save over it.
+        FerumApi.admin.getConfig()
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            var raw = (d.data && d.data.home_hero_tiles) || '';
+            var parsed = [];
+            if (raw) { try { parsed = JSON.parse(raw); } catch (e) { parsed = []; } }
+            self.tiles = Array.isArray(parsed) ? parsed : [];
+          })
+          .catch(function () { self.error = 'Failed to load hero images.'; })
+          .finally(function () { self.loading = false; });
+      },
+
+      // Surface the server's own message — it carries the specific reason
+      // (too large, wrong type, list full) that a generic string would throw away.
+      showApiError: function (r) {
+        var self = this;
+        return r.json().then(function (d) {
+          self.error = (d.error && d.error.message) || 'Request failed.';
+        }).catch(function () {
+          self.error = 'Request failed (HTTP ' + r.status + ').';
+        });
+      },
+
+      save: function () {
+        var self = this;
+        self.busy = true; self.error = ''; self.saved = false;
+        return FerumApi.admin.saveHeroTiles(self.tiles).then(function (r) {
+          if (!r.ok) return self.showApiError(r);
+          return r.json().then(function (d) {
+            self.tiles = (d.data) || [];
+            self.saved = true;
+          });
+        }).catch(function () {
+          self.error = 'Network error — hero images not saved.';
+        }).finally(function () { self.busy = false; });
+      },
+
+      addImage: function (input) {
+        var self = this;
+        var file = input.files[0];
+        if (!file) return;
+        input.value = '';           // let the same file be re-picked after an error
+        self.busy = true; self.error = ''; self.saved = false;
+
+        // Flush pending caption/link edits FIRST. The upload appends server-side to
+        // the stored list and returns it, so without this an unsaved caption would
+        // be silently overwritten by the response.
+        FerumApi.admin.saveHeroTiles(self.tiles)
+          .then(function () {
+            var fd = new FormData();
+            fd.append('file', file);
+            return FerumApi.admin.addHeroTile(fd);
+          })
+          .then(function (r) {
+            if (!r.ok) return self.showApiError(r);
+            return r.json().then(function (d) { self.tiles = (d.data) || []; });
+          })
+          .catch(function () {
+            self.error = 'Network error — image not uploaded.';
+          })
+          .finally(function () { self.busy = false; });
+      },
+
+      removeTile: async function (i) {
+        var ok = await Ferum.showConfirm(
+          'Remove image',
+          'Remove this image from the homepage hero?',
+          'Remove'
+        );
+        if (!ok) return;
+        this.tiles.splice(i, 1);
+        this.save();
+      },
+
+      move: function (i, delta) {
+        var j = i + delta;
+        if (j < 0 || j >= this.tiles.length) return;
+        var moved = this.tiles.splice(i, 1)[0];
+        this.tiles.splice(j, 0, moved);
+        this.save();
+      },
+    };
+  };
+
   // ── Permissions panel (Alpine component) ─────────────────────────
   function permissionsPanelData() {
     return {
@@ -268,6 +369,30 @@
     };
   };
 
+  // Reads the reason a plugin upload was rejected out of the response.
+  //
+  // The body is preferred over `res.statusText`: the server answers a bad
+  // package with 400 and one plain sentence ("This package has no plugin.toml at
+  // its root."), which is the only part that tells the admin what to do. This
+  // used to read `res.statusText || body`, and since statusText is never empty
+  // over HTTP/1.1 the body was dead code — every rejection, whatever the cause,
+  // surfaced as "Bad Request" or "Internal Server Error".
+  //
+  // A genuine server fault still renders the themed HTML error page, so anything
+  // that looks like a document is discarded rather than dumped into the alert.
+  function uploadFailureMessage(res) {
+    return res.text().then(
+      function (body) {
+        var text = (body || '').trim();
+        if (!text || text.charAt(0) === '<') {
+          return res.statusText || ('HTTP ' + res.status);
+        }
+        return text.length > 300 ? text.slice(0, 300) + '…' : text;
+      },
+      function () { return res.statusText || ('HTTP ' + res.status); }
+    );
+  }
+
   // ── Plugin upload modal (Alpine component) ───────────────────────
   // pluginUploadData is extracted as a named function so it can be
   // registered via both window (Alpine 2.x global lookup) and
@@ -299,8 +424,8 @@
         fetch('/admin/plugins/upload-review', { method: 'POST', body: fd })
           .then(function (res) {
             if (!res.ok) {
-              return res.text().then(function (t) {
-                self.errorMsg = 'Upload failed: ' + (res.statusText || t);
+              return uploadFailureMessage(res).then(function (msg) {
+                self.errorMsg = 'Upload failed: ' + msg;
               });
             }
             return res.text().then(function (html) {
@@ -325,8 +450,8 @@
           .then(function (res) {
             if (res.redirected) { window.location.href = res.url; return; }
             if (!res.ok) {
-              return res.text().then(function (t) {
-                self.errorMsg = 'Install failed: ' + (res.statusText || t);
+              return uploadFailureMessage(res).then(function (msg) {
+                self.errorMsg = 'Install failed: ' + msg;
               });
             }
           })
@@ -403,10 +528,11 @@
   });
 
   // ── Threads page ──────────────────────────────────────────────────
-  window.deleteThread = async function (id, title) {
+  // `slug`, not id: DELETE /api/threads/{slug} resolves the thread by slug.
+  window.deleteThread = async function (slug, title) {
     var ok = await Ferum.showConfirm('Delete Thread', 'Delete "' + title + '"? This will remove all posts. This cannot be undone.', 'Delete thread');
     if (!ok) return;
-    FerumApi.threads.delete(id).then(function (res) {
+    FerumApi.threads.delete(slug).then(function (res) {
       if (res.ok) location.reload();
       else res.json().then(function (b) { Ferum.toast((b.error && b.error.message) || 'Failed to delete thread.', true); }).catch(function () { Ferum.toast('Failed to delete thread.', true); });
     });
@@ -428,21 +554,6 @@
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to unban.', true); }).catch(function () { Ferum.toast('Failed to unban.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
-  };
-
-  window.assignRole = function (btn) {
-    var userId = btn.dataset.userId;
-    var select = btn.closest('.card-body').querySelector('select[name=role_id]');
-    var roleId = select && select.value;
-    if (!roleId) return;
-    btn.disabled = true;
-    FerumApi.admin.assignRole(userId, roleId).then(function (r) {
-      if (r.ok) location.reload();
-      else {
-        r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to assign role.', true); }).catch(function () { Ferum.toast('Failed to assign role.', true); });
-        btn.disabled = false;
-      }
-    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); btn.disabled = false; });
   };
 
   window.revokeRole = async function (userId, roleId, roleName) {
@@ -523,16 +634,6 @@
       if (r.ok) location.reload();
       else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to verify.', true); }).catch(function () { Ferum.toast('Failed to verify.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
-  };
-
-  window.confirmBanUser = function (userId, username) {
-    var reason = (document.getElementById('ban-reason') && document.getElementById('ban-reason').value.trim()) || '';
-    var until  = (document.getElementById('ban-until')  && document.getElementById('ban-until').value)         || null;
-    if (!reason) { Ferum.showFeedback('ban-feedback', 'warning', 'Reason is required.'); return; }
-    FerumApi.admin.banUser(userId, reason, until || null).then(function (r) {
-      if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.showFeedback('ban-feedback', 'danger', (d.error && d.error.message) || 'Failed to ban.'); }).catch(function () { Ferum.showFeedback('ban-feedback', 'danger', 'Failed to ban.'); });
-    }).catch(function () { Ferum.showFeedback('ban-feedback', 'danger', Ferum.t('js-network-error')); });
   };
 
   // ── Moderators page ───────────────────────────────────────────────
@@ -854,13 +955,26 @@
     window.uploadBranding(input, input.dataset.brandingUpload);
   });
 
+  // ── Plugin capability review checkboxes ──────────────────────────
+  // Delegated rather than inline `onchange=`, which the CSP blocks: `script-src`
+  // grants 'self' and 'unsafe-eval' (for Alpine's expression compiler) but never
+  // 'unsafe-inline', so an `on*=` attribute never fires. The review partial
+  // carried six of them, which meant unticking a hook, host, RPC action or the
+  // `db`/`media` grant changed nothing — `granted_capabilities` was still
+  // submitted as the manifest's full request. Delegation also survives the
+  // partial being replaced via innerHTML, which is how it arrives.
+  document.addEventListener('change', function (e) {
+    if (!e.target.closest('#plugin-review-container')) return;
+    if (e.target.type !== 'checkbox') return;
+    window.updatePluginGrant();
+  });
+
   // ── Event delegation for onclick-replaced buttons ─────────────────
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-admin-action]');
     if (!btn) return;
     switch (btn.dataset.adminAction) {
       case 'save-settings':    window.saveSettings(btn);                break;
-      case 'upload-branding':  window.uploadBranding(btn, btn.dataset.brandingType); break;
       case 'remove-branding':  window.removeBranding(btn.dataset.brandingType); break;
       case 'create-category':  window.createCategory(btn);              break;
       case 'save-category':    window.saveCategory(btn);                break;
@@ -873,14 +987,13 @@
       case 'verify-email':     window.verifyUserEmail(btn.dataset.userId);                                     break;
       case 'assign-role-by-id': window.assignRoleById(btn.dataset.userId);                                    break;
       case 'unban-user':       window.unbanUser(btn.dataset.userId);                                           break;
-      case 'assign-role':      window.assignRole(btn);                                                         break;
       case 'revoke-role':      window.revokeRole(btn.dataset.userId, btn.dataset.roleId, btn.dataset.roleName); break;
       case 'assign-moderator': window.assignModerator(btn);                             break;
       case 'revoke-moderator': window.revokeModerator(btn.dataset.categoryId, btn.dataset.userId, btn.dataset.displayName); break;
       case 'create-role':      window.createRole(btn);                  break;
       case 'save-role':        window.saveRole(btn);                    break;
       case 'delete-role':      window.deleteRole(btn.dataset.roleId, btn.dataset.roleName, btn.dataset.memberCount); break;
-      case 'delete-thread':    window.deleteThread(btn.dataset.threadId, btn.dataset.threadTitle); break;
+      case 'delete-thread':    window.deleteThread(btn.dataset.threadSlug, btn.dataset.threadTitle); break;
     }
   });
 }());

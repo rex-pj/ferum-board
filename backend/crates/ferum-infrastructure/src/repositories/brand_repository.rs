@@ -45,7 +45,7 @@ impl BrandRepository for PgBrandRepository {
             logo_url: Set(brand.logo_url),
             website: Set(brand.website),
             country: Set(brand.country),
-            is_verified: Set(false),
+            is_verified: Set(brand.is_verified),
             owner_user_id: Set(brand.owner_user_id),
             // `tier` left unset → DB default ('free'); allowed set is free|sponsored.
             ..Default::default()

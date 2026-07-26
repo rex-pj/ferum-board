@@ -64,12 +64,16 @@ pub fn parse_view_policy(s: &str) -> Option<ViewPolicy> {
     }
 }
 
+/// Accepts every value `CategoryResponse` can emit, `moderated` included —
+/// otherwise a client that GETs a moderated category and PATCHes it back is
+/// rejected with the API's own output.
 pub fn parse_post_policy(s: &str) -> Option<PostPolicy> {
     match s {
         "members" => Some(PostPolicy::Members),
         "trusted" => Some(PostPolicy::Trusted),
         "staff_only" => Some(PostPolicy::StaffOnly),
         "closed" => Some(PostPolicy::Closed),
+        "moderated" => Some(PostPolicy::Moderated),
         _ => None,
     }
 }

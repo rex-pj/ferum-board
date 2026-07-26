@@ -5,7 +5,8 @@ use uuid::Uuid;
 use ferum_domain::models::product::{NewProduct, Product};
 use ferum_domain::models::product_media::{NewProductMedia, ProductMedia};
 use ferum_domain::repositories::product_repository::{
-    ProductDependents, ProductListFilter, ProductListItem, ProductRepository, UpdateProduct,
+    ProductDependents, ProductListFilter, ProductListItem, ProductRepository, ReviewedProduct,
+    UpdateProduct,
 };
 use ferum_domain::AppError;
 
@@ -23,6 +24,7 @@ mockall::mock! {
             page: u64,
             per_page: u64,
         ) -> Result<(Vec<ProductListItem>, u64), AppError>;
+        async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<ProductListItem>, AppError>;
         async fn update(&self, id: Uuid, patch: UpdateProduct) -> Result<Product, AppError>;
         async fn delete(&self, id: Uuid) -> Result<(), AppError>;
         async fn count_dependents(&self, product_id: Uuid) -> Result<ProductDependents, AppError>;
@@ -35,10 +37,10 @@ mockall::mock! {
             material_ids: &[Uuid],
         ) -> Result<(), AppError>;
         async fn list_material_ids(&self, product_id: Uuid) -> Result<Vec<Uuid>, AppError>;
-        async fn primary_image_by_threads(
+        async fn reviewed_product_by_threads(
             &self,
             thread_ids: &[Uuid],
-        ) -> Result<HashMap<Uuid, String>, AppError>;
+        ) -> Result<HashMap<Uuid, ReviewedProduct>, AppError>;
         async fn add_media(&self, media: NewProductMedia) -> Result<ProductMedia, AppError>;
         async fn list_media(&self, product_id: Uuid) -> Result<Vec<ProductMedia>, AppError>;
         async fn find_media(&self, media_id: Uuid) -> Result<Option<ProductMedia>, AppError>;

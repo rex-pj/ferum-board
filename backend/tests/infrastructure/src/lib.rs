@@ -4,6 +4,8 @@ pub mod common;
 #[cfg(test)] mod bcrypt_password_hasher;
 #[cfg(test)] mod jwt_token_service;
 #[cfg(test)] mod network_utils;
+#[cfg(test)] mod bulk_seed_service;
+#[cfg(test)] mod system_seed_service;
 
 // ─── Submodules mirroring source layout ───────────────────────────────────────
 mod cache;

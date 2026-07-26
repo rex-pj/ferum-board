@@ -1,6 +1,8 @@
 use std::io::Write as _;
 
 use bytes::Bytes;
+use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
+use ferum_domain::i18n::TransArg;
 use ferum_domain::AppError;
 use ferum_infrastructure::plugins::package_extractor::{extract, sanitize_slug};
 
@@ -43,15 +45,29 @@ fn sanitize_slug_makes_path_traversal_chars_safe() {
 // ─── extract ──────────────────────────────────────────────────────────────────
 
 #[test]
-fn extract_package_too_large_returns_error() {
-    // MAX_PACKAGE_SIZE is 50 MB (50 * 1024 * 1024)
-    let huge = Bytes::from(vec![0u8; 50 * 1024 * 1024 + 1]);
+fn extract_package_too_large_returns_coded_error_carrying_the_limit() {
+    let huge = Bytes::from(vec![0u8; MAX_PLUGIN_PACKAGE_BYTES + 1]);
     let dir = temp_plugins_dir();
     let result = extract(&huge, &dir, "test-plugin");
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(result.is_err());
-    let msg = format!("{:?}", result.unwrap_err());
-    assert!(msg.contains("50"), "error should mention the 50 MB limit");
+
+    // The machine code, not the prose: the sentence lives in the translation
+    // catalog, and the admin upload handlers resolve it from there to tell the
+    // uploader what went wrong. A free-form message here would reach them as an
+    // untranslated 500 instead.
+    let err = result.expect_err("an oversize package must be rejected");
+    let AppError::Invalid { code, args } = err else {
+        panic!("expected AppError::Invalid, got {err:?}");
+    };
+    assert_eq!(code, "package_too_large");
+    assert_eq!(
+        args,
+        vec![(
+            "limit_mb".to_string(),
+            TransArg::Int((MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)) as i64)
+        )],
+        "the catalog sentence interpolates $limit_mb, so the limit has to travel with the code"
+    );
 }
 
 #[test]

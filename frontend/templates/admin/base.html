@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="auto">
+<html lang="{{ locale }}" data-bs-theme="auto">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {# Dictionary for `Ferum.t()` in the shared page scripts, which admin pages
      load too. A meta attribute rather than an inline <script>, which the CSP
-     forbids. Admin renders in the default locale by design. #}
+     forbids. Rendered in the request's locale (see render_admin), which is why
+     <html lang> above is bound rather than hardcoded. #}
   {% if js_strings %}<meta name="ferum-i18n" content="{{ js_strings | json_encode() }}">{% endif %}
   <title>{% block title %}Admin{% endblock %} — {{ site.name }}</title>
   <script src="/static/js/ferum-preload.js"></script>
@@ -37,11 +38,12 @@
       {% if site.logo_url %}
         <img src="{{ site.logo_url }}" alt="{{ site.name }}" class="fr-brand-img">
       {% else %}
-        {# Same mark as the public topbar: `fr-brand-mark`, not the admin-only
-           `adm-brand-logo`. The two had drifted — different size, radius, and
-           accent variable (`--ferum-primary` vs `--bs-primary`), so the badge
-           changed shape and colour when you crossed from the forum into admin.
-           The initial comes from the site name rather than a hardcoded "Fe". #}
+        {# Same mark as the public topbar: `fr-brand-mark`. A separate
+           admin-only badge class used to exist here and had drifted — different
+           size, radius, and accent variable (`--ferum-primary` vs `--bs-primary`),
+           so the badge changed shape and colour when you crossed from the forum
+           into admin. The initial comes from the site name rather than a
+           hardcoded "Fe". #}
         <span class="fr-brand-mark" aria-hidden="true">{{ site.name | truncate(length=1, end="") | upper }}</span>
       {% endif %}
       <div class="adm-brand-text">
@@ -194,7 +196,6 @@
 </div>
 
 <script src="/static/js/bootstrap.bundle.min.js"></script>
-<script src="/static/js/htmx.min.js"></script>
 <script src="/static/js/ferum-utils.js?v={{ asset_version() }}"></script>
 <script src="/static/js/ferum-progress.js?v={{ asset_version() }}"></script>
 <script src="/static/js/ferum-api.js?v={{ asset_version() }}" defer></script>

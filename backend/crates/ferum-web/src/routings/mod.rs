@@ -6,7 +6,7 @@ use axum::extract::{ConnectInfo, DefaultBodyLimit};
 use axum::http::{Request, StatusCode};
 use axum::http::{header, HeaderValue, Method};
 use axum::middleware::{self, Next};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use tower_http::cors::CorsLayer;
@@ -20,6 +20,7 @@ use crate::handlers::admin::api::plugins::get_active_slots;
 use crate::handlers::pages::{render_404_page, render_error_page};
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::AuthUser;
+use crate::middleware::body_limit::non_upload_body_limit;
 use crate::middleware::csrf::csrf_origin_check;
 use crate::middleware::locale::{negotiate_locale, translate_errors};
 use crate::middleware::rate_limit::RateLimitConfig;
@@ -75,6 +76,17 @@ async fn error_page_layer(
         return response;
     }
 
+    // A handler that produced a message for the caller keeps it. These endpoints
+    // are fetched by admin JS and their body is rendered into a dialog, so
+    // swapping in the themed error page would discard the only useful part.
+    if response
+        .extensions()
+        .get::<crate::handlers::pages::ClientErrorPassthrough>()
+        .is_some()
+    {
+        return response;
+    }
+
     match response.status() {
         StatusCode::NOT_FOUND => render_404_page(&state, &req_locale, auth_user.as_ref()).await,
         s if s.is_client_error() || s.is_server_error() => {
@@ -82,6 +94,36 @@ async fn error_page_layer(
         }
         _ => response,
     }
+}
+
+/// Allows only `{slug}/assets/**` through to the themes `ServeDir`.
+///
+/// A theme package contains templates and a manifest alongside its assets, and
+/// only the assets are meant to be public. Rather than replace `ServeDir` (and
+/// lose its ETag/Last-Modified/304 handling, which matters for CSS), this gates
+/// what reaches it.
+///
+/// `nest_service` strips the `/themes` prefix, so the path seen here is
+/// `/{slug}/assets/...`. Both forms are accepted so the guard stays correct if
+/// the mount point ever changes.
+/// `pub` so the test crate can drive it directly: it is a plain middleware with
+/// no state, and asserting the allow/deny set on it is far more precise than
+/// standing up a whole router with a database behind it.
+pub async fn theme_asset_guard(req: Request<axum::body::Body>, next: Next) -> Response {
+    let path = req.uri().path();
+    let rest = path.strip_prefix("/themes").unwrap_or(path);
+
+    let mut segments = rest.split('/').filter(|s| !s.is_empty());
+    let ok = match (segments.next(), segments.next()) {
+        // Reject a traversal or empty slug outright; ServeDir handles the rest.
+        (Some(slug), Some("assets")) => !slug.is_empty() && slug != "." && slug != "..",
+        _ => false,
+    };
+
+    if !ok {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    next.run(req).await
 }
 
 /// Replace token values in paths that carry one-time credentials with `[token]`
@@ -115,23 +157,40 @@ pub fn build_router(
     // It must never sit below the largest *legitimate* upload:
     //   plugin package (.fpkg) = 50 MB, cover = 8 MB, avatar = 5 MB.
     // Per-handler limits remain the real, per-type enforcement.
-    const PLUGIN_PACKAGE_CEILING_MB: u64 = 50;
-    let body_cap_bytes = (max_upload_size_mb.max(PLUGIN_PACKAGE_CEILING_MB) as usize)
+    let plugin_package_ceiling_mb =
+        (ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)) as u64;
+    let body_cap_bytes = (max_upload_size_mb.max(plugin_package_ceiling_mb) as usize)
         .saturating_mul(1024 * 1024)
         .saturating_add(1024 * 1024); // multipart envelope/field overhead
     let body_limit = tower_http::limit::RequestBodyLimitLayer::new(body_cap_bytes);
 
     // Build the CSRF allowed-origin list: the server's own origin + every configured CORS origin.
     let csrf_allowed: Arc<Vec<String>> = {
+        let app = app_url.trim_end_matches('/').to_string();
+        // A production deployment that never sets CORS_ORIGINS inherits the
+        // default `http://localhost:5173`, which would otherwise be trusted as a
+        // CSRF origin on a public host. Drop localhost origins once APP_URL is
+        // itself non-local — they can only be reached by something already
+        // running on the user's machine, and they are never legitimate there.
+        let app_is_local =
+            app.contains("localhost") || app.contains("127.0.0.1") || app.contains("[::1]");
+
         let mut origins: Vec<String> = cors_origins
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty() && s != "*")
+            .filter(|o| {
+                app_is_local
+                    || !(o.contains("localhost")
+                        || o.contains("127.0.0.1")
+                        || o.contains("[::1]"))
+            })
             .collect();
-        let app = app_url.trim_end_matches('/').to_string();
+
         if !app.is_empty() && !origins.contains(&app) {
             origins.push(app);
         }
+        tracing::info!(origins = ?origins, "csrf allowed origins");
         Arc::new(origins)
     };
 
@@ -158,8 +217,18 @@ pub fn build_router(
                 ))
                 .service(ServeDir::new(&state.static_dir).append_index_html_on_directories(false)),
         )
-        // Theme assets: shorter TTL because themes can be reloaded at runtime
-        .nest_service("/themes", ServeDir::new(&state.themes_dir))
+        // Theme assets: shorter TTL because themes can be reloaded at runtime.
+        // Gated to `{slug}/assets/**` — a bare ServeDir over themes_dir also
+        // served `{slug}/templates/*.html` and `{slug}/theme.json`, publishing
+        // raw Tera source (context variable names, plugin slot names, internal
+        // URL structure) to anonymous callers. Every legitimate theme URL in the
+        // codebase is `/themes/{slug}/assets/...`, so nothing else needs serving.
+        .nest_service(
+            "/themes",
+            tower::ServiceBuilder::new()
+                .layer(middleware::from_fn(theme_asset_guard))
+                .service(ServeDir::new(&state.themes_dir)),
+        )
         // Plugin assets: only files under {slug}/assets/ are served.
         // The full plugins_dir is NOT exposed via ServeDir to prevent leaking
         // manifests, hook scripts, and plugin configs to unauthenticated users.
@@ -180,6 +249,11 @@ pub fn build_router(
         // files > ~2 MB cause an aborted TCP connection (ERR_CONNECTION_ABORTED in
         // Chrome), which the JS catch block surfaces as "Network error."
         .layer(DefaultBodyLimit::disable())
+        // Restores a sane cap for everything that is NOT a multipart upload.
+        // `DefaultBodyLimit::disable()` above is required so per-handler byte
+        // checks govern uploads, but on its own it also uncapped every JSON
+        // endpoint down to the 50 MB global backstop. See middleware docs.
+        .layer(middleware::from_fn(non_upload_body_limit))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             setup_guard,
@@ -195,7 +269,10 @@ pub fn build_router(
             auth_middleware,
         ))
         .layer(cors)
-        .layer(middleware::from_fn(security_headers))
+        .layer(middleware::from_fn_with_state(
+            state.cookies_secure,
+            security_headers,
+        ))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &Request<_>| {
@@ -273,6 +350,13 @@ pub fn build_router(
 fn build_cors(origins: &str) -> CorsLayer {
     let trimmed = origins.trim();
     if trimmed.is_empty() || trimmed == "*" {
+        // Loud on purpose. Credentials are off here so cookie auth is not
+        // exposed, but a wildcard is almost never what a real deployment wants
+        // and the default value makes it easy to reach by omission.
+        tracing::warn!(
+            "CORS_ORIGINS is empty or '*' — allowing any origin without credentials. \
+             Set CORS_ORIGINS to an explicit comma-separated list in production."
+        );
         // Wildcard: no credentials — browsers reject the combination anyway.
         return CorsLayer::new()
             .allow_origin(tower_http::cors::Any)

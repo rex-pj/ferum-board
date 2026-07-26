@@ -7,51 +7,69 @@ edition = "2021"
 s3 = ["dep:aws-sdk-s3", "dep:aws-config"]
 meilisearch = ["dep:meilisearch-sdk"]
 script_plugins = ["dep:boa_engine"]
-default = []
+# The OPT-IN example dataset behind the setup wizard's checkbox: demo users,
+# categories, threads, posts, catalogue, reports, bookmarks, follows. 1,464 lines
+# — the largest file in the crate — and 20 instantiations of two generic
+# `insert_*` helpers, one monomorphised copy per entity type, all compiled into
+# every binary to serve something a production install runs exactly never.
+#
+# ON by default so `cargo run` and the wizard behave as documented. A production
+# image that will never tick that box builds with `--no-default-features` and
+# gets `NullBulkSeedService`, which reports `seed_data_unavailable` rather than
+# pretending to seed.
+bulk_seed = []
+default = ["bulk_seed"]
 
 [dependencies]
-ferum-domain = { path = "../ferum-domain" }
+# `sea-orm` feature = the `From<DbErr> for AppError` impl every repository here
+# relies on to write `?`. It lives in ferum-domain because of the orphan rule,
+# not because the domain wants a database.
+ferum-domain = { path = "../ferum-domain", features = ["sea-orm"] }
 ferum-application = { path = "../ferum-application" }
+# For PLUGIN_DB_ROLE only. The migration crate creates that role, so the name
+# lives there; duplicating the literal here would let the two drift apart and
+# silently disable the plugin privilege drop. Not a layer inversion — `migration`
+# is a standalone DDL crate, outside the domain/application/infrastructure chain.
+migration = { path = "../../migration" }
 
-async-trait = "0.1"
-bytes = "1"
-chrono = { version = "0.4", features = ["serde"] }
-dashmap = "6"
-hex = "0.4"
-hmac = "0.12"
-ammonia = "4"
-redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-url = "2"
-sea-orm = { version = "1", features = [
-    "sqlx-postgres",
-    "runtime-tokio-rustls",
+ammonia = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+bcrypt = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+dashmap = { workspace = true }
+fluent-bundle = { workspace = true }
+fluent-syntax = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+intl-memoizer = { workspace = true }
+jsonwebtoken = { workspace = true }
+lettre = { workspace = true }
+redis = { workspace = true }
+reqwest = { workspace = true }
+rust_decimal = { workspace = true }
+sea-orm = { workspace = true, features = ["with-rust_decimal"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = [
+    "rt-multi-thread",
     "macros",
-    "with-uuid",
-    "with-chrono",
-    "with-json",
-    "with-rust_decimal",
+    "net",
+    "sync",
+    "time",
+    "signal",
+    "io-util",
 ] }
-rust_decimal = { version = "1", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "io-util"] }
-tracing = "0.1"
-uuid = { version = "1", features = ["v4", "serde"] }
-bcrypt = "0.15"
-jsonwebtoken = "9"
-lettre = { version = "0.11", default-features = false, features = ["tokio1", "tokio1-rustls-tls", "smtp-transport", "builder"] }
+toml = { workspace = true }
+tracing = { workspace = true }
+unic-langid = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+zip = { workspace = true }
 
-aws-sdk-s3 = { version = "1", optional = true }
-aws-config = { version = "1", optional = true }
-meilisearch-sdk = { version = "0.28", optional = true }
-boa_engine = { version = "0.19", optional = true }
-anyhow = "1.0.102"
-zip = "2.1"
-toml = "0.8"
-fluent-bundle = "0.16.0"
-fluent-syntax = "0.12.0"
-unic-langid = "0.9.6"
-intl-memoizer = "0.5.3"
-
+aws-sdk-s3 = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true }
+meilisearch-sdk = { workspace = true, optional = true }
+boa_engine = { workspace = true, optional = true }

@@ -127,6 +127,8 @@
   padding: 0 1rem;
   max-width: 1440px;
   margin-inline: auto;
+  /* Anchor for the mobile search dropdown (below), which is position:absolute. */
+  position: relative;
 }
 /* .fr-topbar-brand already lives in _navbar.css */
 .fr-topbar-search {
@@ -171,6 +173,29 @@
   line-height: 1;
 }
 .fr-topbar-search-btn:hover .fr-topbar-search-icon { color: var(--bs-body-color); }
+
+/* Mobile search. Below lg the inline pill cannot share the row with brand +
+   actions, so it collapses to the icon button in the actions row (.fr-topbar-
+   search-toggle, d-lg-none in nav.html). Tapping it adds .search-open to the
+   topbar (initSearchToggle in ferum-utils.js), which drops the field as a
+   full-width bar under the sticky header. Without this block the field stays
+   inline and gets crushed next to the toggle — the bug where both showed at once. */
+@media (max-width: 991.98px) {
+  .fr-topbar-search {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+    margin: 0;
+    height: 40px;
+    display: none;
+    z-index: 1035;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  }
+  .fr-topbar.search-open .fr-topbar-search { display: flex; }
+}
+
 .fr-topbar-actions {
   display: flex;
   align-items: center;
