@@ -134,11 +134,11 @@
         <span><i class="fa-solid fa-layer-group fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-categories") }}</span>
         <span class="fr-panel-stat-val">{{ total_categories }}</span>
       </div>
-    </div>
-    <div class="fr-panel-body border-top" style="padding-top:.5rem;padding-bottom:.5rem">
-      <a href="/new-thread" class="btn btn-primary btn-sm w-100">
-        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
-      </a>
+      {# No "new thread" button in this panel. The page header already carries
+         one, directly above the categories it will file the thread under, and
+         this page is short enough that it stays in view. The rail's copy sat
+         between two panel-separator rules and read as an unlabelled section of
+         its own. #}
     </div>
   </div>
   {% endif %}

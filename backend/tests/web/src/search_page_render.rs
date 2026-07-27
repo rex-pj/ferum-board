@@ -743,3 +743,156 @@ async fn an_unsubmitted_search_shows_neither_tabs_nor_filters() {
     // The field itself is still there — that is the whole page at this point.
     assert!(html.contains(r#"name="q""#));
 }
+
+// ─── catalogue rail ───────────────────────────────────────────────────────────
+//
+// The three catalogue tabs were the only public pages rendering a single column
+// while every other surface shipped a right rail. These cover the rail's own
+// logic — active state, filter-preserving links, the contribute action — and the
+// fact that it survives the two tabs that supply less context than /catalog.
+
+/// The rail's category rows are the browse axis that used to exist only as one
+/// of four look-alike selects. They must say which one is showing.
+#[tokio::test]
+async fn catalog_rail_marks_the_active_category() {
+    let mut ctx = catalog_ctx();
+    ctx.insert("active_category_id", "00000000-0000-0000-0000-000000000010");
+
+    let html = render_catalog(&ctx).await;
+
+    assert!(html.contains("fr-right-col"), "the catalogue renders a right rail");
+    assert!(
+        html.contains(r#"aria-current="page""#),
+        "the active category row is marked for assistive tech, not just visually"
+    );
+    assert!(html.contains("All products"), "and offers the way back out of it");
+}
+
+/// Picking a category from the rail must narrow the current view, not reset it.
+/// The rows carry every other active filter; only the category is replaced.
+#[tokio::test]
+async fn catalog_rail_category_links_keep_the_other_filters() {
+    let mut ctx = catalog_ctx();
+    ctx.insert("category_link_params", "&q=sofa&brand_id=b1");
+    ctx.insert("catalog_all_url", "/catalog?q=sofa&brand_id=b1");
+
+    let html = render_catalog(&ctx).await;
+
+    assert!(
+        html.contains("/catalog?category_id=00000000-0000-0000-0000-000000000010&amp;q=sofa&amp;brand_id=b1"),
+        "a category row carries the query and brand already set"
+    );
+    assert!(
+        !html.contains(r#"href="/catalog?category_id=00000000-0000-0000-0000-000000000010""#),
+        "no bare link that would silently drop them"
+    );
+}
+
+/// The submission action lives in the tab bar, where it reaches every reader at
+/// every width. The rail must not carry a second copy of it — that duplicate
+/// existed briefly and only ever showed up for desktop readers.
+#[tokio::test]
+async fn catalog_rail_does_not_duplicate_the_submission_action() {
+    let mut ctx = catalog_ctx();
+    ctx.insert("can_submit_product", &true);
+
+    let html = render_catalog(&ctx).await;
+
+    assert_eq!(
+        html.matches("add_product=1").count(),
+        1,
+        "exactly one submission CTA on the page — the one in the tab bar"
+    );
+    let nav = html.find("fr-catalog-nav").expect("tab bar renders");
+    let rail = html.find("fr-right-col").expect("rail renders");
+    let cta = html.find("add_product=1").expect("the CTA renders");
+    assert!(cta > nav && cta < rail, "and it is the tab bar's, not the rail's");
+}
+
+/// The tab strip shares its row with that action, so the rule under it belongs
+/// to the row — on the tabs alone it stopped short of the button.
+#[tokio::test]
+async fn catalog_tab_rule_spans_the_whole_action_row() {
+    let mut ctx = catalog_ctx();
+    ctx.insert("can_submit_product", &true);
+
+    let html = render_catalog(&ctx).await;
+
+    assert!(
+        html.contains("fr-catalog-nav"),
+        "the tab row carries the rule, so it runs past the action button"
+    );
+}
+
+/// /materials and /brands share the rail but supply no category filter and no
+/// pager params. Tera raises on an equality test against a *missing* variable,
+/// so the rail normalises them — without that, adding the rail to those two tabs
+/// takes both pages down at render time, not at parse time.
+#[tokio::test]
+async fn catalog_rail_renders_on_the_tabs_that_have_no_category_filter() {
+    let mut ctx = base_ctx();
+    ctx.insert("catalog_tab", "brands");
+    ctx.insert(
+        "catalog_categories",
+        &json!([{ "id": "00000000-0000-0000-0000-000000000010", "name": "Sofa", "is_child": true }]),
+    );
+
+    let html = engine()
+        .await
+        .render(
+            &Locale::default_locale(),
+            "default/templates/catalog/brands.html",
+            &ctx,
+        )
+        .await
+        .expect("brands.html must render with the shared rail");
+
+    assert!(html.contains("fr-right-col"), "the rail renders here too");
+    assert!(
+        html.contains("fr-panel-row--child"),
+        "a child category is drawn as one — the taxonomy is two levels deep"
+    );
+    // Nothing is active when there is no category filter on the page, so the
+    // reset row is the current position.
+    assert!(html.contains("All products"));
+}
+/// The rail's review panel calls a macro, and Tera resolves a macro namespace
+/// against the template being *rendered* — not the one the `{% include %}` sits
+/// in. So every page that includes the panel must import `macros.html` itself,
+/// and a page that forgets 500s at request time while still parsing cleanly at
+/// startup. That is exactly how /brands and / broke while every existing test
+/// stayed green: the earlier cases left `latest_reviews` unset, so the panel was
+/// skipped and the macro was never reached.
+///
+/// Every catalogue tab is covered because each is a separate root template with
+/// its own import line to forget.
+#[tokio::test]
+async fn every_catalogue_tab_renders_the_rails_review_panel() {
+    let review = json!([{
+        "slug": "r1", "product_name": "Sofa văng", "product_slug": "sofa-vang",
+        "author_display_name": "Alice", "author_username": "alice",
+        "author_avatar_url": null, "overall": 5, "created_at": "2026-07-01T10:00:00Z"
+    }]);
+
+    for (tab, template) in [
+        ("products", "default/templates/catalog/index.html"),
+        ("materials", "default/templates/catalog/materials.html"),
+        ("brands", "default/templates/catalog/brands.html"),
+    ] {
+        let mut ctx = catalog_ctx();
+        ctx.insert("catalog_tab", tab);
+        ctx.insert("material_groups", &json!([]));
+        ctx.insert("latest_reviews", &review);
+
+        let html = engine()
+            .await
+            .render(&Locale::default_locale(), template, &ctx)
+            .await
+            .unwrap_or_else(|e| panic!("{template} must render with a populated rail: {e}"));
+
+        assert!(
+            html.contains("Sofa văng"),
+            "{template} renders the review row, macro and all"
+        );
+    }
+}

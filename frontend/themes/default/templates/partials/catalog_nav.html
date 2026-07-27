@@ -2,7 +2,7 @@
    result tabs, so the two surfaces read as one. Set `catalog_tab` before
    including. The right-aligned action lets eligible members propose a missing
    product (opens the review composer with the add-product form expanded). #}
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+<div class="fr-catalog-nav d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
   <nav class="fr-search-tabs mb-0" aria-label="{{ t(k='ui-products') }}">
     <a href="/catalog" class="fr-search-tab{% if catalog_tab == 'products' %} active{% endif %}"
        {% if catalog_tab == 'products' %}aria-current="page"{% endif %}>

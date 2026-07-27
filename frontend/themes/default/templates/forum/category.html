@@ -149,19 +149,18 @@
           {% else %}{{ category.post_policy }}{% endif %}
         </span>
       </div>
-    </div>
-  </div>
-
-  {# New Thread CTA — persistent in sidebar for logged-in users allowed to post here #}
-  {% if current_user and category.can_post %}
-  <div class="fr-panel">
-    <div class="fr-panel-body">
-      <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm w-100">
+      {# New Thread CTA — persistent in the rail for logged-in users allowed to
+         post here. It sits at the foot of the category's own panel, the same
+         place /forum and the homepage put theirs: a panel that describes
+         something, then the action on it. As its own bare panel it was bracketed
+         by two panel-separator rules and read as an unlabelled section. #}
+      {% if current_user and category.can_post %}
+      <a href="/new-thread?category_id={{ category.id }}" class="btn btn-primary btn-sm w-100 mt-2">
         <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
       </a>
+      {% endif %}
     </div>
   </div>
-  {% endif %}
 
   {# Subcategories with thread counts for navigation context #}
   {% if subcategories %}

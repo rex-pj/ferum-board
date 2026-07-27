@@ -1,0 +1,80 @@
+{# ── Catalogue rail ─────────────────────────────────────────────────────────
+   The right column for /catalog, /materials and /brands. Every other public
+   surface (home, forum index, category, thread, profile, search) already ships
+   one; the three catalogue tabs were the only pages where the layout collapsed
+   to a single column, which read as a different site rather than a different
+   page.
+
+   Identical on all three tabs by design — switching tab must change the content,
+   not the furniture beside it. Its context is assembled once in
+   `handlers/pages/catalog.rs::catalog_rail_ctx`.
+
+   Every panel is guarded, so a theme or handler that supplies less simply gets a
+   shorter rail rather than an error.
+
+   `active_category_id` exists only on /catalog — the other two tabs have no
+   category filter to be active. It is normalised through `default` because Tera
+   raises on an *equality test* against a missing variable (unlike a bare
+   truthiness test, which is simply false), so comparing it directly would take
+   down /materials and /brands. #}
+{% set active_cat = active_category_id | default(value="") %}
+<aside class="fr-right-col">
+
+  {# Guests first, exactly as on home and /forum: the rail's top slot is the
+     conversion slot. Members skip straight to browsing. #}
+  {% if not current_user %}
+  <div class="fr-panel">
+    <div class="fr-panel-header">{{ t(k="ui-join-in") }}</div>
+    <div class="fr-panel-body">
+      <p class="small text-secondary mb-3">
+        {% if site.tagline %}{{ site.tagline }}{% else %}{{ t(k="ui-join-the-conversation-and-share") }}{% endif %}
+      </p>
+      <div class="d-grid gap-2">
+        <a href="/register" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-user-plus me-1"></i>{{ t(k="ui-create-account") }}
+        </a>
+        <a href="/login" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-log-in") }}</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# Browse by catalogue category — the primary browse axis, which until now
+     existed only as one of four look-alike <select>s on /catalog and not at all
+     on /materials or /brands. Rows carry their own active state, so the rail
+     also answers "what am I looking at?".
+
+     Same shape as the Subcategories panel on a forum category page: rows, then
+     the section's primary action at the foot. #}
+  {% if catalog_categories %}
+  <div class="fr-panel">
+    <div class="fr-panel-header">{{ t(k="ui-product-category") }}</div>
+    <div class="py-1">
+      <a href="{{ catalog_all_url | default(value='/catalog') }}"
+         class="fr-panel-row{% if not active_cat %} active{% endif %}">
+        <i class="fa-solid fa-border-all fa-xs fr-icon-col" aria-hidden="true"></i>
+        <span class="text-truncate">{{ t(k="ui-all-products") }}</span>
+      </a>
+      {% for c in catalog_categories %}
+        {# The other active filters travel with the link, so picking a category
+           from here narrows the current view instead of silently resetting the
+           brand, material or query the reader already chose. #}
+        <a href="/catalog?category_id={{ c.id }}{{ category_link_params | default(value='') }}"
+           class="fr-panel-row{% if c.is_child %} fr-panel-row--child{% endif %}{% if active_cat == c.id %} active{% endif %}"
+           {% if active_cat == c.id %}aria-current="page"{% endif %}>
+          <i class="fa-solid {% if c.icon %}{{ c.icon }}{% else %}fa-couch{% endif %} fa-xs fr-icon-col" aria-hidden="true"></i>
+          <span class="text-truncate">{{ c.name }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    {# No "suggest a product" button here. The tab bar at the top of the content
+       already carries it, on every catalogue tab and at every width — a second
+       copy in the rail only duplicated it for desktop readers. #}
+  </div>
+  {% endif %}
+
+  {# Fresh review activity — the link back out of the catalogue and into the
+     community, and the same panel the homepage rail carries. #}
+  {% include "default/templates/partials/latest_reviews_panel.html" %}
+
+</aside>

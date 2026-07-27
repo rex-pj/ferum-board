@@ -461,13 +461,15 @@ time {
   padding-bottom: 0.55rem;
 }
 
-/* The topbar search stays visible on desktop everywhere, homepage included. An
-   earlier rule hid it on masthead pages to avoid two search fields at once, but
-   the topbar bar is the persistent, sticky one and the masthead's scrolls away —
-   the agreement is desktop always shows the bar, mobile collapses it to a toggle
-   (that behaviour lives in the default theme's mobile rules). The brief overlap
-   with the masthead search at the very top of the homepage is accepted; they sit
-   in different zones (header vs. content) and do not read as duplication. */
+/* The topbar search stays visible on desktop everywhere, homepage included, and
+   is now the ONLY search on the page: the masthead used to carry a second field,
+   which an earlier rule tried to reconcile by hiding the topbar bar on masthead
+   pages. Both attempts were treating the symptom. The duplicate was removed
+   instead (see "Masthead actions" below) — the topbar bar is the persistent,
+   sticky one, the masthead's scrolled away, and two unlabelled role="search"
+   landmarks are announced identically by a screen reader. If a search field is
+   ever put back in the masthead, it needs an aria-label distinguishing it from
+   this one, not a rule hiding one of the two. */
 /* Buttons living inside a label row must not inherit the uppercase tracking */
 .fr-cat-header .btn,
 .fr-cat-header .badge {
@@ -741,38 +743,63 @@ time {
   color: var(--bs-secondary-color);
 }
 
-.fr-hero-search {
+/* ── Masthead actions ─────────────────────────────────────────────────────────
+   Replaces the masthead search field (.fr-hero-search, removed): the topbar
+   carries a search on every page, so a second one here duplicated a global
+   control and left the masthead with no action of its own.
+
+   One filled button, one link — NOT two buttons. As an outline button the
+   catalogue measured ~277px beside a ~312px primary in a ~590px copy column, so
+   the row overflowed by a hair and wrapped into two ragged lines. The fix is not
+   to shave padding until it fits: that pins the layout to the length of one
+   Vietnamese label and the next locale breaks it again. A link has no button
+   padding, so the row clears comfortably in any language.
+
+   It also settles the hierarchy. Contributing is the harder ask and the scarcer
+   supply, so it gets the only filled control on the masthead; two filled buttons
+   of equal weight make the reader stop to work out which is the real one. */
+.fr-hero-cta {
   display: flex;
-  gap: 0.5rem;
-  max-width: 34rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
 }
-.fr-hero-search input {
-  flex: 1;
-  min-width: 0;
-  height: var(--fr-tap-target);
-  padding: 0 1rem;
+.fr-hero-cta .btn {
+  /* inline-flex so min-height centres the label instead of leaving it on the
+     first line of an over-tall button. NF-UX-02. */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--fr-tap-target);
+  padding-inline: 1.5rem;
+  font-weight: 600;
+}
+.fr-hero-cta-link {
+  display: inline-flex;
+  align-items: center;
+  /* Holds the 44px target on touch even though it is not a button — it is a
+     primary navigation link sitting in the masthead. NF-UX-02. */
+  min-height: var(--fr-tap-target);
   font-size: 0.9375rem;
-  color: var(--bs-body-color);
-  background: var(--fr-surface);
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius);
-  outline: none;
-  transition: border-color 0.15s var(--fr-ease), box-shadow 0.15s var(--fr-ease);
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+  transition: color 0.15s var(--fr-ease);
 }
-.fr-hero-search input::placeholder {
-  color: var(--bs-tertiary-color);
+.fr-hero-cta-link:hover,
+.fr-hero-cta-link:focus-visible {
+  color: var(--fr-accent-text);
 }
-.fr-hero-search input:focus {
-  border-color: var(--fr-accent);
-  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.18);
+.fr-hero-cta-link:hover .fa-arrow-right {
+  transform: translateX(3px);
 }
-.fr-hero-search .btn {
-  flex-shrink: 0;
-  padding-inline: 1.35rem;
+.fr-hero-cta-link .fa-arrow-right {
+  transition: transform 0.15s var(--fr-ease);
 }
-@media (max-width: 479.98px) {
-  .fr-hero-search {
-    flex-direction: column;
+@media (prefers-reduced-motion: reduce) {
+  .fr-hero-cta-link .fa-arrow-right,
+  .fr-hero-cta-link:hover .fa-arrow-right {
+    transition: none;
+    transform: none;
   }
 }
 
@@ -796,6 +823,21 @@ time {
     font-size: 0.9375rem;
     line-height: 1.5;
   }
+  /* Stacked on a phone: the button takes the full width — it is the primary tap
+     target and a content-width button next to nothing reads as a stub — and the
+     link centres under it so the two share one axis instead of one being centred
+     and the other ragged left. */
+  .fr-hero-cta {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  .fr-hero-cta .btn {
+    justify-content: center;
+  }
+  .fr-hero-cta-link {
+    justify-content: center;
+  }
 }
 
 /* ── Split masthead + photo mosaic ─────────────────────────────────────────────
@@ -812,40 +854,60 @@ time {
      own content and centred them against each other. Every height input there is
      data: a longer site tagline, a translation that wraps the title to three
      lines, 2 photos instead of 4. Whatever the difference was on the day, half of
-     it appeared above and half below, leaving the search field hanging past the
-     bottom of the last photo (and the eyebrow starting above the first one).
-     Stretching removes the variable rather than tuning it. */
+     it appeared above and half below, leaving the bottom of the copy column
+     hanging past the bottom of the last photo (and the eyebrow starting above the
+     first one). Stretching removes the variable rather than tuning it. */
   .fr-hero--split {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
     gap: clamp(1.5rem, 4vw, 3rem);
     align-items: stretch;
   }
-  /* Text reads from the top of the column; the search field is pushed to the
-     bottom by the auto margin so it lands exactly on the mosaic's bottom edge.
-     `.fr-hero-sub`'s own margin-bottom stays the minimum gap — the auto margin
-     only ever adds to it, so a short copy block never lets the form drift up
-     against the paragraph. */
+  /* The copy is CENTRED against the mosaic, not pinned to its bottom edge.
+     `margin-top: auto` on the last element used to do the pinning, back when that
+     element was a tall search form that filled most of the column. Once the
+     column held only a headline, a paragraph and one button, the same auto margin
+     shoved that button ~260px below the paragraph it belongs to and left a hole
+     in the middle of the masthead — the eye reads the gap as a missing block, not
+     as alignment.
+
+     Centring is the right axis because the mosaic still sets the height — it is
+     just a sane height now (see the clamp on .fr-hero--split .fr-hero-gallery
+     below). The copy block floats as one unit against it, which is also why the
+     pinning approach could never work: there is nothing at the bottom of this
+     column that wants to touch the bottom of a photograph. */
   .fr-hero--split .fr-hero-copy {
     display: flex;
     flex-direction: column;
+    justify-content: center;
   }
-  .fr-hero--split .fr-hero-search {
-    margin-top: auto;
-  }
-  /* The mosaic now takes its height from the row instead of from tile
-     aspect-ratio, and splits it evenly across however many rows the tile count
-     produced. min-height is the floor for the opposite case — a short tagline
-     with a two-line sub would otherwise squash the photos into a letterbox
-     strip. When the floor binds it is the mosaic that sets the row height and
-     the copy stretches to it; the two edges coincide either way. */
+  /* The mosaic gets an EXPLICIT height, and this is the line that decides how
+     tall the whole masthead is.
+
+     It used to say `height: 100%; min-height: 20rem`, which did not do what it
+     reads as. A percentage height against a row that is itself being sized by its
+     content is indefinite, so it resolved to `auto` — and with the tiles' own
+     aspect-ratio switched off just below, every tile fell back to its image's
+     intrinsic height. The photographs, not the layout, were setting the row: three
+     tiles wrapped to two rows came out ~595px against a ~280px copy column, and
+     no vertical alignment can absorb a 300px difference. It only moves the hole
+     (centred: half above and half below; flex-start: all of it under the buttons).
+
+     A definite height fixes the cause. `grid-auto-rows: 1fr` can now divide a real
+     number, so tiles get definite heights, `img { height: 100% }` resolves, and
+     object-fit crops — which it was always meant to do. clamp() keeps it
+     proportional: the floor stops a narrow desktop squashing the photos into a
+     letterbox strip, the ceiling stops a wide one turning the masthead into a
+     billboard. */
   .fr-hero--split .fr-hero-gallery {
-    height: 100%;
-    min-height: 20rem;
+    height: clamp(18rem, 30vw, 26rem);
     grid-auto-rows: 1fr;
   }
-  /* Height comes from the stretched row, so the fixed 4/3 box has to go or it
-     would fight it. Photos are cropped by `object-fit: cover`, never distorted. */
+  /* Height comes from the gallery's own rows above, so the fixed 4/3 box has to go
+     or it would fight it. Photos are cropped by `object-fit: cover`, never
+     distorted. This rule is only safe while the gallery height above stays
+     definite — drop that and the tiles have nothing to size against and fall back
+     to their images' intrinsic heights, which is the bug this pair once had. */
   .fr-hero--split .fr-hero-tile {
     aspect-ratio: auto;
     min-height: 0;
@@ -859,7 +921,7 @@ time {
   }
 }
 .fr-hero-copy {
-  min-width: 0; /* let the search field and sub-text shrink inside the grid track */
+  min-width: 0; /* let the sub-text and the action row shrink inside the grid track */
 }
 
 .fr-hero-gallery {
@@ -1355,13 +1417,19 @@ time {
   min-width: 0;
   line-height: 1.4;
 }
-.fr-spec-value a {
+/* The hover-underline is for plain links in a spec cell (brand, category).
+   `.fr-review-chip` must be excluded: a chip is a pill bordered on all four
+   sides, and this selector — one point more specific than `.fr-review-chip` —
+   would repaint its bottom edge transparent, leaving the pill visibly open at
+   the bottom and, on hover, amber on one edge and grey on the other three.
+   Chips already have their own hover from `.fr-review-chip--link:hover`. */
+.fr-spec-value a:not(.fr-review-chip) {
   color: var(--bs-emphasis-color);
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: border-color 0.15s var(--fr-ease), color 0.15s var(--fr-ease);
 }
-.fr-spec-value a:hover {
+.fr-spec-value a:not(.fr-review-chip):hover {
   color: var(--fr-accent-text);
   border-bottom-color: var(--fr-accent);
   text-decoration: none;
@@ -1547,9 +1615,9 @@ time {
   padding: 0.75rem 1.5rem;
 }
 
-/* Search page submit — recoloured to the amber accent so it matches the masthead
-   search button (which is .btn-accent), rather than the default theme's slate
-   primary. Amber fill + slate text is the same accessible pairing as .btn-accent. */
+/* Search page submit — recoloured to the amber accent so it matches .btn-accent,
+   the theme's CTA fill, rather than the default theme's slate primary. Amber fill
+   + slate text is the same accessible pairing .btn-accent uses. */
 .fr-search-submit {
   background: var(--fr-accent);
   border-color: var(--fr-accent);

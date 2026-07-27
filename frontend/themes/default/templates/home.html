@@ -265,43 +265,26 @@
         <span class="fr-panel-stat-val">{{ total_reviews | default(value=0) | thousands }}</span>
       </div>
       {% endif %}
+      {# The rail's own "new post" button, matching /forum and a category page —
+         the rail is the one part of the layout that survives scrolling past the
+         feed header, and it is where a returning member looks for the action.
+         It does duplicate the feed-header button at the top of the page; that is
+         the same deliberate duplication /forum already ships, and it costs
+         nothing on mobile, where the rail is not rendered at all (< 1100px).
+         Same body as the stats above it, so it shares their exact inset. #}
+      {% if current_user %}
+      <a href="/new-thread" class="btn btn-primary btn-sm w-100 mt-2">
+        <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}
+      </a>
+      {% endif %}
     </div>
-    {# No "new post" button here on purpose. The feed header already carries one,
-       and two identical primary CTAs on one screen make the reader stop to work
-       out whether they differ. The feed header's wins: it sits in the reading
-       path, next to the content the post will join. #}
   </div>
 
   {# Latest reviews — the sidebar home for review content now that it no longer
-     appears in the discussion feed. One row per product (collapsed server-side),
-     so five rows are five different products. Ranked above "trending" because on
-     a review platform a fresh review is the more valuable signal. #}
-  {% if latest_reviews %}
-  <div class="fr-panel">
-    <div class="fr-panel-header">
-      <i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-latest-reviews") }}
-    </div>
-    {% for r in latest_reviews %}
-      {# Link to the product when it is known, else to the review thread — product
-         is the more useful destination and the one the reader is deciding about. #}
-      <a href="{% if r.product_slug %}/catalog/{{ r.product_slug }}{% else %}/forum/t/{{ r.slug }}{% endif %}" class="fr-panel-row">
-        {{ m::avatar(url=r.author_avatar_url, name=r.author_display_name, size=32) }}
-        <div class="min-w-0 flex-grow-1">
-          <div class="small fw-medium text-body text-truncate lh-sm mb-1">
-            {% if r.product_name %}{{ r.product_name }}{% else %}{{ t(k="ui-a-product") }}{% endif %}
-          </div>
-          <div class="d-flex align-items-center gap-2" style="font-size:.75rem;color:var(--bs-tertiary-color)">
-            {% if r.overall %}
-              <span class="text-warning"><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>{{ r.overall }}/5</span>
-              <span aria-hidden="true">·</span>
-            {% endif %}
-            <span class="text-truncate">{{ r.author_display_name }}</span>
-          </div>
-        </div>
-      </a>
-    {% endfor %}
-  </div>
-  {% endif %}
+     appears in the discussion feed. Ranked above "trending" because on a review
+     platform a fresh review is the more valuable signal. The panel itself is
+     shared with the catalogue rail. #}
+  {% include "default/templates/partials/latest_reviews_panel.html" %}
 
   {# Active discussions — most-viewed from current feed #}
   {% if threads %}

@@ -21,6 +21,46 @@ use ferum_domain::repositories::product_repository::ProductListFilter;
 
 const PER_PAGE: u64 = 24;
 
+/// The catalogue taxonomy shaped for the templates: the filter `<select>` on
+/// /catalog and the "Category" panel in the catalogue rail read the same rows,
+/// so they are built once here rather than twice with two ideas of what a child
+/// category looks like.
+fn catalog_categories_ctx(
+    categories: &[ferum_domain::models::product_category::ProductCategory],
+) -> Vec<serde_json::Value> {
+    categories
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "id": c.id.to_string(),
+                "name": c.name.clone(),
+                "icon": c.icon.clone(),
+                "is_child": c.parent_id.is_some(),
+            })
+        })
+        .collect()
+}
+
+/// Context every catalogue surface (/catalog, /materials, /brands) needs for the
+/// shared rail in `partials/catalog_sidebar.html`.
+///
+/// The rail is identical on all three tabs by design — switching tabs must not
+/// change what sits beside the content — so its data is assembled in one place
+/// rather than three times with three ideas of what belongs there. `categories`
+/// is passed in because /catalog already holds them for its filter chips; a
+/// second fetch here would be the same query twice per request.
+///
+/// The review read degrades to an empty panel rather than failing the page: the
+/// rail supports the page, it is not the page.
+async fn catalog_rail_ctx(
+    state: &AppState,
+    ctx: &mut Context,
+    categories: &[ferum_domain::models::product_category::ProductCategory],
+) {
+    ctx.insert("catalog_categories", &catalog_categories_ctx(categories));
+    ctx.insert("latest_reviews", &super::forum::latest_reviews_ctx(state).await);
+}
+
 #[derive(Deserialize)]
 pub struct CatalogQuery {
     pub page: Option<u64>,
@@ -106,18 +146,7 @@ pub async fn catalog_index(
     // tree. Same list the search page offers, so the two agree. Kept raw for the
     // chip builder to name the active category.
     let categories_raw = state.product.list_categories().await.unwrap_or_default();
-    let categories: Vec<serde_json::Value> = categories_raw
-        .iter()
-        .map(|c| {
-            serde_json::json!({
-                "id": c.id.to_string(),
-                "name": c.name.clone(),
-                "icon": c.icon.clone(),
-                "is_child": c.parent_id.is_some(),
-            })
-        })
-        .collect();
-    ctx.insert("catalog_categories", &categories);
+    catalog_rail_ctx(&state, &mut ctx, &categories_raw).await;
 
     // Active narrowing filters, each a removable chip — same shape and template
     // the search page uses, so the two read alike. Sort is ordering, not
@@ -191,11 +220,26 @@ pub async fn catalog_index(
     if let Some(v) = q.material_id {
         params.push(format!("&material_id={v}"));
     }
-    if let Some(v) = q.category_id.as_deref().filter(|s| !s.is_empty()) {
-        params.push(format!("&category_id={}", urlencoding::encode(v)));
-    }
     if let Some(v) = q.sort.as_deref().filter(|s| !s.is_empty()) {
         params.push(format!("&sort={}", urlencoding::encode(v)));
+    }
+
+    // Everything active EXCEPT the category, for the rail's category rows. They
+    // replace the category rather than add to it, so re-emitting the current one
+    // would produce a link that cannot change anything — and dropping the rest
+    // would silently clear the reader's brand/material/query, which is the bug
+    // the pager had before `filter_params` existed.
+    let category_link_params = params.join("");
+    let catalog_all_url = if category_link_params.is_empty() {
+        "/catalog".to_string()
+    } else {
+        format!("/catalog?{}", category_link_params.trim_start_matches('&'))
+    };
+    ctx.insert("category_link_params", &category_link_params);
+    ctx.insert("catalog_all_url", &catalog_all_url);
+
+    if let Some(v) = q.category_id.as_deref().filter(|s| !s.is_empty()) {
+        params.push(format!("&category_id={}", urlencoding::encode(v)));
     }
     ctx.insert("filter_params", &params.join(""));
     ctx.insert(
@@ -242,6 +286,8 @@ pub async fn materials_index(
         "can_submit_product",
         &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
     );
+    let categories = state.product.list_categories().await.unwrap_or_default();
+    catalog_rail_ctx(&state, &mut ctx, &categories).await;
 
     render_with_theme_in(&state, &req_locale, &active, "catalog/materials.html", &ctx).await
 }
@@ -275,6 +321,8 @@ pub async fn brands_index(
         "can_submit_product",
         &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
     );
+    let categories = state.product.list_categories().await.unwrap_or_default();
+    catalog_rail_ctx(&state, &mut ctx, &categories).await;
 
     render_with_theme_in(&state, &req_locale, &active, "catalog/brands.html", &ctx).await
 }

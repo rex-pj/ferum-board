@@ -52,6 +52,14 @@
 }
 /* Stat rows: more breathing room than the 3px global default */
 .fr-right-col .fr-panel-stat-row { padding: 0.3125rem 0; }
+/* The panel owns the space above and below its own separator rule (0.875rem
+   each). A .fr-panel-body inside it adds another 0.75rem, so a panel that ended
+   in a body sat ~10px lower off its rule than one that ended in rows — 31px
+   under the /forum stats against 20-22px under every link list in the same rail.
+   The last body in a panel gives that back; bodies followed by something else
+   keep their padding, because there it separates two blocks rather than
+   doubling the panel's own margin. */
+.fr-right-col .fr-panel > .fr-panel-body:last-child { padding-bottom: 0; }
 /* Section labels: left accent stripe as rhythm marker + brand signal */
 .fr-right-col .fr-panel-header,
 .fr-right-col .fr-panel-section {
@@ -72,6 +80,18 @@
   font-weight: 700;
   font-size: 0.9375rem;
 }
+/* Browse rows that carry state and depth — the catalogue rail's category list.
+   A plain .fr-panel-row can say "here is a link"; it cannot say "this is the one
+   you are looking at" or "this one sits under that one", and the catalogue
+   taxonomy is two levels deep. Same active treatment as .fr-nav-link.active in
+   the left sidebar, so "selected" looks the same on both rails. */
+.fr-right-col .fr-panel-row.active {
+  background: var(--fr-nav-active-bg);
+  color: var(--fr-nav-active-color);
+  font-weight: 600;
+}
+.fr-right-col .fr-panel-row--child { padding-left: 1.75rem; }
+
 /* Nav icons in sidebar rows: primary color at 65% instead of generic gray at 50% */
 .fr-right-col .fr-icon-col {
   color: var(--ferum-primary);

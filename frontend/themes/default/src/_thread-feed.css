@@ -246,9 +246,10 @@
    row, and the removable active-category chip). */
 .fr-search-head { margin-bottom: 1.5rem; }
 
-/* Field + trailing submit button, mirroring the masthead search (.fr-hero-search):
-   input and button are separate, with a gap, so the two search surfaces on the
-   site read as one idiom. */
+/* Field + trailing submit button: input and button are separate, with a gap, so
+   this reads as the same idiom as the topbar's search rather than as a third
+   shape. (It used to mirror .fr-hero-search, a second search field in the
+   ferum-review masthead; that duplicate has since been removed.) */
 .fr-search-field {
   display: flex;
   gap: 0.5rem;
@@ -531,6 +532,19 @@
 .fr-search-tab.active {
   color: var(--ferum-primary);
   border-bottom-color: var(--ferum-primary);
+}
+/* Catalogue sub-nav: the tab strip shares its row with the "suggest a product"
+   action, so the rule under it has to run the full width of that row. Left on
+   the tabs alone it stopped where the last tab did, leaving the action floating
+   over a gap and the rule looking like it had been cut short. The border moves
+   to the row; the tabs keep their per-tab underline for the active state. */
+.fr-catalog-nav {
+  border-bottom: 1px solid var(--bs-border-color);
+}
+.fr-catalog-nav .fr-search-tabs {
+  border-bottom: none;
+  /* The row owns the spacing below now; the strip sits flush on the rule. */
+  margin-bottom: -1px;
 }
 .fr-search-tab-count {
   padding: 0.05rem 0.45rem;

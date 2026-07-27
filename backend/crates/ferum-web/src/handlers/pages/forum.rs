@@ -49,9 +49,10 @@ const SHELF_MIN_ITEMS: usize = 3;
 const SHELF_MODE_TOP_RATED: &str = "top_rated";
 const SHELF_MODE_NEWEST: &str = "newest";
 
-/// Rows in the homepage "latest reviews" panel. Sized to sit beside the feed
-/// without turning the sidebar into a second feed.
-const LATEST_REVIEWS_LIMIT: u64 = 5;
+/// Rows in the "latest reviews" rail panel. Sized to sit beside the feed without
+/// turning the sidebar into a second feed. Shared with the catalogue rail, which
+/// renders the identical panel — one number, so the two cannot drift.
+pub(crate) const LATEST_REVIEWS_LIMIT: u64 = 5;
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -61,14 +62,19 @@ pub struct ListQuery {
     pub sort: Option<String>,
 }
 
-/// Build the homepage "latest reviews" panel: newest review per product, joined to
+/// Build the "latest reviews" rail panel: newest review per product, joined to
 /// the product it reviews and the score it gave.
 ///
 /// Three batched queries, no N+1 — the repository already collapses to one review
 /// per product, so `reviewed_products` and `ratings_for_threads` each run once over
 /// the whole (≤ 5 row) set. Every failure degrades to an empty panel rather than
-/// failing the homepage: this is a supporting module, not the page's reason to exist.
-async fn latest_reviews_ctx(state: &AppState) -> Vec<LatestReviewCtx> {
+/// failing the page: this is a supporting module, not the page's reason to exist.
+///
+/// Shared with the catalogue rail (`pages::catalog`), which renders the same
+/// panel from the same rows — the panel exists to carry fresh review activity
+/// wherever the reader is browsing, and two builders would eventually disagree
+/// about what "latest" means.
+pub(crate) async fn latest_reviews_ctx(state: &AppState) -> Vec<LatestReviewCtx> {
     let threads = state
         .thread
         .latest_reviews(LATEST_REVIEWS_LIMIT)

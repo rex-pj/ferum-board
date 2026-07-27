@@ -295,6 +295,7 @@ ui-no-reviews-yet = Chưa có đánh giá nào
 ui-view-product = Xem sản phẩm
 ui-all-categories = Tất cả chuyên mục
 ui-all-categories-2 = Tất cả chuyên mục
+ui-all-products = Tất cả sản phẩm
 ui-highest-rated = Điểm cao nhất
 ui-lowest-rated = Điểm thấp nhất
 ui-top-rated = Được đánh giá cao
@@ -685,8 +686,9 @@ ui-architects-contractors-log-the-numbers =
     Kiến trúc sư, nhà thầu và chủ nhà ghi lại những con số quan trọng: độ bền
     theo thời gian, khả năng chống ẩm, độ khó khi thi công và chi phí thực tế
     trên mỗi m².
-ui-search-products-or-materials = Tìm sản phẩm hoặc vật liệu
-ui-search-flooring-tile-sofas-paint = Tìm sàn gỗ, gạch, sofa, sơn…
+# Đồng thời là nhãn nút phụ ở masthead (→ /catalog). Dùng lại thay vì đặt thêm
+# key kiểu "duyệt danh mục": đích đến chỉ có một tên, và nên đọc giống nhau ở mọi
+# chỗ trỏ tới nó.
 ui-product-catalog = Danh mục sản phẩm
 ui-discussion-categories = Chuyên mục thảo luận
 ui-browse-by-type = Duyệt theo loại

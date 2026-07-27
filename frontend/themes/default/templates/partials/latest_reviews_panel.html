@@ -1,0 +1,46 @@
+{# ── Latest reviews rail panel ──────────────────────────────────────────────
+   One row per product (the repository collapses to the newest review per
+   product server-side), so five rows are five different products.
+
+   Shared by the homepage rail and the catalogue rail — and by the ferum-review
+   theme's own home.html, which used to carry a hand-copied duplicate under a
+   "keep in sync" comment. Three copies of a panel is three chances for one of
+   them to keep linking somewhere the others stopped linking.
+
+   Renders nothing when the handler supplied no reviews, so it is safe to
+   include unconditionally.
+
+   THE INCLUDING TEMPLATE MUST IMPORT macros.html AS `m`. The import below is
+   not enough on its own: Tera resolves a macro namespace against the template
+   being *rendered*, not the one the `{% include %}` came from, so a page that
+   includes this without its own import fails at render time — a 500 on the
+   page, not an error at startup. Removing the (then unused-looking) import from
+   home.html is exactly how that was discovered. #}
+{% import "default/templates/macros.html" as m %}
+{% if latest_reviews %}
+<div class="fr-panel">
+  <div class="fr-panel-header">
+    <i class="fa-solid fa-star text-warning me-1" aria-hidden="true"></i>{{ t(k="ui-latest-reviews") }}
+  </div>
+  {% for r in latest_reviews %}
+    {# Link to the product when it is known, else to the review thread — the
+       product is the more useful destination and the one the reader is deciding
+       about. #}
+    <a href="{% if r.product_slug %}/catalog/{{ r.product_slug }}{% else %}/forum/t/{{ r.slug }}{% endif %}" class="fr-panel-row">
+      {{ m::avatar(url=r.author_avatar_url, name=r.author_display_name, size=32) }}
+      <div class="min-w-0 flex-grow-1">
+        <div class="small fw-medium text-body text-truncate lh-sm mb-1">
+          {% if r.product_name %}{{ r.product_name }}{% else %}{{ t(k="ui-a-product") }}{% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-2" style="font-size:.75rem;color:var(--bs-tertiary-color)">
+          {% if r.overall %}
+            <span class="text-warning"><i class="fa-solid fa-star fa-xs me-1" aria-hidden="true"></i>{{ r.overall }}/5</span>
+            <span aria-hidden="true">·</span>
+          {% endif %}
+          <span class="text-truncate">{{ r.author_display_name }}</span>
+        </div>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% endif %}

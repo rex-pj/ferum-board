@@ -114,6 +114,9 @@ ui-add-select-for-review = Add & select for review
 ui-admin = Admin
 ui-all-categories = All Categories
 ui-all-categories-2 = All categories
+# The catalogue rail's "no category filter" row — the way back out of a category
+# without losing the brand/material/query already picked.
+ui-all-products = All products
 ui-already-have-an-account = Already have an account?
 ui-apply = Apply
 ui-author = Author
@@ -656,8 +659,9 @@ ui-architects-contractors-log-the-numbers =
     Architects, contractors and homeowners log the numbers that matter: how it
     wears over years, how it handles damp, how hard it is to install, and the
     real cost per m².
-ui-search-products-or-materials = Search products or materials
-ui-search-flooring-tile-sofas-paint = Search flooring, tile, sofas, paint…
+# Doubles as the label on the masthead's secondary button (→ /catalog). Reused
+# rather than minting a "browse the catalogue" near-duplicate: the destination
+# has one name, and it should read the same wherever it is linked.
 ui-product-catalog = Product catalog
 ui-discussion-categories = Discussion categories
 ui-browse-by-type = Browse by type
