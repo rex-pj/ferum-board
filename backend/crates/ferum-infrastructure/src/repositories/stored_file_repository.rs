@@ -47,7 +47,10 @@ impl StoredFileRepository for PgStoredFileRepository {
 
         Ok(row
             .map(|r| UploadUsage {
-                file_count: r.file_count.max(0) as u64,
+                // `Ord::max`, not `ExprTrait::max` — sea-query 1.0's ExprTrait is
+                // blanket-implemented, so a bare `.max()` on an i64 is ambiguous
+                // wherever `sea_orm::*` is glob-imported.
+                file_count: Ord::max(r.file_count, 0) as u64,
                 total_bytes: r.total_bytes,
             })
             .unwrap_or(UploadUsage { file_count: 0, total_bytes: 0 }))
@@ -65,7 +68,7 @@ impl StoredFileRepository for PgStoredFileRepository {
                 stored_files::Column::RefCount,
                 Func::greatest([
                     Expr::col(stored_files::Column::RefCount).sub(1i32),
-                    Expr::val(0i32).into(),
+                    Expr::val(0i32),
                 ]),
             )
             .and_where(stored_files::Column::Key.eq(key))
@@ -172,12 +175,17 @@ impl StoredFileRepository for PgStoredFileRepository {
         // Escape LIKE metacharacters so a prefix containing "%"/"_" (e.g. an
         // unusual plugin slug) can't widen the scan beyond its own namespace.
         let escaped = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        // `select_only().column(Key)` matters here far more than usual: hydrating
+        // the full model would also fetch `data`, the file's entire byte content.
+        // The one caller that matters is plugin uninstall, which walks every blob
+        // in a `plugin_{slug}/` namespace — so the old form read every uploaded
+        // file into memory purely to learn its name.
         Ok(stored_files::Entity::find()
+            .select_only()
+            .column(stored_files::Column::Key)
             .filter(stored_files::Column::Key.like(format!("{escaped}%")))
+            .into_tuple::<String>()
             .all(&self.db)
-            .await?
-            .into_iter()
-            .map(|m| m.key)
-            .collect())
+            .await?)
     }
 }

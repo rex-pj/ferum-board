@@ -166,44 +166,80 @@ impl ModerationUseCase {
         let (reports, total) =
             self.reports.list_all(status, target_type, q, None, page, per_page.min(50)).await?;
 
-        let reporter_ids: Vec<Uuid> = reports
-            .iter()
-            .map(|r| r.reporter_id)
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        let users = self.users.find_many_by_ids(&reporter_ids).await?;
-        let user_map: HashMap<Uuid, String> =
-            users.into_iter().map(|u| (u.id, u.username)).collect();
+        Ok((self.enrich_reports(reports).await?, total))
+    }
 
-        let mut enriched = Vec::with_capacity(reports.len());
-        for report in reports {
-            let reporter_username = user_map
-                .get(&report.reporter_id)
-                .cloned()
-                .unwrap_or_else(|| report.reporter_id.to_string());
-
-            let (thread_slug, thread_title) = if let Some(thread_id) = report.thread_id {
-                match self.threads.find_by_id(thread_id).await? {
-                    Some(t) => (Some(t.slug), Some(t.title)),
-                    None => (None, None),
-                }
-            } else if let Some(post_id) = report.post_id {
-                match self.posts.find_by_id(post_id).await? {
-                    Some(p) => match self.threads.find_by_id(p.thread_id).await? {
-                        Some(t) => (Some(t.slug), Some(t.title)),
-                        None => (None, None),
-                    },
-                    None => (None, None),
-                }
-            } else {
-                (None, None)
-            };
-
-            enriched.push(ReportWithContext { report, reporter_username, thread_slug, thread_title });
+    /// Attaches reporter username and target-thread slug/title to a page of reports.
+    ///
+    /// Batched on purpose. The obvious per-row shape — `threads.find_by_id` for a
+    /// thread report, `posts.find_by_id` then `threads.find_by_id` for a post
+    /// report — costs up to two round trips per row, so a full page at the
+    /// endpoint's `per_page.min(50)` ceiling was up to 100 sequential queries to
+    /// render one moderator screen. This does it in at most four, regardless of
+    /// page size: reporters, directly-reported threads, reported posts, then the
+    /// threads those posts belong to.
+    ///
+    /// Lookup misses stay misses: a report whose target was deleted still yields
+    /// `(None, None)`, and an unresolvable reporter still falls back to the raw
+    /// id, exactly as the per-row version did.
+    async fn enrich_reports(
+        &self,
+        reports: Vec<Report>,
+    ) -> Result<Vec<ReportWithContext>, AppError> {
+        fn unique(ids: impl Iterator<Item = Uuid>) -> Vec<Uuid> {
+            ids.collect::<std::collections::HashSet<_>>().into_iter().collect()
         }
 
-        Ok((enriched, total))
+        let reporter_ids = unique(reports.iter().map(|r| r.reporter_id));
+        let direct_thread_ids = unique(reports.iter().filter_map(|r| r.thread_id));
+        // `thread_id` wins over `post_id` below, matching the original if/else-if
+        // ordering — a report carrying both is treated as a thread report.
+        let post_ids = unique(
+            reports.iter().filter(|r| r.thread_id.is_none()).filter_map(|r| r.post_id),
+        );
+
+        let (users, direct_threads, posts) = tokio::try_join!(
+            self.users.find_many_by_ids(&reporter_ids),
+            self.threads.find_many_by_ids(&direct_thread_ids),
+            self.posts.find_many_by_ids(&post_ids),
+        )?;
+
+        let user_map: HashMap<Uuid, String> =
+            users.into_iter().map(|u| (u.id, u.username)).collect();
+        let post_thread: HashMap<Uuid, Uuid> =
+            posts.into_iter().map(|p| (p.id, p.thread_id)).collect();
+
+        // Second thread hop: the threads reached only via a reported post. Skip
+        // any already fetched above so a mixed page does not load one twice.
+        let indirect_thread_ids = unique(
+            post_thread.values().copied().filter(|id| !direct_thread_ids.contains(id)),
+        );
+        let thread_map: HashMap<Uuid, (String, String)> = direct_threads
+            .into_iter()
+            .chain(self.threads.find_many_by_ids(&indirect_thread_ids).await?)
+            .map(|t| (t.id, (t.slug, t.title)))
+            .collect();
+
+        Ok(reports
+            .into_iter()
+            .map(|report| {
+                let reporter_username = user_map
+                    .get(&report.reporter_id)
+                    .cloned()
+                    .unwrap_or_else(|| report.reporter_id.to_string());
+
+                let thread_id = report
+                    .thread_id
+                    .or_else(|| report.post_id.and_then(|id| post_thread.get(&id).copied()));
+                // `get(..).cloned()`, not `remove(..)`: two reports on the same
+                // thread must both resolve, so the entry has to survive the first.
+                let (thread_slug, thread_title) = thread_id
+                    .and_then(|id| thread_map.get(&id).cloned())
+                    .map_or((None, None), |(slug, title)| (Some(slug), Some(title)));
+
+                ReportWithContext { report, reporter_username, thread_slug, thread_title }
+            })
+            .collect())
     }
 
     /// Resolves the category a report's target (post or thread) belongs to.
@@ -430,44 +466,7 @@ impl ModerationUseCase {
             .list_all(status, target_type, q, cat_ids.as_deref(), page, per_page.min(50))
             .await?;
 
-        let reporter_ids: Vec<Uuid> = reports
-            .iter()
-            .map(|r| r.reporter_id)
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        let users = self.users.find_many_by_ids(&reporter_ids).await?;
-        let user_map: HashMap<Uuid, String> =
-            users.into_iter().map(|u| (u.id, u.username)).collect();
-
-        let mut enriched = Vec::with_capacity(reports.len());
-        for report in reports {
-            let reporter_username = user_map
-                .get(&report.reporter_id)
-                .cloned()
-                .unwrap_or_else(|| report.reporter_id.to_string());
-
-            let (thread_slug, thread_title) = if let Some(thread_id) = report.thread_id {
-                match self.threads.find_by_id(thread_id).await? {
-                    Some(t) => (Some(t.slug), Some(t.title)),
-                    None => (None, None),
-                }
-            } else if let Some(post_id) = report.post_id {
-                match self.posts.find_by_id(post_id).await? {
-                    Some(p) => match self.threads.find_by_id(p.thread_id).await? {
-                        Some(t) => (Some(t.slug), Some(t.title)),
-                        None => (None, None),
-                    },
-                    None => (None, None),
-                }
-            } else {
-                (None, None)
-            };
-
-            enriched.push(ReportWithContext { report, reporter_username, thread_slug, thread_title });
-        }
-
-        Ok((enriched, total))
+        Ok((self.enrich_reports(reports).await?, total))
     }
 
     pub async fn mod_report_status_counts(

@@ -9,15 +9,13 @@ use sea_orm::{
 use uuid::{uuid, Uuid};
 
 use crate::entities::{
-    categories::{self, PostPolicy, ViewPolicy},
-    notifications::{self, NotificationKind},
-    posts,
-    reactions::{self, ReactionKind},
-    tags, thread_tags,
-    threads::{self, ThreadStatus},
-    user_preferences,
-    user_roles,
-    users::{self, TrustLevel},
+    categories, notifications, posts, reactions,
+    // Codegen puts every PostgreSQL enum type in one module rather than beside
+    // the table that happens to use it, since several are shared.
+    sea_orm_active_enums::{
+        NotificationKind, PostPolicy, ReactionKind, ThreadStatus, TrustLevel, ViewPolicy,
+    },
+    tags, thread_tags, threads, user_preferences, user_roles, users,
 };
 use ferum_application::ports::BulkSeedService;
 use ferum_application::shared::AppError;
@@ -1150,7 +1148,7 @@ impl PgBulkSeedService {
     async fn seed_furniture_demo(&self, admin_id: Uuid) -> Result<(), AppError> {
         use crate::entities::{
             materials, product_categories, product_materials, product_rating_stats, products,
-            review_ratings,
+            review_ratings, sea_orm_active_enums,
         };
         use rust_decimal::Decimal;
 
@@ -1174,8 +1172,8 @@ impl PgBulkSeedService {
                 id: Set(P_SOFA),
                 slug: Set("sofa-vang-boc-ni-scandinavian".into()),
                 name: Set("Sofa văng bọc nỉ Scandinavian".into()),
-                product_type: Set(products::ProductType::Furniture),
-                status: Set(products::ProductStatus::Published),
+                product_type: Set(sea_orm_active_enums::ProductType::Furniture),
+                status: Set(sea_orm_active_enums::ProductStatus::Published),
                 brand_id: Set(Some(BRAND_NHA_XINH)),
                 category_id: Set(cat("sofa")),
                 style: Set(Some("Scandinavian".into())),
@@ -1190,8 +1188,8 @@ impl PgBulkSeedService {
                 id: Set(P_TABLE),
                 slug: Set("ban-an-go-oc-cho-6-ghe".into()),
                 name: Set("Bàn ăn gỗ óc chó 6 ghế".into()),
-                product_type: Set(products::ProductType::Furniture),
-                status: Set(products::ProductStatus::Published),
+                product_type: Set(sea_orm_active_enums::ProductType::Furniture),
+                status: Set(sea_orm_active_enums::ProductStatus::Published),
                 brand_id: Set(Some(BRAND_HOA_PHAT)),
                 category_id: Set(cat("ban")),
                 style: Set(Some("Hiện đại".into())),
@@ -1209,8 +1207,8 @@ impl PgBulkSeedService {
                 id: Set(P_MDF),
                 slug: Set("van-mdf-phu-melamine".into()),
                 name: Set("Ván MDF phủ Melamine".into()),
-                product_type: Set(products::ProductType::Material),
-                status: Set(products::ProductStatus::Published),
+                product_type: Set(sea_orm_active_enums::ProductType::Material),
+                status: Set(sea_orm_active_enums::ProductStatus::Published),
                 price_min: Set(Some(220_000)),
                 price_max: Set(Some(450_000)),
                 description_md: Set(Some("Đánh giá vật liệu ván MDF phủ Melamine.".into())),
@@ -1314,7 +1312,7 @@ impl PgBulkSeedService {
     // User most wants to look at are the ones with nothing to show.
 
     async fn seed_moderation_demo(&self, admin_id: Uuid) -> Result<(), AppError> {
-        use crate::entities::reports::{self, ReportStatus};
+        use crate::entities::{reports, sea_orm_active_enums::ReportStatus};
 
         let now = Utc::now().fixed_offset();
 
@@ -1445,7 +1443,7 @@ impl PgBulkSeedService {
         use sea_orm::{ConnectionTrait, Statement};
 
         self.db
-            .execute(Statement::from_string(
+            .execute_raw(Statement::from_string(
                 self.db.get_database_backend(),
                 "UPDATE users u SET post_count = coalesce(c.n, 0) \
                  FROM ( \

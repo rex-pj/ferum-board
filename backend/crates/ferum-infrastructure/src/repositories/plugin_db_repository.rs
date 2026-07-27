@@ -1,4 +1,5 @@
 use sea_orm::sqlx;
+use sea_orm::sqlx::AssertSqlSafe;
 use sea_orm::DatabaseConnection;
 
 use ferum_application::shared::AppError;
@@ -170,8 +171,11 @@ async fn grant_schema_to_plugin_role(pool: &sqlx::PgPool, schema: &str) {
         ),
     ];
 
+    // AssertSqlSafe: every interpolation above is server-derived — `schema` comes
+    // from `schema_name()` (non-alphanumerics folded to `_`) and `role` is the
+    // compile-time `PLUGIN_DB_ROLE` constant. No plugin-supplied text reaches here.
     for stmt in stmts {
-        if let Err(e) = sqlx::query(&stmt).execute(pool).await {
+        if let Err(e) = sqlx::query(AssertSqlSafe(stmt)).execute(pool).await {
             tracing::warn!(
                 schema = %schema,
                 error = %e,
@@ -195,7 +199,8 @@ async fn grant_schema_to_plugin_role(pool: &sqlx::PgPool, schema: &str) {
 /// `users` table — worth a WARN every time, not a silent downgrade.
 async fn set_plugin_role(tx: &mut sqlx::PgConnection, slug: &str) -> bool {
     let role = migration::PLUGIN_DB_ROLE;
-    match sqlx::query(&format!("SET LOCAL ROLE {role}")).execute(tx).await {
+    // AssertSqlSafe: `role` is the compile-time `PLUGIN_DB_ROLE` constant.
+    match sqlx::query(AssertSqlSafe(format!("SET LOCAL ROLE {role}"))).execute(tx).await {
         Ok(_) => true,
         Err(e) => {
             tracing::warn!(
@@ -215,7 +220,9 @@ impl PluginDbGateway for PgPluginDbGateway {
         let schema = schema_name(slug);
         let pool = self.db.get_postgres_connection_pool();
 
-        sqlx::query(&format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\""))
+        // AssertSqlSafe: `schema` is `schema_name(slug)` output — non-alphanumerics
+        // folded to `_` — so it cannot break out of the quoted identifier.
+        sqlx::query(AssertSqlSafe(format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\"")))
             .execute(pool)
             .await
             .map_err(|e| AppError::internal(format!("Failed to create plugin schema: {e}")))?;
@@ -223,11 +230,14 @@ impl PluginDbGateway for PgPluginDbGateway {
         for stmt in statements {
             let mut tx = pool.begin().await
                 .map_err(|e| AppError::internal(format!("Failed to begin schema tx: {e}")))?;
-            sqlx::query(&format!("SET LOCAL search_path TO \"{schema}\""))
+            sqlx::query(AssertSqlSafe(format!("SET LOCAL search_path TO \"{schema}\"")))
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| AppError::internal(format!("Failed to scope schema tx: {e}")))?;
-            sqlx::query(stmt)
+            // AssertSqlSafe: plugin-authored schema DDL. It is deliberately trusted
+            // *here* — this is the install-time `db` capability an admin granted —
+            // and is confined by the `SET LOCAL search_path` above.
+            sqlx::query(AssertSqlSafe(stmt.as_str()))
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| AppError::unprocessable(&format!("Schema DDL failed: {e}")))?;
@@ -242,7 +252,8 @@ impl PluginDbGateway for PgPluginDbGateway {
     async fn drop_schema(&self, slug: &str) -> Result<(), AppError> {
         let schema = schema_name(slug);
         let pool = self.db.get_postgres_connection_pool();
-        sqlx::query(&format!("DROP SCHEMA IF EXISTS \"{schema}\" CASCADE"))
+        // AssertSqlSafe: `schema` is sanitized `schema_name(slug)` output.
+        sqlx::query(AssertSqlSafe(format!("DROP SCHEMA IF EXISTS \"{schema}\" CASCADE")))
             .execute(pool)
             .await
             .map_err(|e| AppError::internal(format!("Failed to drop plugin schema: {e}")))?;
@@ -261,7 +272,8 @@ impl PluginDbGateway for PgPluginDbGateway {
         let pool = self.db.get_postgres_connection_pool();
         let mut tx = pool.begin().await
             .map_err(|e| AppError::internal(format!("Failed to begin query tx: {e}")))?;
-        sqlx::query(&format!("SET LOCAL search_path TO \"{schema}\""))
+        // AssertSqlSafe: `schema` is sanitized `schema_name(slug)` output.
+        sqlx::query(AssertSqlSafe(format!("SET LOCAL search_path TO \"{schema}\"")))
             .execute(&mut *tx)
             .await
             .map_err(|e| AppError::internal(format!("Failed to scope query tx: {e}")))?;
@@ -283,7 +295,10 @@ impl PluginDbGateway for PgPluginDbGateway {
         let is_select = trimmed_lower.starts_with("select") || trimmed_lower.starts_with("with");
 
         let result = if is_select {
-            let mut q = sqlx::query_scalar::<_, Option<serde_json::Value>>(sql);
+            // AssertSqlSafe: plugin-supplied SQL, reaching here only after
+            // `validate_plugin_sql` and with `SET LOCAL ROLE ferum_plugin` in
+            // force. Values are bound as parameters below, never interpolated.
+            let mut q = sqlx::query_scalar::<_, Option<serde_json::Value>>(AssertSqlSafe(sql));
             for p in &params {
                 q = bind_scalar_param(q, p);
             }
@@ -291,7 +306,8 @@ impl PluginDbGateway for PgPluginDbGateway {
                 .map_err(|e| AppError::unprocessable(&format!("Query failed: {e}")))?;
             row.flatten().unwrap_or(serde_json::Value::Null)
         } else {
-            let mut q = sqlx::query(sql);
+            // AssertSqlSafe: same contract as the SELECT branch above.
+            let mut q = sqlx::query(AssertSqlSafe(sql));
             for p in &params {
                 q = bind_exec_param(q, p);
             }

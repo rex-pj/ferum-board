@@ -4,7 +4,7 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{posts, threads};
+use crate::entities::{posts, sea_orm_active_enums, threads};
 use ferum_application::shared::AppError;
 use ferum_domain::models::post::{Post, PostStatus};
 use ferum_domain::repositories::post_repository::{NewPost, PostRepository};
@@ -21,17 +21,17 @@ impl PgPostRepository {
     }
 }
 
-fn entity_status_to_domain(s: &posts::PostStatus) -> PostStatus {
+fn entity_status_to_domain(s: &sea_orm_active_enums::PostStatus) -> PostStatus {
     match s {
-        posts::PostStatus::Pending => PostStatus::Pending,
-        posts::PostStatus::Published => PostStatus::Published,
+        sea_orm_active_enums::PostStatus::Pending => PostStatus::Pending,
+        sea_orm_active_enums::PostStatus::Published => PostStatus::Published,
     }
 }
 
-fn domain_status_to_entity(s: PostStatus) -> posts::PostStatus {
+fn domain_status_to_entity(s: PostStatus) -> sea_orm_active_enums::PostStatus {
     match s {
-        PostStatus::Pending => posts::PostStatus::Pending,
-        PostStatus::Published => posts::PostStatus::Published,
+        PostStatus::Pending => sea_orm_active_enums::PostStatus::Pending,
+        PostStatus::Published => sea_orm_active_enums::PostStatus::Published,
     }
 }
 
@@ -69,11 +69,11 @@ fn entity_to_domain(m: posts::Model) -> Post {
 /// `position_in_thread` so the two can never define "visible" differently.
 fn visibility_condition(viewer_id: Option<Uuid>) -> Condition {
     let mut condition =
-        Condition::any().add(posts::Column::Status.eq(posts::PostStatus::Published));
+        Condition::any().add(posts::Column::Status.eq(sea_orm_active_enums::PostStatus::Published));
     if let Some(viewer) = viewer_id {
         condition = condition.add(
             Condition::all()
-                .add(posts::Column::Status.eq(posts::PostStatus::Pending))
+                .add(posts::Column::Status.eq(sea_orm_active_enums::PostStatus::Pending))
                 .add(posts::Column::AuthorId.eq(viewer)),
         );
     }
@@ -87,6 +87,19 @@ impl PostRepository for PgPostRepository {
             .one(&self.db)
             .await?
             .map(entity_to_domain))
+    }
+
+    async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<Post>, AppError> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        Ok(posts::Entity::find()
+            .filter(posts::Column::Id.is_in(ids.to_vec()))
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(entity_to_domain)
+            .collect())
     }
 
     async fn list_by_thread(
@@ -201,7 +214,7 @@ impl PostRepository for PgPostRepository {
         let query = posts::Entity::find()
             .filter(posts::Column::AuthorId.eq(author_id))
             .filter(posts::Column::IsDeleted.eq(false))
-            .filter(posts::Column::Status.eq(posts::PostStatus::Published))
+            .filter(posts::Column::Status.eq(sea_orm_active_enums::PostStatus::Published))
             .order_by_desc(posts::Column::CreatedAt);
 
         let (total, rows) = tokio::try_join!(
@@ -245,14 +258,14 @@ impl PostRepository for PgPostRepository {
         let offset = (page.saturating_sub(1)) * per_page;
 
         let mut query = posts::Entity::find()
-            .filter(posts::Column::Status.eq(posts::PostStatus::Pending))
+            .filter(posts::Column::Status.eq(sea_orm_active_enums::PostStatus::Pending))
             .filter(posts::Column::IsDeleted.eq(false))
             .order_by_asc(posts::Column::CreatedAt);
 
         // Both filters live on `threads`, so join once if either is present —
         // joining per-filter would duplicate the join and the result rows.
         if category_id.is_some() || allowed_category_ids.is_some() {
-            query = query.join(JoinType::InnerJoin, posts::Relation::Thread.def());
+            query = query.join(JoinType::InnerJoin, posts::Relation::Threads.def());
         }
         if let Some(cat_id) = category_id {
             query = query.filter(threads::Column::CategoryId.eq(cat_id));
@@ -284,8 +297,8 @@ impl PostRepository for PgPostRepository {
 
         // Confirm the target itself is visible to this viewer under the same
         // rule list_by_thread uses, otherwise "position" is meaningless.
-        let is_visible = target.status == posts::PostStatus::Published
-            || (target.status == posts::PostStatus::Pending && viewer_id == Some(target.author_id));
+        let is_visible = target.status == sea_orm_active_enums::PostStatus::Published
+            || (target.status == sea_orm_active_enums::PostStatus::Pending && viewer_id == Some(target.author_id));
         if !is_visible {
             return Ok(None);
         }

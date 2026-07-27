@@ -21,6 +21,13 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 slug = { workspace = true }
-tokio = { workspace = true }
+# `rt` for `tokio::spawn` / `spawn_blocking`, `sync` for the `mpsc` channel in
+# `ports.rs` and the `Mutex` in `setup_usecase.rs`, `macros` for the seven
+# `tokio::try_join!` / `join!` sites. These were previously left to feature
+# unification — the crate compiled only because `ferum-web` happened to enable
+# them, so `cargo check -p ferum-application` (and running this crate's tests
+# alone) failed with "module `sync` is private". A crate must ask for what it
+# uses; unification is an optimisation, not a dependency declaration.
+tokio = { workspace = true, features = ["rt", "sync", "macros"] }
 tracing = { workspace = true }
 uuid = { workspace = true }

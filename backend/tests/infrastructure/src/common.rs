@@ -162,7 +162,7 @@ impl TestDb {
 }
 
 async fn exec(conn: &DatabaseConnection, sql: &str) {
-    conn.execute(Statement::from_string(DbBackend::Postgres, sql.to_owned()))
+    conn.execute_raw(Statement::from_string(DbBackend::Postgres, sql.to_owned()))
         .await
         .unwrap_or_else(|e| panic!("admin statement failed ({sql}): {e}"));
 }

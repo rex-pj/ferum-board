@@ -219,7 +219,7 @@ impl UserRoleRepository for PgUserRoleRepository {
         }
 
         let placeholders: Vec<SimpleExpr> =
-            user_ids.iter().map(|id| Expr::val(*id).into()).collect();
+            user_ids.iter().map(|id| Expr::val(*id)).collect();
 
         let (sql, values) = base_query()
             .and_where(

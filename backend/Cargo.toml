@@ -56,6 +56,7 @@ hex = "0.4.3"
 # Tied to sha2 below: hmac 0.12 is built on digest 0.10. Bumping one without the
 # other does not fail to compile — it silently duplicates the stack again.
 hmac = "0.12"
+# ^ stays on 0.12 for the same reason sha2 stays on 0.10 — see that note.
 http = "1"
 http-body-util = "0.1"
 intl-memoizer = "0.5.3"
@@ -84,7 +85,7 @@ redis = { version = "0.27", default-features = false, features = [
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rust_decimal = { version = "1", features = ["serde"] }
-sea-orm = { version = "1", features = [
+sea-orm = { version = "2", features = [
     "sqlx-postgres",
     "runtime-tokio-rustls",
     "macros",
@@ -97,14 +98,20 @@ sea-orm = { version = "1", features = [
 # binary. The server only ever calls `Migrator::up` as a library; the CLI is
 # needed solely by the `migration` bin target, which re-enables it through that
 # crate's own `cli` feature + `required-features`.
-sea-orm-migration = { version = "1", default-features = false, features = [
+sea-orm-migration = { version = "2", default-features = false, features = [
     "sqlx-postgres",
     "runtime-tokio-rustls",
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Must stay on the 0.10 line: sqlx (via sea-orm) pins it there, so any other
-# choice duplicates rather than upgrades. See the note on `hmac`.
+# Stays on the 0.10 line, but the reason changed with sea-orm 2.0 / sqlx 0.9.
+# sqlx 0.9 is itself split across two RustCrypto generations: `sqlx-core` still
+# builds on sha2 0.10 / digest 0.10, while `sqlx-postgres` moved to sha2 0.11 /
+# hmac 0.13. Two copies are therefore in the tree no matter what we pick — the
+# duplication now originates inside sqlx, not from a drift on our side. Staying
+# on 0.10 unifies our HMAC webhook signing with `sqlx-core`; moving to 0.11 would
+# merely swap which half we share with, at the cost of churning that code.
+# Re-check when sqlx finishes the migration and both halves land on one line.
 sha2 = "0.10"
 slug = "0.1"
 tera = "1"

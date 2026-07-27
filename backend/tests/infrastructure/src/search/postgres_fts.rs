@@ -161,7 +161,7 @@ async fn set_thread_metrics(
     created_at: &str,
 ) {
     use sea_orm::ConnectionTrait;
-    conn.execute(sea_orm::Statement::from_string(
+    conn.execute_raw(sea_orm::Statement::from_string(
         sea_orm::DatabaseBackend::Postgres,
         format!(
             "UPDATE threads SET reply_count = {reply_count}, created_at = '{created_at}' \
@@ -440,7 +440,7 @@ async fn product_search_matches_without_diacritics() {
     use sea_orm::{ConnectionTrait, Statement};
     let unaccent_active: bool = db
         .conn
-        .query_one(Statement::from_string(
+        .query_one_raw(Statement::from_string(
             sea_orm::DbBackend::Postgres,
             "SELECT (f_unaccent('ế') = 'e') AS folded".to_owned(),
         ))

@@ -5,6 +5,7 @@ mod auth_usecase;
 mod bookmark_usecase;
 mod category_usecase;
 mod follow_usecase;
+mod moderation_enrichment;
 mod moderation_usecase;
 mod notification_usecase;
 mod plugin_usecase;

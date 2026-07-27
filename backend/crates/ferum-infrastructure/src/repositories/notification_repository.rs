@@ -3,7 +3,7 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::notifications;
+use crate::entities::{notifications, sea_orm_active_enums};
 use ferum_application::shared::AppError;
 use ferum_domain::models::notification::{Notification, NotificationKind};
 use ferum_domain::repositories::notification_repository::NotificationRepository;
@@ -23,12 +23,12 @@ fn entity_to_domain(m: notifications::Model) -> Notification {
         id: m.id,
         user_id: m.user_id,
         kind: match m.kind {
-            notifications::NotificationKind::Reply => NotificationKind::Reply,
-            notifications::NotificationKind::Mention => NotificationKind::Mention,
-            notifications::NotificationKind::Reaction => NotificationKind::Reaction,
-            notifications::NotificationKind::BestAnswer => NotificationKind::BestAnswer,
-            notifications::NotificationKind::Warn => NotificationKind::Warn,
-            notifications::NotificationKind::System => NotificationKind::System,
+            sea_orm_active_enums::NotificationKind::Reply => NotificationKind::Reply,
+            sea_orm_active_enums::NotificationKind::Mention => NotificationKind::Mention,
+            sea_orm_active_enums::NotificationKind::Reaction => NotificationKind::Reaction,
+            sea_orm_active_enums::NotificationKind::BestAnswer => NotificationKind::BestAnswer,
+            sea_orm_active_enums::NotificationKind::Warn => NotificationKind::Warn,
+            sea_orm_active_enums::NotificationKind::System => NotificationKind::System,
         },
         payload: m.payload,
         is_read: m.is_read,
@@ -37,14 +37,14 @@ fn entity_to_domain(m: notifications::Model) -> Notification {
     }
 }
 
-fn kind_to_entity(k: &NotificationKind) -> notifications::NotificationKind {
+fn kind_to_entity(k: &NotificationKind) -> sea_orm_active_enums::NotificationKind {
     match k {
-        NotificationKind::Reply => notifications::NotificationKind::Reply,
-        NotificationKind::Mention => notifications::NotificationKind::Mention,
-        NotificationKind::Reaction => notifications::NotificationKind::Reaction,
-        NotificationKind::BestAnswer => notifications::NotificationKind::BestAnswer,
-        NotificationKind::Warn => notifications::NotificationKind::Warn,
-        NotificationKind::System => notifications::NotificationKind::System,
+        NotificationKind::Reply => sea_orm_active_enums::NotificationKind::Reply,
+        NotificationKind::Mention => sea_orm_active_enums::NotificationKind::Mention,
+        NotificationKind::Reaction => sea_orm_active_enums::NotificationKind::Reaction,
+        NotificationKind::BestAnswer => sea_orm_active_enums::NotificationKind::BestAnswer,
+        NotificationKind::Warn => sea_orm_active_enums::NotificationKind::Warn,
+        NotificationKind::System => sea_orm_active_enums::NotificationKind::System,
     }
 }
 

@@ -61,12 +61,15 @@ impl PluginStorageRepository for PgPluginStorageRepository {
             let escaped = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
             q = q.filter(plugin_storage::Column::Key.like(format!("{escaped}%")));
         }
-        Ok(q.order_by_asc(plugin_storage::Column::Key)
+        // Project the key alone — the discarded `value` column is JSONB of
+        // unbounded size, so hydrating full models would transfer every stored
+        // document to return a list of names.
+        Ok(q.select_only()
+            .column(plugin_storage::Column::Key)
+            .order_by_asc(plugin_storage::Column::Key)
             .limit(limit)
+            .into_tuple::<String>()
             .all(&self.db)
-            .await?
-            .into_iter()
-            .map(|m| m.key)
-            .collect())
+            .await?)
     }
 }

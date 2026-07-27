@@ -8,7 +8,7 @@ use uuid::Uuid;
 use sea_orm::sea_query::extension::postgres::PgExpr;
 use sea_orm::sea_query::{Alias, CaseStatement, Expr, Func, Order, PostgresQueryBuilder, Query, SimpleExpr, SubQueryStatement};
 
-use crate::entities::{roles, user_avatars, user_covers, user_muted_categories, user_preferences, user_roles, user_watched_categories, users};
+use crate::entities::{roles, sea_orm_active_enums, user_avatars, user_covers, user_muted_categories, user_preferences, user_roles, user_watched_categories, users};
 use ferum_application::shared::AppError;
 use ferum_domain::models::user::{TrustLevel, User, UserPreferences};
 use ferum_domain::Locale;
@@ -88,8 +88,8 @@ fn user_select() -> sea_orm::Select<users::Entity> {
         .column_as(user_avatars::Column::FileKey, "avatar_key")
         .column_as(user_covers::Column::FileKey, "cover_key")
         .column_as(primary_role_subexpr(), "primary_role_slug")
-        .join(JoinType::LeftJoin, users::Relation::UserAvatar.def())
-        .join(JoinType::LeftJoin, users::Relation::UserCover.def())
+        .join(JoinType::LeftJoin, users::Relation::UserAvatars.def())
+        .join(JoinType::LeftJoin, users::Relation::UserCovers.def())
 }
 
 #[derive(Debug, FromQueryResult)]
@@ -157,13 +157,13 @@ fn row_to_domain(row: UserRow) -> User {
     }
 }
 
-pub(crate) fn domain_trust_to_entity(level: &TrustLevel) -> users::TrustLevel {
+pub(crate) fn domain_trust_to_entity(level: &TrustLevel) -> sea_orm_active_enums::TrustLevel {
     match level {
-        TrustLevel::New => users::TrustLevel::New,
-        TrustLevel::Basic => users::TrustLevel::Basic,
-        TrustLevel::Member => users::TrustLevel::Member,
-        TrustLevel::Regular => users::TrustLevel::Regular,
-        TrustLevel::Leader => users::TrustLevel::Leader,
+        TrustLevel::New => sea_orm_active_enums::TrustLevel::New,
+        TrustLevel::Basic => sea_orm_active_enums::TrustLevel::Basic,
+        TrustLevel::Member => sea_orm_active_enums::TrustLevel::Member,
+        TrustLevel::Regular => sea_orm_active_enums::TrustLevel::Regular,
+        TrustLevel::Leader => sea_orm_active_enums::TrustLevel::Leader,
     }
 }
 
@@ -511,6 +511,12 @@ impl UserRepository for PgUserRepository {
             layout: Set(layout),
             email_notifications: Set(email_notifications),
             locale: Set(locale.map(|l| l.to_string())),
+            // `NotSet`, deliberately: the previous hand-maintained entity did not
+            // model this column at all, so no write path has ever populated it.
+            // Regeneration surfaced it; leaving it unwritten keeps behaviour
+            // identical rather than quietly starting to maintain a timestamp
+            // nothing reads. See the note in the upgrade summary.
+            updated_at: NotSet,
         })
         .on_conflict(
             OnConflict::column(user_preferences::Column::UserId)
@@ -644,7 +650,7 @@ impl UserRepository for PgUserRepository {
             .build(PostgresQueryBuilder);
 
         self.db
-            .execute(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
+            .execute_raw(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
             .await?;
         Ok(())
     }
@@ -654,7 +660,7 @@ impl UserRepository for PgUserRepository {
             .col_expr(
                 users::Column::PostCount,
                 Func::greatest(vec![
-                    Expr::val(0i32).into(),
+                    Expr::val(0i32),
                     Expr::col(users::Column::PostCount).add(delta),
                 ])
                 .into(),
@@ -670,9 +676,9 @@ impl UserRepository for PgUserRepository {
             .col_expr(
                 users::Column::TrustScore,
                 Func::greatest(vec![
-                    Expr::val(0i32).into(),
+                    Expr::val(0i32),
                     Func::least(vec![
-                        Expr::val(100i32).into(),
+                        Expr::val(100i32),
                         Expr::col(users::Column::TrustScore).add(amount),
                     ])
                     .into(),

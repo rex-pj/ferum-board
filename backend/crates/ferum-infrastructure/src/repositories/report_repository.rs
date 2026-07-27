@@ -4,7 +4,7 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{posts, reports, threads};
+use crate::entities::{posts, reports, sea_orm_active_enums, threads};
 use ferum_application::shared::AppError;
 use ferum_domain::models::report::{Report, ReportStatus};
 use ferum_domain::repositories::report_repository::{ReportRepository, ReportStatusCounts};
@@ -62,9 +62,9 @@ fn entity_to_domain(m: reports::Model) -> Report {
         thread_id: m.thread_id,
         reason: m.reason,
         status: match m.status {
-            reports::ReportStatus::Pending => ReportStatus::Pending,
-            reports::ReportStatus::Resolved => ReportStatus::Resolved,
-            reports::ReportStatus::Dismissed => ReportStatus::Dismissed,
+            sea_orm_active_enums::ReportStatus::Pending => ReportStatus::Pending,
+            sea_orm_active_enums::ReportStatus::Resolved => ReportStatus::Resolved,
+            sea_orm_active_enums::ReportStatus::Dismissed => ReportStatus::Dismissed,
         },
         moderator_notes: m.moderator_notes,
         resolved_by_id: m.resolved_by_id,
@@ -87,7 +87,7 @@ impl ReportRepository for PgReportRepository {
         &self,
         category_ids: Option<&'a [Uuid]>,
     ) -> Result<ReportStatusCounts, AppError> {
-        let base = |status: reports::ReportStatus| {
+        let base = |status: sea_orm_active_enums::ReportStatus| {
             let mut q = reports::Entity::find().filter(reports::Column::Status.eq(status));
             if let Some(cats) = category_ids {
                 q = scope_to_categories(q, cats);
@@ -95,9 +95,9 @@ impl ReportRepository for PgReportRepository {
             q
         };
         let (pending, resolved, dismissed) = tokio::try_join!(
-            base(reports::ReportStatus::Pending).count(&self.db),
-            base(reports::ReportStatus::Resolved).count(&self.db),
-            base(reports::ReportStatus::Dismissed).count(&self.db),
+            base(sea_orm_active_enums::ReportStatus::Pending).count(&self.db),
+            base(sea_orm_active_enums::ReportStatus::Resolved).count(&self.db),
+            base(sea_orm_active_enums::ReportStatus::Dismissed).count(&self.db),
         )?;
         Ok(ReportStatusCounts { pending, resolved, dismissed })
     }
@@ -120,9 +120,9 @@ impl ReportRepository for PgReportRepository {
 
         if let Some(s) = status {
             let entity_status = match s {
-                ReportStatus::Pending => reports::ReportStatus::Pending,
-                ReportStatus::Resolved => reports::ReportStatus::Resolved,
-                ReportStatus::Dismissed => reports::ReportStatus::Dismissed,
+                ReportStatus::Pending => sea_orm_active_enums::ReportStatus::Pending,
+                ReportStatus::Resolved => sea_orm_active_enums::ReportStatus::Resolved,
+                ReportStatus::Dismissed => sea_orm_active_enums::ReportStatus::Dismissed,
             };
             query = query.filter(reports::Column::Status.eq(entity_status));
         }
@@ -199,9 +199,9 @@ impl ReportRepository for PgReportRepository {
         moderator_notes: Option<String>,
     ) -> Result<(), AppError> {
         let entity_status = match status {
-            ReportStatus::Pending => reports::ReportStatus::Pending,
-            ReportStatus::Resolved => reports::ReportStatus::Resolved,
-            ReportStatus::Dismissed => reports::ReportStatus::Dismissed,
+            ReportStatus::Pending => sea_orm_active_enums::ReportStatus::Pending,
+            ReportStatus::Resolved => sea_orm_active_enums::ReportStatus::Resolved,
+            ReportStatus::Dismissed => sea_orm_active_enums::ReportStatus::Dismissed,
         };
 
         let mut active = reports::ActiveModel {

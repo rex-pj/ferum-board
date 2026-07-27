@@ -19,7 +19,7 @@
     review surface.
 
 .NOTES
-    Requires sea-orm-cli:  cargo install sea-orm-cli --version ^1.1
+    Requires sea-orm-cli:  cargo install sea-orm-cli --version ^2.0
     Run from the repository root.
 #>
 [CmdletBinding()]
@@ -36,7 +36,7 @@ $backend = Join-Path $repoRoot "backend"
 $entitiesDir = Join-Path $backend "crates/ferum-infrastructure/src/entities"
 
 if (-not (Get-Command sea-orm-cli -ErrorAction SilentlyContinue)) {
-    throw "sea-orm-cli not found. Install it: cargo install sea-orm-cli --version ^1.1"
+    throw "sea-orm-cli not found. Install it: cargo install sea-orm-cli --version ^2.0"
 }
 
 # Derive the server URL from backend/.env if not supplied.
@@ -57,14 +57,21 @@ Push-Location $backend
 try {
     $env:DATABASE_URL = $regenUrl
     Write-Host "==> migration fresh" -ForegroundColor Cyan
-    cargo run --quiet --package migration -- fresh
+    # `--features cli` is required: the migration bin target is behind
+    # `required-features = ["cli"]` so the server binary does not link an
+    # argument parser. Without it this invocation silently builds nothing to run.
+    cargo run --quiet --package migration --features cli -- fresh
     if ($LASTEXITCODE -ne 0) { throw "migration fresh failed (does database '$RegenDb' exist?)" }
 
     # 2. Generate entities in place. Flags match the existing output.
+    #    `--entity-format dense` (sea-orm 2.0) folds relations into `Model` as
+    #    typed `BelongsTo`/`HasMany` fields, replacing the separate `Relation`
+    #    enum and the hand-written `impl Related<..>` blocks.
     Write-Host "==> sea-orm-cli generate entity -> $entitiesDir" -ForegroundColor Cyan
     sea-orm-cli generate entity `
         --database-url $regenUrl `
         --output-dir $entitiesDir `
+        --entity-format dense `
         --with-serde both `
         --date-time-crate chrono
     if ($LASTEXITCODE -ne 0) { throw "sea-orm-cli generate entity failed" }

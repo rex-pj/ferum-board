@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use sea_orm::sea_query::{
-    Alias, Asterisk, Condition, Expr, Func, JoinType, OnConflict, Order, PostgresQueryBuilder,
-    Query, SelectStatement, SimpleExpr, SubQueryStatement, UnionType, Values,
+    Alias, Asterisk, Condition, Expr, ExprTrait, Func, JoinType, OnConflict, Order,
+    PostgresQueryBuilder, Query, SelectStatement, SimpleExpr, SubQueryStatement, UnionType, Values,
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, FromQueryResult, Statement};
 
@@ -120,8 +120,10 @@ impl StatsRepository for PgStatsRepository {
         let view_total_live = || {
             Query::select()
                 .expr(Func::coalesce([
-                    Func::sum(Expr::col(threads::Column::ViewCount)).into(),
-                    Expr::val(0i64).into(),
+                    // sea-query 1.0 unified `SimpleExpr` into `Expr`; a bare
+                    // `.into()` no longer resolves to a unique target type.
+                    Expr::from(Func::sum(Expr::col(threads::Column::ViewCount))),
+                    Expr::val(0i64),
                 ]))
                 .from(threads::Entity)
                 .and_where(
@@ -143,7 +145,7 @@ impl StatsRepository for PgStatsRepository {
 
         let new_views_today: SimpleExpr = Func::cust(Alias::new("GREATEST"))
             .args([
-                Expr::val(0i64).into(),
+                Expr::val(0i64),
                 Expr::expr(scalar(view_total_live())).sub(Func::coalesce([
                     scalar(view_yesterday_snapshot),
                     scalar(view_total_live()), // no snapshot → delta = 0
@@ -242,8 +244,10 @@ impl StatsRepository for PgStatsRepository {
         {
             let view_now = Query::select()
                 .expr(Func::coalesce([
-                    Func::sum(Expr::col(threads::Column::ViewCount)).into(),
-                    Expr::val(0i64).into(),
+                    // sea-query 1.0 unified `SimpleExpr` into `Expr`; a bare
+                    // `.into()` no longer resolves to a unique target type.
+                    Expr::from(Func::sum(Expr::col(threads::Column::ViewCount))),
+                    Expr::val(0i64),
                 ]))
                 .from(threads::Entity)
                 .and_where(
@@ -275,7 +279,7 @@ impl StatsRepository for PgStatsRepository {
             );
             let (sql, values) = seed_ins.build(PostgresQueryBuilder);
             self.db
-                .execute(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
+                .execute_raw(Statement::from_sql_and_values(DbBackend::Postgres, sql, values))
                 .await?;
         }
 
@@ -284,8 +288,10 @@ impl StatsRepository for PgStatsRepository {
         let view_total = || {
             Query::select()
                 .expr(Func::coalesce([
-                    Func::sum(Expr::col(threads::Column::ViewCount)).into(),
-                    Expr::val(0i64).into(),
+                    // sea-query 1.0 unified `SimpleExpr` into `Expr`; a bare
+                    // `.into()` no longer resolves to a unique target type.
+                    Expr::from(Func::sum(Expr::col(threads::Column::ViewCount))),
+                    Expr::val(0i64),
                 ]))
                 .from(threads::Entity)
                 .and_where(
@@ -342,7 +348,7 @@ impl StatsRepository for PgStatsRepository {
             Func::coalesce([scalar(view_yesterday), scalar(view_total())]);
         let new_views: SimpleExpr = Func::cust(Alias::new("GREATEST"))
             .args([
-                Expr::val(0i64).into(),
+                Expr::val(0i64),
                 Expr::expr(scalar(view_total())).sub(view_yesterday_expr),
             ])
             .into();
@@ -398,7 +404,7 @@ impl StatsRepository for PgStatsRepository {
         let (sql, values) = ins.build(PostgresQueryBuilder);
 
         self.db
-            .execute(Statement::from_sql_and_values(
+            .execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 sql,
                 values,
@@ -487,7 +493,7 @@ impl StatsRepository for PgStatsRepository {
 
         for (sql, values) in [users_stmt, threads_stmt, posts_stmt, reactions_stmt] {
             self.db
-                .execute(Statement::from_sql_and_values(
+                .execute_raw(Statement::from_sql_and_values(
                     DbBackend::Postgres,
                     sql,
                     values,
@@ -516,8 +522,8 @@ impl StatsRepository for PgStatsRepository {
             .expr_as(Expr::cust("d::date"), Alias::new("date"))
             .expr_as(
                 Func::coalesce([
-                    Expr::col((s.clone(), daily_stats::Column::Value)).into(),
-                    Expr::val(0i64).into(),
+                    Expr::col((s.clone(), daily_stats::Column::Value)),
+                    Expr::val(0i64),
                 ]),
                 Alias::new("value"),
             )
@@ -541,7 +547,7 @@ impl StatsRepository for PgStatsRepository {
                     .add(Expr::col((s.clone(), daily_stats::Column::Metric)).eq(metric))
                     .add(Expr::col((s.clone(), daily_stats::Column::CategoryId)).is_null()),
             )
-            .order_by_expr(Expr::col(d).into(), Order::Asc)
+            .order_by_expr(Expr::col(d), Order::Asc)
             .to_owned();
 
         let (sql, values) = query.build(PostgresQueryBuilder);

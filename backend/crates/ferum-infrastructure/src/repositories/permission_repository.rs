@@ -7,7 +7,7 @@ use ferum_domain::models::role::Permission;
 use ferum_domain::models::user::TrustLevel as DomainTrustLevel;
 use ferum_domain::repositories::permission_repository::PermissionRepository;
 
-use crate::entities::{permissions, role_permissions, users::TrustLevel as EntityTrustLevel};
+use crate::entities::{permissions, role_permissions, sea_orm_active_enums::TrustLevel as EntityTrustLevel};
 
 pub struct PgPermissionRepository {
     db: DatabaseConnection,
@@ -52,8 +52,17 @@ impl PermissionRepository for PgPermissionRepository {
     }
 
     async fn list_for_role(&self, role_id: Uuid) -> Result<Vec<Permission>, AppError> {
+        // Dense codegen models `permissions <-> roles` as a many-to-many *via*
+        // `role_permissions`, so `permissions::Entity` no longer has a direct
+        // `Related<role_permissions::Entity>` for `inner_join` to pick up. Join
+        // the junction explicitly — same two-table SQL as before, whereas
+        // joining through `roles::Entity` would drag in a third table this
+        // query has no use for.
         let rows = permissions::Entity::find()
-            .inner_join(role_permissions::Entity)
+            .join(
+                JoinType::InnerJoin,
+                role_permissions::Relation::Permissions.def().rev(),
+            )
             .filter(role_permissions::Column::RoleId.eq(role_id))
             .order_by_asc(permissions::Column::Key)
             .all(&self.db)

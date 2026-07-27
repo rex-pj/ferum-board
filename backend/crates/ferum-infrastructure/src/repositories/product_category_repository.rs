@@ -183,7 +183,7 @@ impl ProductCategoryRepository for PgProductCategoryRepository {
 
         if !dry_run {
             self.db
-                .execute(Statement::from_string(
+                .execute_raw(Statement::from_string(
                     DbBackend::Postgres,
                     format!(
                         "UPDATE products p SET category_id = m.category_id \

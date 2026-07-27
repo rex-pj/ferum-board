@@ -8,7 +8,7 @@ use sea_orm::sea_query::{Expr, NullOrdering, Query};
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{product_materials, product_media, product_rating_stats, products, threads};
+use crate::entities::{product_materials, product_media, product_rating_stats, products, sea_orm_active_enums, threads};
 use ferum_application::shared::AppError;
 use ferum_domain::models::product::{NewProduct, Product, ProductStatus, ProductType};
 use ferum_domain::models::product_media::{NewProductMedia, ProductMedia};
@@ -63,35 +63,35 @@ impl PgProductRepository {
 
 // ── enum mapping (domain ↔ entity) ─────────────────────────────────────────────
 
-fn type_to_entity(t: ProductType) -> products::ProductType {
+fn type_to_entity(t: ProductType) -> sea_orm_active_enums::ProductType {
     match t {
-        ProductType::Furniture => products::ProductType::Furniture,
-        ProductType::Material => products::ProductType::Material,
-        ProductType::Room => products::ProductType::Room,
+        ProductType::Furniture => sea_orm_active_enums::ProductType::Furniture,
+        ProductType::Material => sea_orm_active_enums::ProductType::Material,
+        ProductType::Room => sea_orm_active_enums::ProductType::Room,
     }
 }
 
-fn type_to_domain(t: products::ProductType) -> ProductType {
+fn type_to_domain(t: sea_orm_active_enums::ProductType) -> ProductType {
     match t {
-        products::ProductType::Furniture => ProductType::Furniture,
-        products::ProductType::Material => ProductType::Material,
-        products::ProductType::Room => ProductType::Room,
+        sea_orm_active_enums::ProductType::Furniture => ProductType::Furniture,
+        sea_orm_active_enums::ProductType::Material => ProductType::Material,
+        sea_orm_active_enums::ProductType::Room => ProductType::Room,
     }
 }
 
-fn status_to_entity(s: ProductStatus) -> products::ProductStatus {
+fn status_to_entity(s: ProductStatus) -> sea_orm_active_enums::ProductStatus {
     match s {
-        ProductStatus::Draft => products::ProductStatus::Draft,
-        ProductStatus::Published => products::ProductStatus::Published,
-        ProductStatus::Archived => products::ProductStatus::Archived,
+        ProductStatus::Draft => sea_orm_active_enums::ProductStatus::Draft,
+        ProductStatus::Published => sea_orm_active_enums::ProductStatus::Published,
+        ProductStatus::Archived => sea_orm_active_enums::ProductStatus::Archived,
     }
 }
 
-fn status_to_domain(s: products::ProductStatus) -> ProductStatus {
+fn status_to_domain(s: sea_orm_active_enums::ProductStatus) -> ProductStatus {
     match s {
-        products::ProductStatus::Draft => ProductStatus::Draft,
-        products::ProductStatus::Published => ProductStatus::Published,
-        products::ProductStatus::Archived => ProductStatus::Archived,
+        sea_orm_active_enums::ProductStatus::Draft => ProductStatus::Draft,
+        sea_orm_active_enums::ProductStatus::Published => ProductStatus::Published,
+        sea_orm_active_enums::ProductStatus::Archived => ProductStatus::Archived,
     }
 }
 
@@ -253,7 +253,7 @@ impl ProductRepository for PgProductRepository {
 
         // Rating-based sorts LEFT JOIN the aggregate rollup and order by it with
         // unrated products (NULL) pushed last, then newest as a stable tiebreak.
-        let stats_rel = product_rating_stats::Relation::Product.def().rev();
+        let stats_rel = product_rating_stats::Relation::Products.def().rev();
         let q = match filter.sort {
             ProductSort::Newest => q.order_by_desc(products::Column::CreatedAt),
             // Bayesian-shrunk mean, not the raw average: one 5★ review must not
@@ -377,7 +377,7 @@ impl ProductRepository for PgProductRepository {
             // block a hard delete.
             reviews: threads::Entity::find()
                 .filter(threads::Column::ProductId.eq(product_id))
-                .filter(threads::Column::Status.ne(threads::ThreadStatus::Deleted))
+                .filter(threads::Column::Status.ne(sea_orm_active_enums::ThreadStatus::Deleted))
                 .count(&self.db)
                 .await?,
             media: product_media::Entity::find()
@@ -456,9 +456,9 @@ impl ProductRepository for PgProductRepository {
             .column_as(products::Column::Slug, "slug")
             .column_as(products::Column::Name, "name")
             .column_as(products::Column::PrimaryImageKey, "key")
-            .join(JoinType::InnerJoin, threads::Relation::Product.def())
+            .join(JoinType::InnerJoin, threads::Relation::Products.def())
             .filter(threads::Column::Id.is_in(thread_ids.to_vec()))
-            .filter(products::Column::Status.eq(products::ProductStatus::Published))
+            .filter(products::Column::Status.eq(sea_orm_active_enums::ProductStatus::Published))
             .into_model::<Row>()
             .all(&self.db)
             .await?;

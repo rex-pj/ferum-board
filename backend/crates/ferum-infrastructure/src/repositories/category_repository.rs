@@ -1,9 +1,11 @@
 use async_trait::async_trait;
-use sea_orm::sea_query::{Alias, CaseStatement, Expr, Func, JoinType, PostgresQueryBuilder, Query};
+use sea_orm::sea_query::{
+    Alias, CaseStatement, Expr, ExprTrait, Func, JoinType, PostgresQueryBuilder, Query,
+};
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{categories, threads};
+use crate::entities::{categories, sea_orm_active_enums, threads};
 use ferum_application::shared::AppError;
 use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 use ferum_domain::repositories::category_repository::{
@@ -35,16 +37,16 @@ fn entity_to_domain(m: categories::Model) -> Category {
         description: m.description,
         position: m.position,
         view_policy: match m.view_policy {
-            categories::ViewPolicy::Public => ViewPolicy::Public,
-            categories::ViewPolicy::MembersOnly => ViewPolicy::MembersOnly,
-            categories::ViewPolicy::StaffOnly => ViewPolicy::StaffOnly,
+            sea_orm_active_enums::ViewPolicy::Public => ViewPolicy::Public,
+            sea_orm_active_enums::ViewPolicy::MembersOnly => ViewPolicy::MembersOnly,
+            sea_orm_active_enums::ViewPolicy::StaffOnly => ViewPolicy::StaffOnly,
         },
         post_policy: match m.post_policy {
-            categories::PostPolicy::Members => PostPolicy::Members,
-            categories::PostPolicy::Trusted => PostPolicy::Trusted,
-            categories::PostPolicy::StaffOnly => PostPolicy::StaffOnly,
-            categories::PostPolicy::Closed => PostPolicy::Closed,
-            categories::PostPolicy::Moderated => PostPolicy::Moderated,
+            sea_orm_active_enums::PostPolicy::Members => PostPolicy::Members,
+            sea_orm_active_enums::PostPolicy::Trusted => PostPolicy::Trusted,
+            sea_orm_active_enums::PostPolicy::StaffOnly => PostPolicy::StaffOnly,
+            sea_orm_active_enums::PostPolicy::Closed => PostPolicy::Closed,
+            sea_orm_active_enums::PostPolicy::Moderated => PostPolicy::Moderated,
         },
         color: m.color,
         created_at: m.created_at.with_timezone(&chrono::Utc),
@@ -54,21 +56,21 @@ fn entity_to_domain(m: categories::Model) -> Category {
     }
 }
 
-fn view_policy_to_entity(p: &ViewPolicy) -> categories::ViewPolicy {
+fn view_policy_to_entity(p: &ViewPolicy) -> sea_orm_active_enums::ViewPolicy {
     match p {
-        ViewPolicy::Public => categories::ViewPolicy::Public,
-        ViewPolicy::MembersOnly => categories::ViewPolicy::MembersOnly,
-        ViewPolicy::StaffOnly => categories::ViewPolicy::StaffOnly,
+        ViewPolicy::Public => sea_orm_active_enums::ViewPolicy::Public,
+        ViewPolicy::MembersOnly => sea_orm_active_enums::ViewPolicy::MembersOnly,
+        ViewPolicy::StaffOnly => sea_orm_active_enums::ViewPolicy::StaffOnly,
     }
 }
 
-fn post_policy_to_entity(p: &PostPolicy) -> categories::PostPolicy {
+fn post_policy_to_entity(p: &PostPolicy) -> sea_orm_active_enums::PostPolicy {
     match p {
-        PostPolicy::Members => categories::PostPolicy::Members,
-        PostPolicy::Trusted => categories::PostPolicy::Trusted,
-        PostPolicy::StaffOnly => categories::PostPolicy::StaffOnly,
-        PostPolicy::Closed => categories::PostPolicy::Closed,
-        PostPolicy::Moderated => categories::PostPolicy::Moderated,
+        PostPolicy::Members => sea_orm_active_enums::PostPolicy::Members,
+        PostPolicy::Trusted => sea_orm_active_enums::PostPolicy::Trusted,
+        PostPolicy::StaffOnly => sea_orm_active_enums::PostPolicy::StaffOnly,
+        PostPolicy::Closed => sea_orm_active_enums::PostPolicy::Closed,
+        PostPolicy::Moderated => sea_orm_active_enums::PostPolicy::Moderated,
     }
 }
 
@@ -180,7 +182,9 @@ impl CategoryRepository for PgCategoryRepository {
             .column((categories::Entity, categories::Column::Id))
             .expr_as(
                 Func::coalesce([
-                    Func::sum(
+                    // sea-query 1.0 unified `SimpleExpr` into `Expr`, so a bare
+                    // `.into()` here no longer has a unique target. Name it.
+                    Expr::from(Func::sum(
                         CaseStatement::new()
                             .case(
                                 Expr::col((threads::Entity, threads::Column::Id)).is_not_null()
@@ -188,9 +192,8 @@ impl CategoryRepository for PgCategoryRepository {
                                 1i32,
                             )
                             .finally(0i32),
-                    )
-                    .into(),
-                    Expr::val(0i64).into(),
+                    )),
+                    Expr::val(0i64),
                 ]),
                 Alias::new("thread_count"),
             )

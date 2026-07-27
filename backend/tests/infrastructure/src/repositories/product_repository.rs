@@ -44,7 +44,7 @@ fn new_product(slug: &str, name: &str) -> NewProduct {
 /// staging whole review threads just to reach a number.
 async fn set_stats(db: &TestDb, product_id: Uuid, review_count: i32, avg_overall: f64) {
     db.conn
-        .execute(Statement::from_sql_and_values(
+        .execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             // `$3::numeric` rather than binding a Decimal: it keeps the column's
             // real type without pulling rust_decimal into the test crate.

@@ -4,7 +4,7 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{plugin_hooks, plugin_logs, plugin_ui_slots, plugins};
+use crate::entities::{plugin_hooks, plugin_logs, plugin_ui_slots, plugins, sea_orm_active_enums};
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::{
     NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginHook, PluginLog,
@@ -24,41 +24,41 @@ impl PgPluginRepository {
 
 // ─── Conversion helpers ───────────────────────────────────────────────────────
 
-fn tier_to_entity(t: &PluginTier) -> plugins::PluginTierEntity {
+fn tier_to_entity(t: &PluginTier) -> sea_orm_active_enums::PluginTier {
     match t {
-        PluginTier::Manifest => plugins::PluginTierEntity::Manifest,
-        PluginTier::Script => plugins::PluginTierEntity::Script,
-        PluginTier::Service => plugins::PluginTierEntity::Service,
+        PluginTier::Manifest => sea_orm_active_enums::PluginTier::Manifest,
+        PluginTier::Script => sea_orm_active_enums::PluginTier::Script,
+        PluginTier::Service => sea_orm_active_enums::PluginTier::Service,
     }
 }
 
-fn tier_from_entity(e: plugins::PluginTierEntity) -> PluginTier {
+fn tier_from_entity(e: sea_orm_active_enums::PluginTier) -> PluginTier {
     match e {
-        plugins::PluginTierEntity::Manifest => PluginTier::Manifest,
-        plugins::PluginTierEntity::Script => PluginTier::Script,
-        plugins::PluginTierEntity::Service => PluginTier::Service,
+        sea_orm_active_enums::PluginTier::Manifest => PluginTier::Manifest,
+        sea_orm_active_enums::PluginTier::Script => PluginTier::Script,
+        sea_orm_active_enums::PluginTier::Service => PluginTier::Service,
     }
 }
 
-fn status_to_entity(s: &PluginStatus) -> plugins::PluginStatusEntity {
+fn status_to_entity(s: &PluginStatus) -> sea_orm_active_enums::PluginStatus {
     match s {
-        PluginStatus::Installing => plugins::PluginStatusEntity::Installing,
-        PluginStatus::Active => plugins::PluginStatusEntity::Active,
-        PluginStatus::Inactive => plugins::PluginStatusEntity::Inactive,
-        PluginStatus::Error => plugins::PluginStatusEntity::Error,
-        PluginStatus::Disabled => plugins::PluginStatusEntity::Disabled,
-        PluginStatus::Uninstalling => plugins::PluginStatusEntity::Uninstalling,
+        PluginStatus::Installing => sea_orm_active_enums::PluginStatus::Installing,
+        PluginStatus::Active => sea_orm_active_enums::PluginStatus::Active,
+        PluginStatus::Inactive => sea_orm_active_enums::PluginStatus::Inactive,
+        PluginStatus::Error => sea_orm_active_enums::PluginStatus::Error,
+        PluginStatus::Disabled => sea_orm_active_enums::PluginStatus::Disabled,
+        PluginStatus::Uninstalling => sea_orm_active_enums::PluginStatus::Uninstalling,
     }
 }
 
-fn status_from_entity(e: plugins::PluginStatusEntity) -> PluginStatus {
+fn status_from_entity(e: sea_orm_active_enums::PluginStatus) -> PluginStatus {
     match e {
-        plugins::PluginStatusEntity::Installing => PluginStatus::Installing,
-        plugins::PluginStatusEntity::Active => PluginStatus::Active,
-        plugins::PluginStatusEntity::Inactive => PluginStatus::Inactive,
-        plugins::PluginStatusEntity::Error => PluginStatus::Error,
-        plugins::PluginStatusEntity::Disabled => PluginStatus::Disabled,
-        plugins::PluginStatusEntity::Uninstalling => PluginStatus::Uninstalling,
+        sea_orm_active_enums::PluginStatus::Installing => PluginStatus::Installing,
+        sea_orm_active_enums::PluginStatus::Active => PluginStatus::Active,
+        sea_orm_active_enums::PluginStatus::Inactive => PluginStatus::Inactive,
+        sea_orm_active_enums::PluginStatus::Error => PluginStatus::Error,
+        sea_orm_active_enums::PluginStatus::Disabled => PluginStatus::Disabled,
+        sea_orm_active_enums::PluginStatus::Uninstalling => PluginStatus::Uninstalling,
     }
 }
 
@@ -161,7 +161,7 @@ impl PluginRepository for PgPluginRepository {
             name: Set(data.name),
             version: Set(data.version),
             tier: Set(tier_to_entity(&data.tier)),
-            status: Set(plugins::PluginStatusEntity::Installing),
+            status: Set(sea_orm_active_enums::PluginStatus::Installing),
             manifest: Set(data.manifest),
             config: Set(serde_json::json!({})),
             granted_capabilities: Set(data.granted_capabilities),

@@ -8,7 +8,7 @@ use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query};
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::reactions;
+use crate::entities::{reactions, sea_orm_active_enums};
 use ferum_application::shared::AppError;
 use ferum_domain::models::reaction::{Reaction, ReactionKind};
 use ferum_domain::repositories::reaction_repository::ReactionRepository;
@@ -23,21 +23,21 @@ impl PgReactionRepository {
     }
 }
 
-fn kind_to_entity(k: &ReactionKind) -> reactions::ReactionKind {
+fn kind_to_entity(k: &ReactionKind) -> sea_orm_active_enums::ReactionKind {
     match k {
-        ReactionKind::Like => reactions::ReactionKind::Like,
-        ReactionKind::Helpful => reactions::ReactionKind::Helpful,
-        ReactionKind::Insightful => reactions::ReactionKind::Insightful,
-        ReactionKind::Funny => reactions::ReactionKind::Funny,
+        ReactionKind::Like => sea_orm_active_enums::ReactionKind::Like,
+        ReactionKind::Helpful => sea_orm_active_enums::ReactionKind::Helpful,
+        ReactionKind::Insightful => sea_orm_active_enums::ReactionKind::Insightful,
+        ReactionKind::Funny => sea_orm_active_enums::ReactionKind::Funny,
     }
 }
 
-fn entity_to_kind(k: &reactions::ReactionKind) -> ReactionKind {
+fn entity_to_kind(k: &sea_orm_active_enums::ReactionKind) -> ReactionKind {
     match k {
-        reactions::ReactionKind::Like => ReactionKind::Like,
-        reactions::ReactionKind::Helpful => ReactionKind::Helpful,
-        reactions::ReactionKind::Insightful => ReactionKind::Insightful,
-        reactions::ReactionKind::Funny => ReactionKind::Funny,
+        sea_orm_active_enums::ReactionKind::Like => ReactionKind::Like,
+        sea_orm_active_enums::ReactionKind::Helpful => ReactionKind::Helpful,
+        sea_orm_active_enums::ReactionKind::Insightful => ReactionKind::Insightful,
+        sea_orm_active_enums::ReactionKind::Funny => ReactionKind::Funny,
     }
 }
 

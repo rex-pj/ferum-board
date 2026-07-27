@@ -4,6 +4,7 @@
 #[cfg(test)] mod follow_repository;
 #[cfg(test)] mod notification_repository;
 #[cfg(test)] mod permission_repository;
+#[cfg(test)] mod plugin_db_repository;
 #[cfg(test)] mod plugin_repository;
 #[cfg(test)] mod post_repository;
 #[cfg(test)] mod product_category_repository;

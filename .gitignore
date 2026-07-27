@@ -1,6 +1,7 @@
 # ─── Rust / Cargo ─────────────────────────────────────────────────────────────
 target/
 **/*.rs.bk
+**/Cargo.lock
 
 # ─── Node (client-widgets build only) ─────────────────────────────────────────
 node_modules/

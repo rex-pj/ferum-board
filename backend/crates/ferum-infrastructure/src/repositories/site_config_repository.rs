@@ -50,10 +50,36 @@ impl SiteConfigRepository for PgSiteConfigRepository {
         Ok(())
     }
 
+    /// One multi-row upsert, not one round trip per key.
+    ///
+    /// `PUT /api/admin/config` writes the whole settings form at once — around
+    /// eighteen keys — so the previous `for (k, v) in entries { self.set(..) }`
+    /// cost eighteen sequential statements to save one page. It was also not
+    /// atomic: a failure partway left some keys written and the rest not, with
+    /// no indication of where it stopped. A single INSERT … ON CONFLICT applies
+    /// all of them or none.
     async fn set_many(&self, entries: &HashMap<String, String>) -> Result<(), AppError> {
-        for (k, v) in entries {
-            self.set(k, v).await?;
-        }
+        let now = chrono::Utc::now().fixed_offset();
+        let rows: Vec<site_config::ActiveModel> = entries
+            .iter()
+            .map(|(key, value)| site_config::ActiveModel {
+                key: Set(key.clone()),
+                value: Set(value.clone()),
+                updated_at: Set(now),
+                updated_by_id: NotSet,
+            })
+            .collect();
+
+        // sea-orm 2.0 returns Ok (rather than `DbErr::RecordNotInserted`) for an
+        // empty iterator, so an empty map needs no guard of its own.
+        site_config::Entity::insert_many(rows)
+            .on_conflict(
+                sea_orm::sea_query::OnConflict::column(site_config::Column::Key)
+                    .update_columns([site_config::Column::Value, site_config::Column::UpdatedAt])
+                    .to_owned(),
+            )
+            .exec(&self.db)
+            .await?;
         Ok(())
     }
 }

@@ -296,7 +296,11 @@ impl PgSystemSeedService {
                     .do_nothing()
                     .to_owned(),
                 )
-                .do_nothing()
+                // `InsertMany::do_nothing` was deprecated in 2.0; `try_insert` is
+                // documented as the same wrapper — it maps `DbErr::RecordNotInserted`
+                // to `TryInsertResult::Conflicted` rather than erroring, which is
+                // what keeps a fully-seeded database idempotent here.
+                .try_insert()
                 .exec(&self.db)
                 .await?;
         }

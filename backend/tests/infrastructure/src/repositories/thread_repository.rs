@@ -323,7 +323,7 @@ async fn try_record_view_on_conflict_dedup_logic() {
 /// the row exists and carries a `status`, not about the full product model.
 async fn make_product(db: &sea_orm::DatabaseConnection, slug: &str, status: &str) -> Uuid {
     let id = Uuid::new_v4();
-    db.execute(Statement::from_sql_and_values(
+    db.execute_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
         "INSERT INTO products (id, slug, name, product_type, status, currency, dimensions, created_at, updated_at) \
          VALUES ($1, $2, $2, 'furniture', $3::product_status, 'VND', '{}'::jsonb, now(), now())",
@@ -357,7 +357,7 @@ async fn make_review(
         })
         .await
         .expect("create review thread");
-    db.execute(Statement::from_sql_and_values(
+    db.execute_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
         "UPDATE threads SET created_at = $2::timestamptz WHERE id = $1",
         [id.into(), created_at.into()],

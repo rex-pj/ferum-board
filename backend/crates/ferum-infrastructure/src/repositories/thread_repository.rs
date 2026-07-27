@@ -5,7 +5,7 @@ use sea_orm::sea_query::{Alias, Asterisk, Expr, Func, OnConflict, PostgresQueryB
 use sea_orm::*;
 use uuid::Uuid;
 
-use crate::entities::{tags, thread_tags, thread_thumbnails, thread_view_dedup, threads};
+use crate::entities::{sea_orm_active_enums, tags, thread_tags, thread_thumbnails, thread_view_dedup, threads};
 use ferum_application::shared::AppError;
 use ferum_domain::models::thread::{Thread, ThreadStatus};
 use ferum_domain::repositories::thread_repository::{
@@ -38,9 +38,9 @@ fn entity_to_domain(m: threads::Model) -> Thread {
         title: m.title,
         slug: m.slug,
         status: match m.status {
-            threads::ThreadStatus::Open => ThreadStatus::Open,
-            threads::ThreadStatus::Locked => ThreadStatus::Locked,
-            threads::ThreadStatus::Deleted => ThreadStatus::Deleted,
+            sea_orm_active_enums::ThreadStatus::Open => ThreadStatus::Open,
+            sea_orm_active_enums::ThreadStatus::Locked => ThreadStatus::Locked,
+            sea_orm_active_enums::ThreadStatus::Deleted => ThreadStatus::Deleted,
         },
         is_pinned: m.is_pinned,
         is_solved: m.is_solved,
@@ -114,11 +114,11 @@ fn row_to_domain(row: ThreadRow) -> Thread {
     }
 }
 
-fn domain_status_to_entity(s: &ThreadStatus) -> threads::ThreadStatus {
+fn domain_status_to_entity(s: &ThreadStatus) -> sea_orm_active_enums::ThreadStatus {
     match s {
-        ThreadStatus::Open => threads::ThreadStatus::Open,
-        ThreadStatus::Locked => threads::ThreadStatus::Locked,
-        ThreadStatus::Deleted => threads::ThreadStatus::Deleted,
+        ThreadStatus::Open => sea_orm_active_enums::ThreadStatus::Open,
+        ThreadStatus::Locked => sea_orm_active_enums::ThreadStatus::Locked,
+        ThreadStatus::Deleted => sea_orm_active_enums::ThreadStatus::Deleted,
     }
 }
 
@@ -377,7 +377,7 @@ impl ThreadRepository for PgThreadRepository {
                     count_vals,
                 );
                 let (count_result, rows) = tokio::try_join!(
-                    self.db.query_one(count_stmt),
+                    self.db.query_one_raw(count_stmt),
                     ThreadRow::find_by_statement(data_stmt).all(&self.db),
                 )?;
                 let total = count_result
@@ -455,7 +455,7 @@ impl ThreadRepository for PgThreadRepository {
                     count_vals,
                 );
                 let (count_result, rows) = tokio::try_join!(
-                    self.db.query_one(count_stmt),
+                    self.db.query_one_raw(count_stmt),
                     ThreadRow::find_by_statement(data_stmt).all(&self.db),
                 )?;
                 let total = count_result
@@ -570,7 +570,7 @@ impl ThreadRepository for PgThreadRepository {
         let (count_sql, count_vals) = count_q.build(PostgresQueryBuilder);
         let count_result = self
             .db
-            .query_one(Statement::from_sql_and_values(
+            .query_one_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 count_sql,
                 count_vals,
@@ -695,7 +695,7 @@ impl ThreadRepository for PgThreadRepository {
         )
         .build(DbBackend::Postgres);
 
-        let inserted = self.db.execute(insert_stmt).await?;
+        let inserted = self.db.execute_raw(insert_stmt).await?;
 
         if inserted.rows_affected() > 0 {
             return Ok(true); // brand-new viewer
@@ -866,7 +866,7 @@ impl ThreadRepository for PgThreadRepository {
         // Run COUNT and data fetch concurrently — each uses a separate pool connection
         // so neither blocks the other, halving the wall-clock time for this query pair.
         let (count_result, rows) = tokio::try_join!(
-            self.db.query_one(count_stmt),
+            self.db.query_one_raw(count_stmt),
             ThreadRow::find_by_statement(data_stmt).all(&self.db),
         )?;
 

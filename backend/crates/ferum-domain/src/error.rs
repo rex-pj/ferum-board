@@ -272,6 +272,12 @@ impl From<sea_orm::DbErr> for AppError {
             sea_orm::DbErr::RecordNotFound(_) => "record_not_found",
             sea_orm::DbErr::RecordNotInserted => "record_not_inserted",
             sea_orm::DbErr::RecordNotUpdated => "record_not_updated",
+            // Added in sea-orm 2.0. Both previously surfaced as a panic
+            // ("Database backend doesn't support RETURNING" / "PrimaryKey is not
+            // set"); they are now ordinary errors and reach this conversion, so
+            // they get their own kind rather than disappearing into "other".
+            sea_orm::DbErr::BackendNotSupported { .. } => "backend_not_supported",
+            sea_orm::DbErr::PrimaryKeyNotSet { .. } => "primary_key_not_set",
             _ => "other",
         };
         tracing::error!(

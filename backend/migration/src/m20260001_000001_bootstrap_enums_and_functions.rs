@@ -232,7 +232,7 @@ impl Migration {
         // surrounding migration transaction, taking the rest of this file with
         // it. Ask first, then only run what will succeed.
         let unaccent_available = conn
-            .query_one(Statement::from_string(
+            .query_one_raw(Statement::from_string(
                 manager.get_database_backend(),
                 "SELECT count(*)::bigint AS n FROM pg_available_extensions WHERE name = 'unaccent'"
                     .to_owned(),

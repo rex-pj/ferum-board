@@ -13,7 +13,7 @@
 //! than absent: rows written in an order that leaves a foreign key unfilled, and
 //! counters asserted by hand instead of derived.
 
-use sea_orm::{DatabaseConnection, FromQueryResult, ConnectionTrait, Statement};
+use sea_orm::{DatabaseConnection, FromQueryResult, Statement};
 
 use ferum_application::ports::BulkSeedService;
 use ferum_infrastructure::bulk_seed_service::PgBulkSeedService;
