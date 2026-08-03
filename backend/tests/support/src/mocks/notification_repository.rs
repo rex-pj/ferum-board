@@ -15,6 +15,7 @@ mockall::mock! {
         async fn create(&self, user_id: Uuid, kind: NotificationKind, payload: serde_json::Value) -> Result<Notification, AppError>;
         async fn mark_read(&self, id: Uuid, user_id: Uuid) -> Result<(), AppError>;
         async fn mark_all_read(&self, user_id: Uuid) -> Result<(), AppError>;
+        async fn delete_expired(&self, read_retention_days: u32, unread_retention_days: u32) -> Result<u64, AppError>;
     }
 }
 
@@ -29,4 +30,5 @@ impl NotificationRepository for NoopNotificationRepository {
     }
     async fn mark_read(&self, _id: Uuid, _user_id: Uuid) -> Result<(), AppError> { Ok(()) }
     async fn mark_all_read(&self, _user_id: Uuid) -> Result<(), AppError> { Ok(()) }
+    async fn delete_expired(&self, _read_retention_days: u32, _unread_retention_days: u32) -> Result<u64, AppError> { Ok(0) }
 }

@@ -15,6 +15,14 @@ impl PgPluginDbGateway {
     }
 }
 
+/// Wall-clock ceiling on a single `Ferum.db.query`, enforced by Postgres.
+///
+/// Sized for the workload plugins actually have — a keyed lookup or a small
+/// aggregate over their own schema — not for reporting. Raising it raises how
+/// long one plugin can hold a connection from a pool that also serves page
+/// renders, which is the cost this constant exists to cap.
+const PLUGIN_STATEMENT_TIMEOUT_MS: u32 = 2_000;
+
 /// Derive the Postgres schema name for a plugin slug. Slugs are reverse-domain
 /// strings (e.g. "com.ferum.simple-chatbox") containing characters invalid in
 /// an unquoted identifier, so non-alphanumeric characters are folded to `_`.
@@ -278,13 +286,40 @@ impl PluginDbGateway for PgPluginDbGateway {
             .await
             .map_err(|e| AppError::internal(format!("Failed to scope query tx: {e}")))?;
 
+        // Bound how long plugin SQL may hold this connection.
+        //
+        // This is the only thing that actually bounds it. `PluginRegistry` wraps
+        // hook dispatch in a `tokio::time::timeout`, but the plugin is running
+        // inside `block_on` on a dedicated OS thread outside the runtime — the
+        // timeout cancels the future waiting on the tokio side and cannot touch
+        // that thread, which keeps holding a pooled connection with this
+        // transaction open. Postgres abandoning the statement itself is what
+        // closes that hole, so a runaway `generate_series` or recursive CTE
+        // costs one connection for two seconds instead of indefinitely.
+        //
+        // `SET LOCAL`, like the two statements around it, unwinds at COMMIT, so
+        // the timeout never leaks onto an unrelated caller of this pool.
+        if let Err(e) = sqlx::query(AssertSqlSafe(format!(
+            "SET LOCAL statement_timeout = '{PLUGIN_STATEMENT_TIMEOUT_MS}ms'"
+        )))
+        .execute(&mut *tx)
+        .await
+        {
+            // Failing open here would silently restore the unbounded behaviour
+            // this exists to remove, so refuse the query instead.
+            return Err(AppError::internal(format!(
+                "Failed to bound plugin query time: {e}"
+            )));
+        }
+
         // Drop privileges for the duration of this transaction. This — not the
         // denylist above — is what actually stops a plugin reaching
         // `"public".users`: the role holds no grant on any application table, so
         // Postgres refuses the read regardless of how the SQL is spelled. The
         // denylist stays as a second, independent layer.
         //
-        // Order matters: `search_path` is set first, while still privileged.
+        // Order matters: `search_path` and the timeout are set first, while
+        // still privileged.
         set_plugin_role(&mut tx, slug).await;
 
         // "with" covers the common `WITH x AS (INSERT ... RETURNING ...) SELECT

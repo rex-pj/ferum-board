@@ -140,7 +140,12 @@ pub enum ForumJob {
         body: String,
         locale: Locale,
     },
-    /// Decrement ref_count for a CAS key; delete from storage + DB if it hits 0.
+    /// Delete a CAS key's row and blob, but only if it is still unreferenced.
+    ///
+    /// The caller owns the decrement and enqueues this only after `ref_count`
+    /// reached 0. The job must not decrement again — doing so would consume a
+    /// reference taken between enqueue and execution, which CAS content
+    /// deduplication makes an ordinary occurrence rather than a rare race.
     GcStorageKey {
         key: String,
     },
@@ -160,7 +165,34 @@ pub trait StorageService: Send + Sync {
     async fn put(&self, key: &str, data: Bytes, content_type: &str) -> Result<(), AppError>;
     async fn delete(&self, key: &str) -> Result<(), AppError>;
     fn public_url(&self, key: &str) -> String;
+
+    /// Recovers the CAS key from a URL this application previously produced.
+    ///
+    /// The inverse of [`public_url`], and it has to exist as a port method
+    /// rather than a `strip_prefix` at each call site because the URL shape is
+    /// the *backend's* business and there are now several: same-origin
+    /// `/files/{key}`, a CDN-prefixed variant, and S3's `{cdn}/{key}`.
+    ///
+    /// **Every implementation must also accept the legacy `/files/{key}` form,
+    /// whatever shape it currently emits.** URLs are denormalised into
+    /// `users.avatar_url`, `site_config` and — most awkwardly — the stored HTML
+    /// of every post. Those strings were written before the backend changed and
+    /// are never rewritten, so a deployment that switches to S3 still holds
+    /// years of same-origin URLs. An implementation that only recognised its own
+    /// current output would silently stop finding them, and since these lookups
+    /// drive reference counting, the failure surfaces as files quietly being
+    /// garbage-collected while posts still point at them.
+    ///
+    /// Returns `None` when the URL is not one of ours — an author may paste any
+    /// external image URL into a post.
+    fn key_from_url(&self, url: &str) -> Option<String>;
 }
+
+/// The same-origin path prefix every backend must keep understanding.
+///
+/// Exists as a constant so the legacy contract in [`StorageService::key_from_url`]
+/// is stated once rather than spelled out in each adapter.
+pub const LEGACY_FILES_PREFIX: &str = "/files/";
 
 // ─── SearchService ────────────────────────────────────────────────────────────
 

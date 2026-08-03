@@ -21,6 +21,7 @@ use ferum_test_support::mocks::{
     material_repository::MockMaterialRepository,
     product_category_repository::{MockProductCategoryRepository, NoopProductCategoryRepository},
     product_repository::MockProductRepository,
+    storage_service::NoopStorageService,
     stored_file_repository::NoopStoredFileRepository,
 };
 
@@ -41,6 +42,7 @@ fn build_with_categories(
         Arc::new(MockMaterialRepository::new()),
         Arc::new(MockBrandRepository::new()),
         Arc::new(NoopStoredFileRepository),
+        Arc::new(NoopStorageService),
         Arc::new(MockJobQueue::new()),
     )
 }

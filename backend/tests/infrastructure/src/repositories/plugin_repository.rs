@@ -285,3 +285,54 @@ async fn delete_old_logs_returns_count() {
     assert_eq!(deleted, 0, "recent logs should not be deleted");
     db.teardown().await;
 }
+
+/// Measures how fast the batched log path actually drains, which is what
+/// decides whether `PluginLogSink`'s 1024-entry buffer is the right size.
+///
+/// The buffer only has to cover the gap between a burst arriving and the writer
+/// clearing it. Sizing it by intuition is guesswork in either direction: too
+/// small and ordinary logging is shed, too large and a runaway plugin parks
+/// megabytes of strings in memory before backpressure engages. Reported rather
+/// than asserted tightly, because absolute throughput is hardware-dependent —
+/// the assertion is only that it is fast enough for 1024 to be a short backlog.
+#[tokio::test]
+async fn batched_log_writes_drain_fast_enough_for_the_sink_buffer() {
+    let db = TestDb::new("plg_log_throughput").await;
+    let repo = PgPluginRepository::new(db.conn.clone());
+    let plugin = repo.create(new_plugin("throughput-probe")).await.expect("create plugin");
+
+    const BATCH: usize = 100;
+    const BATCHES: usize = 20;
+
+    let started = std::time::Instant::now();
+    for _ in 0..BATCHES {
+        let entries: Vec<NewPluginLog> = (0..BATCH)
+            .map(|i| NewPluginLog {
+                plugin_id: plugin.id,
+                level: "info".to_string(),
+                hook_name: None,
+                duration_ms: None,
+                message: format!("throughput probe line {i}"),
+                context: None,
+            })
+            .collect();
+        repo.append_logs_batch(entries).await.expect("batch insert");
+    }
+    let elapsed = started.elapsed();
+
+    let rows = (BATCH * BATCHES) as f64;
+    let per_sec = rows / elapsed.as_secs_f64();
+    let buffer_drain_ms = (1024.0 / per_sec) * 1000.0;
+    println!(
+        "  plugin_logs batched write: {rows:.0} rows in {elapsed:?} = {per_sec:.0} rows/s; \
+         a full 1024-entry buffer drains in ~{buffer_drain_ms:.0}ms"
+    );
+
+    assert!(
+        per_sec > 1_000.0,
+        "batched writes managed only {per_sec:.0} rows/s — at that rate the sink's \
+         1024-entry buffer would take over a second to drain and normal logging would shed"
+    );
+
+    db.teardown().await;
+}

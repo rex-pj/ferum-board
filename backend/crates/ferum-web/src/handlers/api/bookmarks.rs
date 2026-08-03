@@ -15,7 +15,7 @@ pub async fn list_bookmarks(
     Query(query): Query<BookmarkListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let (page, per_page) = crate::utils::paginate(query.page, query.per_page, 20, 50);
+    let (page, per_page) = crate::utils::paginate(query.page, query.per_page, 20, 50)?;
 
     let (pairs, total) = state.bookmark.list(actor, page, per_page).await?;
     let items: Vec<BookmarkResponse> = pairs

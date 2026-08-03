@@ -90,14 +90,18 @@ impl StoredFileRepository for PgStoredFileRepository {
         &self,
         key: &str,
         content_type: &str,
-        data: &[u8],
         size: i64,
         uploaded_by_id: Option<Uuid>,
     ) -> Result<(), AppError> {
         stored_files::Entity::insert(stored_files::ActiveModel {
             key: Set(key.to_owned()),
             content_type: Set(content_type.to_owned()),
-            data: Set(data.to_vec()),
+            // `NotSet`, never `Set(None)`: the database backend's `put` has
+            // already written the bytes into this very row, so naming the column
+            // here at all would overwrite them with NULL on the conflict path.
+            // Under S3 the row is new and `data` stays NULL, which is what the
+            // nullable column exists for.
+            data: NotSet,
             size: Set(size),
             ref_count: Set(1),
             uploaded_by_id: Set(uploaded_by_id),
@@ -120,14 +124,14 @@ impl StoredFileRepository for PgStoredFileRepository {
         &self,
         key: &str,
         content_type: &str,
-        data: &[u8],
         size: i64,
         uploaded_by_id: Option<Uuid>,
     ) -> Result<(), AppError> {
         let res = stored_files::Entity::insert(stored_files::ActiveModel {
             key: Set(key.to_owned()),
             content_type: Set(content_type.to_owned()),
-            data: Set(data.to_vec()),
+            // See `upsert_and_ref` — the bytes are the storage backend's to write.
+            data: NotSet,
             size: Set(size),
             ref_count: Set(0),
             uploaded_by_id: Set(uploaded_by_id),
@@ -169,6 +173,20 @@ impl StoredFileRepository for PgStoredFileRepository {
             .exec(&self.db)
             .await?;
         Ok(())
+    }
+
+    async fn delete_if_unreferenced(&self, key: &str) -> Result<bool, AppError> {
+        // The `ref_count = 0` predicate belongs in the DELETE, not in a
+        // preceding SELECT — see the trait doc. Postgres evaluates it while
+        // holding the row lock, so a concurrent `upsert_and_ref` either lands
+        // first (and this deletes nothing) or lands after (and finds no row to
+        // revive, so it inserts a fresh one). Neither order loses a reference.
+        let res = stored_files::Entity::delete_many()
+            .filter(stored_files::Column::Key.eq(key))
+            .filter(stored_files::Column::RefCount.lte(0))
+            .exec(&self.db)
+            .await?;
+        Ok(res.rows_affected > 0)
     }
 
     async fn list_keys_with_prefix(&self, prefix: &str) -> Result<Vec<String>, AppError> {

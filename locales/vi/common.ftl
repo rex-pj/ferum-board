@@ -435,7 +435,7 @@ ui-search-all-categories = Tìm trong tất cả chuyên mục
 ui-no-results-found-for = Không tìm thấy kết quả nào cho "
 ui-search-tips = Mẹo tìm kiếm
 ui-use-specific-keywords = Dùng từ khóa cụ thể
-ui-tip-searches-products-and-threads = Tìm trong tên sản phẩm, thương hiệu và tiêu đề chủ đề
+ui-tip-searches-products-and-threads = Tìm trong tên sản phẩm, thương hiệu, tiêu đề chủ đề và nội dung bài trả lời
 ui-tip-accents-optional = Không cần gõ dấu — “ghe an” vẫn ra “ghế ăn”
 ui-tip-filter-products-by-brand = Ở tab Sản phẩm, lọc thêm theo loại, thương hiệu hoặc chất liệu
 ui-sort-relevance = Liên quan nhất
@@ -549,7 +549,7 @@ ui-weakest = Điểm yếu nhất:
 ui-sort-reviews = Sắp xếp đánh giá
 ui-no-reviews-match-this-filter = Không có đánh giá nào khớp bộ lọc này.
 ui-no-reviews-yet-be-the-first = Chưa có đánh giá nào — hãy là người đầu tiên.
-ui-log-in-to-review = Đăng nhập để đánh giá
+ui-log-in-to-review = Đăng nhập
 ui-view-your-review = Xem đánh giá của bạn
 ui-you-have-already-reviewed-this-product = Bạn đã đánh giá sản phẩm này rồi. Hãy sửa bài đánh giá hiện có để cập nhật.
 

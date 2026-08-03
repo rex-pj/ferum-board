@@ -11,6 +11,7 @@ error-internal-error = Đã có lỗi xảy ra ở phía chúng tôi. Vui lòng 
 error-validation-error = Một số thông tin bạn nhập chưa hợp lệ.
 error-rate-limit-exceeded =
     Bạn thao tác quá nhanh. Vui lòng thử lại sau { $seconds } giây.
+error-page-out-of-range = Trang này nằm quá xa. Bạn có thể xem đến trang { $max_page } — hãy dùng tìm kiếm nếu cần tìm một nội dung cụ thể.
 
 ## ─── Quyền hạn ───────────────────────────────────────────────────────────────
 

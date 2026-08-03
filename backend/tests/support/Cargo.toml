@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 ferum-domain = { path = "../../crates/ferum-domain" }
 ferum-application = { path = "../../crates/ferum-application" }
+bytes = { workspace = true }
 
 async-trait = { workspace = true }
 chrono = { workspace = true }

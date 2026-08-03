@@ -120,4 +120,37 @@ impl NotificationRepository for PgNotificationRepository {
             .await?;
         Ok(())
     }
+
+    async fn delete_expired(
+        &self,
+        read_retention_days: u32,
+        unread_retention_days: u32,
+    ) -> Result<u64, AppError> {
+        let now = chrono::Utc::now();
+        let read_cutoff = now - chrono::Duration::days(read_retention_days as i64);
+        let unread_cutoff = now - chrono::Duration::days(unread_retention_days as i64);
+
+        // One statement rather than two so the pair is atomic and costs a single
+        // scan. There is deliberately no index on `created_at` alone to support
+        // it: this runs once a day off the request path, whereas an extra index
+        // would be maintained on every insert — and notifications are written
+        // far more often than they are pruned.
+        let res = notifications::Entity::delete_many()
+            .filter(
+                Condition::any()
+                    .add(
+                        Condition::all()
+                            .add(notifications::Column::IsRead.eq(true))
+                            .add(notifications::Column::CreatedAt.lt(read_cutoff)),
+                    )
+                    .add(
+                        Condition::all()
+                            .add(notifications::Column::IsRead.eq(false))
+                            .add(notifications::Column::CreatedAt.lt(unread_cutoff)),
+                    ),
+            )
+            .exec(&self.db)
+            .await?;
+        Ok(res.rows_affected)
+    }
 }

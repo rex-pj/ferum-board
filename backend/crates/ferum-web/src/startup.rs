@@ -31,6 +31,8 @@ use ferum_application::usecases::plugin_usecase::PluginUseCase;
 use ferum_application::usecases::webhook_usecase::WebhookUseCase;
 use ferum_application::usecases::theme_usecase::ThemeUseCase;
 use ferum_infrastructure::repositories::PgThemeRepository;
+use ferum_domain::repositories::notification_repository::NotificationRepository;
+use ferum_domain::repositories::plugin_repository::PluginRepository;
 use ferum_domain::repositories::{SiteConfigRepository, ThemeRepository};
 #[cfg(feature = "meilisearch")]
 use ferum_infrastructure::search::MeilisearchService;
@@ -64,10 +66,68 @@ use ferum_infrastructure::{
 use migration::MigratorTrait;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 
+/// How long a plugin's log entries are kept.
+///
+/// Long enough to investigate a fault reported days after it happened, short
+/// enough that a chatty plugin cannot make the table the largest thing in the
+/// database. The admin UI paginates these, so older entries have no reader.
+const PLUGIN_LOG_RETENTION_DAYS: u32 = 30;
+
+/// How many `/files/` blob reads may run at once.
+///
+/// Serving a blob reads the whole file into memory over a pooled connection, so
+/// the natural assumption is that this caps *connection* use. Measured, that is
+/// not what it does. Flooding `/files/` with 120 concurrent requests for a
+/// 1.95 MB image, page latency was ~765-800ms whether this was 6 or 500, and
+/// whether the pool held 5 connections or 40 — the blob bytes themselves are
+/// the bottleneck, not the pool.
+///
+/// What it does cap is *memory*: the same flood grew the process by 15 MB at 6
+/// permits and 74 MB at 500. That is the reason to keep it, and it scales with
+/// the per-file limits in `constants.rs`, not with `DB_MAX_CONNECTIONS` — which
+/// is also why raising the pool must not widen it.
+///
+/// The latency result is the stronger argument for the documented production
+/// path: serving large blobs out of Postgres degrades under load no matter how
+/// it is rationed, so real deployments set `S3_ENDPOINT`.
+const BLOB_READ_CONCURRENCY: usize = 6;
+
+/// Server-side ceilings applied to every application connection.
+///
+/// Until this existed, nothing in the process bounded a query's runtime — a
+/// single pathological statement held its connection until the client or the
+/// TCP layer gave up, while `acquire_timeout` failed every other caller after
+/// five seconds. These are backstops, not tuning: no legitimate request in this
+/// application is anywhere near 30s, and a transaction left idle for a minute
+/// is a bug holding locks.
+///
+/// Expressed as libqp `options` rather than a `SET` on checkout because it then
+/// applies from the connection's first statement, including ones issued before
+/// any repository code runs. `SET LOCAL` inside a transaction still overrides
+/// it — that is how the plugin gateway imposes its much tighter 2s ceiling.
+const STATEMENT_TIMEOUT_MS: u32 = 30_000;
+const IDLE_IN_TRANSACTION_TIMEOUT_MS: u32 = 60_000;
+
+/// Appends the server-side timeouts to a connection URL.
+///
+/// An operator who has set their own `options=` wins: the parameter can only
+/// appear once, and someone who spelled it out explicitly has a reason.
+pub fn with_server_timeouts(url: &str) -> String {
+    if url.contains("options=") {
+        tracing::info!("DATABASE_URL already carries `options=` — leaving server timeouts alone");
+        return url.to_string();
+    }
+    let sep = if url.contains('?') { '&' } else { '?' };
+    format!(
+        "{url}{sep}options=-c%20statement_timeout%3D{STATEMENT_TIMEOUT_MS}%20\
+         -c%20idle_in_transaction_session_timeout%3D{IDLE_IN_TRANSACTION_TIMEOUT_MS}"
+    )
+}
+
 /// Pool options shared by the write and read connections. Pool sizing comes
 /// from DB_MAX_CONNECTIONS / DB_MIN_CONNECTIONS; timeouts are fixed.
 fn build_connect_options(url: &str, config: &Config) -> ConnectOptions {
-    let mut opts = ConnectOptions::new(url);
+    let mut opts = ConnectOptions::new(with_server_timeouts(url));
     opts.max_connections(config.db_max_connections)
         .min_connections(config.db_min_connections)
         .connect_timeout(std::time::Duration::from_secs(5))
@@ -85,13 +145,26 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // Observability knobs read by infrastructure without threading through every repo.
     ferum_infrastructure::observability::set_slow_query_threshold_ms(config.slow_query_ms);
 
+    // ─── Run database migrations ─────────────────────────────────────────────
+    // On a connection of its own, deliberately WITHOUT the statement timeout the
+    // application pool carries. Schema changes are the one legitimate long
+    // statement in this process — building a GIN index over a mature `posts`
+    // table can run for minutes — and a 30s ceiling would abort the deploy
+    // partway through, leaving the schema half-migrated. The connection is
+    // dropped as soon as migrations finish, so nothing serving requests inherits
+    // the unbounded setting.
+    tracing::info!("Running database migrations...");
+    {
+        let mut migration_opts = ConnectOptions::new(config.database_url.clone());
+        migration_opts.max_connections(1).min_connections(1).sqlx_logging(false);
+        let migration_conn = Database::connect(migration_opts).await?;
+        migration::Migrator::up(&migration_conn, None).await?;
+        migration_conn.close().await?;
+    }
+    tracing::info!("Migrations completed successfully");
+
     // ─── PostgreSQL ─────────────────────────────────────────────────────────
     let pg_write = Database::connect(build_connect_options(&config.database_url, config)).await?;
-
-    // ─── Run database migrations ─────────────────────────────────────────────
-    tracing::info!("Running database migrations...");
-    migration::Migrator::up(&pg_write, None).await?;
-    tracing::info!("Migrations completed successfully");
 
     // ─── System data ─────────────────────────────────────────────────────────
     // Idempotent, and deliberately unconditional: migrations carry no data, so
@@ -151,7 +224,10 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         }
         None => {
             tracing::info!("S3_ENDPOINT not set — using database storage");
-            Arc::new(DatabaseStorageService::new(pg_write.clone()))
+            Arc::new(
+                DatabaseStorageService::new(pg_write.clone())
+                    .with_cdn_base_url(config.cdn_base_url.as_deref()),
+            )
         }
     };
     #[cfg(not(feature = "s3"))]
@@ -522,6 +598,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             post_repo.clone(),
             job_queue.clone(),
             stored_file_repo.clone(),
+            storage.clone(),
             event_bus.clone(),
             cache.clone(),
             tag_repo.clone(),
@@ -552,7 +629,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             event_bus.clone(),
         )
         .with_plugin_runtime(plugin_hooks.clone())
-        .with_stored_files(stored_file_repo.clone()),
+        .with_stored_files(stored_file_repo.clone(), storage.clone()),
     );
 
     let reaction = Arc::new(
@@ -574,6 +651,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         material_repo,
         brand_repo,
         stored_file_repo.clone(),
+        storage.clone(),
         job_queue.clone(),
     ));
     let review = Arc::new(ReviewUseCase::new(review_rating_repo));
@@ -584,7 +662,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             post_repo.clone(),
             thread_repo.clone(),
             user_repo.clone(),
-            notification_repo,
+            notification_repo.clone(),
             Arc::new(PgAuditLogRepository::new(pg_write.clone())),
             event_bus.clone(),
             cache.clone(),
@@ -608,6 +686,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             user_repo.clone(),
             hasher2,
             stored_file_repo.clone(),
+            storage.clone(),
             job_queue.clone(),
         )
         .with_cache(cache.clone()),
@@ -626,12 +705,17 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         Arc::new(ferum_infrastructure::webhook_delivery::ReqwestWebhookDeliveryService),
         Arc::new(ferum_infrastructure::network_utils::TokioHostResolver),
     ));
+    // Cloned before the use case takes ownership — the log-retention task below
+    // needs the repository directly, not through a use case that would require
+    // an `AuthUser` for a job with no actor.
+    let plugin_repo_for_prune = plugin_repo.clone();
     let plugin = Arc::new(PluginUseCase::new(
         plugin_repo,
         webhook_repo.clone(),
         plugin_lifecycle,
         plugin_db_gateway,
         stored_file_repo.clone(),
+        storage.clone(),
         job_queue.clone(),
         std::path::PathBuf::from(&config.plugins_dir),
     ));
@@ -751,11 +835,62 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         });
     }
 
+    // ─── Background: prune plugin_logs daily ───────────────────────────────────
+    // `plugin_logs` is written at a rate plugin authors control and had no
+    // retention at all — `delete_old_logs` existed, was tested, and was never
+    // called from anywhere, so the table grew without bound for the life of an
+    // install. Runs once at startup and then daily; a miss is harmless, so
+    // failures are logged rather than retried.
+    {
+        let repo = plugin_repo_for_prune;
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+            loop {
+                interval.tick().await;
+                match repo.delete_old_logs(PLUGIN_LOG_RETENTION_DAYS).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(deleted = n, "pruned plugin logs"),
+                    Err(e) => tracing::warn!("plugin log prune failed: {:?}", e),
+                }
+            }
+        });
+    }
+
+    // ─── Background: prune expired notifications daily ─────────────────────────
+    // Shares the plugin-log job's shape and reasoning: a table written on the
+    // request path with no retention grows for the life of the install, and here
+    // it also inflates the inbox COUNT that every visit to /notifications pays.
+    {
+        let repo = notification_repo.clone();
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+            loop {
+                interval.tick().await;
+                match repo
+                    .delete_expired(
+                        ferum_application::constants::NOTIFICATION_READ_RETENTION_DAYS,
+                        ferum_application::constants::NOTIFICATION_UNREAD_RETENTION_DAYS,
+                    )
+                    .await
+                {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(deleted = n, "pruned expired notifications"),
+                    Err(e) => tracing::warn!("notification prune failed: {:?}", e),
+                }
+            }
+        });
+    }
+
     let cookies_secure = config.app_url.starts_with("https://");
     warn_degraded_capabilities(config);
 
     Ok(AppState {
         db: pg_write.clone(),
+        db_read: pg_read.clone(),
+        blob_read_permits: Arc::new(tokio::sync::Semaphore::new(BLOB_READ_CONCURRENCY)),
+        storage: storage.clone(),
         setup,
         auth,
         admin,
@@ -839,17 +974,69 @@ pub async fn maybe_run_headless_setup(config: &Config, state: &AppState) -> anyh
 
 fn warn_degraded_capabilities(config: &Config) {
     if config.redis_url.is_none() {
+        // Only the first clause was ever true. Jobs run through
+        // `InlineJobRunner` (tokio::spawn) in both branches, and SSE is served
+        // by the in-process `SseBroadcaster`, which never consulted Redis — the
+        // old text sent operators looking for a Redis fault to explain
+        // behaviour that was working as designed.
         tracing::warn!(
-            "Redis disabled: rate limit is per-instance, jobs are synchronous, SSE unavailable"
+            "Redis disabled: rate limit and cache are per-instance — \
+             correct for a single process, not for a horizontally scaled deployment"
         );
     }
     if config.s3_endpoint.is_none() {
+        // An HTTPS APP_URL is the same signal `cookies_secure` uses to decide a
+        // deployment is real rather than a laptop.
+        if config.app_url.starts_with("https://") {
+            // Escalated from the generic notice below because this is the one
+            // degraded capability *measured* to hurt under load: flooding
+            // /files/ with 120 concurrent requests for a 1.95 MB image took page
+            // rendering from ~20ms to ~800ms, and that number did not move when
+            // the blob-read cap or the pool size were changed. The cost is
+            // reading and shipping the bytes, and it competes with serving pages
+            // because it shares the same process and database.
+            //
+            // An earlier version of this told the operator to set S3_ENDPOINT.
+            // That was wrong and worth stating plainly: nothing calls
+            // `StorageService::put` or `public_url`, so uploads land in Postgres
+            // whatever that variable says. Advice that cannot be acted on is
+            // worse than none — it sends someone to change config and conclude
+            // the problem is elsewhere when nothing improves.
+            tracing::warn!(
+                "APP_URL is https and uploads are served out of PostgreSQL by this process. \
+                 A burst of image requests measurably slows page rendering and no in-app \
+                 limit prevents it. Put a caching reverse proxy in front of /files/ — \
+                 responses already carry `Cache-Control: immutable` and an ETag, so a warm \
+                 cache keeps this traffic off the origin entirely. NOTE: S3_ENDPOINT does \
+                 not currently move uploads off the database; only the delete path is wired \
+                 to it."
+            );
+        }
         tracing::warn!(
             "S3 disabled: uploads stored in PostgreSQL — suitable for small-scale deployments"
         );
     }
     if !config.rate_limit_enabled {
         tracing::warn!("Rate limiting disabled — do NOT use in production");
+    }
+    // A production deployment terminates TLS at a proxy, so an https APP_URL with
+    // no trusted-proxy hop is almost always a misconfiguration rather than a
+    // choice. `extract_client_ip` ignores forwarded headers entirely at 0 and the
+    // middleware falls back to the peer address — which behind nginx is nginx.
+    // Every visitor then shares one counter, so the first few exhaust the budget
+    // for everyone else. Worth an explicit warning because the symptom
+    // (widespread 429s that vanish when rate limiting is turned off) points
+    // nowhere near the cause.
+    if config.rate_limit_enabled
+        && config.trusted_proxy_count == 0
+        && config.app_url.starts_with("https://")
+    {
+        tracing::warn!(
+            "TRUSTED_PROXY_COUNT is 0 but APP_URL is https — if a proxy terminates TLS, \
+             every client is seen as that proxy's IP and they all share one rate-limit \
+             bucket. Set TRUSTED_PROXY_COUNT to the number of proxies in front of this \
+             process (1 for a single nginx)."
+        );
     }
 }
 

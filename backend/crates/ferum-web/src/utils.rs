@@ -3,6 +3,7 @@ use std::collections::hash_map::DefaultHasher;
 
 use axum::extract::Multipart;
 use axum::http::HeaderMap;
+use ferum_application::constants::MAX_PAGE;
 use ferum_application::shared::AppError;
 
 use crate::app_state::AppState;
@@ -155,16 +156,65 @@ impl ImageKind {
 /// This is an input bound, not the final say: the use cases additionally clamp
 /// to the admin's `max_threads_per_page` / `max_posts_per_page` site config,
 /// which is the layer allowed to make that decision.
+///
+/// `page` is rejected rather than clamped once it passes [`MAX_PAGE`]. Clamping
+/// would be a one-line change here and no change at all in the callers, but it
+/// answers a request for page 999999 with the contents of page 500 and calls it
+/// success — the reader is told nothing, and a crawler keeps walking. Returning
+/// an error costs the `?` at each call site and makes the ceiling visible in
+/// both the JSON envelope and the HTML error page, in the reader's language.
 pub fn paginate(
     page: Option<u64>,
     per_page: Option<u64>,
     default_per_page: u64,
     max_per_page: u64,
-) -> (u64, u64) {
-    (
-        page.unwrap_or(1).max(1),
+) -> Result<(u64, u64), AppError> {
+    let page = page.unwrap_or(1).max(1);
+    if page > MAX_PAGE {
+        return Err(AppError::invalid_with(
+            "page_out_of_range",
+            [("max_page", MAX_PAGE.into())],
+        ));
+    }
+    Ok((
+        page,
         per_page.unwrap_or(default_per_page).clamp(1, max_per_page),
-    )
+    ))
+}
+
+// ─── Content-addressed caching ────────────────────────────────────────────────
+//
+// A CAS key is a digest of the bytes it names, so it doubles as a strong ETag:
+// the content behind a key can never change. That is what lets a handler answer
+// `If-None-Match` from the key alone, without reading the row it refers to.
+
+/// The `ETag` a CAS key implies, quoted per RFC 9110.
+pub fn etag_for(key: &str) -> String {
+    format!("\"{key}\"")
+}
+
+/// The single-header array to attach to a `304`, so callers do not re-spell it.
+pub fn etag_headers(key: &str) -> [(axum::http::HeaderName, String); 1] {
+    [(axum::http::header::ETAG, etag_for(key))]
+}
+
+/// Whether the client already holds the content named by `key`.
+///
+/// `If-None-Match` is a comma-separated list and may be `*`. Weak validators
+/// (`W/"…"`) compare equal for the purposes of a 304 and browsers do echo them
+/// back, so the `W/` prefix is stripped rather than treated as a miss.
+pub fn if_none_match_hits(headers: &HeaderMap, key: &str) -> bool {
+    let Some(raw) = headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return false;
+    };
+    let want = etag_for(key);
+    raw.split(',').any(|candidate| {
+        let candidate = candidate.trim();
+        candidate == "*" || candidate.trim_start_matches("W/") == want
+    })
 }
 
 // ─── Auth cookies ─────────────────────────────────────────────────────────────

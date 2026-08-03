@@ -6,7 +6,7 @@ use sea_orm::DatabaseConnection;
 use crate::tera_engine::TeraEngine;
 use ferum_application::ports::{
     CacheService, NotificationSubscriber, PermissionResolver, PluginHookRuntime, PluginRpcRuntime,
-    PluginUiRuntime, RateLimiter, TokenService, Translator,
+    PluginUiRuntime, RateLimiter, StorageService, TokenService, Translator,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
@@ -36,6 +36,25 @@ use ferum_domain::repositories::user_repository::UserRepository;
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
+    /// The read pool — a clone of `db` unless `DATABASE_READ_URL` is set, in
+    /// which case it is a genuinely separate pool against the replica.
+    ///
+    /// Exists so bulk reads that are not part of rendering a page (today: blob
+    /// serving) can be pointed away from the write pool without every caller
+    /// having to know whether a replica is configured.
+    pub db_read: DatabaseConnection,
+    /// Caps how many blob reads may be in flight at once.
+    ///
+    /// `/files/` loads an entire file into memory through the pool, so without
+    /// a cap a burst of image requests takes every connection and the site
+    /// stops rendering. This bounds the damage to a slice of the pool: images
+    /// queue, pages keep serving. It is a `Semaphore` rather than a bigger pool
+    /// because the scarce resource is the database's connections, not ours.
+    pub blob_read_permits: Arc<tokio::sync::Semaphore>,
+    /// The configured blob backend. Handlers need it for the same two reasons
+    /// use cases do: to write bytes, and because it is the only thing that knows
+    /// what a file URL looks like under the current configuration.
+    pub storage: Arc<dyn StorageService>,
     pub setup: Arc<SetupUseCase>,
     pub auth: Arc<AuthUseCase>,
     pub admin: Arc<AdminUseCase>,

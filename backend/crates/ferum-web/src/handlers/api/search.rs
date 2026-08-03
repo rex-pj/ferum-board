@@ -18,7 +18,7 @@ pub async fn search(
     let query = q.q.unwrap_or_default();
     // Capped below the SSR page's own limit: this endpoint backs typeahead,
     // where a caller asking for 50 rows per keystroke is a mistake, not a need.
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 30);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 30)?;
     let scope = q.tab.as_deref().map(SearchScope::parse).unwrap_or_default();
 
     // Category visibility is resolved inside the use case from `auth_user`, so

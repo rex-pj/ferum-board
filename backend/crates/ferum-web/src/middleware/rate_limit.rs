@@ -12,6 +12,22 @@ use crate::app_state::AppState;
 use ferum_application::ports::RateLimitResult;
 
 pub struct RateLimitConfig {
+    /// Stable name of the counter this group shares, per client.
+    ///
+    /// Load-bearing, and the reason this field exists at all: the key used to be
+    /// built from `req.uri().path()`, so every distinct *concrete* path got its
+    /// own budget. Most rate-limited routes carry a path parameter, which made
+    /// the limits far weaker than the numbers suggested — `/api/posts/{id}/reactions`
+    /// gave a fresh allowance per post, and `/files/{key}` (unbounded
+    /// cardinality) gave one per file, so the scraper the blob limit was added
+    /// to stop simply walked keys and never hit it.
+    ///
+    /// A fixed name per group makes the limit what NF-SC-05 always described:
+    /// per client, per capability. Note this is stricter than the old behaviour
+    /// for groups spanning several endpoints — auth is now 10/min across login,
+    /// registration and password reset combined rather than 10/min each, which
+    /// is what "auth 10 req/min" meant.
+    pub bucket: &'static str,
     /// Key in site_config table that stores the per-minute limit for this route group.
     pub config_key: &'static str,
     /// Fallback value when the key is absent or unparseable.
@@ -22,6 +38,7 @@ pub struct RateLimitConfig {
 impl RateLimitConfig {
     pub fn auth() -> Self {
         Self {
+            bucket: "auth",
             config_key: "auth_rate_limit_per_min",
             default_limit: ferum_application::constants::DEFAULT_AUTH_RATE_LIMIT_PER_MIN,
             window: Duration::from_secs(60),
@@ -30,8 +47,28 @@ impl RateLimitConfig {
 
     pub fn public_write() -> Self {
         Self {
+            bucket: "public_write",
             config_key: "public_write_rate_limit_per_min",
             default_limit: ferum_application::constants::DEFAULT_PUBLIC_WRITE_RATE_LIMIT_PER_MIN,
+            window: Duration::from_secs(60),
+        }
+    }
+
+    /// Limit for `/files/` blob reads.
+    ///
+    /// Far looser than the write limits, and necessarily so: one page can
+    /// legitimately fetch dozens of avatars and thumbnails, so a write-shaped
+    /// ceiling would break ordinary browsing. It exists to bound the abusive
+    /// case — a scraper looping over `/files/`, which needs no account — not to
+    /// pace a normal reader.
+    ///
+    /// Not written by `PgSystemSeedService`: absent means "use the default",
+    /// and an admin who wants a different ceiling sets the key explicitly.
+    pub fn file_read() -> Self {
+        Self {
+            bucket: "file_read",
+            config_key: "file_read_rate_limit_per_min",
+            default_limit: ferum_application::constants::DEFAULT_FILE_READ_RATE_LIMIT_PER_MIN,
             window: Duration::from_secs(60),
         }
     }
@@ -78,6 +115,15 @@ pub fn extract_client_ip(headers: &axum::http::HeaderMap, trusted_proxy_count: u
     "unknown".to_string()
 }
 
+/// Builds the counter key for a `(group, client)` pair.
+///
+/// Split out so the keying rule can be asserted directly — the previous rule was
+/// wrong in a way no integration test noticed, because it only shows up when two
+/// requests that *should* share a budget are compared.
+pub fn rate_limit_key(bucket: &str, ip: &str) -> String {
+    format!("rl:{bucket}:{ip}")
+}
+
 pub async fn rate_limit_middleware(
     State(state): State<AppState>,
     axum::extract::Extension(config): axum::extract::Extension<Arc<RateLimitConfig>>,
@@ -94,7 +140,8 @@ pub async fn rate_limit_middleware(
             forwarded
         }
     };
-    let key = format!("rl:{}:{}", req.uri().path(), ip);
+    // Keyed on the group name, not the request path — see `RateLimitConfig::bucket`.
+    let key = rate_limit_key(config.bucket, &ip);
 
     let limit = {
         let cache = state.site_config_cache.read().await;

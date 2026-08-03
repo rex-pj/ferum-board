@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::constants::{DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS, MAX_TAGS_PER_THREAD, MAX_THUMBNAIL_BYTES};
 use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
-use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginHookRuntime};
+use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginHookRuntime, StorageService};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::validate_image_magic;
@@ -37,6 +37,8 @@ pub struct ThreadUseCase {
     pub posts: Arc<dyn PostRepository>,
     pub jobs: Arc<dyn JobQueue>,
     pub stored_files: Arc<dyn StoredFileRepository>,
+    /// Blob bytes and the authority on file URL shape.
+    pub storage: Arc<dyn StorageService>,
     pub event_bus: Arc<dyn EventPublisher>,
     pub cache: Arc<dyn CacheService>,
     pub tags: Arc<dyn TagRepository>,
@@ -52,12 +54,14 @@ pub struct ThreadUseCase {
 }
 
 impl ThreadUseCase {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         threads: Arc<dyn ThreadRepository>,
         categories: Arc<dyn CategoryRepository>,
         posts: Arc<dyn PostRepository>,
         jobs: Arc<dyn JobQueue>,
         stored_files: Arc<dyn StoredFileRepository>,
+        storage: Arc<dyn StorageService>,
         event_bus: Arc<dyn EventPublisher>,
         cache: Arc<dyn CacheService>,
         tags: Arc<dyn TagRepository>,
@@ -69,6 +73,7 @@ impl ThreadUseCase {
             posts,
             jobs,
             stored_files,
+            storage,
             event_bus,
             cache,
             tags,
@@ -1160,10 +1165,12 @@ impl ThreadUseCase {
         let thread = self.find_live_thread(thread_id).await?;
         Self::require_author_or_mod(actor, &thread)?;
 
+        let size = data.len() as i64;
         let key = cas_key("thumbnails", &data, &content_type);
 
+        self.storage.put(&key, data, &content_type).await?;
         self.stored_files
-            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .upsert_and_ref(&key, &content_type, size, Some(actor.id))
             .await?;
 
         // Release old ref

@@ -198,8 +198,19 @@ fn default_meilisearch_index() -> String {
 fn default_meilisearch_product_index() -> String {
     "products".to_string()
 }
+/// Sized for how many connections a *request* takes, not how many requests run.
+///
+/// Handlers deliberately run their COUNT and their data fetch concurrently
+/// (`tokio::try_join!`), and pages compose several such calls, so a single
+/// search or thread render can hold 4-6 connections at once. At 20 the pool
+/// therefore served roughly 4-8 concurrent requests before callers began
+/// failing on `acquire_timeout` — well short of what the hardware could do.
+///
+/// Past this range more connections stop buying throughput and start costing
+/// Postgres memory and scheduling; a deployment that needs to go further wants
+/// PgBouncer in transaction mode rather than a larger number here.
 fn default_db_max_connections() -> u32 {
-    20
+    40
 }
 fn default_db_min_connections() -> u32 {
     2

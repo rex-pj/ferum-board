@@ -10,8 +10,13 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub key: String,
     pub content_type: String,
-    #[sea_orm(column_type = "VarBinary(StringLen::None)")]
-    pub data: Vec<u8>,
+    /// The bytes, when the database is the storage backend.
+    ///
+    /// NULL means the file lives in an external store (S3) and this row carries
+    /// only its metadata and reference count. Rows predating that split always
+    /// have their bytes here, so `/files/` keeps serving them.
+    #[sea_orm(column_type = "VarBinary(StringLen::None)", nullable)]
+    pub data: Option<Vec<u8>>,
     pub size: i64,
     pub ref_count: i32,
     pub uploaded_by_id: Option<Uuid>,

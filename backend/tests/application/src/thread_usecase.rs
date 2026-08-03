@@ -11,6 +11,7 @@ use ferum_test_support::mocks::{
     event_publisher::MockEventPublisher,
     job_queue::NoopJobQueue,
     post_repository::MockPostRepository,
+    storage_service::NoopStorageService,
     stored_file_repository::NoopStoredFileRepository,
     tag_repository::MockTagRepository,
     thread_repository::MockThreadRepository,
@@ -39,14 +40,15 @@ impl StoredFileRepository for SpyStoredFiles {
     async fn usage_since(&self, _: uuid::Uuid, _: chrono::DateTime<chrono::Utc>) -> Result<UploadUsage, AppError> {
         Ok(UploadUsage { file_count: 0, total_bytes: 0 })
     }
-    async fn upsert_and_ref(&self, _: &str, _: &str, _: &[u8], _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
-    async fn upsert_staged(&self, _: &str, _: &str, _: &[u8], _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
+    async fn upsert_and_ref(&self, _: &str, _: &str, _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
+    async fn upsert_staged(&self, _: &str, _: &str, _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
     async fn increment_ref(&self, _: &str) -> Result<(), AppError> { Ok(()) }
     async fn decrement_ref(&self, key: &str) -> Result<i32, AppError> {
         self.dereferenced.lock().unwrap().push(key.to_string());
         Ok(0)
     }
     async fn delete_by_key(&self, _: &str) -> Result<(), AppError> { Ok(()) }
+    async fn delete_if_unreferenced(&self, _: &str) -> Result<bool, AppError> { Ok(true) }
     async fn list_keys_with_prefix(&self, _: &str) -> Result<Vec<String>, AppError> { Ok(vec![]) }
 }
 
@@ -80,6 +82,7 @@ impl Uc {
             Arc::new(self.posts),
             Arc::new(NoopJobQueue),
             self.stored_files,
+            Arc::new(NoopStorageService),
             Arc::new(self.events),
             Arc::new(NoopCacheService),
             Arc::new(self.tags),

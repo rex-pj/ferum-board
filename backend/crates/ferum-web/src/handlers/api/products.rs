@@ -27,7 +27,7 @@ pub async fn list_products(
     Extension(auth_user): Extension<Option<AuthUser>>,
     Query(q): Query<ProductListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
 
     let filter = ProductListFilter {
         product_type: q.product_type.as_deref().and_then(parse_product_type),

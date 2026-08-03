@@ -204,7 +204,9 @@ pub fn build_router(
 
     let routed = router
         .route("/health", get(crate::handlers::api::health::health))
-        .merge(files_routes())
+        .route("/health/live", get(crate::handlers::api::health::live))
+        .route("/health/ready", get(crate::handlers::api::health::ready))
+        .merge(files_routes(state.clone()))
         // Static files (Bootstrap, HTMX, Alpine, theme CSS, widgets).
         // Cache 1 day; ServeDir sets ETag + Last-Modified automatically so
         // browsers send conditional GETs after TTL and get 304 when unchanged.

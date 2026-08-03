@@ -22,6 +22,7 @@ error-rate-limit-exceeded =
         [one] 1 second
        *[other] { $seconds } seconds
     }.
+error-page-out-of-range = That page is too far in. You can browse up to page { $max_page } — try searching instead to find something specific.
 
 ## ─── Permissions & trust ─────────────────────────────────────────────────────
 

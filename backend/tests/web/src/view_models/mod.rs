@@ -1,5 +1,6 @@
 mod validators;
 
+use ferum_application::constants::MAX_PAGE;
 use ferum_web::view_models::page_context::PaginationCtx;
 use ferum_web::view_models::{DataResponse, PagedResponse};
 
@@ -81,4 +82,46 @@ fn paged_response_meta_has_all_three_fields() {
     assert!(meta.get("total").is_some());
     assert!(meta.get("page").is_some());
     assert!(meta.get("per_page").is_some());
+}
+
+// ─── PaginationCtx respects the reachable-page ceiling ───────────────────────
+//
+// `utils::paginate` rejects `?page=` past MAX_PAGE, so the navigation must not
+// advertise pages beyond it. These guard the seam between the two: they only
+// diverge once a forum holds enough rows to exceed the ceiling, which is
+// exactly when nobody is watching.
+
+#[test]
+fn total_pages_is_capped_at_the_reachable_ceiling() {
+    // 50k threads at 20/page is 2,500 pages of data but only MAX_PAGE reachable.
+    let p = PaginationCtx::simple(1, 20, 50_000);
+    assert_eq!(
+        p.total_pages, MAX_PAGE,
+        "navigation must not offer a page the server refuses"
+    );
+}
+
+#[test]
+fn the_reported_total_is_not_capped() {
+    // Only reachability is bounded — "50,000 threads" is still the truth, and
+    // capping it would make the page lie about how much content exists.
+    let p = PaginationCtx::simple(1, 20, 50_000);
+    assert_eq!(p.total, 50_000);
+}
+
+#[test]
+fn has_next_is_false_on_the_last_reachable_page() {
+    let p = PaginationCtx::simple(MAX_PAGE, 20, 50_000);
+    assert!(
+        !p.has_next,
+        "a `next` link from the final reachable page would 422"
+    );
+    assert!(p.has_prev);
+}
+
+#[test]
+fn small_result_sets_are_unaffected() {
+    let p = PaginationCtx::simple(1, 20, 100);
+    assert_eq!(p.total_pages, 5);
+    assert!(p.has_next);
 }

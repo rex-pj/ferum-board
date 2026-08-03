@@ -21,6 +21,7 @@ pub mod report_repository;
 pub mod role_repository;
 pub mod search_service;
 pub mod site_config;
+pub mod storage_service;
 pub mod stored_file_repository;
 pub mod tag_repository;
 pub mod thread_repository;

@@ -20,6 +20,15 @@ pub const DEFAULT_MAX_THREADS_PER_PAGE: u64 = 30;
 pub const DEFAULT_AUTH_RATE_LIMIT_PER_MIN: u32 = 10;
 pub const DEFAULT_PUBLIC_WRITE_RATE_LIMIT_PER_MIN: u32 = 30;
 
+/// Ceiling on `/files/` blob reads per client per minute.
+///
+/// An order of magnitude above the write limits because it paces a different
+/// thing: a single thread page can pull dozens of avatars and thumbnails, so
+/// this must clear ordinary browsing comfortably and only catch a client
+/// enumerating the CAS namespace. Requests answered from cache with a 304 still
+/// count, which is deliberate — the point is to bound request volume.
+pub const DEFAULT_FILE_READ_RATE_LIMIT_PER_MIN: u32 = 300;
+
 pub const DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY: u64 = 5;
 
 // ── Fixed constants — not admin-configurable ─────────────────────────────────
@@ -28,6 +37,20 @@ pub const DEFAULT_THEME_SLUG: &str = "default";
 
 /// Site name used before an admin sets one, e.g. in transactional email copy.
 pub const DEFAULT_SITE_NAME: &str = "Ferum Board";
+
+/// How deep `?page=` may go on any paginated endpoint.
+///
+/// Every list in this codebase paginates with `LIMIT/OFFSET`, so the database
+/// must walk and discard every row before the offset. Without a ceiling,
+/// `?page=999999` is an unauthenticated request that costs seconds of database
+/// CPU — and because list queries run their COUNT and their data fetch
+/// concurrently, one such request occupies two pool connections while it does.
+///
+/// 500 pages is past anything a human reaches by clicking; deep crawlers are
+/// what actually generate these. Readers who need to go further have search.
+/// Raising this trades directly against how cheaply the server can be stalled,
+/// so it is deliberately not admin-configurable.
+pub const MAX_PAGE: u64 = 500;
 
 /// Categories are a two-level hierarchy: a top-level category and its children.
 /// The check itself is structural (a parent may not already have a parent); this
@@ -86,8 +109,31 @@ pub const MIN_THREAD_TITLE_LEN: usize = 5;
 pub const MAX_THREAD_TITLE_LEN: usize = 255;
 pub const MAX_TAGS_PER_THREAD: usize = 5;
 
+// ── Notification retention ───────────────────────────────────────────────────
+//
+// Notifications had no retention at all, so the table grew for the life of an
+// account — and `/notifications` runs a COUNT over every row a user has ever
+// received, making the page's cost a function of account age rather than of
+// what is on screen.
+//
+// Two windows because the two states carry different value. A read notification
+// has already done its job: the user saw it, and the thread it points at is
+// still reachable by other means. An unread one is a pending item nobody has
+// seen, so it is kept far longer and removed only once it is old enough that
+// nobody is realistically coming back for it.
+pub const NOTIFICATION_READ_RETENTION_DAYS: u32 = 30;
+pub const NOTIFICATION_UNREAD_RETENTION_DAYS: u32 = 180;
+
 /// Auto-disable a webhook after this many consecutive failures.
 pub const WEBHOOK_MAX_FAILURES: i32 = 5;
+
+/// Most webhooks that will be dispatched for one event.
+///
+/// The event bus enqueues one background job per subscribed webhook, so this
+/// row count multiplies the work a single post creates. Fifty is far beyond any
+/// legitimate deployment; it exists so a misconfigured install cannot turn one
+/// reply into hundreds of concurrent jobs competing for the connection pool.
+pub const MAX_WEBHOOKS_PER_EVENT: u64 = 50;
 
 /// Reviews a product needs before its rating panel shows the star-distribution
 /// histogram and the per-dimension comparison bars.

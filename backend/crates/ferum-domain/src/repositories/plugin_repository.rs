@@ -46,6 +46,13 @@ pub trait PluginRepository: Send + Sync {
 
     // ── Log management ────────────────────────────────────────────────────────
     async fn append_log(&self, entry: NewPluginLog) -> Result<(), AppError>;
+    /// Insert many log entries in one statement.
+    ///
+    /// Plugin logging is caller-driven — a loop in plugin script can emit
+    /// thousands of entries — so the write path has to cost one round trip per
+    /// batch rather than one per line, or logging becomes a way to exhaust the
+    /// connection pool.
+    async fn append_logs_batch(&self, entries: Vec<NewPluginLog>) -> Result<(), AppError>;
     async fn get_logs(
         &self,
         plugin_id: Uuid,

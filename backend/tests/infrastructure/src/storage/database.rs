@@ -60,3 +60,91 @@ async fn public_url_returns_files_path_prefix() {
     assert!(url.contains("sha256-abc123def456"));
     db.teardown().await;
 }
+
+// ─── URL round-tripping ───────────────────────────────────────────────────────
+//
+// `public_url` and `key_from_url` are inverses, and the pair carries more weight
+// than its size suggests: file URLs are denormalised into user rows, site config
+// and the stored HTML of every post, and the *reverse* direction is what drives
+// reference counting. A `key_from_url` that fails to recognise a URL does not
+// error — it silently reports "not one of ours", so the reference is never taken
+// or never released, and files are either leaked or collected out from under
+// posts still displaying them.
+
+#[tokio::test]
+async fn same_origin_url_round_trips() {
+    let db = TestDb::new("dbs_url_same_origin").await;
+    let svc = DatabaseStorageService::new(db.conn.clone());
+    let url = svc.public_url("avatars/abc123.png");
+    assert_eq!(url, "/files/avatars/abc123.png");
+    assert_eq!(svc.key_from_url(&url).as_deref(), Some("avatars/abc123.png"));
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn cdn_prefixed_url_round_trips() {
+    let db = TestDb::new("dbs_url_cdn").await;
+    let svc = DatabaseStorageService::new(db.conn.clone())
+        .with_cdn_base_url(Some("https://cdn.example.com"));
+    let url = svc.public_url("avatars/abc123.png");
+    assert_eq!(url, "https://cdn.example.com/files/avatars/abc123.png");
+    assert_eq!(svc.key_from_url(&url).as_deref(), Some("avatars/abc123.png"));
+    db.teardown().await;
+}
+
+/// The compatibility case that matters: adding `CDN_BASE_URL` to a running forum
+/// must not orphan the URLs already written into posts and profiles.
+#[tokio::test]
+async fn a_cdn_configured_backend_still_reads_legacy_same_origin_urls() {
+    let db = TestDb::new("dbs_url_legacy").await;
+    let svc = DatabaseStorageService::new(db.conn.clone())
+        .with_cdn_base_url(Some("https://cdn.example.com"));
+    assert_eq!(
+        svc.key_from_url("/files/avatars/old.png").as_deref(),
+        Some("avatars/old.png"),
+        "URLs written before the CDN was configured must stay resolvable"
+    );
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn a_trailing_slash_on_the_cdn_base_does_not_double_up() {
+    let db = TestDb::new("dbs_url_slash").await;
+    let svc = DatabaseStorageService::new(db.conn.clone())
+        .with_cdn_base_url(Some("https://cdn.example.com/"));
+    assert_eq!(svc.public_url("k.png"), "https://cdn.example.com/files/k.png");
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn foreign_urls_are_not_claimed() {
+    let db = TestDb::new("dbs_url_foreign").await;
+    let svc = DatabaseStorageService::new(db.conn.clone());
+    // An author may paste any external image into a post; claiming one as ours
+    // would decrement a reference count that belongs to nothing.
+    assert_eq!(svc.key_from_url("https://example.com/photo.png"), None);
+    assert_eq!(svc.key_from_url("/files/"), None, "an empty key is not a key");
+    db.teardown().await;
+}
+
+/// `put` must leave `ref_count` alone — the repository call that follows takes
+/// the first reference. The column DEFAULTs to 1, so a `put` that let that
+/// default through would leave every new file already referenced once and
+/// therefore never collectable.
+#[tokio::test]
+async fn put_does_not_take_a_reference() {
+    use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
+    let db = TestDb::new("dbs_put_refcount").await;
+    let svc = DatabaseStorageService::new(db.conn.clone());
+    let repo = ferum_infrastructure::repositories::PgStoredFileRepository::new(db.conn.clone());
+
+    svc.put("sha256-fresh", Bytes::from(b"x".as_ref()), "image/png").await.expect("put");
+    repo.upsert_and_ref("sha256-fresh", "image/png", 1, None).await.expect("ref");
+
+    assert_eq!(
+        repo.decrement_ref("sha256-fresh").await.expect("dec"),
+        0,
+        "one upload must leave exactly one reference"
+    );
+    db.teardown().await;
+}

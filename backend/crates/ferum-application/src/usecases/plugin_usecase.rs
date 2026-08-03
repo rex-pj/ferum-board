@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::constants::MAX_PLUGIN_MEDIA_BYTES;
 use crate::permission::PermissionChecker;
-use crate::ports::{ForumJob, JobQueue, PluginLifecycle};
+use crate::ports::{ForumJob, JobQueue, PluginLifecycle, StorageService};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::validate_image_magic;
@@ -25,6 +25,8 @@ pub struct PluginUseCase {
     pub plugin_runtime: Arc<dyn PluginLifecycle>,
     pub db_gateway: Arc<dyn PluginDbGateway>,
     pub stored_files: Arc<dyn StoredFileRepository>,
+    /// Blob bytes and the authority on file URL shape.
+    pub storage: Arc<dyn StorageService>,
     pub jobs: Arc<dyn JobQueue>,
     plugins_dir: std::path::PathBuf,
 }
@@ -37,6 +39,7 @@ impl PluginUseCase {
         plugin_runtime: Arc<dyn PluginLifecycle>,
         db_gateway: Arc<dyn PluginDbGateway>,
         stored_files: Arc<dyn StoredFileRepository>,
+        storage: Arc<dyn StorageService>,
         jobs: Arc<dyn JobQueue>,
         plugins_dir: std::path::PathBuf,
     ) -> Self {
@@ -46,6 +49,7 @@ impl PluginUseCase {
             plugin_runtime,
             db_gateway,
             stored_files,
+            storage,
             jobs,
             plugins_dir,
         }
@@ -407,12 +411,14 @@ impl PluginUseCase {
             )));
         }
 
+        let size = data.len() as i64;
         let key = cas_key(&format!("plugin_{slug}"), &data, &content_type);
+        self.storage.put(&key, data, &content_type).await?;
         self.stored_files
-            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .upsert_and_ref(&key, &content_type, size, Some(actor.id))
             .await?;
 
-        Ok(format!("/files/{key}"))
+        Ok(self.storage.public_url(&key))
     }
 
     // ─── Active UI Slots (public — no auth, for frontend SSR) ─────────────────

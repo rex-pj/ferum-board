@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use crate::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
 use crate::permission::PermissionChecker;
-use crate::ports::{CacheService, ForumJob, JobQueue, PasswordHasher};
+use crate::ports::{CacheService, ForumJob, JobQueue, PasswordHasher, StorageService};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::validate_image_magic;
@@ -31,6 +31,9 @@ pub struct UserUseCase {
     pub users: Arc<dyn UserRepository>,
     pub hasher: Arc<dyn PasswordHasher>,
     pub stored_files: Arc<dyn StoredFileRepository>,
+    /// Where blob bytes live, and the only authority on what a file's URL looks
+    /// like. `stored_files` owns the metadata and reference count beside it.
+    pub storage: Arc<dyn StorageService>,
     pub jobs: Arc<dyn JobQueue>,
     /// Optional — when unset, get_preferences just always hits the DB.
     /// Exists so every page render (via user_ctx()) can cheaply read the
@@ -43,12 +46,14 @@ impl UserUseCase {
         users: Arc<dyn UserRepository>,
         hasher: Arc<dyn PasswordHasher>,
         stored_files: Arc<dyn StoredFileRepository>,
+        storage: Arc<dyn StorageService>,
         jobs: Arc<dyn JobQueue>,
     ) -> Self {
         Self {
             users,
             hasher,
             stored_files,
+            storage,
             jobs,
             cache: None,
         }
@@ -203,10 +208,15 @@ impl UserUseCase {
             return Err(AppError::invalid_with("avatar_too_large", [("limit_mb", (MAX_AVATAR_BYTES / (1024 * 1024)).into())]));
         }
 
+        let size = data.len() as i64;
         let key = cas_key("avatars", &data, &content_type);
 
+        // Bytes first, then the row that makes the key discoverable. The order
+        // matters: the row is what any reader resolves a URL through, so
+        // creating it before the content exists would publish a link to nothing.
+        self.storage.put(&key, data, &content_type).await?;
         self.stored_files
-            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .upsert_and_ref(&key, &content_type, size, Some(actor.id))
             .await?;
 
         // Swap pointer — get old key before overwriting
@@ -218,8 +228,7 @@ impl UserUseCase {
         let old_key = user
             .avatar_url
             .as_deref()
-            .and_then(|url| url.strip_prefix("/files/"))
-            .map(|k| k.to_string());
+            .and_then(|url| self.storage.key_from_url(url));
 
         self.users.set_avatar(actor.id, key.clone()).await?;
 
@@ -233,7 +242,7 @@ impl UserUseCase {
             }
         }
 
-        Ok(format!("/files/{key}"))
+        Ok(self.storage.public_url(&key))
     }
 
     // ─── Cover — CAS upload flow ──────────────────────────────────────────────
@@ -254,10 +263,12 @@ impl UserUseCase {
             return Err(AppError::invalid_with("cover_too_large", [("limit_mb", (MAX_COVER_BYTES / (1024 * 1024)).into())]));
         }
 
+        let size = data.len() as i64;
         let key = cas_key("covers", &data, &content_type);
 
+        self.storage.put(&key, data, &content_type).await?;
         self.stored_files
-            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .upsert_and_ref(&key, &content_type, size, Some(actor.id))
             .await?;
 
         let user = self
@@ -268,8 +279,7 @@ impl UserUseCase {
         let old_key = user
             .cover_url
             .as_deref()
-            .and_then(|url| url.strip_prefix("/files/"))
-            .map(|k| k.to_string());
+            .and_then(|url| self.storage.key_from_url(url));
 
         self.users.set_cover(actor.id, key.clone()).await?;
 
@@ -282,7 +292,7 @@ impl UserUseCase {
             }
         }
 
-        Ok(format!("/files/{key}"))
+        Ok(self.storage.public_url(&key))
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
@@ -296,7 +306,8 @@ impl UserUseCase {
             .or_not_found()?;
 
         if let Some(url) = &user.cover_url {
-            if let Some(key) = url.strip_prefix("/files/") {
+            if let Some(key) = self.storage.key_from_url(url) {
+                let key = key.as_str();
                 let remaining = self.stored_files.decrement_ref(key).await?;
                 if remaining == 0 {
                     self.jobs
@@ -322,7 +333,8 @@ impl UserUseCase {
             .or_not_found()?;
 
         if let Some(url) = &user.avatar_url {
-            if let Some(key) = url.strip_prefix("/files/") {
+            if let Some(key) = self.storage.key_from_url(url) {
+                let key = key.as_str();
                 let remaining = self.stored_files.decrement_ref(key).await?;
                 if remaining == 0 {
                     self.jobs

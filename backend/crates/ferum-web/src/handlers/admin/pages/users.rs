@@ -21,7 +21,7 @@ pub async fn users(
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
 
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
     let search = q.q.clone();
     let sort_by = q.sort_by.clone();
     let sort_dir = q.sort_dir.clone();

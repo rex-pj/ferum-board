@@ -178,6 +178,126 @@ async fn integer_bool_null_and_non_uuid_text_params_all_round_trip() {
     db.teardown().await;
 }
 
+/// A `statement_timeout` set through the `options` parameter of the connection
+/// URL actually reaches the server.
+///
+/// This is the mechanism the application-wide ceiling relies on, and it is worth
+/// pinning rather than assuming: `options` is a libpq convention that the driver
+/// has to forward deliberately. If a future sqlx were to drop it, every query in
+/// the process would silently become unbounded again — the failure is invisible,
+/// because nothing errors, things merely stop being capped.
+#[tokio::test]
+async fn statement_timeout_can_be_set_through_the_connection_url() {
+    use sea_orm::{ConnectOptions, Database, FromQueryResult};
+
+    // Resolved the same way `TestDb` does; this test needs only *a* server, not
+    // a scratch database, so it connects to the configured one directly.
+    let _ = dotenvy::from_filename("../../.env");
+    let _ = dotenvy::dotenv();
+    let base = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .expect("TEST_DATABASE_URL or DATABASE_URL must be set");
+    let sep = if base.contains('?') { '&' } else { '?' };
+    let url = format!("{base}{sep}options=-c%20statement_timeout%3D7000");
+
+    let conn = Database::connect(ConnectOptions::new(url))
+        .await
+        .expect("connect with an options= parameter must succeed");
+
+    let rows: Vec<sea_orm::JsonValue> = sea_orm::JsonValue::find_by_statement(
+        sea_orm::Statement::from_string(sea_orm::DbBackend::Postgres, "SHOW statement_timeout"),
+    )
+    .all(&conn)
+    .await
+    .expect("SHOW statement_timeout");
+
+    assert_eq!(
+        rows[0]["statement_timeout"].as_str(),
+        Some("7s"),
+        "the driver did not forward `options` to the server — the app-wide \
+         statement_timeout would be silently absent"
+    );
+}
+
+/// A runaway plugin query is cancelled by Postgres rather than holding a pooled
+/// connection indefinitely.
+///
+/// This is the only thing that actually bounds plugin SQL. `PluginRegistry`
+/// wraps hook dispatch in a `tokio::time::timeout`, but the plugin runs inside
+/// `block_on` on a dedicated OS thread outside the runtime, so that timeout
+/// cancels the waiting future and cannot touch the thread still holding this
+/// transaction open. The `SET LOCAL statement_timeout` in the gateway is what
+/// closes that hole.
+///
+/// Tested against a real server because the gateway fails *closed* if the
+/// statement is rejected: a syntax error here would break every
+/// `Ferum.db.query` at once, not degrade quietly.
+///
+/// `pg_sleep` would be the natural probe but the validator's `pg_` denylist
+/// blocks it, so this burns real rows instead.
+#[tokio::test]
+async fn a_runaway_query_is_cancelled_instead_of_holding_the_connection() {
+    let db = TestDb::new("pdb_stmt_timeout").await;
+    let gw = provisioned(&db, "notes-plugin").await;
+
+    let started = std::time::Instant::now();
+    let result = gw
+        .query(
+            "notes-plugin",
+            "SELECT to_json(count(*)) FROM generate_series(1, 20000000000)",
+            vec![],
+        )
+        .await;
+    let elapsed = started.elapsed();
+
+    assert!(
+        result.is_err(),
+        "a query far longer than the ceiling must be cancelled, got {result:?}"
+    );
+    // Generous upper bound — the point is that it returns at all rather than
+    // running for the minutes that query would otherwise take.
+    assert!(
+        elapsed < std::time::Duration::from_secs(15),
+        "cancellation took {elapsed:?}; the statement timeout does not appear to be in force"
+    );
+
+    db.teardown().await;
+}
+
+/// The timeout is transaction-scoped, so it must not follow the connection back
+/// into the pool and cut short an unrelated caller's legitimate query.
+#[tokio::test]
+async fn the_statement_timeout_does_not_leak_into_the_next_query() {
+    let db = TestDb::new("pdb_timeout_noleak").await;
+    let gw = provisioned(&db, "notes-plugin").await;
+
+    // Burn a query that trips the timeout, returning its connection to the pool.
+    let _ = gw
+        .query(
+            "notes-plugin",
+            "SELECT to_json(count(*)) FROM generate_series(1, 20000000000)",
+            vec![],
+        )
+        .await;
+
+    // The application's own connection must still have no ceiling imposed.
+    use sea_orm::FromQueryResult;
+    let shown: Vec<sea_orm::JsonValue> = sea_orm::JsonValue::find_by_statement(
+        sea_orm::Statement::from_string(sea_orm::DbBackend::Postgres, "SHOW statement_timeout"),
+    )
+    .all(&db.conn)
+    .await
+    .expect("SHOW statement_timeout");
+
+    let value = shown[0]["statement_timeout"].as_str().unwrap_or_default();
+    assert_eq!(
+        value, "0",
+        "SET LOCAL must unwind at COMMIT — a pooled connection came back still capped at {value}"
+    );
+
+    db.teardown().await;
+}
+
 #[tokio::test]
 async fn a_read_matching_no_row_returns_json_null_rather_than_an_error() {
     let db = TestDb::new("pdb_nullrow").await;

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use axum::extract::{Extension, Path, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use sea_orm::EntityTrait;
 
@@ -122,12 +122,55 @@ const ATTACHMENT_PREFIX: &str = "post-attachments/";
 pub async fn serve(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
+    headers: HeaderMap,
     Path(key): Path<String>,
 ) -> Response {
-    let result = stored_files::Entity::find_by_id(&key).one(&state.db).await;
+    // Answer revalidation before touching the database.
+    //
+    // A CAS key is a digest of the bytes it names, so it *is* a strong ETag:
+    // the content behind a key can never change, which is what makes matching
+    // the key against `If-None-Match` sound without reading the row first. That
+    // is the entire point — this handler otherwise loads the whole blob into
+    // memory through the write pool, so every cold client and every CDN miss
+    // costs a full `bytea` read on the same 20 connections that render pages.
+    //
+    // Staged attachments are excluded, and must stay excluded: they are
+    // authorized per viewer below, so a 304 here would answer a request that
+    // the owner check should have refused. A key outside that namespace can
+    // never be staged, so the exclusion is exact rather than conservative.
+    if !key.starts_with(ATTACHMENT_PREFIX) && crate::utils::if_none_match_hits(&headers, &key) {
+        return (StatusCode::NOT_MODIFIED, crate::utils::etag_headers(&key)).into_response();
+    }
+
+    // Past this point the request costs a connection and a full copy of the
+    // file in memory, so it queues behind a fixed number of peers rather than
+    // competing freely for the pool. Held for the query only — the response
+    // body is already in memory by then, so a slow client cannot pin a permit.
+    let Ok(_permit) = state.blob_read_permits.clone().acquire_owned().await else {
+        // Only reachable if the semaphore was closed, which nothing does.
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+
+    // Read pool: blob traffic has no reason to contend with posting, and where
+    // a replica is configured this moves it off the primary entirely.
+    let result = stored_files::Entity::find_by_id(&key).one(&state.db_read).await;
 
     match result {
         Ok(Some(file)) => {
+            // A row whose bytes are not here belongs to an external backend. It
+            // is not an error and not a 404 either — the file exists, this
+            // endpoint simply is not where it lives. Redirecting keeps every URL
+            // this application has ever minted resolvable, including the
+            // `/files/...` strings baked into years of post HTML, without the
+            // app having to proxy the bytes it deliberately moved off itself.
+            let Some(bytes) = file.data else {
+                return (
+                    StatusCode::TEMPORARY_REDIRECT,
+                    [(header::LOCATION, state.storage.public_url(&file.key))],
+                )
+                    .into_response();
+            };
+
             let is_staged_attachment =
                 file.key.starts_with(ATTACHMENT_PREFIX) && file.ref_count <= 0;
 
@@ -152,7 +195,7 @@ pub async fn serve(
                         (header::CACHE_CONTROL, "private, no-store".to_string()),
                         (header::CONTENT_DISPOSITION, "attachment".to_string()),
                     ],
-                    file.data,
+                    bytes,
                 )
                     .into_response();
             }
@@ -165,9 +208,17 @@ pub async fn serve(
                         header::CACHE_CONTROL,
                         "public, max-age=31536000, immutable".to_string(),
                     ),
+                    // Without this the short-circuit above can never fire: a
+                    // client only sends `If-None-Match` for an ETag it was
+                    // given. `immutable` already suppresses revalidation in
+                    // browsers that honour it, but shared caches, `no-cache`
+                    // reloads and non-browser clients all revalidate anyway,
+                    // and those are exactly the requests worth answering
+                    // without a database round trip.
+                    (header::ETAG, crate::utils::etag_for(&file.key)),
                     (header::CONTENT_DISPOSITION, "attachment".to_string()),
                 ],
-                file.data,
+                bytes,
             )
                 .into_response()
         }

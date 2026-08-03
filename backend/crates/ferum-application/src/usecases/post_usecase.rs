@@ -13,7 +13,7 @@ use crate::constants::{
 };
 use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
-use crate::ports::{HookContext, HookDecision, PluginHookRuntime};
+use crate::ports::{HookContext, HookDecision, PluginHookRuntime, StorageService};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use ferum_domain::events::ForumEvent;
@@ -43,7 +43,12 @@ pub struct PostUseCase {
     pub plugin_runtime: Arc<dyn PluginHookRuntime>,
     /// Only needed by `upload_attachment` (F-CTT-03) — optional so existing
     /// test builders that construct `PostUseCase` without CAS storage still compile.
+    ///
+    /// Paired with `storage` by the builder: metadata and bytes are two halves of
+    /// one upload, and having either alone can only produce a row pointing at
+    /// nothing or bytes nobody can find.
     pub stored_files: Option<Arc<dyn StoredFileRepository>>,
+    pub storage: Option<Arc<dyn StorageService>>,
 }
 
 impl PostUseCase {
@@ -66,6 +71,7 @@ impl PostUseCase {
             event_bus,
             plugin_runtime: Arc::new(crate::ports::NullPluginRuntime),
             stored_files: None,
+            storage: None,
         }
     }
 
@@ -74,8 +80,14 @@ impl PostUseCase {
         self
     }
 
-    pub fn with_stored_files(mut self, stored_files: Arc<dyn StoredFileRepository>) -> Self {
+    /// Takes both halves at once so an upload can never be half-configured.
+    pub fn with_stored_files(
+        mut self,
+        stored_files: Arc<dyn StoredFileRepository>,
+        storage: Arc<dyn StorageService>,
+    ) -> Self {
         self.stored_files = Some(stored_files);
+        self.storage = Some(storage);
         self
     }
 
@@ -115,6 +127,10 @@ impl PostUseCase {
             .stored_files
             .as_ref()
             .ok_or_else(|| AppError::internal("post attachment storage not configured"))?;
+        let storage = self
+            .storage
+            .as_ref()
+            .ok_or_else(|| AppError::internal("post attachment storage not configured"))?;
 
         // Per-account quota. The write rate limiter upstream keys on IP, so it
         // caps burst rate but not total storage per account — without this an
@@ -137,12 +153,14 @@ impl PostUseCase {
         // Staged (ref_count = 0): stored, but not publicly servable until a post
         // actually embeds this URL. Until then only the uploader can fetch it,
         // which is what the composer's preview needs and nothing more.
+        let size = data.len() as i64;
         let key = cas_key("post-attachments", &data, &content_type);
+        storage.put(&key, data, &content_type).await?;
         stored_files
-            .upsert_staged(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .upsert_staged(&key, &content_type, size, Some(actor.id))
             .await?;
 
-        Ok(format!("/files/{key}"))
+        Ok(storage.public_url(&key))
     }
 
     /// Applies attachment ref-count changes for a post whose content just went
@@ -781,11 +799,23 @@ fn parse_trust_level(s: &str) -> TrustLevel {
 /// Shared with `ThreadUseCase`, which releases these same references when a
 /// whole thread is deleted — one definition, so the two can never disagree
 /// about what counts as an attachment reference.
+///
+/// Matches on the key rather than on a particular URL prefix, because the prefix
+/// is not stable and the content is. Post HTML is written once and never
+/// rewritten, so a forum that has changed storage backend or added a CDN holds
+/// several generations of URL for the same file. Anchoring to `/files/` would
+/// have made this silently stop matching newer ones — and since this drives
+/// reference counting, "silently stop matching" means attachments never get
+/// referenced, stay staged, and are eventually collected out from under posts
+/// that still display them.
 pub(crate) fn extract_attachment_keys(content: &str) -> HashSet<String> {
-    // Extensions are the exact set `content_type_to_ext` can return for the
+    // The literal `post-attachments/` still pins the namespace, and the
+    // extensions are the exact set `content_type_to_ext` can return for the
     // content types `upload_attachment` accepts (jpeg/png/webp/gif) — not a
-    // loose `[a-z0-9]+`, which would happily match `.exe`.
-    let re = Regex::new(r"/files/(post-attachments/[0-9a-f]{32}\.(?:jpg|png|webp|gif))")
+    // loose `[a-z0-9]+`, which would happily match `.exe`. The leading `/` keeps
+    // the key at a path boundary, so it cannot be reached by gluing text onto
+    // the end of some unrelated word.
+    let re = Regex::new(r"/(post-attachments/[0-9a-f]{32}\.(?:jpg|png|webp|gif))")
         .expect("valid regex");
     re.captures_iter(content)
         .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))

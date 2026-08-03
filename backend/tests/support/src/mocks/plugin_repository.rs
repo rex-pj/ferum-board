@@ -36,6 +36,7 @@ mockall::mock! {
         async fn delete_ui_slots_for_plugin(&self, plugin_id: Uuid) -> Result<(), AppError>;
 
         async fn append_log(&self, entry: NewPluginLog) -> Result<(), AppError>;
+        async fn append_logs_batch(&self, entries: Vec<NewPluginLog>) -> Result<(), AppError>;
         async fn get_logs(&self, plugin_id: Uuid, query: PluginLogQuery) -> Result<Vec<PluginLog>, AppError>;
         async fn delete_old_logs(&self, retention_days: u32) -> Result<u64, AppError>;
     }

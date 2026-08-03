@@ -6,7 +6,7 @@ use uuid::Uuid;
 use bytes::Bytes;
 
 use crate::permission::PermissionChecker;
-use crate::ports::{ForumJob, JobQueue};
+use crate::ports::{ForumJob, JobQueue, StorageService};
 use crate::shared::AppError;
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::validate_image_magic;
@@ -64,19 +64,23 @@ pub struct ProductUseCase {
     pub materials: Arc<dyn MaterialRepository>,
     pub brands: Arc<dyn BrandRepository>,
     pub stored_files: Arc<dyn StoredFileRepository>,
+    /// Blob bytes and the authority on file URL shape.
+    pub storage: Arc<dyn StorageService>,
     pub jobs: Arc<dyn JobQueue>,
 }
 
 impl ProductUseCase {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         products: Arc<dyn ProductRepository>,
         categories: Arc<dyn ProductCategoryRepository>,
         materials: Arc<dyn MaterialRepository>,
         brands: Arc<dyn BrandRepository>,
         stored_files: Arc<dyn StoredFileRepository>,
+        storage: Arc<dyn StorageService>,
         jobs: Arc<dyn JobQueue>,
     ) -> Self {
-        Self { products, categories, materials, brands, stored_files, jobs }
+        Self { products, categories, materials, brands, stored_files, storage, jobs }
     }
 
     // ─── Product categories ───────────────────────────────────────────────────
@@ -510,9 +514,12 @@ impl ProductUseCase {
             ));
         }
 
+        let size = data.len() as i64;
         let key = cas_key("products", &data, &content_type);
+        // Bytes first, then the row — see `UserUseCase::set_avatar`.
+        self.storage.put(&key, data, &content_type).await?;
         self.stored_files
-            .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+            .upsert_and_ref(&key, &content_type, size, Some(actor.id))
             .await?;
 
         let position = existing.len() as i32;

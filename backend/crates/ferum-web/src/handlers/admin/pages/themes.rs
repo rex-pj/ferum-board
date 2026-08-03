@@ -321,12 +321,17 @@ pub async fn upload_theme_preview(
     let size = data.len() as i64;
 
     state
+        .storage
+        .put(&key, data.into(), &content_type)
+        .await
+        .map_err(|e| PageError::Internal(anyhow::anyhow!("storage: {:?}", e)))?;
+    state
         .stored_files
-        .upsert_and_ref(&key, &content_type, &data, size, Some(auth_user.id))
+        .upsert_and_ref(&key, &content_type, size, Some(auth_user.id))
         .await
         .map_err(|e| PageError::Internal(anyhow::anyhow!("storage: {:?}", e)))?;
 
-    let preview_url = format!("/files/{key}");
+    let preview_url = state.storage.public_url(&key);
     state
         .theme
         .set_preview(&auth_user, &slug, Some(preview_url))

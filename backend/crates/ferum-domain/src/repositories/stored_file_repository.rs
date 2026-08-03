@@ -29,11 +29,15 @@ pub trait StoredFileRepository: Send + Sync {
 
     /// Atomically insert a new file row (ref_count=1) or, if the key already
     /// exists, increment its ref_count — all in a single SQL statement.
+    ///
+    /// Records *metadata* only. The bytes are written separately, by whichever
+    /// `StorageService` is configured, and callers must do that first: this row
+    /// is what makes a key discoverable, so creating it before the content
+    /// exists opens a window where a reader can be handed a URL to nothing.
     async fn upsert_and_ref(
         &self,
         key: &str,
         content_type: &str,
-        data: &[u8],
         size: i64,
         uploaded_by_id: Option<Uuid>,
     ) -> Result<(), AppError>;
@@ -50,7 +54,6 @@ pub trait StoredFileRepository: Send + Sync {
         &self,
         key: &str,
         content_type: &str,
-        data: &[u8],
         size: i64,
         uploaded_by_id: Option<Uuid>,
     ) -> Result<(), AppError>;
@@ -66,6 +69,20 @@ pub trait StoredFileRepository: Send + Sync {
 
     /// Permanently delete the DB row (called by GC after ref_count hits 0).
     async fn delete_by_key(&self, key: &str) -> Result<(), AppError>;
+
+    /// Delete the row only if it is still unreferenced, reporting whether it
+    /// went. The `ref_count = 0` test lives inside the DELETE on purpose.
+    ///
+    /// GC is asynchronous: a key is enqueued once its count reaches 0, but CAS
+    /// deduplicates on content, so an upload of the identical bytes in the gap
+    /// before the job runs legitimately revives the row at count 1. Reading the
+    /// count and then deleting cannot see that — the row must be re-tested in
+    /// the same statement that removes it, or GC destroys the reference the new
+    /// uploader just took.
+    ///
+    /// Returns `false` when the row was revived or already gone, in which case
+    /// the caller must leave the underlying blob alone.
+    async fn delete_if_unreferenced(&self, key: &str) -> Result<bool, AppError>;
 
     /// List keys starting with `prefix` — used at plugin uninstall to find every
     /// file it ever uploaded (keys are namespaced `plugin_{slug}/...` by cas_key)

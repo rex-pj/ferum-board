@@ -414,6 +414,450 @@ async fn search_returns_excerpt_from_ts_headline() {
     db.teardown().await;
 }
 
+// ─── Post content ─────────────────────────────────────────────────────────────
+//
+// F-ORG-03 is "thread title + post content". `idx_posts_fts` was built in
+// migration 6 and then queried by nothing, so for the whole life of the feature
+// a term that appeared only in a reply was unfindable — which on a forum is most
+// of the text there is. These cover the half that was missing, and the
+// visibility rules it has to respect.
+
+async fn insert_post_with(
+    conn: &sea_orm::DatabaseConnection,
+    thread_id: Uuid,
+    author_id: Uuid,
+    content_md: &str,
+    status: ferum_domain::models::post::PostStatus,
+) -> Uuid {
+    use ferum_domain::repositories::post_repository::{NewPost, PostRepository};
+    use ferum_infrastructure::repositories::PgPostRepository;
+    PgPostRepository::new(conn.clone())
+        .create(NewPost {
+            thread_id,
+            author_id,
+            parent_id: None,
+            content_md: content_md.to_string(),
+            content_html: format!("<p>{content_md}</p>"),
+            status,
+        })
+        .await
+        .expect("create post")
+        .id
+}
+
+#[tokio::test]
+async fn search_finds_a_thread_by_a_word_only_its_body_contains() {
+    let db = TestDb::new("fts_post_body").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await; // title "Thread 1"
+
+    // "carburettor" appears nowhere in the title, so a title-only search cannot
+    // find this thread however well the reply matches.
+    insert_post_with(
+        &db.conn,
+        thread.id,
+        user.id,
+        "You will want to clean the carburettor before reassembling anything.",
+        ferum_domain::models::post::PostStatus::Published,
+    )
+    .await;
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+    let result = svc
+        .search(thread_query("carburettor", vec![cat.id], 1, 20))
+        .await
+        .expect("search");
+
+    assert_eq!(result.total, 1, "a term found only in a reply must still match");
+    assert_eq!(result.hits[0].id, thread.id);
+    assert_eq!(
+        result.hits[0].kind,
+        SearchKind::Thread,
+        "a body match is still a thread hit — posts are not a separate result kind"
+    );
+    db.teardown().await;
+}
+
+/// The excerpt is the reason a body hit is legible: without it the reader sees a
+/// title that does not contain their term and no clue why it was returned.
+#[tokio::test]
+async fn a_body_match_excerpts_the_post_not_the_title() {
+    let db = TestDb::new("fts_post_body_excerpt").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+
+    insert_post_with(
+        &db.conn,
+        thread.id,
+        user.id,
+        "The correct torque for that flywheel bolt is ninety newton metres.",
+        ferum_domain::models::post::PostStatus::Published,
+    )
+    .await;
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+    let result = svc
+        .search(thread_query("flywheel", vec![cat.id], 1, 20))
+        .await
+        .expect("search");
+
+    let excerpt = result.hits[0].excerpt.as_deref().expect("body hit needs an excerpt");
+    assert!(
+        excerpt.contains("flywheel"),
+        "excerpt should come from the matching post, got {excerpt:?}"
+    );
+    assert!(
+        excerpt.contains("<b>"),
+        "ts_headline should mark the term, and <b> must survive sanitisation: {excerpt:?}"
+    );
+    db.teardown().await;
+}
+
+/// Diacritic folding has to reach the body too. Folding only the title would
+/// leave Vietnamese replies — the bulk of the prose on this forum — unsearchable
+/// for anyone who types tone marks, which is most people.
+#[tokio::test]
+async fn a_body_match_folds_diacritics_in_both_directions() {
+    let db = TestDb::new("fts_post_body_unaccent").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+
+    insert_post_with(
+        &db.conn,
+        thread.id,
+        user.id,
+        "Mình dùng đệm lò xo túi độc lập, nằm khá êm.",
+        ferum_domain::models::post::PostStatus::Published,
+    )
+    .await;
+
+    use sea_orm::{ConnectionTrait, Statement};
+    let unaccent_active: bool = db
+        .conn
+        .query_one_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            "SELECT (f_unaccent('ế') = 'e') AS folded".to_owned(),
+        ))
+        .await
+        .expect("probe f_unaccent")
+        .and_then(|r| r.try_get::<bool>("", "folded").ok())
+        .unwrap_or(false);
+    if !unaccent_active {
+        eprintln!("unaccent extension unavailable — skipping diacritic-folding assertion");
+        db.teardown().await;
+        return;
+    }
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+    for q in ["đệm", "dem", "độc lập", "doc lap"] {
+        let result = svc
+            .search(thread_query(q, vec![cat.id], 1, 20))
+            .await
+            .expect("search");
+        assert_eq!(result.total, 1, "query {q:?} should reach the post body");
+    }
+    db.teardown().await;
+}
+
+/// A soft-deleted post renders as a tombstone in the thread; its text must not
+/// keep pulling the thread into results. A pending post is awaiting moderation
+/// and must not be reachable at all — search is where unreviewed text would
+/// otherwise get its first audience.
+#[tokio::test]
+async fn deleted_and_pending_post_bodies_are_not_searchable() {
+    let db = TestDb::new("fts_post_body_hidden").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+
+    let deleted_thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    let post = insert_post_with(
+        &db.conn,
+        deleted_thread.id,
+        user.id,
+        "A retracted claim about magnetrons.",
+        ferum_domain::models::post::PostStatus::Published,
+    )
+    .await;
+
+    let pending_thread = insert_thread(&db.conn, 2, cat.id, user.id).await;
+    insert_post_with(
+        &db.conn,
+        pending_thread.id,
+        user.id,
+        "An unreviewed claim about magnetrons.",
+        ferum_domain::models::post::PostStatus::Pending,
+    )
+    .await;
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+    let cats = vec![cat.id];
+
+    // Before deletion the published post is findable — otherwise the assertion
+    // after it would pass for the wrong reason.
+    assert_eq!(
+        svc.search(thread_query("magnetrons", cats.clone(), 1, 20)).await.unwrap().total,
+        1,
+        "only the published post should match; the pending one must already be excluded"
+    );
+
+    use ferum_domain::repositories::post_repository::PostRepository;
+    ferum_infrastructure::repositories::PgPostRepository::new(db.conn.clone())
+        .soft_delete(post, user.id)
+        .await
+        .expect("soft delete");
+
+    assert_eq!(
+        svc.search(thread_query("magnetrons", cats, 1, 20)).await.unwrap().total,
+        0,
+        "neither a deleted nor a pending body may match"
+    );
+    db.teardown().await;
+}
+
+/// A thread is one hit however many of its posts match — the result set is
+/// threads, so N matching replies must not produce N rows of the same thread.
+#[tokio::test]
+async fn many_matching_posts_still_yield_one_thread_hit() {
+    let db = TestDb::new("fts_post_body_dedup").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+
+    for i in 1..=4 {
+        insert_post_with(
+            &db.conn,
+            thread.id,
+            user.id,
+            &format!("Reply {i} also mentions the alternator."),
+            ferum_domain::models::post::PostStatus::Published,
+        )
+        .await;
+    }
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+    let result = svc
+        .search(thread_query("alternator", vec![cat.id], 1, 20))
+        .await
+        .expect("search");
+
+    assert_eq!(result.total, 1, "count must not multiply by matching posts");
+    assert_eq!(result.hits.len(), 1);
+    db.teardown().await;
+}
+
+/// A body match must not smuggle a thread past the category filter — the
+/// visibility set is the security boundary and the new OR branch sits inside it.
+#[tokio::test]
+async fn a_body_match_still_obeys_category_visibility() {
+    let db = TestDb::new("fts_post_body_visibility").await;
+    let user = insert_user(&db.conn, 1).await;
+    let visible = insert_category(&db.conn, 1).await;
+    let hidden = insert_category(&db.conn, 2).await;
+    let thread = insert_thread(&db.conn, 1, hidden.id, user.id).await;
+
+    insert_post_with(
+        &db.conn,
+        thread.id,
+        user.id,
+        "Staff-only discussion of the crankshaft incident.",
+        ferum_domain::models::post::PostStatus::Published,
+    )
+    .await;
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+    assert_eq!(
+        svc.search(thread_query("crankshaft", vec![visible.id], 1, 20)).await.unwrap().total,
+        0,
+        "a post in an invisible category must not surface its thread"
+    );
+    assert_eq!(
+        svc.search(thread_query("crankshaft", vec![visible.id, hidden.id], 1, 20))
+            .await
+            .unwrap()
+            .total,
+        1,
+        "and must surface once the category is visible"
+    );
+    db.teardown().await;
+}
+
+/// Title beats body. A thread named for the query must outrank one that merely
+/// mentions it in passing, or searching for a topic returns whichever thread
+/// happens to be chattiest about it.
+#[tokio::test]
+async fn a_title_match_outranks_a_body_only_match() {
+    let db = TestDb::new("fts_post_body_rank").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+
+    use ferum_domain::repositories::thread_repository::{NewThread, ThreadRepository};
+    use ferum_infrastructure::repositories::PgThreadRepository;
+    let repo = PgThreadRepository::new(db.conn.clone());
+    let by_title = repo
+        .create(NewThread {
+            id: Uuid::new_v4(),
+            category_id: cat.id,
+            author_id: user.id,
+            title: "Choosing a differential".to_string(),
+            slug: "choosing-differential".to_string(),
+            product_id: None,
+        })
+        .await
+        .expect("title thread");
+    let by_body = repo
+        .create(NewThread {
+            id: Uuid::new_v4(),
+            category_id: cat.id,
+            author_id: user.id,
+            title: "Weekend garage log".to_string(),
+            slug: "weekend-garage-log".to_string(),
+            product_id: None,
+        })
+        .await
+        .expect("body thread");
+
+    insert_post_with(
+        &db.conn,
+        by_body.id,
+        user.id,
+        "Spent Sunday staring at the differential and gave up.",
+        ferum_domain::models::post::PostStatus::Published,
+    )
+    .await;
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+    let hits = svc
+        .search(thread_query_sorted(
+            "differential",
+            vec![cat.id],
+            ThreadSearchSort::Relevance,
+            1,
+            20,
+        ))
+        .await
+        .expect("search");
+
+    assert_eq!(hits.total, 2, "both routes to a match must return a hit");
+    assert_eq!(
+        hits.hits[0].id, by_title.id,
+        "a title hit must outrank a body-only hit"
+    );
+    assert_eq!(hits.hits[1].id, by_body.id);
+    db.teardown().await;
+}
+
+/// The page is chosen in a subquery and the body snippet joined on afterwards; a
+/// subquery's ORDER BY is not carried through a join by any rule Postgres
+/// guarantees, so the outer ORDER BY is load-bearing. This walks every sort with
+/// body matches present, where a dropped ordering shows up as a scrambled page.
+#[tokio::test]
+async fn every_thread_sort_survives_the_body_snippet_join() {
+    let db = TestDb::new("fts_post_body_sorts").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let a = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    let b = insert_thread(&db.conn, 2, cat.id, user.id).await;
+    let c = insert_thread(&db.conn, 3, cat.id, user.id).await;
+
+    // Every thread matches only through its body, so relevance is equal and the
+    // explicit orderings are what is under test.
+    for t in [&a, &b, &c] {
+        insert_post_with(
+            &db.conn,
+            t.id,
+            user.id,
+            "Notes on the camshaft profile.",
+            ferum_domain::models::post::PostStatus::Published,
+        )
+        .await;
+    }
+    set_thread_metrics(&db.conn, a.id, 5, "2026-01-01T00:00:00Z").await;
+    set_thread_metrics(&db.conn, b.id, 1, "2026-03-01T00:00:00Z").await;
+    set_thread_metrics(&db.conn, c.id, 10, "2026-02-01T00:00:00Z").await;
+
+    let svc = PostgresFtsService::new(db.conn.clone());
+
+    let by_new = svc
+        .search(thread_query_sorted("camshaft", vec![cat.id], ThreadSearchSort::Newest, 1, 20))
+        .await
+        .expect("newest");
+    assert_eq!(
+        by_new.hits.iter().map(|h| h.id).collect::<Vec<_>>(),
+        vec![b.id, c.id, a.id],
+        "newest first"
+    );
+
+    let by_replies = svc
+        .search(thread_query_sorted("camshaft", vec![cat.id], ThreadSearchSort::MostReplies, 1, 20))
+        .await
+        .expect("most replies");
+    assert_eq!(
+        by_replies.hits.iter().map(|h| h.id).collect::<Vec<_>>(),
+        vec![c.id, a.id, b.id],
+        "most replies first"
+    );
+    db.teardown().await;
+}
+
+/// `idx_posts_fts` existed for the whole life of this feature and was used by
+/// nothing. Now that something queries it, the way that regresses is no longer
+/// "no results" but "a sequential scan of every post on every search" — silent,
+/// correct, and ruinous. `enable_seqscan = off` makes the planner state its
+/// preference: if the predicate matches the index it reaches for it, and if the
+/// expression has drifted it falls back to a Seq Scan even under the penalty.
+#[tokio::test]
+async fn the_body_predicate_actually_uses_idx_posts_fts() {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement, TransactionTrait};
+
+    let db = TestDb::new("fts_post_body_index").await;
+    let user = insert_user(&db.conn, 1).await;
+    let cat = insert_category(&db.conn, 1).await;
+    let thread = insert_thread(&db.conn, 1, cat.id, user.id).await;
+    insert_post_with(
+        &db.conn,
+        thread.id,
+        user.id,
+        "Notes on the camshaft profile.",
+        ferum_domain::models::post::PostStatus::Published,
+    )
+    .await;
+
+    let txn = db.conn.begin().await.expect("begin");
+    // SET LOCAL, so the setting cannot escape onto a pooled connection.
+    txn.execute_raw(Statement::from_string(
+        DbBackend::Postgres,
+        "SET LOCAL enable_seqscan = off".to_owned(),
+    ))
+    .await
+    .expect("disable seqscan");
+
+    let plan = txn
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            &format!(
+                "EXPLAIN SELECT t.id FROM threads t WHERE t.id IN ({})",
+                ferum_infrastructure::search::postgres_fts::POST_MATCH_SUBQUERY
+            ),
+            [sea_orm::Value::from("camshaft:*")],
+        ))
+        .await
+        .expect("explain")
+        .iter()
+        .map(|r| r.try_get::<String>("", "QUERY PLAN").expect("plan line"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    txn.commit().await.expect("commit");
+
+    assert!(
+        plan.contains("idx_posts_fts"),
+        "the body predicate must reach the FTS index, not scan posts:\n{plan}"
+    );
+    db.teardown().await;
+}
+
 // ─── Products ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]

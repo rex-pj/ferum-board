@@ -13,10 +13,11 @@ impl StoredFileRepository for NoopStoredFileRepository {
     async fn usage_since(&self, _by: Uuid, _since: chrono::DateTime<chrono::Utc>) -> Result<UploadUsage, AppError> {
         Ok(UploadUsage { file_count: 0, total_bytes: 0 })
     }
-    async fn upsert_and_ref(&self, _key: &str, _ct: &str, _data: &[u8], _size: i64, _by: Option<Uuid>) -> Result<(), AppError> { Ok(()) }
-    async fn upsert_staged(&self, _key: &str, _ct: &str, _data: &[u8], _size: i64, _by: Option<Uuid>) -> Result<(), AppError> { Ok(()) }
+    async fn upsert_and_ref(&self, _key: &str, _ct: &str, _size: i64, _by: Option<Uuid>) -> Result<(), AppError> { Ok(()) }
+    async fn upsert_staged(&self, _key: &str, _ct: &str, _size: i64, _by: Option<Uuid>) -> Result<(), AppError> { Ok(()) }
     async fn increment_ref(&self, _key: &str) -> Result<(), AppError> { Ok(()) }
     async fn decrement_ref(&self, _key: &str) -> Result<i32, AppError> { Ok(0) }
     async fn delete_by_key(&self, _key: &str) -> Result<(), AppError> { Ok(()) }
+    async fn delete_if_unreferenced(&self, _key: &str) -> Result<bool, AppError> { Ok(true) }
     async fn list_keys_with_prefix(&self, _prefix: &str) -> Result<Vec<String>, AppError> { Ok(vec![]) }
 }

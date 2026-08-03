@@ -32,7 +32,7 @@ pub async fn list_products(
     let user = auth_user.require_auth()?;
     PermissionChecker::can_manage_products(user)?;
 
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
     let filter = ProductListFilter {
         product_type: q.product_type.as_deref().and_then(parse_product_type),
         status: q.status.as_deref().and_then(parse_product_status),

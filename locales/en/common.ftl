@@ -389,7 +389,7 @@ ui-see-n-discussions-instead =
         [one] See 1 matching discussion
        *[other] See { $count } matching discussions
     }
-ui-tip-searches-products-and-threads = Searches product names, brands and thread titles
+ui-tip-searches-products-and-threads = Searches product names, brands, thread titles and post replies
 ui-tip-accents-optional = Vietnamese accents are optional — “ghe an” finds “ghế ăn”
 ui-tip-filter-products-by-brand = On the Products tab, narrow by type, brand or material
 ui-sort-relevance = Best match

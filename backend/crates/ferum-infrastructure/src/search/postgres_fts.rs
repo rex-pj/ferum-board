@@ -94,10 +94,52 @@ fn build_tsquery(raw: &str) -> Option<String> {
     }
 }
 
-/// Threads: title match, excluding deleted threads and reviews of products that
-/// are still drafts (mirrors the public feed — a pending product's review is
-/// unlisted until approval). Category visibility is enforced by the caller
-/// supplying the allowed set; an empty set means no hits at all.
+/// Threads whose *body* matches, as a subquery over `idx_posts_fts`.
+///
+/// F-ORG-03 asks for "thread title + post content", and the index for the second
+/// half has existed since migration 6 — but nothing queried it, so a term that
+/// appeared only in a reply was unfindable. On a discussion forum that is most
+/// of the text on the site: the title is one line, the answers are the substance.
+///
+/// Uncorrelated `IN`, exactly like [`BRAND_MATCH_SUBQUERY`] and for the same
+/// reason: an `OR` spanning two tables cannot use either index, so written as a
+/// join Postgres would sequentially scan `threads`. In this shape it runs one
+/// GIN scan over `posts`, hashes the thread ids, and BitmapOrs that against the
+/// title index.
+///
+/// Only `published` posts, and never a soft-deleted one. A pending post is
+/// awaiting moderation and must not be reachable — not even by its own author,
+/// who can already see it in the thread. Making that viewer-dependent would put
+/// a viewer term into `count_sql` for a case nobody asked for.
+///
+/// Public only so the test suite can `EXPLAIN` this exact string. The
+/// `to_tsvector(...)` here has to match `idx_posts_fts` character for character
+/// or Postgres quietly ignores the index and sequentially scans `posts` on every
+/// search — a failure with no error and no wrong answer, only a bill. Asserting
+/// against a copy of the text would assert against the copy, so the test reads
+/// the real one.
+#[doc(hidden)]
+pub const POST_MATCH_SUBQUERY: &str = "SELECT po.thread_id FROM posts po \
+     WHERE po.is_deleted = false \
+       AND po.status = 'published'::post_status \
+       AND to_tsvector('simple', f_unaccent(po.content_md)) \
+           @@ to_tsquery('simple', f_unaccent($1))";
+
+/// What a body-only match contributes to a thread's relevance score.
+///
+/// Deliberately below what a title match scores. `to_tsvector` assigns weight D
+/// when nothing calls `setweight`, and `ts_rank`'s default weight for D is 0.1,
+/// which puts a single-lexeme title hit at ≈0.0608. Anything at or above that
+/// would let a passing mention in a reply outrank a thread whose title is the
+/// query — the opposite of what a searcher means. Half of it keeps the two tiers
+/// ordered while still giving body-only hits a score to sort by; at 0 they would
+/// all tie and fall through to `created_at`.
+const POST_MATCH_RANK_BONUS: f32 = 0.03;
+
+/// Threads: title or post-body match, excluding deleted threads and reviews of
+/// products that are still drafts (mirrors the public feed — a pending product's
+/// review is unlisted until approval). Category visibility is enforced by the
+/// caller supplying the allowed set; an empty set means no hits at all.
 fn plan_threads(tsquery: &str, query: &SearchQuery) -> Option<Plan> {
     if query.visible_category_ids.is_empty() {
         return None;
@@ -116,7 +158,9 @@ fn plan_threads(tsquery: &str, query: &SearchQuery) -> Option<Plan> {
     }
 
     let where_sql = format!(
-        "WHERE to_tsvector('simple', f_unaccent(t.title)) @@ to_tsquery('simple', f_unaccent($1)) \
+        "WHERE (to_tsvector('simple', f_unaccent(t.title)) \
+                    @@ to_tsquery('simple', f_unaccent($1)) \
+                OR t.id IN ({POST_MATCH_SUBQUERY})) \
            AND t.deleted_at IS NULL \
            AND t.status != 'deleted'::thread_status \
            AND t.category_id IN ({placeholders}) \
@@ -128,32 +172,83 @@ fn plan_threads(tsquery: &str, query: &SearchQuery) -> Option<Plan> {
     let limit_idx = values.len() + 1;
     let offset_idx = values.len() + 2;
 
-    // Every ordering ends with `created_at DESC` as a deterministic tiebreak, so
-    // paging is total: without it two equally-ranked (or equal reply_count)
-    // threads can swap between pages and the reader sees one twice.
-    let order_by = match query.thread_sort {
-        ThreadSearchSort::Relevance => "ts_rank(to_tsvector('simple', f_unaccent(t.title)), \
-             to_tsquery('simple', f_unaccent($1))) DESC, t.created_at DESC",
-        ThreadSearchSort::Newest => "t.created_at DESC",
-        ThreadSearchSort::MostReplies => "t.reply_count DESC, t.created_at DESC",
+    // Each ordering is reduced to one numeric key, selected as a column, so the
+    // outer query can re-state the sort without recomputing it. That matters
+    // because the body snippet is joined on *after* the page is chosen: a
+    // subquery's ORDER BY is not carried through a join by any rule Postgres
+    // guarantees, so an outer ORDER BY is required and it must key off something
+    // the inner query actually emits.
+    //
+    // Every ordering still ends with `created_at DESC` as a deterministic
+    // tiebreak, so paging is total: without it two equally-ranked (or equal
+    // reply_count) threads can swap between pages and the reader sees one twice.
+    //
+    // Relevance repeats the body subquery rather than joining its result in,
+    // because `count_sql` shares `where_sql` and has no joins of its own — the
+    // same constraint the brand-match ranking works around. Both occurrences are
+    // uncorrelated, so each is one hashed subplan, not a scan per row.
+    let sort_key = match query.thread_sort {
+        ThreadSearchSort::Relevance => format!(
+            "(ts_rank(to_tsvector('simple', f_unaccent(t.title)), \
+                      to_tsquery('simple', f_unaccent($1))) \
+              + CASE WHEN t.id IN ({POST_MATCH_SUBQUERY}) \
+                     THEN {POST_MATCH_RANK_BONUS} ELSE 0 END)"
+        ),
+        // A constant leaves `created_at DESC` as the only live term.
+        ThreadSearchSort::Newest => "0::real".to_string(),
+        ThreadSearchSort::MostReplies => "t.reply_count::real".to_string(),
     };
 
     Some(Plan {
+        // The page is selected first and the body snippet joined onto it
+        // afterwards, so the LATERAL runs `per_page` times rather than once per
+        // matching thread — `ts_headline` reads the whole document, and a
+        // popular query can match thousands.
+        //
+        // Preferring the post snippet over the title one is not a tiebreak but
+        // the point: `title` is already a field on the hit, so headlining it
+        // again says nothing the reader cannot see. A line of the reply that
+        // actually contains the term does.
         data_sql: format!(
             r#"
             SELECT
-                t.id   AS id,
-                t.slug AS slug,
-                t.title,
-                ts_headline(
-                    'simple', t.title,
-                    to_tsquery('simple', f_unaccent($1)),
-                    'MaxFragments=1,MinWords=6,MaxWords=20'
-                )      AS excerpt
-            FROM threads t
-            {where_sql}
-            ORDER BY {order_by}
-            LIMIT ${limit_idx} OFFSET ${offset_idx}
+                hit.id   AS id,
+                hit.slug AS slug,
+                hit.title,
+                COALESCE(
+                    body.excerpt,
+                    ts_headline(
+                        'simple', hit.title,
+                        to_tsquery('simple', f_unaccent($1)),
+                        'MaxFragments=1,MinWords=6,MaxWords=20'
+                    )
+                ) AS excerpt
+            FROM (
+                SELECT t.id, t.slug, t.title, t.created_at,
+                       {sort_key} AS sort_key
+                FROM threads t
+                {where_sql}
+                ORDER BY sort_key DESC, t.created_at DESC
+                LIMIT ${limit_idx} OFFSET ${offset_idx}
+            ) hit
+            LEFT JOIN LATERAL (
+                SELECT ts_headline(
+                           'simple', po.content_md,
+                           to_tsquery('simple', f_unaccent($1)),
+                           'MaxFragments=1,MinWords=8,MaxWords=28'
+                       ) AS excerpt
+                FROM posts po
+                WHERE po.thread_id = hit.id
+                  AND po.is_deleted = false
+                  AND po.status = 'published'::post_status
+                  AND to_tsvector('simple', f_unaccent(po.content_md))
+                      @@ to_tsquery('simple', f_unaccent($1))
+                ORDER BY ts_rank(to_tsvector('simple', f_unaccent(po.content_md)),
+                                 to_tsquery('simple', f_unaccent($1))) DESC,
+                         po.created_at ASC
+                LIMIT 1
+            ) body ON true
+            ORDER BY hit.sort_key DESC, hit.created_at DESC
             "#
         ),
         count_sql: format!("SELECT COUNT(*)::BIGINT AS count FROM threads t {where_sql}"),

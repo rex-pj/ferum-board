@@ -138,7 +138,7 @@ pub async fn home(
     Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
 
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let sort_str = sort.as_str().to_string();
@@ -362,7 +362,7 @@ pub async fn category(
     Path(slug): Path<String>,
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let sort_str = sort.as_str().to_string();
 

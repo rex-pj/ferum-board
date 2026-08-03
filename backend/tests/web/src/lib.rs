@@ -2,6 +2,7 @@
 #[cfg(test)] mod handlers;
 #[cfg(test)] mod middleware;
 #[cfg(test)] mod search_page_render;
+#[cfg(test)] mod startup;
 #[cfg(test)] mod template_integrity;
 #[cfg(test)] mod template_keys;
 #[cfg(test)] mod tera_templates;

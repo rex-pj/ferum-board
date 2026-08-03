@@ -382,7 +382,8 @@ Debug mode, verbose errors, or development endpoints left active in production.
 - [ ] Stack traces never appear in HTTP responses (verify `AppError` / `HandlerError` mapping)
 - [ ] `RUST_LOG` in production is `info` or `warn` — not `debug` or `trace`
 - [ ] No `/debug`, `/internal`, or `/dev` routes in the production binary
-- [ ] `GET /health` returns only DB + Redis status — not env vars, config, or internal state
+- [ ] `GET /health` and `/health/live` return only `{"status":"ok"}` — they check no dependencies by design, so they cannot leak one
+- [ ] `GET /health/ready` returns only per-dependency `ok`/`unreachable` — never a connection string, driver error, or host name
 - [ ] Error responses only return `{ "error": { "code": "...", "message": "..." } }` — no `details.backtrace`
 
 **PASS:** Production mode leaks no debug information. Health endpoint is minimal.

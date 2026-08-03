@@ -5,7 +5,7 @@ use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::Client;
 use bytes::Bytes;
 
-use ferum_application::ports::StorageService;
+use ferum_application::ports::{StorageService, LEGACY_FILES_PREFIX};
 use ferum_application::shared::AppError;
 
 pub struct S3StorageService {
@@ -67,5 +67,22 @@ impl StorageService for S3StorageService {
 
     fn public_url(&self, key: &str) -> String {
         format!("{}/{}", self.cdn_base_url, key)
+    }
+
+    fn key_from_url(&self, url: &str) -> Option<String> {
+        // Legacy first, and this branch is not hypothetical: switching an
+        // existing install to S3 leaves every previously stored URL — avatars,
+        // site config, and the HTML of every post ever written — in the
+        // same-origin form. Those files also keep their bytes in `stored_files`,
+        // so they must stay resolvable for reference counting to keep working.
+        if let Some(i) = url.rfind(LEGACY_FILES_PREFIX) {
+            let key = &url[i + LEGACY_FILES_PREFIX.len()..];
+            return (!key.is_empty()).then(|| key.to_string());
+        }
+        // Our own shape: `{cdn_base_url}/{key}`.
+        url.strip_prefix(&self.cdn_base_url)
+            .and_then(|rest| rest.strip_prefix('/'))
+            .filter(|k| !k.is_empty())
+            .map(str::to_string)
     }
 }

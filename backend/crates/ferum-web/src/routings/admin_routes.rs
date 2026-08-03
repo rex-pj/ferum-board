@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use axum::routing::{delete, get, patch, post};
 use axum::Router;
 
 use crate::app_state::AppState;
 use crate::handlers::{admin, api};
+use crate::middleware::rate_limit::{rate_limit_middleware, RateLimitConfig};
 
 pub fn admin_api_routes() -> Router<AppState> {
     let admin_category_routes = Router::new()
@@ -197,6 +200,12 @@ pub fn setup_routes() -> Router<AppState> {
         .route("/run", post(api::setup::run))
 }
 
-pub fn files_routes() -> Router<AppState> {
-    Router::new().route("/files/{*key}", get(api::uploads::serve))
+/// `/files/` is unauthenticated and reads whole blobs out of Postgres, which
+/// makes it the cheapest way to exhaust the connection pool. It is rate limited
+/// for that reason, not to police content access.
+pub fn files_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/files/{*key}", get(api::uploads::serve))
+        .layer(axum::middleware::from_fn_with_state(state, rate_limit_middleware))
+        .layer(axum::Extension(Arc::new(RateLimitConfig::file_read())))
 }

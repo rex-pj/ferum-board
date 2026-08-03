@@ -55,6 +55,12 @@ pub struct PluginRegistry {
     /// Scoped Postgres access to each plugin's own `plugin_{slug}` schema
     #[cfg(feature = "script_plugins")]
     db_gateway: Arc<dyn PluginDbGateway>,
+    /// One buffered log writer for every plugin in the process.
+    ///
+    /// Shared rather than per-plugin on purpose: the resource being rationed is
+    /// the connection pool, so ten active plugins must still cost one writer.
+    #[cfg(feature = "script_plugins")]
+    log_sink: crate::plugins::log_sink::PluginLogSink,
     /// Tier 2 — one JS runtime per active Script plugin
     #[cfg(feature = "script_plugins")]
     script_runtimes: dashmap::DashMap<Uuid, Arc<ScriptPluginRuntime>>,
@@ -76,6 +82,8 @@ impl PluginRegistry {
         let _ = (cache, plugin_storage, user_repo, notification_repo, db_gateway, hook_timeout_ms);
 
         Self {
+            #[cfg(feature = "script_plugins")]
+            log_sink: crate::plugins::log_sink::PluginLogSink::start(plugin_repo.clone()),
             plugin_repo,
             dispatch_table: Mutex::new(HashMap::new()),
             circuit_threshold,
@@ -202,7 +210,7 @@ impl PluginRegistry {
             bundle_js,
             plugin.id,
             plugin.config.clone(),
-            self.plugin_repo.clone(),
+            self.log_sink.clone(),
             self.cache.clone(),
             self.plugin_storage.clone(),
             self.user_repo.clone(),

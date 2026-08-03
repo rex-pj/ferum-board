@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use tokio::sync::Semaphore;
 
 use crate::network_utils::build_pinned_client;
 use ferum_application::ports::{
@@ -116,18 +117,24 @@ impl JobExecutor {
     }
 
     pub async fn run_gc_storage_key(&self, key: &str) -> Result<(), AppError> {
-        // Decrement once more — might have raced, check count
-        let remaining = self.stored_files.decrement_ref(key).await?;
-        if remaining > 0 {
-            // Another reference was added concurrently; skip deletion
+        // Deliberately does NOT decrement: every caller decrements first and
+        // only enqueues this job once the count already reached 0. Decrementing
+        // again used to be how this checked for a concurrent re-reference, but
+        // that consumed the very reference it was meant to detect — a user who
+        // removed an avatar and re-uploaded the identical file in the same
+        // moment had their new one deleted.
+        //
+        // The row is re-tested inside the DELETE instead, so a revived key is
+        // left completely alone — including its blob, which is why the backend
+        // delete is now conditional on the row actually going.
+        if !self.stored_files.delete_if_unreferenced(key).await? {
+            tracing::debug!("gc: key {} was re-referenced or already gone, skipping", key);
             return Ok(());
         }
 
-        // Delete from underlying storage backend first, then DB row
         if let Err(e) = self.storage.delete(key).await {
             tracing::warn!("gc: storage delete failed for key {}: {:?}", key, e);
         }
-        self.stored_files.delete_by_key(key).await?;
         tracing::debug!("gc: deleted orphaned file {}", key);
         Ok(())
     }
@@ -200,13 +207,61 @@ pub fn hmac_sha256(secret: &str, payload: &str) -> String {
 
 // ─── InlineJobRunner ──────────────────────────────────────────────────────────
 
+/// How many *outbound-network* jobs may run at once.
+///
+/// Webhook delivery is the only job that fans out: `EventBus` enqueues one per
+/// subscribed webhook, so a single reply can produce hundreds. Bounding them
+/// keeps a burst from opening hundreds of simultaneous sockets — and, since a
+/// plugin can register webhooks, from turning one post into an outbound
+/// request storm.
+///
+/// Larger than the local budget below because these jobs are almost entirely
+/// I/O wait: each spends up to the 10s HTTP timeout in the network and touches
+/// the database only once, briefly, at the very end.
+const MAX_CONCURRENT_NETWORK_JOBS: usize = 16;
+
+/// How many jobs that mainly touch *local* resources may run at once.
+///
+/// Kept separate from the network budget, and that separation is the point.
+/// A single shared semaphore looks tidier but couples job classes whose
+/// durations differ by three orders of magnitude: 200 webhooks to a dead
+/// endpoint would hold every permit for 10s each, so a `SendEmailVerification`
+/// enqueued behind them waited minutes — a user sat staring at an inbox waiting
+/// for a signup mail because somebody else's webhook host was down. Splitting
+/// the budgets means a stalled integration cannot delay a signup.
+const MAX_CONCURRENT_LOCAL_JOBS: usize = 8;
+
 pub struct InlineJobRunner {
     executor: Arc<JobExecutor>,
+    network_permits: Arc<Semaphore>,
+    local_permits: Arc<Semaphore>,
 }
 
 impl InlineJobRunner {
     pub fn new(executor: Arc<JobExecutor>) -> Self {
-        Self { executor }
+        Self {
+            executor,
+            network_permits: Arc::new(Semaphore::new(MAX_CONCURRENT_NETWORK_JOBS)),
+            local_permits: Arc::new(Semaphore::new(MAX_CONCURRENT_LOCAL_JOBS)),
+        }
+    }
+
+    /// Which budget a job draws from — by where it actually spends its time,
+    /// not by what it is called.
+    ///
+    /// **A new job that calls out to the network must be added here.** Left out,
+    /// it silently draws from the local budget and reintroduces exactly the
+    /// head-of-line blocking the split exists to remove; nothing about that
+    /// failure is visible except signup mail getting slow. `job_classification`
+    /// in the infrastructure tests enumerates the variants to make the omission
+    /// fail a build instead.
+    ///
+    /// Email is deliberately *not* here despite talking to an SMTP server: mail
+    /// is enqueued one job at a time by a user action, never fanned out, so it
+    /// cannot produce the burst this bounds — and putting it in the network
+    /// budget would let a webhook storm delay it again.
+    pub fn is_network_bound(job: &ForumJob) -> bool {
+        matches!(job, ForumJob::SendWebhook { .. })
     }
 }
 
@@ -214,7 +269,22 @@ impl InlineJobRunner {
 impl JobQueue for InlineJobRunner {
     async fn enqueue(&self, job: ForumJob) -> Result<(), AppError> {
         let executor = self.executor.clone();
+        let permits = if Self::is_network_bound(&job) {
+            self.network_permits.clone()
+        } else {
+            self.local_permits.clone()
+        };
+        // The permit is acquired *inside* the task, not before spawning it:
+        // `enqueue` is awaited on the request path, so blocking here would make
+        // a backed-up job queue slow down the very responses it is meant to stay
+        // out of. The task waits instead, and the caller returns immediately.
         tokio::spawn(async move {
+            let _permit = match permits.acquire_owned().await {
+                Ok(p) => p,
+                // Only if the semaphore were closed, which nothing does — but
+                // dropping the job silently would be worse than running it.
+                Err(_) => return,
+            };
             if let Err(e) = executor.run(job).await {
                 tracing::error!("background job error: {:?}", e);
             }

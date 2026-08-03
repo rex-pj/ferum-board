@@ -7,6 +7,7 @@ use ferum_test_support::fixtures::{make_user, AuthUserBuilder};
 use ferum_test_support::mocks::{
     job_queue::NoopJobQueue,
     password_hasher::MockPasswordHasher,
+    storage_service::NoopStorageService,
     stored_file_repository::NoopStoredFileRepository,
     user_repository::MockUserRepository,
 };
@@ -16,6 +17,7 @@ fn build_uc(users: MockUserRepository, hasher: MockPasswordHasher) -> UserUseCas
         Arc::new(users),
         Arc::new(hasher),
         Arc::new(NoopStoredFileRepository),
+        Arc::new(NoopStorageService),
         Arc::new(NoopJobQueue),
     )
 }

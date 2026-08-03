@@ -256,18 +256,20 @@ pub async fn upload_favicon(
 
     let key = cas_key("favicons", &data, &content_type);
 
+    let size = data.len() as i64;
+    state.storage.put(&key, data, &content_type).await?;
     state
         .stored_files
-        .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+        .upsert_and_ref(&key, &content_type, size, Some(actor.id))
         .await?;
 
     let old_key = state
         .site_config
         .get("favicon_url")
         .await?
-        .and_then(|url| url.strip_prefix("/files/").map(str::to_string));
+        .and_then(|url| state.storage.key_from_url(&url));
 
-    let favicon_url = format!("/files/{key}");
+    let favicon_url = state.storage.public_url(&key);
     state.site_config.set("favicon_url", &favicon_url).await?;
     state.site_config_cache.write().await.insert("favicon_url".to_string(), favicon_url.clone());
 
@@ -296,7 +298,7 @@ pub async fn delete_favicon(
         .get("favicon_url")
         .await?
         .filter(|url| !url.is_empty())
-        .and_then(|url| url.strip_prefix("/files/").map(str::to_string))
+        .and_then(|url| state.storage.key_from_url(&url))
     {
         let remaining = state.stored_files.decrement_ref(&key).await?;
         if remaining == 0 {
@@ -323,18 +325,20 @@ pub async fn upload_logo(
 
     let key = cas_key("logos", &data, &content_type);
 
+    let size = data.len() as i64;
+    state.storage.put(&key, data, &content_type).await?;
     state
         .stored_files
-        .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+        .upsert_and_ref(&key, &content_type, size, Some(actor.id))
         .await?;
 
     let old_key = state
         .site_config
         .get("logo_url")
         .await?
-        .and_then(|url| url.strip_prefix("/files/").map(str::to_string));
+        .and_then(|url| state.storage.key_from_url(&url));
 
-    let logo_url = format!("/files/{key}");
+    let logo_url = state.storage.public_url(&key);
     state.site_config.set("logo_url", &logo_url).await?;
     state.site_config_cache.write().await.insert("logo_url".to_string(), logo_url.clone());
 
@@ -363,7 +367,7 @@ pub async fn delete_logo(
         .get("logo_url")
         .await?
         .filter(|url| !url.is_empty())
-        .and_then(|url| url.strip_prefix("/files/").map(str::to_string))
+        .and_then(|url| state.storage.key_from_url(&url))
     {
         let remaining = state.stored_files.decrement_ref(&key).await?;
         if remaining == 0 {
@@ -422,13 +426,16 @@ async fn store_hero_tiles(state: &AppState, tiles: &[HeroTileCtx]) -> Result<Str
 
 /// Drop one reference to a CAS image and delete the blob when nothing else holds it.
 ///
-/// Tiles store `/files/<key>`; `stored_files` is keyed by `<key>`. A URL that is
-/// not in that form (an operator-set external CDN link) simply has no CAS
-/// reference to release, so it is skipped.
+/// Tiles store whatever URL the storage backend minted; `stored_files` is keyed
+/// by the CAS key inside it. A URL the backend does not recognise (an
+/// operator-set external link) simply has no CAS reference to release, so it is
+/// skipped — which is also why this asks the backend rather than pattern
+/// matching: only it can tell one of our URLs from somebody else's.
 async fn release_hero_image(state: &AppState, image_url: &str) {
-    let Some(key) = image_url.strip_prefix("/files/") else {
+    let Some(key) = state.storage.key_from_url(image_url) else {
         return;
     };
+    let key = key.as_str();
     if let Ok(remaining) = state.stored_files.decrement_ref(key).await {
         if remaining == 0 {
             let _ = state.stored_files.delete_by_key(key).await;
@@ -463,13 +470,15 @@ pub async fn add_hero_tile(
     validate_upload_image(&content_type, &data, MAX_HERO_IMAGE_BYTES, ImageKind::HERO_IMAGE)?;
 
     let key = cas_key("hero", &data, &content_type);
+    let size = data.len() as i64;
+    state.storage.put(&key, data, &content_type).await?;
     state
         .stored_files
-        .upsert_and_ref(&key, &content_type, &data, data.len() as i64, Some(actor.id))
+        .upsert_and_ref(&key, &content_type, size, Some(actor.id))
         .await?;
 
     tiles.push(HeroTileCtx {
-        image_url: format!("/files/{key}"),
+        image_url: state.storage.public_url(&key),
         link: String::new(),
         caption: String::new(),
     });

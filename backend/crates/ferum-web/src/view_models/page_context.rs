@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::middleware::AuthUser;
+use ferum_application::constants::MAX_PAGE;
 
 /// A single rendered plugin Web Component element for a UI slot.
 /// Pre-rendered as HTML so Tera can output it with `{{ slot.html | safe }}`.
@@ -97,7 +98,19 @@ impl PaginationCtx {
         // underflows u64 — a panic in debug, u64::MAX in release. Handlers clamp
         // their query params too; this is the backstop for every call site.
         let per_page = per_page.max(1);
-        let total_pages = (total + per_page - 1) / per_page;
+        // Capped at the same ceiling `utils::paginate` enforces on input.
+        // Without this the navigation happily links to pages the server now
+        // refuses: a forum with 50k threads at 20/page advertises 2,500 pages,
+        // every one past 500 answering `page_out_of_range`. The reader would
+        // meet a dead link the UI drew for them.
+        //
+        // `total` is deliberately NOT capped — "1,234 threads" stays true, and
+        // it is what the page actually reports; only reachability is bounded.
+        //
+        // The macro also loops `range(1..=total_pages)` to render a five-link
+        // window, so this incidentally stops that being a 2,500-iteration loop
+        // on every render.
+        let total_pages = ((total + per_page - 1) / per_page).min(MAX_PAGE);
         Self {
             page,
             per_page,

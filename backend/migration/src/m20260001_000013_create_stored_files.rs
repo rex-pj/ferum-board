@@ -66,7 +66,16 @@ impl MigrationTrait for Migration {
                             .string_len(128)
                             .not_null(),
                     )
-                    .col(ColumnDef::new(StoredFiles::Data).binary().not_null())
+                    // Nullable because this table holds two separable things:
+                    // the metadata every backend needs (content type, size,
+                    // ref_count, uploader) and the bytes, which only the
+                    // database backend stores. NULL means the file lives in an
+                    // external store — S3 — and this row carries its bookkeeping
+                    // alone. `NOT NULL` here would force every blob to be copied
+                    // into Postgres even when something else already owns it,
+                    // which is what kept `S3StorageService` from ever being a
+                    // real toggle.
+                    .col(ColumnDef::new(StoredFiles::Data).binary().null())
                     .col(
                         ColumnDef::new(StoredFiles::Size)
                             .big_integer()

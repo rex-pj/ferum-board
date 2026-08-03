@@ -10,7 +10,8 @@ use ferum_domain::models::plugin::{Plugin, PluginHook, PluginStatus, PluginTier}
 use ferum_test_support::fixtures::AuthUserBuilder;
 use ferum_test_support::mocks::{
     job_queue::NoopJobQueue, plugin_db_repository::MockPluginDbGateway,
-    plugin_repository::MockPluginRepository, stored_file_repository::NoopStoredFileRepository,
+    plugin_repository::MockPluginRepository, storage_service::NoopStorageService,
+    stored_file_repository::NoopStoredFileRepository,
     webhook_repository::MockWebhookRepository,
 };
 
@@ -84,6 +85,7 @@ impl Uc {
             Arc::new(NullPluginRuntime),
             Arc::new(self.db_gateway),
             Arc::new(NoopStoredFileRepository),
+            Arc::new(NoopStorageService),
             Arc::new(NoopJobQueue),
             PathBuf::from("/tmp/plugins"),
         )

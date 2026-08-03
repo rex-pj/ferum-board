@@ -19,7 +19,12 @@ pub async fn setup_guard(
         || path.starts_with("/static/")
         || path.starts_with("/themes/")
         || path.starts_with("/files/")   // files are DB blobs — not page routes
-        || path == "/health";
+        // Probes, including /health/live and /health/ready. An orchestrator
+        // must get a real answer during first-run setup too — redirecting a
+        // liveness probe to /setup would read as unhealthy and restart-loop
+        // the container before an admin can finish the wizard.
+        || path == "/health"
+        || path.starts_with("/health/");
 
     if is_asset {
         tracing::debug!("setup_guard_asset_bypass");

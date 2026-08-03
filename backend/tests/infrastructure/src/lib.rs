@@ -12,7 +12,7 @@ mod cache;
 mod job_queue;
 mod notification;
 mod plugins;
+mod storage;
 mod rate_limit;
 mod repositories;
 mod search;
-mod storage;

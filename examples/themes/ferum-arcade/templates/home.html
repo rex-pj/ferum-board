@@ -64,7 +64,7 @@
         <a href="/u/{{ thread.author_username }}" class="fac-author">{{ thread.author_display_name }}</a>
         <span class="fac-sep" aria-hidden="true">//</span>
         <time class="fac-time" data-rel datetime="{{ thread.created_at }}">
-          {{ thread.created_at | date(format="%b %d, %Y") }}
+          {{ thread.created_at | localdate }}
         </time>
       </div>
     </div>

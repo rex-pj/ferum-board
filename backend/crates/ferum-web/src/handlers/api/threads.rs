@@ -47,7 +47,7 @@ pub async fn list_feed(
     Extension(auth_user): Extension<Option<AuthUser>>,
     Query(q): Query<ThreadListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
 
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let (threads, total) = if let Some(tag_slug) = &q.tag {
@@ -76,7 +76,7 @@ pub async fn list_threads(
     Query(q): Query<ThreadListQuery>,
     Path(category_slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100);
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
 
     let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
     let (threads, total) = state

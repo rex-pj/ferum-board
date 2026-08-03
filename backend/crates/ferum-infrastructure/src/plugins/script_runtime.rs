@@ -30,7 +30,6 @@ mod inner {
     use ferum_domain::models::plugin::NewPluginLog;
     use ferum_domain::repositories::notification_repository::NotificationRepository;
     use ferum_domain::repositories::plugin_db_repository::PluginDbGateway;
-    use ferum_domain::repositories::plugin_repository::PluginRepository;
     use ferum_domain::repositories::plugin_storage_repository::PluginStorageRepository;
     use ferum_domain::repositories::user_repository::UserRepository;
 
@@ -64,7 +63,13 @@ mod inner {
         plugin_id: Uuid,
         plugin_slug: String,
         config: serde_json::Value,
-        plugin_repo: Arc<dyn PluginRepository>,
+        /// Buffered, batched writer for `plugin_logs`. Shared process-wide, so
+        /// total logging cost stays at one connection however many plugins run.
+        ///
+        /// Replaces the `PluginRepository` this struct used to hold: logging was
+        /// the only thing the JS thread ever did with it, and it now goes
+        /// through the sink instead.
+        log_sink: crate::plugins::log_sink::PluginLogSink,
         cache: Arc<dyn CacheService>,
         /// Durable KV store — the persistent counterpart to `cache` (which is TTL-bound).
         storage: Arc<dyn PluginStorageRepository>,
@@ -246,21 +251,19 @@ var __ferum_rpc = {};
                         _       => tracing::debug!(plugin = %s.plugin_slug, "[{}] {}", level, message),
                     }
 
-                    // Async write to plugin_logs — block briefly
-                    let plugin_id = s.plugin_id;
-                    let repo = s.plugin_repo.clone();
-                    let level_c = level.clone();
-                    let msg_c = message.clone();
-                    let ctx_c = context.clone();
-                    s.rt_handle.spawn(async move {
-                        let _ = repo.append_log(NewPluginLog {
-                            plugin_id,
-                            level: level_c,
-                            hook_name: None,
-                            duration_ms: None,
-                            message: msg_c,
-                            context: ctx_c,
-                        }).await;
+                    // Hand off to the buffered sink rather than spawning a task
+                    // that owns its own INSERT. A plugin controls how often
+                    // this runs, so the per-call cost has to be a channel send:
+                    // the previous shape turned one logging loop into thousands
+                    // of concurrent writers and starved the pool. Overflow is
+                    // dropped and counted inside the sink.
+                    s.log_sink.try_log(NewPluginLog {
+                        plugin_id: s.plugin_id,
+                        level: level.clone(),
+                        hook_name: None,
+                        duration_ms: None,
+                        message: message.clone(),
+                        context: context.clone(),
                     });
 
                     Ok(JsValue::undefined())
@@ -830,7 +833,7 @@ var __ferum_rpc = {};
             bundle_js: String,
             plugin_id: Uuid,
             config: serde_json::Value,
-            plugin_repo: Arc<dyn PluginRepository>,
+            log_sink: crate::plugins::log_sink::PluginLogSink,
             cache: Arc<dyn CacheService>,
             storage: Arc<dyn PluginStorageRepository>,
             user_repo: Arc<dyn UserRepository>,
@@ -846,7 +849,7 @@ var __ferum_rpc = {};
                 plugin_id,
                 plugin_slug: slug.clone(),
                 config,
-                plugin_repo,
+                log_sink,
                 cache,
                 storage,
                 user_repo,

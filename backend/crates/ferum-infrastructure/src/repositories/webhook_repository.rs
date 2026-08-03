@@ -5,7 +5,7 @@ use sea_orm::*;
 use uuid::Uuid;
 
 use crate::entities::webhooks;
-use ferum_application::constants::WEBHOOK_MAX_FAILURES;
+use ferum_application::constants::{MAX_WEBHOOKS_PER_EVENT, WEBHOOK_MAX_FAILURES};
 use ferum_application::shared::AppError;
 use ferum_domain::models::webhook::Webhook;
 use ferum_domain::repositories::webhook_repository::{
@@ -58,12 +58,20 @@ impl WebhookRepository for PgWebhookRepository {
     }
 
     async fn find_subscribed(&self, event_type: &str) -> Result<Vec<Webhook>, AppError> {
+        // Bounded because the caller fans out one job per row: `EventBus`
+        // enqueues a `SendWebhook` for every hook returned, so this row count
+        // is a multiplier on the work a single post creates. The limit is a
+        // backstop against a misconfigured or hostile install, not a number a
+        // real deployment should ever reach — subscribing more than this to one
+        // event is already a sign something is wrong.
         Ok(webhooks::Entity::find()
             .filter(webhooks::Column::IsActive.eq(true))
             .filter(Expr::cust_with_values(
                 "$1 = ANY(events)",
                 [event_type.to_string()],
             ))
+            .order_by_asc(webhooks::Column::CreatedAt)
+            .limit(MAX_WEBHOOKS_PER_EVENT)
             .all(&self.db)
             .await?
             .into_iter()

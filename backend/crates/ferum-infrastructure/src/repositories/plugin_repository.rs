@@ -394,6 +394,25 @@ impl PluginRepository for PgPluginRepository {
         Ok(())
     }
 
+    async fn append_logs_batch(&self, entries: Vec<NewPluginLog>) -> Result<(), AppError> {
+        if entries.is_empty() {
+            // `insert_many` with no rows is an error in sea-orm, not a no-op.
+            return Ok(());
+        }
+        let models = entries.into_iter().map(|entry| plugin_logs::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            plugin_id: Set(entry.plugin_id),
+            level: Set(entry.level),
+            hook_name: Set(entry.hook_name),
+            duration_ms: Set(entry.duration_ms),
+            message: Set(entry.message),
+            context: Set(entry.context),
+            ..Default::default()
+        });
+        plugin_logs::Entity::insert_many(models).exec(&self.db).await?;
+        Ok(())
+    }
+
     async fn get_logs(
         &self,
         plugin_id: Uuid,

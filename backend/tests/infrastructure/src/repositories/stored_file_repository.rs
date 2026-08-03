@@ -17,7 +17,7 @@ async fn upsert_inserts_with_ref_count_one() {
     let db = TestDb::new("sfile_upsert_insert").await;
     let repo = PgStoredFileRepository::new(db.conn.clone());
 
-    repo.upsert_and_ref("sha256:aabbcc", "image/png", b"fake_data", 9, None)
+    repo.upsert_and_ref("sha256:aabbcc", "image/png", 9, None)
         .await
         .expect("upsert_and_ref inserts new row with ref_count = 1");
 
@@ -36,12 +36,12 @@ async fn upsert_on_conflict_increments_ref_count() {
     let db = TestDb::new("sfile_upsert_conflict").await;
     let repo = PgStoredFileRepository::new(db.conn.clone());
 
-    repo.upsert_and_ref("sha256:aabbcc", "image/png", b"fake_data", 9, None)
+    repo.upsert_and_ref("sha256:aabbcc", "image/png", 9, None)
         .await
         .expect("first upsert inserts (ref_count = 1)");
 
     // Second call for the same key must hit ON CONFLICT and increment ref_count to 2
-    repo.upsert_and_ref("sha256:aabbcc", "image/png", b"fake_data", 9, None)
+    repo.upsert_and_ref("sha256:aabbcc", "image/png", 9, None)
         .await
         .expect("second upsert increments ref_count via ON CONFLICT DO UPDATE");
 
@@ -66,7 +66,7 @@ async fn decrement_ref_greatest_floors_at_zero() {
     let db = TestDb::new("sfile_decrement_floor").await;
     let repo = PgStoredFileRepository::new(db.conn.clone());
 
-    repo.upsert_and_ref("sha256:aabbcc", "image/png", b"fake_data", 9, None)
+    repo.upsert_and_ref("sha256:aabbcc", "image/png", 9, None)
         .await
         .expect("insert");
 
@@ -103,7 +103,7 @@ async fn delete_by_key_removes_row() {
     let db = TestDb::new("sfile_delete_by_key").await;
     let repo = PgStoredFileRepository::new(db.conn.clone());
 
-    repo.upsert_and_ref("sha256:aabbcc", "image/png", b"fake_data", 9, None)
+    repo.upsert_and_ref("sha256:aabbcc", "image/png", 9, None)
         .await
         .expect("insert");
 
@@ -122,13 +122,73 @@ async fn delete_by_key_removes_row() {
 }
 
 #[tokio::test]
+async fn delete_if_unreferenced_removes_a_row_at_zero() {
+    let db = TestDb::new("sfile_del_unref_zero").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+
+    repo.upsert_and_ref("sha256:orphan", "image/png", 5, None)
+        .await
+        .expect("insert");
+    repo.decrement_ref("sha256:orphan").await.expect("dec to 0");
+
+    let deleted = repo
+        .delete_if_unreferenced("sha256:orphan")
+        .await
+        .expect("conditional delete executes");
+
+    assert!(deleted, "a row sitting at ref_count 0 must be collectable");
+    db.teardown().await;
+}
+
+/// The GC race, reproduced against a real database.
+///
+/// Sequence: last reference released (count → 0, GC enqueued) → the identical
+/// bytes are uploaded again before the job runs, which CAS folds back onto the
+/// same row at count 1 → GC finally runs. The conditional DELETE must match
+/// nothing, because that row is now somebody's live avatar.
+///
+/// This asserts the property the old `decrement_ref`-based check could not have:
+/// it consumed the new reference and reported 0, deleting a file in active use.
+#[tokio::test]
+async fn delete_if_unreferenced_spares_a_row_revived_before_gc_ran() {
+    let db = TestDb::new("sfile_del_unref_revived").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+
+    repo.upsert_and_ref("sha256:revived", "image/png", 5, None)
+        .await
+        .expect("first upload");
+    repo.decrement_ref("sha256:revived").await.expect("dec to 0");
+
+    // The re-upload that races the queued GC job.
+    repo.upsert_and_ref("sha256:revived", "image/png", 5, None)
+        .await
+        .expect("re-upload of identical bytes");
+
+    let deleted = repo
+        .delete_if_unreferenced("sha256:revived")
+        .await
+        .expect("conditional delete executes");
+
+    assert!(!deleted, "a re-referenced row must survive GC");
+
+    // And it survived intact — still referenced exactly once.
+    let count = repo
+        .decrement_ref("sha256:revived")
+        .await
+        .expect("row still exists");
+    assert_eq!(count, 0, "the surviving row had exactly one live reference");
+
+    db.teardown().await;
+}
+
+#[tokio::test]
 async fn three_upserts_then_two_decrements_leaves_ref_count_one() {
     let db = TestDb::new("sfile_ref_count_lifecycle").await;
     let repo = PgStoredFileRepository::new(db.conn.clone());
 
     // Three callers reference the same CAS key
     for _ in 0..3 {
-        repo.upsert_and_ref("sha256:shared", "image/jpeg", b"img", 3, None)
+        repo.upsert_and_ref("sha256:shared", "image/jpeg", 3, None)
             .await
             .expect("upsert");
     }
@@ -188,14 +248,14 @@ async fn usage_since_sums_only_this_users_files_inside_the_window() {
     let alice = make_user(&db.conn, 1).await;
     let bob = make_user(&db.conn, 2).await;
 
-    repo.upsert_and_ref("post-attachments/a1.png", "image/png", b"aaaa", 4, Some(alice))
+    repo.upsert_and_ref("post-attachments/a1.png", "image/png", 4, Some(alice))
         .await
         .expect("alice upload 1");
-    repo.upsert_and_ref("post-attachments/a2.png", "image/png", b"bbbbbb", 6, Some(alice))
+    repo.upsert_and_ref("post-attachments/a2.png", "image/png", 6, Some(alice))
         .await
         .expect("alice upload 2");
     // Bob's upload must not be charged to Alice's quota.
-    repo.upsert_and_ref("post-attachments/b1.png", "image/png", b"cccccccc", 8, Some(bob))
+    repo.upsert_and_ref("post-attachments/b1.png", "image/png", 8, Some(bob))
         .await
         .expect("bob upload");
 
@@ -236,7 +296,7 @@ async fn upsert_staged_inserts_with_ref_count_zero() {
     let db = TestDb::new("sfile_staged_insert").await;
     let repo = PgStoredFileRepository::new(db.conn.clone());
 
-    repo.upsert_staged("post-attachments/deadbeef.png", "image/png", b"img", 3, None)
+    repo.upsert_staged("post-attachments/deadbeef.png", "image/png", 3, None)
         .await
         .expect("upsert_staged inserts");
 
@@ -256,13 +316,13 @@ async fn upsert_staged_is_idempotent_and_never_resets_an_existing_ref_count() {
     let key = "post-attachments/shared.png";
 
     // A live post already references these exact bytes.
-    repo.upsert_staged(key, "image/png", b"img", 3, None).await.expect("stage");
+    repo.upsert_staged(key, "image/png", 3, None).await.expect("stage");
     repo.increment_ref(key).await.expect("a post embeds it");
     assert_eq!(ref_count_of(&db.conn, key).await, Some(1));
 
     // Someone re-uploads identical bytes (CAS collapses them to one row).
     // ON CONFLICT DO NOTHING: must neither reset to 0 nor bump to 2.
-    repo.upsert_staged(key, "image/png", b"img", 3, None)
+    repo.upsert_staged(key, "image/png", 3, None)
         .await
         .expect("re-staging an existing key must not error");
 
@@ -296,7 +356,7 @@ async fn publish_then_unpublish_round_trip() {
     let repo = PgStoredFileRepository::new(db.conn.clone());
     let key = "post-attachments/cycle.png";
 
-    repo.upsert_staged(key, "image/png", b"img", 3, None).await.expect("stage");
+    repo.upsert_staged(key, "image/png", 3, None).await.expect("stage");
 
     // Two posts embed the same image.
     repo.increment_ref(key).await.expect("post A");
