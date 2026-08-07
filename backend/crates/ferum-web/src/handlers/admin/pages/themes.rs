@@ -331,7 +331,8 @@ pub async fn upload_theme_preview(
         .await
         .map_err(|e| PageError::Internal(anyhow::anyhow!("storage: {:?}", e)))?;
 
-    let preview_url = state.storage.public_url(&key);
+    // Persisted into `themes.preview_url` — see `ports::file_url`.
+    let preview_url = ferum_application::ports::file_url(&key);
     state
         .theme
         .set_preview(&auth_user, &slug, Some(preview_url))

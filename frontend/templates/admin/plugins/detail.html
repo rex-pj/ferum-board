@@ -131,6 +131,60 @@
             <i class="fa-solid fa-floppy-disk me-1"></i>{{ t(k="adm-save-configuration") }}
           </button>
         </form>
+
+        {# ── Field reference ────────────────────────────────────────────────
+           `config_schema` from the plugin's manifest has been in this page's
+           context since the detail page was written, and nothing rendered it —
+           so a plugin's own documentation of its settings reached the admin
+           nowhere, and the only guidance beside a raw JSON textarea was "valid
+           JSON object".
+
+           This is a reference list, not a generated form. A form would have to
+           model every JSON Schema construct (nested objects, arrays of objects,
+           oneOf) to avoid silently dropping fields it did not understand on
+           save, and losing an operator's config to a UI limitation is far worse
+           than asking them to type JSON. The textarea stays authoritative; this
+           tells them what to type into it — including constraints the server
+           cannot enforce, such as which image hosts the CSP will actually
+           load. #}
+        {% if plugin.config_schema.properties %}
+        <hr class="my-4">
+        <div class="small fw-semibold mb-2">{{ t(k="adm-config-fields") }}</div>
+        <p class="text-body-secondary mb-3" style="font-size:.8rem">
+          {{ t(k="adm-config-fields-help") }}
+        </p>
+        <dl class="mb-0">
+          {% for key, prop in plugin.config_schema.properties %}
+          <dt class="d-flex align-items-baseline gap-2 flex-wrap mb-1">
+            <code style="font-size:.82rem">{{ key }}</code>
+            {% if prop.type %}
+              <span class="badge bg-secondary-subtle text-secondary-emphasis fw-normal"
+                    style="font-size:.68rem">{{ prop.type }}</span>
+            {% endif %}
+            {# Two nested ifs, not `required and key in required`: a manifest may
+               omit `required` entirely, and `in` against an undefined value is a
+               render-time error, not a false. #}
+            {% if plugin.config_schema.required %}
+              {% if key in plugin.config_schema.required %}
+              <span class="badge bg-warning-subtle text-warning-emphasis fw-normal"
+                    style="font-size:.68rem">{{ t(k="adm-required") }}</span>
+              {% endif %}
+            {% endif %}
+            {% if prop.default is defined %}
+              <span class="text-body-secondary" style="font-size:.72rem">
+                {{ t(k="adm-default") }} <code>{{ prop.default }}</code>
+              </span>
+            {% endif %}
+          </dt>
+          <dd class="mb-3" style="font-size:.8rem">
+            {% if prop.title %}<div class="fw-medium">{{ prop.title }}</div>{% endif %}
+            {% if prop.description %}
+              <div class="text-body-secondary">{{ prop.description }}</div>
+            {% endif %}
+          </dd>
+          {% endfor %}
+        </dl>
+        {% endif %}
       </div>
     </div>
   </div>

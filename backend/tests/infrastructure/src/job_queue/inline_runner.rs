@@ -125,6 +125,12 @@ impl StoredFileRepository for SpyStoredFiles {
     async fn increment_ref(&self, _: &str) -> Result<(), AppError> {
         Ok(())
     }
+    async fn read_data(&self, _: &str) -> Result<Option<(Vec<u8>, String)>, AppError> {
+        Ok(None)
+    }
+    async fn clear_data(&self, _: &str) -> Result<(), AppError> {
+        Ok(())
+    }
     async fn decrement_ref(&self, _: &str) -> Result<i32, AppError> {
         self.decrement_calls.fetch_add(1, Ordering::SeqCst);
         Ok(0)

@@ -3,7 +3,7 @@ use axum::http::header;
 use axum::response::IntoResponse;
 
 use crate::app_state::AppState;
-use ferum_domain::repositories::thread_repository::ThreadSort;
+use ferum_domain::repositories::thread_repository::{ThreadFeedFilter, ThreadSort};
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -40,7 +40,11 @@ pub async fn sitemap_xml(State(state): State<AppState>) -> impl IntoResponse {
         }
     }
 
-    if let Ok((threads, _total)) = state.thread.list_feed(None, ThreadSort::Newest, 1, 500).await {
+    if let Ok((threads, _total)) = state
+        .thread
+        .list_feed(None, ThreadSort::Newest, ThreadFeedFilter::All, 1, 500)
+        .await
+    {
         for t in &threads {
             body.push_str(&url_entry(&format!("{base}/forum/t/{}", t.slug)));
         }

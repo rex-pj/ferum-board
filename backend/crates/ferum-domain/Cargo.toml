@@ -3,6 +3,18 @@ name = "ferum-domain"
 version = "0.1.0"
 edition = "2021"
 
+# Unit tests live in `tests/domain`, not in `#[cfg(test)]` modules here, so there
+# is no harness to build — cargo was linking an empty test binary per production
+# crate. `doctest` stays ON: doc examples are documentation correctness, a
+# separate concern from unit tests, and nothing moved them out.
+#
+# The trade-off is that a `#[cfg(test)] mod tests` added to this crate later
+# would compile but never run, silently. That is the point of the convention:
+# tests belong in the matching `tests/*` crate, where they are also forced to go
+# through the public API.
+[lib]
+test = false
+
 [features]
 default = []
 # Two glue impls in `error.rs` reach outside the domain: `IntoResponse for

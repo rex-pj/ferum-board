@@ -90,10 +90,52 @@ pub struct PluginUiSlot {
     pub plugin_slug: String,
     pub slot_name: String,
     pub asset_url: String,
+    /// Always [`ui_slot_element_tag`] of this row's slug and slot name — the
+    /// repository derives it on read rather than trusting the stored column, so
+    /// a row written under an older naming rule cannot go on addressing an
+    /// element no bundle defines.
     pub custom_element_tag: String,
     pub props: Vec<String>,
     pub load_order: i32,
     pub is_active: bool,
+}
+
+/// The custom element name that carries a plugin's widget in a named slot.
+///
+/// **The plugin slug is part of the name, and that is the whole point.** The tag
+/// used to come from the slot name alone, which made a slot single-occupancy in
+/// a way nothing announced: the server emits one element per slot *row*, so two
+/// plugins in `home_feed_top` produced two identical `<ferum-slot-home-feed-top>`
+/// tags, both `customElements.define` calls raced for the one name, and whichever
+/// registered first then rendered into **both** elements. The observable symptom
+/// was one plugin's widget appearing twice and the other's not at all — with no
+/// error anywhere, because nothing in that sequence is a failure.
+///
+/// With the slug in the name each plugin owns its own element, so several
+/// plugins share a slot and render in `load_order` sequence.
+///
+/// The output is a valid custom element name for any slug: lowercased, every
+/// character outside `[a-z0-9]` folded to a single `-`, and the constant prefix
+/// guarantees both the required hyphen and a leading letter — which a slug
+/// starting with a digit would otherwise violate.
+pub fn ui_slot_element_tag(plugin_slug: &str, slot_name: &str) -> String {
+    fn sanitize(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        for ch in s.chars() {
+            if ch.is_ascii_alphanumeric() {
+                out.extend(ch.to_lowercase());
+            } else if !out.ends_with('-') {
+                out.push('-');
+            }
+        }
+        out.trim_matches('-').to_string()
+    }
+
+    format!(
+        "ferum-slot-{}-{}",
+        sanitize(plugin_slug),
+        sanitize(slot_name)
+    )
 }
 
 #[derive(Clone, Debug)]

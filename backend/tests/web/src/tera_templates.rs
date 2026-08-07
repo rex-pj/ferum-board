@@ -2,7 +2,7 @@
 //!
 //! `build_tera` fails closed on first-party templates (`frontend/templates/` and
 //! the built-in `default` theme), so a broken one makes `TeraEngine::new` return
-//! `Err` and these tests panic on the `expect`. Unit tests in `tera_engine.rs`
+//! `Err` and these tests panic on the `expect`. The tests in [`super::tera_engine`]
 //! cover that policy directly, against a synthetic tree.
 //!
 //! What these add is coverage of the *real* repository tree, and — because a user

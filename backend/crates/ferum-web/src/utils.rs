@@ -131,10 +131,6 @@ impl ImageKind {
         invalid_type: "logo_invalid_type",
         too_large: "logo_too_large",
     };
-    pub const HERO_IMAGE: Self = Self {
-        invalid_type: "hero_image_invalid_type",
-        too_large: "hero_image_too_large",
-    };
     pub const THUMBNAIL: Self = Self {
         invalid_type: "thumbnail_invalid_type",
         too_large: "thumbnail_too_large",

@@ -75,24 +75,10 @@
     </div>
   </div>
 
-  {# Sort / filter tab bar #}
-  <div class="fr-sort-tabs">
-    <a href="?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>{{ t(k="ui-active") }}
-    </a>
-    <a href="?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>{{ t(k="ui-new") }}
-    </a>
-    <a href="?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>{{ t(k="ui-hottest") }}
-    </a>
-    <a href="?sort=unanswered" class="fr-sort-tab {% if active_sort == 'unanswered' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>{{ t(k="ui-unanswered") }}
-    </a>
-    <a href="?sort=solved" class="fr-sort-tab {% if active_sort == 'solved' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>{{ t(k="ui-solved") }}
-    </a>
-  </div>
+  {# Same controls as the homepage, from the same macro. These two used to be
+     hand-written twice and had drifted: identical behaviour was labelled
+     "Hoạt động"/"Mới nhất" here and "Đang hoạt động"/"Mới" there. #}
+  {{ m::feed_controls(controls=feed_controls) }}
 
   {% if threads %}
     {% for thread in threads %}
@@ -101,9 +87,9 @@
   {% else %}
     <div class="text-center py-5 text-muted">
       <i class="fa-regular fa-comment-dots fa-3x mb-3 d-block"></i>
-      {% if active_sort == "unanswered" %}
+      {% if active_filter == "unanswered" %}
         {{ t(k="ui-no-unanswered-threads") }}
-      {% elif active_sort == "solved" %}
+      {% elif active_filter == "solved" %}
         {{ t(k="ui-no-solved-threads-yet") }}
       {% else %}
         {{ t(k="ui-no-threads-in-this-category") }}

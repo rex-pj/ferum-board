@@ -91,7 +91,7 @@
     <a href="/catalog/{{ p.slug }}" class="fr-shelf-card card text-decoration-none shadow-sm">
       <div class="ratio ratio-4x3 bg-body-tertiary rounded-top overflow-hidden">
         {% if p.primary_image_key %}
-          <img src="/files/{{ p.primary_image_key }}" alt="{{ p.name }}" style="object-fit:cover;width:100%;height:100%">
+          <img src="{{ file_url(key=p.primary_image_key) }}" alt="{{ p.name }}" style="object-fit:cover;width:100%;height:100%">
         {% else %}
           <div class="d-flex align-items-center justify-content-center h-100 text-muted">
             <i class="fa-solid fa-couch fa-2x opacity-25" aria-hidden="true"></i>
@@ -151,7 +151,11 @@
         </a>
       </div>
     {% else %}
-      <span class="fw-semibold">{{ t(k="ui-latest-discussions") }}</span>
+      {# Neutral on purpose: the sort tabs below say what the order is, and this
+         heading previously claimed "latest" while the default tab sorted by
+         recent activity — two different things, one of which was also the name
+         of a neighbouring tab. #}
+      <span class="fw-semibold">{{ t(k="ui-discussions") }}</span>
       {% if watched_count and watched_count > 0 %}
         <a href="/account#preferences" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none ms-2"
            style="pointer-events:auto" title="{{ t(k='ui-manage-watched-categories') }}">
@@ -166,25 +170,10 @@
     {% endif %}
   </div>
 
-  {# Sort tabs — hidden when filtering by tag (tag has no sort meaning) #}
+  {# Sort + filter controls — hidden when filtering by tag (a tag view is
+     already a narrowing, and the sort tabs would silently drop it). #}
   {% if not active_tag %}
-  <div class="fr-sort-tabs">
-    <a href="/?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' or not active_sort %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>{{ t(k="ui-activity") }}
-    </a>
-    <a href="/?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>{{ t(k="ui-newest") }}
-    </a>
-    <a href="/?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>{{ t(k="ui-hottest") }}
-    </a>
-    <a href="/?sort=unanswered" class="fr-sort-tab {% if active_sort == 'unanswered' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>{{ t(k="ui-unanswered") }}
-    </a>
-    <a href="/?sort=solved" class="fr-sort-tab {% if active_sort == 'solved' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>{{ t(k="ui-solved") }}
-    </a>
-  </div>
+    {{ m::feed_controls(controls=feed_controls) }}
   {% endif %}
 
   {# Thread list or empty state #}
@@ -198,9 +187,9 @@
       {% if active_tag %}
         <p class="text-secondary mb-3">{{ t(k="ui-no-posts-found-for-the-tag") }} <strong>#{{ active_tag }}</strong>.</p>
         <a href="/" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-view-all-discussions") }}</a>
-      {% elif active_sort == "unanswered" %}
+      {% elif active_filter == "unanswered" %}
         <p class="text-secondary mb-0">{{ t(k="ui-nothing-left-unanswered-nice-work") }}</p>
-      {% elif active_sort == "solved" %}
+      {% elif active_filter == "solved" %}
         <p class="text-secondary mb-0">{{ t(k="ui-no-posts-have-been-marked-solved") }}</p>
       {% else %}
         <p class="text-secondary mb-3">{{ t(k="ui-no-discussions-yet-be-the-first") }}</p>

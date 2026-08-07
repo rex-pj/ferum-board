@@ -107,8 +107,6 @@ ui-account = Account
 ui-account-settings = Account Settings
 ui-account-status = Account Status
 ui-actions = Actions
-ui-active = Active
-ui-activity = Activity
 ui-add-a-product = Add a product
 ui-add-select-for-review = Add & select for review
 ui-admin = Admin
@@ -196,7 +194,6 @@ ui-get-involved = Get Involved
 ui-highest-rated = Highest rated
 ui-home = Home
 ui-home-feed = Home Feed
-ui-hottest = Hottest
 ui-i-have-actually-bought-or-used = I have actually bought or used this product
 ui-inbox = Inbox
 ui-invalid-email-or-password = Invalid email or password.
@@ -207,7 +204,6 @@ ui-join-the-conversation = Join the conversation
 ui-jpeg-png-webp-gif-max-10 = JPEG · PNG · WebP · GIF · max 10 MB
 ui-jump-to-best-answer = Jump to best answer
 ui-large = Large
-ui-latest-discussions = Latest discussions
 # Homepage sidebar panel: newest review per product, now that reviews are kept
 # out of the discussion feed.
 ui-latest-reviews = Latest reviews
@@ -649,25 +645,16 @@ ui-related = Related
 ui-in-this-category = in this category
 
 ## ─── Ferum Review theme ──────────────────────────────────────────────────────
-# Copy unique to the ferum-review theme's home.html masthead — the default
-# theme has no equivalent strings, so these have no counterpart elsewhere in
-# this file. See frontend/themes/ferum-review/templates/home.html.
+# Copy unique to the ferum-review theme — the default theme has no equivalent
+# strings, so these have no counterpart elsewhere in this file. See
+# frontend/themes/ferum-review/templates/home.html.
+#
+# The masthead's own copy is NOT here: it moved to the `home-hero` plugin, whose
+# text is operator-entered per locale in the plugin's config rather than
+# translated from a catalog. See examples/plugins/home-hero/README.md.
 
-ui-material-furniture-reviews = Material & furniture reviews
-ui-real-reviews-from-the-people-who-built-it = Real reviews from the people who built it and live with it
-ui-architects-contractors-log-the-numbers =
-    Architects, contractors and homeowners log the numbers that matter: how it
-    wears over years, how it handles damp, how hard it is to install, and the
-    real cost per m².
-# Doubles as the label on the masthead's secondary button (→ /catalog). Reused
-# rather than minting a "browse the catalogue" near-duplicate: the destination
-# has one name, and it should read the same wherever it is linked.
-ui-product-catalog = Product catalog
 ui-discussion-categories = Discussion categories
 ui-browse-by-type = Browse by type
-# Accessible name for a curated masthead tile the operator linked but left
-# uncaptioned — without it the link would reach a screen reader unnamed.
-ui-featured-image = Featured image
 
 ## ─── Client-side messages ────────────────────────────────────────────────────
 # Rendered by JavaScript rather than the server, so they reach the browser via
@@ -858,3 +845,24 @@ js-account-suspended = Your account is suspended.
 ui-filter-by = Filter by:
 ui-active-filters = Active filters
 ui-clear-all-filters = Clear all
+
+## ─── Thread feed: sort tabs + filter chips ───────────────────────────────────
+# Two axes, deliberately labelled apart. The sort tabs reorder the list; the
+# filter chips remove rows from it. They used to be one strip of five tabs with
+# identical affordances, where three reordered and two made threads disappear.
+#
+# Every label states what the query actually does. "Most discussed" is not
+# "Hottest" because the ordering carries no time decay — it ranks all-time reply
+# volume, and a label promising trending content over a query that cannot
+# express it is a bug that no test can catch.
+ui-discussions = Discussions
+ui-sort-by = Sort by
+ui-sort-activity = Recent activity
+ui-sort-activity-hint = Threads with the newest replies
+ui-sort-newest = Newly posted
+ui-sort-newest-hint = Threads created most recently
+ui-sort-most-discussed = Most discussed
+ui-sort-most-discussed-hint = Threads with the most replies, all time
+ui-filter-label = Filter
+ui-filter-unanswered-hint = Only open threads nobody has replied to
+ui-filter-solved-hint = Only threads with an accepted best answer

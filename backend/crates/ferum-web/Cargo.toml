@@ -3,16 +3,24 @@ name = "ferum-web"
 version = "0.1.0"
 edition = "2021"
 
+# Tests live in `tests/web` — see the note in ferum-domain/Cargo.toml. `doctest`
+# is deliberately left ON here: `telemetry::Latency` carries a real compiled
+# ```rust example, and it is the only doctest in the workspace.
 [lib]
 name = "ferum_web"
 path = "src/lib.rs"
+test = false
 
+# `main.rs` is a thin entry point with no tests of its own; without this cargo
+# links a second empty harness for the binary target on every `cargo test`.
 [[bin]]
 name = "ferum-board"
 path = "src/main.rs"
+test = false
 
 [features]
 s3 = ["ferum-infrastructure/s3"]
+gcs = ["ferum-infrastructure/gcs"]
 meilisearch = ["ferum-infrastructure/meilisearch"]
 script_plugins = ["ferum-infrastructure/script_plugins"]
 bulk_seed = ["ferum-infrastructure/bulk_seed"]

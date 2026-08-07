@@ -272,7 +272,7 @@ pub fn build_router(
         ))
         .layer(cors)
         .layer(middleware::from_fn_with_state(
-            state.cookies_secure,
+            state.security_headers.clone(),
             security_headers,
         ))
         .layer(

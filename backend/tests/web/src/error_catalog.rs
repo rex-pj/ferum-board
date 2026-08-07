@@ -67,8 +67,8 @@ fn scan(src: &str, out: &mut BTreeSet<String>) {
         // Upload failures name their codes in `utils::ImageKind` constants
         // rather than at the `AppError::invalid` call, which passes the field.
         // Without these two patterns the whole upload surface — avatar, cover,
-        // logo, hero image, thumbnail — is emitted through a path this scan
-        // cannot see, and the test silently stops covering it.
+        // logo, thumbnail — is emitted through a path this scan cannot see, and
+        // the test silently stops covering it.
         "invalid_type: \"",
         "too_large: \"",
     ] {

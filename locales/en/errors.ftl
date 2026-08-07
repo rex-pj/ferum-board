@@ -113,14 +113,6 @@ error-logo-too-large = The logo must be { $limit_mb } MB or smaller.
 error-logo-invalid-type = The logo must be a JPEG, PNG, WebP, or GIF image.
 error-favicon-too-large = The favicon must be { $limit_kb } KB or smaller.
 error-favicon-invalid-type = The favicon must be an ICO, PNG, GIF, or JPEG image. SVG isn't allowed.
-error-hero-image-too-large = Each homepage hero image must be { $limit_mb } MB or smaller.
-error-hero-image-invalid-type = A hero image must be a JPEG, PNG, WebP, or GIF image.
-error-hero-tiles-full = The homepage hero holds { $limit } images. Remove one before adding another.
-error-hero-image-unknown = That image isn't one of the uploaded hero images. Reload the page and try again.
-error-hero-image-duplicate = The same image can't be used for two hero tiles.
-error-hero-link-invalid = A hero link must start with / or with http:// or https://.
-error-hero-link-too-long = A hero link must be { $limit } characters or fewer.
-error-hero-caption-too-long = A hero caption must be { $limit } characters or fewer.
 
 ## ─── Preferences ─────────────────────────────────────────────────────────────
 

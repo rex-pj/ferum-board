@@ -3,9 +3,12 @@ name = "migration"
 version = "0.1.0"
 edition = "2021"
 
+# DDL only, no `#[cfg(test)]` modules — migrations are exercised for real by
+# `tests/infrastructure`, which runs `Migrator::up` against a live database.
 [lib]
 name = "migration"
 path = "src/lib.rs"
+test = false
 
 # The standalone migration CLI. Gated behind `required-features` so that
 # building it is the only thing that drags `sea-orm-cli` + `clap` into the tree.
@@ -17,6 +20,7 @@ path = "src/lib.rs"
 name = "migration"
 path = "src/main.rs"
 required-features = ["cli"]
+test = false
 
 [features]
 default = []

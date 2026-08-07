@@ -124,7 +124,7 @@
 <a href="/catalog/{{ p.slug }}" class="fr-product-card">
   <div class="fr-product-thumb">
     {% if p.primary_image_key %}
-      <img src="/files/{{ p.primary_image_key }}" alt="{{ p.name }}" loading="lazy">
+      <img src="{{ file_url(key=p.primary_image_key) }}" alt="{{ p.name }}" loading="lazy">
     {% else %}
       <i class="fa-solid fa-couch fa-2x opacity-25" aria-hidden="true"></i>
     {% endif %}
@@ -552,3 +552,57 @@
 </nav>
 {% endif %}
 {% endmacro paginate %}
+
+
+{# ── feed_controls ────────────────────────────────────────────────
+   The thread listing's two control axes, rendered as one block but
+   deliberately as two GROUPS with different affordances:
+
+     sort tabs    → reorder the list. Nothing disappears.
+     filter chips → narrow the list. Rows disappear.
+
+   These used to be a single strip of five identical-looking tabs
+   sharing one `?sort=` parameter, which made them mutually exclusive:
+   "unanswered threads, newest first" — the query a contributor most
+   wants — could not be expressed at all, and clicking one control
+   reordered the page while clicking its neighbour emptied it.
+
+   Chips are toggle LINKS, not buttons: when a chip is on, its own
+   href is the URL without that filter. No JavaScript, correct back
+   button, works with scripting off.
+
+   Every href arrives prebuilt from `FeedControlsCtx::build` — the
+   rule for carrying the untouched axis through has one definition in
+   Rust instead of one per theme, and it is unit-tested there.
+
+   Call with:
+     {{ m::feed_controls(controls=feed_controls) }}
+#}
+{% macro feed_controls(controls) %}
+<div class="fr-feed-controls">
+
+  <div class="fr-sort-tabs" role="group" aria-label="{{ t(k='ui-sort-by') }}">
+    {% for tab in controls.sorts %}
+      <a href="{{ tab.href }}"
+         class="fr-sort-tab{% if tab.active %} fr-sort-tab--active{% endif %}"
+         {% if tab.active %}aria-current="page"{% endif %}
+         title="{{ t(k=tab.hint_key) }}">
+        <i class="fa-solid {{ tab.icon }} fa-xs" aria-hidden="true"></i>{{ t(k=tab.label_key) }}
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="fr-filter-chips" role="group" aria-label="{{ t(k='ui-filter-label') }}">
+    <span class="fr-filter-chips__label">{{ t(k="ui-filter-label") }}</span>
+    {% for chip in controls.filters %}
+      <a href="{{ chip.href }}"
+         class="fr-filter-chip{% if chip.active %} fr-filter-chip--on{% endif %}"
+         {% if chip.active %}aria-pressed="true"{% else %}aria-pressed="false"{% endif %}
+         title="{{ t(k=chip.hint_key) }}">
+        <i class="fa-solid {{ chip.icon }} fa-xs" aria-hidden="true"></i>{{ t(k=chip.label_key) }}
+      </a>
+    {% endfor %}
+  </div>
+
+</div>
+{% endmacro feed_controls %}

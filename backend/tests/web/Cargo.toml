@@ -3,6 +3,11 @@ name = "ferum-web-tests"
 version = "0.1.0"
 edition = "2021"
 
+# Test-harness crate: no public API to document, and no ```rust doc examples.
+# Skips a rustdoc invocation per crate on every `cargo test`.
+[lib]
+doctest = false
+
 [features]
 script_plugins = ["ferum-web/script_plugins"]
 default = ["script_plugins"]
@@ -13,6 +18,10 @@ ferum-domain = { path = "../../crates/ferum-domain", features = ["axum"] }
 ferum-application = { path = "../../crates/ferum-application" }
 ferum-infrastructure = { path = "../../crates/ferum-infrastructure" }
 
+# `anyhow` for `build_tera`'s Result, `async-trait` for the stub `Translator`
+# implementations the tera_engine tests render against.
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
 tower = { workspace = true, features = ["util"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

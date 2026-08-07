@@ -119,13 +119,6 @@ pub fn admin_api_routes() -> Router<AppState> {
             "/config/favicon",
             post(admin::api::config::upload_favicon).delete(admin::api::config::delete_favicon),
         )
-        // POST appends one uploaded image; PUT saves captions/links/order and, by
-        // omission, deletions. Both live under /config because a hero tile is site
-        // configuration, not a content entity with its own lifecycle.
-        .route(
-            "/config/hero-tiles",
-            post(admin::api::config::add_hero_tile).put(admin::api::config::save_hero_tiles),
-        )
         .route(
             "/webhooks",
             get(admin::api::webhooks::list_webhooks).post(admin::api::webhooks::create_webhook),

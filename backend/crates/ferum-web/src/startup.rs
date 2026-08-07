@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::app_state::AppState;
 use crate::config::Config;
 use crate::handlers::admin::api::config::smtp_settings_from_config;
+use crate::middleware::security_headers::{csp_origin_of, SecurityHeadersConfig};
 use crate::tera_engine::TeraEngine;
 use ferum_application::event_bus::{EventBus, EventPublisher};
 use ferum_application::ports::{
@@ -36,6 +37,8 @@ use ferum_domain::repositories::plugin_repository::PluginRepository;
 use ferum_domain::repositories::{SiteConfigRepository, ThemeRepository};
 #[cfg(feature = "meilisearch")]
 use ferum_infrastructure::search::MeilisearchService;
+#[cfg(feature = "gcs")]
+use ferum_infrastructure::storage::GcsStorageService;
 #[cfg(feature = "s3")]
 use ferum_infrastructure::storage::S3StorageService;
 use ferum_infrastructure::{
@@ -60,7 +63,7 @@ use ferum_infrastructure::{
     },
     role_permission_cache::RolePermissionCache,
     search::PostgresFtsService,
-    storage::DatabaseStorageService,
+    storage::{DatabaseStorageService, PublicReadProbe},
     system_seed_service::PgSystemSeedService,
 };
 use migration::MigratorTrait;
@@ -202,38 +205,101 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let broadcaster = broadcaster_concrete as Arc<dyn ferum_application::ports::NotificationSubscriber>;
 
     // ─── Storage ────────────────────────────────────────────────────────────
-    #[cfg(feature = "s3")]
-    let storage: Arc<dyn StorageService> = match &config.s3_endpoint {
-        Some(endpoint) => {
-            tracing::info!("S3_ENDPOINT set — using S3 object storage");
-            let access_key = config.s3_access_key.as_deref().unwrap_or_default();
-            let secret_key = config.s3_secret_key.as_deref().unwrap_or_default();
-            let bucket = config.s3_bucket.as_deref().unwrap_or("forum-uploads");
-            let cdn_base = config.cdn_base_url.as_deref().unwrap_or(endpoint);
-            Arc::new(
-                S3StorageService::new(
-                    endpoint,
-                    access_key,
-                    secret_key,
-                    bucket,
-                    &config.s3_region,
-                    cdn_base,
-                )
-                .await,
-            )
+    //
+    // Presence of the env var is the toggle, as with every other capability.
+    // PRECEDENCE, when more than one backend is configured:
+    //
+    //     GCS_BUCKET  >  S3_ENDPOINT  >  database
+    //
+    // GCS wins because it is the newer variable: an operator who adds it to a
+    // deployment that already had `S3_ENDPOINT` is expressing a new intent, and
+    // the reverse order would make that setting appear to do nothing. The loser
+    // is named in a WARN rather than ignored silently — a storage backend that
+    // is not the one you configured is not something to discover from a missing
+    // file weeks later.
+    //
+    // A backend whose env var is set but whose cargo feature is off is also a
+    // WARN, not a silent fall-through to the database, for the same reason.
+    // `unused_mut` in the lean build: with neither `gcs` nor `s3` compiled in,
+    // both assignments below are cfg'd away and this stays `None`.
+    #[allow(unused_mut)]
+    let mut storage: Option<Arc<dyn StorageService>> = None;
+
+    if let Some(bucket) = config.gcs_bucket.as_deref() {
+        #[cfg(feature = "gcs")]
+        {
+            tracing::info!("GCS_BUCKET set — using Google Cloud Storage (bucket `{bucket}`)");
+            storage = Some(Arc::new(GcsStorageService::new(
+                bucket,
+                config.gcs_prefix.as_deref(),
+                config.cdn_base_url.as_deref(),
+                config.gcs_credentials_json.as_deref(),
+                config
+                    .gcs_credentials_file
+                    .as_deref()
+                    .or(config.google_application_credentials.as_deref()),
+            )?));
         }
+        #[cfg(not(feature = "gcs"))]
+        tracing::warn!(
+            "GCS_BUCKET is set (`{bucket}`) but this binary was built without \
+             `--features gcs`; the setting has no effect"
+        );
+    }
+
+    if let Some(endpoint) = config.s3_endpoint.as_deref() {
+        if storage.is_some() {
+            tracing::warn!(
+                "Both GCS_BUCKET and S3_ENDPOINT are set. GCS wins; S3_ENDPOINT \
+                 (`{endpoint}`) is ignored — unset one of them"
+            );
+        } else {
+            #[cfg(feature = "s3")]
+            {
+                tracing::info!("S3_ENDPOINT set — using S3 object storage");
+                storage = Some(Arc::new(
+                    S3StorageService::new(
+                        endpoint,
+                        config.s3_access_key.as_deref().unwrap_or_default(),
+                        config.s3_secret_key.as_deref().unwrap_or_default(),
+                        config.s3_bucket.as_deref().unwrap_or("forum-uploads"),
+                        &config.s3_region,
+                        // `None` when unset, NOT the endpoint. Substituting the
+                        // endpoint here is what made `public_url` drop the
+                        // bucket segment and mint 404s — see `S3StorageService::new`.
+                        config.cdn_base_url.as_deref(),
+                    )
+                    .await,
+                ));
+            }
+            #[cfg(not(feature = "s3"))]
+            tracing::warn!(
+                "S3_ENDPOINT is set (`{endpoint}`) but this binary was built without \
+                 `--features s3`; the setting has no effect"
+            );
+        }
+    }
+
+    // Recorded here, where the answer is a fact rather than an inference. Post
+    // attachments stage in the database and are promoted outward on publish, and
+    // that must happen only when there is genuinely somewhere else to put them.
+    // Deriving it later from a `public_url` shape would misread database storage
+    // behind `CDN_BASE_URL` as an object store and delete the bytes.
+    let uses_object_store = storage.is_some();
+
+    let storage: Arc<dyn StorageService> = match storage {
+        Some(backend) => backend,
         None => {
-            tracing::info!("S3_ENDPOINT not set — using database storage");
+            tracing::info!("No object store configured — using database storage");
+            // `CDN_BASE_URL` is honoured here too: a pull-CDN pointed at this app
+            // serves `/files/` perfectly well. The previous `#[cfg(not(s3))]`
+            // arm dropped this call, so a build without the s3 feature silently
+            // ignored the variable.
             Arc::new(
                 DatabaseStorageService::new(pg_write.clone())
                     .with_cdn_base_url(config.cdn_base_url.as_deref()),
             )
         }
-    };
-    #[cfg(not(feature = "s3"))]
-    let storage: Arc<dyn StorageService> = {
-        tracing::info!("S3 feature disabled — using database storage");
-        Arc::new(DatabaseStorageService::new(pg_write.clone()))
     };
 
     // ─── Repositories ────────────────────────────────────────────────────────
@@ -629,7 +695,17 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             event_bus.clone(),
         )
         .with_plugin_runtime(plugin_hooks.clone())
-        .with_stored_files(stored_file_repo.clone(), storage.clone()),
+        // Third argument is staging: database-backed, and present ONLY when an
+        // object store is actually configured. A staged attachment is authorized
+        // per viewer, which cannot be enforced once its bytes are in a public
+        // bucket, so they move outward only when a post publishes them. With no
+        // object store there is nowhere to move them to, and `None` says so.
+        .with_stored_files(
+            stored_file_repo.clone(),
+            storage.clone(),
+            uses_object_store
+                .then(|| Arc::new(DatabaseStorageService::new(pg_write.clone())) as Arc<dyn StorageService>),
+        ),
     );
 
     let reaction = Arc::new(
@@ -884,6 +960,26 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     }
 
     let cookies_secure = config.app_url.starts_with("https://");
+
+    // Derived from the backend that was actually selected, by asking it for a
+    // URL, rather than re-deriving it from the same env vars the selection block
+    // above already read. Re-deriving would be a second copy of the precedence
+    // rules and the feature gates, free to drift — and drift here is invisible
+    // from the server: images simply stop rendering in the browser.
+    let image_origins: Vec<String> =
+        csp_origin_of(&storage.public_url("csp-probe")).into_iter().collect();
+    if let Some(origin) = image_origins.first() {
+        tracing::info!("Uploads are served from {origin} — added to the CSP `img-src` allowlist");
+    }
+    let security_headers = SecurityHeadersConfig::new(cookies_secure, &image_origins);
+
+    // Same question from the other side: the CSP now *permits* that origin, but
+    // can a visitor actually read from it? Spawned rather than awaited — the
+    // answer is advisory, and binding process start to an outbound request would
+    // turn a slow object store into a failed deploy.
+    let upload_read_status = Arc::new(tokio::sync::RwLock::new(None));
+    spawn_public_read_probe(storage.clone(), upload_read_status.clone());
+
     warn_degraded_capabilities(config);
 
     Ok(AppState {
@@ -935,6 +1031,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         static_dir: config.static_dir.clone(),
         translator,
         cookies_secure,
+        security_headers,
+        upload_read_status,
         app_url: config.app_url.trim_end_matches('/').to_string(),
         trusted_proxy_count: config.trusted_proxy_count,
         plugins_dir: config.plugins_dir.clone(),
@@ -972,6 +1070,86 @@ pub async fn maybe_run_headless_setup(config: &Config, state: &AppState) -> anyh
     Ok(())
 }
 
+/// How often the anonymous-read check is repeated.
+///
+/// What it detects is a change to bucket IAM, which happens on human timescales,
+/// so this is about noticing within the hour rather than within the second. Each
+/// tick is one HTTP request; anything much shorter would be paying continuously
+/// to watch something that rarely moves.
+const PUBLIC_READ_RECHECK: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+/// Keeps `upload_read_status` current with whether an anonymous visitor can read
+/// what this deployment uploads.
+///
+/// A private bucket is invisible from the server — uploads succeed, rows are
+/// written, logs stay clean — and shows up only as broken images in somebody's
+/// browser. Checking once at startup caught the deploy that got it wrong; it did
+/// not catch permissions being changed on a running bucket, which is why this
+/// repeats.
+///
+/// Only *transitions* are logged. A WARN repeated every fifteen minutes forever
+/// stops being read, and the state is on `/health/ready` for anyone who wants to
+/// poll it.
+fn spawn_public_read_probe(
+    storage: Arc<dyn StorageService>,
+    status: Arc<tokio::sync::RwLock<Option<PublicReadProbe>>>,
+) {
+    tokio::spawn(async move {
+        let mut previous: Option<&'static str> = None;
+        loop {
+            let outcome = ferum_infrastructure::storage::probe_public_read(storage.as_ref()).await;
+            let label = outcome.label();
+            let changed = previous != Some(label);
+            previous = Some(label);
+            let same_origin = matches!(outcome, PublicReadProbe::SameOrigin);
+            *status.write().await = Some(outcome.clone());
+
+            if changed {
+                report_public_read(&outcome);
+            }
+
+            if same_origin {
+                // Database storage with no CDN: this process serves the bytes,
+                // so there is no third party whose permissions could drift and
+                // nothing to re-check. Ending the task beats ticking forever to
+                // re-derive a constant.
+                return;
+            }
+            tokio::time::sleep(PUBLIC_READ_RECHECK).await;
+        }
+    });
+}
+
+fn report_public_read(outcome: &PublicReadProbe) {
+    match outcome {
+        PublicReadProbe::SameOrigin => {}
+        PublicReadProbe::Readable => {
+            tracing::info!("Uploads are publicly readable — image URLs will resolve");
+        }
+        PublicReadProbe::Forbidden => {
+            tracing::warn!(
+                    "UPLOADS ARE NOT PUBLICLY READABLE. An anonymous request to the upload \
+                     origin was refused, which is exactly what every visitor's browser will \
+                     get: avatars, logos and post images will all be broken links, and \
+                     nothing on the server will report it. Grant anonymous read on the \
+                     bucket — for Cloud Storage: `gcloud storage buckets add-iam-policy-binding \
+                     gs://YOUR_BUCKET --member=allUsers \
+                     --role=roles/storage.legacyObjectReader`. Use that role, NOT \
+                     objectViewer: objectViewer also carries storage.objects.list, which would \
+                     let anyone on the internet enumerate every object in the bucket. With \
+                     uniform bucket-level access enabled (recommended) the IAM binding is the \
+                 only mechanism; per-object ACLs are ignored."
+            );
+        }
+        PublicReadProbe::Inconclusive(why) => {
+            // Not a warning: the probe races the HTTP listener when a CDN is
+            // pointed back at this app, and a transient failure here says
+            // nothing about the configuration.
+            tracing::info!("Could not verify public read access to uploads: {why}");
+        }
+    }
+}
+
 fn warn_degraded_capabilities(config: &Config) {
     if config.redis_url.is_none() {
         // Only the first clause was ever true. Jobs run through
@@ -984,7 +1162,7 @@ fn warn_degraded_capabilities(config: &Config) {
              correct for a single process, not for a horizontally scaled deployment"
         );
     }
-    if config.s3_endpoint.is_none() {
+    if config.s3_endpoint.is_none() && config.gcs_bucket.is_none() {
         // An HTTPS APP_URL is the same signal `cookies_secure` uses to decide a
         // deployment is real rather than a laptop.
         if config.app_url.starts_with("https://") {
@@ -996,24 +1174,19 @@ fn warn_degraded_capabilities(config: &Config) {
             // reading and shipping the bytes, and it competes with serving pages
             // because it shares the same process and database.
             //
-            // An earlier version of this told the operator to set S3_ENDPOINT.
-            // That was wrong and worth stating plainly: nothing calls
-            // `StorageService::put` or `public_url`, so uploads land in Postgres
-            // whatever that variable says. Advice that cannot be acted on is
-            // worse than none — it sends someone to change config and conclude
-            // the problem is elsewhere when nothing improves.
             tracing::warn!(
                 "APP_URL is https and uploads are served out of PostgreSQL by this process. \
                  A burst of image requests measurably slows page rendering and no in-app \
-                 limit prevents it. Put a caching reverse proxy in front of /files/ — \
+                 limit prevents it. Either put a caching reverse proxy in front of /files/ — \
                  responses already carry `Cache-Control: immutable` and an ETag, so a warm \
-                 cache keeps this traffic off the origin entirely. NOTE: S3_ENDPOINT does \
-                 not currently move uploads off the database; only the delete path is wired \
-                 to it."
+                 cache keeps this traffic off the origin entirely — or move the bytes off \
+                 this process with S3_ENDPOINT (`--features s3`) or GCS_BUCKET \
+                 (`--features gcs`)."
             );
         }
         tracing::warn!(
-            "S3 disabled: uploads stored in PostgreSQL — suitable for small-scale deployments"
+            "No object store: uploads stored in PostgreSQL — suitable for small-scale \
+             deployments. Set S3_ENDPOINT or GCS_BUCKET to move them out"
         );
     }
     if !config.rate_limit_enabled {

@@ -107,18 +107,126 @@ fn content_type_for_path(path: &PathBuf) -> &'static str {
 /// (`ref_count == 0`) and are not public until some post embeds them.
 const ATTACHMENT_PREFIX: &str = "post-attachments/";
 
-/// GET /files/:key — serve a file stored in the database.
-/// This endpoint is only reached when DatabaseStorageService is active (no S3).
+/// How long a browser may reuse a `/files/` → object-store redirect.
 ///
-/// Staged post attachments are visible only to whoever uploaded them, so the
-/// composer can preview an image before the post is submitted, while an image
-/// that is never posted (or whose post was rejected/deleted) is not reachable
-/// by anyone else — it cannot be used as anonymous file hosting, and it cannot
-/// outlive moderation.
+/// The *content* behind a CAS key is immutable; its *location* is not — it moves
+/// when the backend, bucket or CDN changes. So this is bounded rather than
+/// `immutable`: long enough that a browsing session stops re-asking (which is
+/// the entire cost being removed here), short enough that changing backends
+/// heals itself within the hour instead of needing every visitor to clear their
+/// cache. A permanent redirect would be the wrong tool for the same reason.
+const REDIRECT_MAX_AGE_SECS: u32 = 3600;
+
+fn redirect_cache_control() -> String {
+    format!("public, max-age={REDIRECT_MAX_AGE_SECS}")
+}
+
+/// Rejects keys that could steer a redirect at something other than this key's
+/// own object.
 ///
-/// NOTE: this gate lives in the DB-storage path. Under `S3StorageService`,
-/// blobs are served straight from S3/CDN and never reach this handler, so
-/// staging is not enforced there.
+/// `public_url` builds `{base}/{key}` by concatenation, so a key containing
+/// `..` normalises in the browser to a *different* path under the same host —
+/// and in the path-style shapes both S3 and GCS use, a different path means a
+/// different bucket. Every key `cas_key` emits is `{prefix}/{hex}.{ext}`, so
+/// nothing legitimate is excluded.
+pub fn is_safe_key(key: &str) -> bool {
+    !key.is_empty()
+        && !key.starts_with('/')
+        && !key.contains("..")
+        && !key.contains("//")
+        && !key.contains('\\')
+        && !key.chars().any(char::is_control)
+}
+
+/// Whether a key belongs to the one namespace where a row can be staged.
+///
+/// Named rather than inlined because three separate decisions depend on it —
+/// whether a 304 may be answered from the key alone, whether the database can be
+/// skipped, and whether `ref_count == 0` means "staged" — and they must agree.
+pub fn may_be_staged(key: &str) -> bool {
+    key.starts_with(ATTACHMENT_PREFIX)
+}
+
+/// What `/files/` should do with a row, decided before any of it becomes HTTP.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileDisposition {
+    /// Staged, and the caller is not its uploader. 404 rather than 403: whether
+    /// a staged attachment exists is not something to confirm to a stranger.
+    NotFound,
+    /// Staged, caller owns it, bytes are here. Never cacheable.
+    StagedBytes,
+    /// Staged, caller owns it, bytes are in the object store. Never cacheable.
+    StagedRedirect,
+    /// Published, bytes are here. Immutable + ETag.
+    PublishedBytes,
+    /// Published, bytes are in the object store. Bounded cache.
+    PublishedRedirect,
+}
+
+/// Decides the disposition of a `stored_files` row for a given viewer.
+///
+/// Pure, and split out of [`serve`] deliberately: the **order** of the two tests
+/// inside is security-critical and was once wrong. The staged check used to run
+/// after the bytes check, so under an object store — where `data` is always NULL
+/// — the redirect fired first and the ownership test was unreachable code. Every
+/// staged attachment's location was handed to whoever asked for it.
+///
+/// A handler needing an `AppState` cannot be exercised in this repository's test
+/// suite; this function can, exhaustively, which is the point of it existing.
+pub fn resolve_stored_file(
+    key: &str,
+    ref_count: i32,
+    uploaded_by: Option<uuid::Uuid>,
+    has_bytes: bool,
+    viewer: Option<uuid::Uuid>,
+) -> FileDisposition {
+    // Staged first. Always.
+    if may_be_staged(key) && ref_count <= 0 {
+        // `uploaded_by_id` is nullable (ON DELETE SET NULL); a staged row whose
+        // owner was deleted is reachable by nobody.
+        let is_uploader = matches!((viewer, uploaded_by), (Some(v), Some(o)) if v == o);
+        if !is_uploader {
+            return FileDisposition::NotFound;
+        }
+        return if has_bytes {
+            FileDisposition::StagedBytes
+        } else {
+            FileDisposition::StagedRedirect
+        };
+    }
+
+    if has_bytes {
+        FileDisposition::PublishedBytes
+    } else {
+        FileDisposition::PublishedRedirect
+    }
+}
+
+/// GET /files/:key — resolve a stored file to its bytes or its location.
+///
+/// **This endpoint is on the hot path under every backend, not just database
+/// storage.** `ports::file_url` is what gets persisted, so avatars, covers,
+/// thumbnails, product images, post attachments and site config all point here
+/// whatever the bytes are stored in. Under an object store it acts as the
+/// indirection that keeps those stored strings valid across a change of bucket
+/// or CDN — the same job Facebook's Haystack Directory does.
+///
+/// Two paths, and the split is deliberate:
+///
+/// * **Anything outside the attachment namespace** cannot be staged, so its
+///   location is a pure function of the key. Under an object store it is
+///   redirected with no database work at all.
+/// * **Attachments** always go through the database, because a staged one
+///   (`ref_count == 0`) is visible only to whoever uploaded it. That lets the
+///   composer preview an image before the post exists, while an image that is
+///   never posted — or whose post was rejected — is not reachable by anyone
+///   else. It cannot be used as anonymous file hosting and it cannot outlive
+///   moderation.
+///
+/// The honest limit on that second guarantee: when the bytes are in a public
+/// bucket, this handler can refuse to *tell* a stranger where they are, but it
+/// cannot stop someone who already knows the URL. Protection there rests on the
+/// key being unguessable and the bucket not being listable.
 pub async fn serve(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
@@ -138,8 +246,48 @@ pub async fn serve(
     // authorized per viewer below, so a 304 here would answer a request that
     // the owner check should have refused. A key outside that namespace can
     // never be staged, so the exclusion is exact rather than conservative.
-    if !key.starts_with(ATTACHMENT_PREFIX) && crate::utils::if_none_match_hits(&headers, &key) {
+    // A key that could not have come from `cas_key` is refused before it is
+    // allowed anywhere near a redirect target.
+    if !is_safe_key(&key) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    // Staged-ness is a property of this namespace alone, so membership decides
+    // which of the two paths below a request takes. Computed once.
+    let may_be_staged = may_be_staged(&key);
+
+    if !may_be_staged && crate::utils::if_none_match_hits(&headers, &key) {
         return (StatusCode::NOT_MODIFIED, crate::utils::etag_headers(&key)).into_response();
+    }
+
+    // ── Object-store fast path: no database work at all ──────────────────────
+    //
+    // `public_url` is a pure function of the key, so for a key that cannot be
+    // staged there is nothing to look up: whether the row exists changes only
+    // *who* answers the 404, and the object store answers it perfectly well.
+    //
+    // This is the difference between an image costing a connection and costing
+    // nothing. Avatars appear once per post and product images once per card, so
+    // a listing page was issuing dozens of `stored_files` queries and taking a
+    // blob-read permit for each — on a deployment whose entire reason for
+    // configuring an object store was to stop serving bytes from this process.
+    //
+    // A HEAD against the bucket to confirm existence first would undo the point:
+    // it trades a local query for an outbound round trip.
+    if !may_be_staged {
+        let location = state.storage.public_url(&key);
+        // Relative means database storage, where `public_url` returns this very
+        // path — redirecting to it would loop.
+        if location.contains("://") {
+            return (
+                StatusCode::TEMPORARY_REDIRECT,
+                [
+                    (header::LOCATION, location),
+                    (header::CACHE_CONTROL, redirect_cache_control()),
+                ],
+            )
+                .into_response();
+        }
     }
 
     // Past this point the request costs a connection and a full copy of the
@@ -157,70 +305,105 @@ pub async fn serve(
 
     match result {
         Ok(Some(file)) => {
-            // A row whose bytes are not here belongs to an external backend. It
-            // is not an error and not a 404 either — the file exists, this
-            // endpoint simply is not where it lives. Redirecting keeps every URL
-            // this application has ever minted resolvable, including the
-            // `/files/...` strings baked into years of post HTML, without the
-            // app having to proxy the bytes it deliberately moved off itself.
-            let Some(bytes) = file.data else {
-                return (
+            // The decision — including the ordering that makes the staged check
+            // effective — lives in `resolve_stored_file`, where it can be tested
+            // without an `AppState`. Everything below is marshalling.
+            let disposition = resolve_stored_file(
+                &file.key,
+                file.ref_count,
+                file.uploaded_by_id,
+                file.data.is_some(),
+                auth_user.as_ref().map(|u| u.id),
+            );
+
+            // Moved out once, so the two byte-serving arms below bind it rather
+            // than each reaching back into `file` for an `Option` they would
+            // have to unwrap.
+            let data = file.data;
+
+            match disposition {
+                FileDisposition::NotFound => StatusCode::NOT_FOUND.into_response(),
+
+                // Bytes are in the object store. This endpoint can decline to
+                // tell a stranger where they are; it cannot stop anyone who
+                // already has the URL, because the object is world-readable.
+                // `private, no-store` because the answer is per viewer — a
+                // cacheable redirect would let a shared cache reveal the
+                // location to the next person through it.
+                FileDisposition::StagedRedirect => (
                     StatusCode::TEMPORARY_REDIRECT,
-                    [(header::LOCATION, state.storage.public_url(&file.key))],
-                )
-                    .into_response();
-            };
-
-            let is_staged_attachment =
-                file.key.starts_with(ATTACHMENT_PREFIX) && file.ref_count <= 0;
-
-            if is_staged_attachment {
-                // `uploaded_by_id` is nullable (ON DELETE SET NULL); a staged row
-                // with no owner is reachable by nobody.
-                let is_uploader = match (auth_user.as_ref(), file.uploaded_by_id) {
-                    (Some(u), Some(owner)) => u.id == owner,
-                    _ => false,
-                };
-                if !is_uploader {
-                    return StatusCode::NOT_FOUND.into_response();
-                }
-
-                // Must not land in a shared cache: this response is authorized
-                // per-viewer, unlike every published (ref_count > 0) file, whose
-                // content-addressed key makes it safe to cache forever.
-                return (
-                    StatusCode::OK,
                     [
-                        (header::CONTENT_TYPE, file.content_type.clone()),
+                        (header::LOCATION, state.storage.public_url(&file.key)),
                         (header::CACHE_CONTROL, "private, no-store".to_string()),
-                        (header::CONTENT_DISPOSITION, "attachment".to_string()),
                     ],
-                    bytes,
                 )
-                    .into_response();
-            }
+                    .into_response(),
 
-            (
-                StatusCode::OK,
-                [
-                    (header::CONTENT_TYPE, file.content_type.clone()),
+                // A row whose bytes are not here belongs to an external backend.
+                // Not an error and not a 404 — the file exists, this endpoint
+                // simply is not where it lives.
+                FileDisposition::PublishedRedirect => (
+                    StatusCode::TEMPORARY_REDIRECT,
+                    [
+                        (header::LOCATION, state.storage.public_url(&file.key)),
+                        (header::CACHE_CONTROL, redirect_cache_control()),
+                    ],
+                )
+                    .into_response(),
+
+                FileDisposition::StagedBytes | FileDisposition::PublishedBytes => {
+                    // `resolve_stored_file` returns these two only when told the
+                    // row has bytes, so this cannot fire. It is a hard error
+                    // rather than an empty body on purpose: a 200 carrying zero
+                    // bytes with an image content-type is a corrupt file that
+                    // looks like a successful response, and it would be blamed
+                    // on the uploader or the browser long before anyone looked
+                    // here.
+                    let Some(bytes) = data else {
+                        tracing::error!(
+                            key = %file.key,
+                            "stored_files row classified as having bytes but `data` is NULL"
+                        );
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    };
+
+                    let staged = disposition == FileDisposition::StagedBytes;
+                    // Published files are content-addressed and immutable, so
+                    // they may be cached forever and revalidated by ETag. A
+                    // staged one is authorized per viewer and gets neither.
+                    let cache_control = if staged {
+                        "private, no-store".to_string()
+                    } else {
+                        "public, max-age=31536000, immutable".to_string()
+                    };
+                    let mut headers = vec![
+                        (header::CONTENT_TYPE, file.content_type.clone()),
+                        (header::CACHE_CONTROL, cache_control),
+                        (header::CONTENT_DISPOSITION, "attachment".to_string()),
+                    ];
+                    if !staged {
+                        // Without this the 304 short-circuit above can never
+                        // fire: a client only sends `If-None-Match` for an ETag
+                        // it was given. `immutable` already suppresses
+                        // revalidation in browsers that honour it, but shared
+                        // caches, `no-cache` reloads and non-browser clients all
+                        // revalidate anyway, and those are exactly the requests
+                        // worth answering without a database round trip.
+                        headers.push((header::ETAG, crate::utils::etag_for(&file.key)));
+                    }
+
+                    // `AppendHeaders` rather than an array literal: the two arms
+                    // differ only by the ETag, and a `Vec` keeps that one
+                    // difference expressed once instead of duplicating the
+                    // whole header set per arm.
                     (
-                        header::CACHE_CONTROL,
-                        "public, max-age=31536000, immutable".to_string(),
-                    ),
-                    // Without this the short-circuit above can never fire: a
-                    // client only sends `If-None-Match` for an ETag it was
-                    // given. `immutable` already suppresses revalidation in
-                    // browsers that honour it, but shared caches, `no-cache`
-                    // reloads and non-browser clients all revalidate anyway,
-                    // and those are exactly the requests worth answering
-                    // without a database round trip.
-                    (header::ETAG, crate::utils::etag_for(&file.key)),
-                    (header::CONTENT_DISPOSITION, "attachment".to_string()),
-                ],
-                bytes,
-            )
-                .into_response()
+                        StatusCode::OK,
+                        axum::response::AppendHeaders(headers),
+                        bytes,
+                    )
+                        .into_response()
+                }
+            }
         }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),

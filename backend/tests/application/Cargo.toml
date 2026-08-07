@@ -4,12 +4,20 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+# Test-harness crate: no public API to document, and no ```rust doc examples.
+# Skips a rustdoc invocation per crate on every `cargo test`.
+[lib]
+doctest = false
+
 [dependencies]
 ferum-domain = { path = "../../crates/ferum-domain" }
 ferum-application = { path = "../../crates/ferum-application" }
 ferum-test-support = { path = "../support" }
 
 async-trait = { workspace = true }
+# `StorageService::put` takes `Bytes`, so the attachment-promotion spy in
+# post_usecase.rs names the type.
+bytes = { workspace = true }
 chrono = { workspace = true }
 mockall = { workspace = true }
 rust_decimal = { workspace = true }

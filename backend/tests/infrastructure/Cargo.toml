@@ -4,6 +4,17 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+# Test-harness crate: no public API to document, and no ```rust doc examples.
+# Skips a rustdoc invocation per crate on every `cargo test`.
+[lib]
+doctest = false
+
+[features]
+# Forward to each adapter's own opt-in feature, so `storage/{gcs,s3}.rs` compile
+# only when the type under test exists.
+gcs = ["ferum-infrastructure/gcs"]
+s3 = ["ferum-infrastructure/s3"]
+
 [dependencies]
 ferum-domain = { path = "../../crates/ferum-domain" }
 ferum-application = { path = "../../crates/ferum-application" }
@@ -17,6 +28,8 @@ chrono = { workspace = true }
 dotenvy = { workspace = true }
 zip = { workspace = true }
 sea-orm = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+# `net` + `io-util`: the public-read probe test answers a real HTTP request from
+# a raw TcpListener rather than mocking a status code.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util"] }
 serde_json = { workspace = true }
 uuid = { workspace = true }

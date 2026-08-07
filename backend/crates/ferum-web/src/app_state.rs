@@ -117,6 +117,19 @@ pub struct AppState {
     pub broadcaster: Arc<dyn NotificationSubscriber>,
     /// True when APP_URL starts with https:// — adds the Secure flag to auth cookies.
     pub cookies_secure: bool,
+    /// Resolved once at startup because the CSP now depends on which storage
+    /// backend was selected: `img-src` must name the origin `public_url` mints,
+    /// or the browser blocks every uploaded image.
+    pub security_headers: crate::middleware::security_headers::SecurityHeadersConfig,
+    /// Latest answer to "can an anonymous visitor read what we upload?", kept
+    /// current by a background task and surfaced on `/health/ready`.
+    ///
+    /// `None` until the first probe finishes. Cached rather than probed per
+    /// request because the question is about bucket IAM, which changes on human
+    /// timescales — and because a health endpoint that makes an outbound request
+    /// per call is a denial-of-service amplifier.
+    pub upload_read_status:
+        Arc<tokio::sync::RwLock<Option<ferum_infrastructure::storage::PublicReadProbe>>>,
     /// Absolute site origin (e.g. `https://forum.example.com`, no trailing slash).
     /// Used wherever an absolute URL is required — currently only sitemap.xml.
     pub app_url: String,

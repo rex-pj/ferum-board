@@ -26,7 +26,8 @@ use ferum_domain::repositories::site_config_repository::{
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::tag_repository::TagRepository;
 use ferum_domain::repositories::thread_repository::{
-    AdminThreadFilter, NewThread, ThreadFilter, ThreadRepository, ThreadSort, UpdateThread,
+    AdminThreadFilter, NewThread, ThreadFeedFilter, ThreadFilter, ThreadRepository, ThreadSort,
+    UpdateThread,
 };
 use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::AuthUser;
@@ -270,6 +271,7 @@ impl ThreadUseCase {
         actor: Option<&AuthUser>,
         category_slug: &str,
         sort: ThreadSort,
+        feed_filter: ThreadFeedFilter,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Thread>, u64), AppError> {
@@ -282,11 +284,15 @@ impl ThreadUseCase {
         PermissionChecker::can_view_category(actor, &category)?;
 
         let per_page = per_page.min(self.max_threads_per_page().await);
-        let filter = ThreadFilter { sort };
+        let filter = ThreadFilter { sort, filter: feed_filter };
         // The category thread count is identical for every viewer (no per-user filter),
-        // so cache it briefly and skip the COUNT(*) on the hot path. Sort matters because
-        // Unanswered/Solved add WHERE predicates that change the total.
-        let count_key = format!("threads:count:cat:{}:{}", category.id, filter.sort.as_str());
+        // so cache it briefly and skip the COUNT(*) on the hot path.
+        //
+        // Keyed on the FILTER, not the sort: a total counts rows, and only the
+        // filter changes which rows there are. Keying it on the sort — as this
+        // did while the two were one enum — split one cache entry into three that
+        // hold the identical number.
+        let count_key = format!("threads:count:cat:{}:{}", category.id, filter.filter.as_str());
         let cached_total = self.read_cached_count(&count_key).await;
         let (mut threads, total) = self
             .threads
@@ -310,6 +316,7 @@ impl ThreadUseCase {
         &self,
         actor: Option<&AuthUser>,
         sort: ThreadSort,
+        feed_filter: ThreadFeedFilter,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Thread>, u64), AppError> {
@@ -396,7 +403,7 @@ impl ThreadUseCase {
             _ => feed_ids,
         };
 
-        let filter = ThreadFilter { sort };
+        let filter = ThreadFilter { sort, filter: feed_filter };
         // Only cache the count for the guest feed, whose category set is stable. A
         // logged-in user's feed is personalized (watched/muted), so its count is not
         // shared and not worth caching — pass None to compute it normally.
@@ -406,8 +413,10 @@ impl ThreadUseCase {
         // that still counted review threads against a list that no longer contains
         // them — a paginator promising pages that render empty, and it would fail
         // silently until the 30s TTL expired on every deployed instance.
+        // Keyed on the filter for the same reason as `list_by_category` above:
+        // the total is a property of the row set, which the sort does not touch.
         let count_key = (actor.is_none())
-            .then(|| format!("threads:count:feed:guest:nr:{}", filter.sort.as_str()));
+            .then(|| format!("threads:count:feed:guest:nr:{}", filter.filter.as_str()));
         let cached_total = match &count_key {
             Some(k) => self.read_cached_count(k).await,
             None => None,
@@ -492,13 +501,14 @@ impl ThreadUseCase {
         actor: Option<&AuthUser>,
         tag_slug: &str,
         sort: ThreadSort,
+        feed_filter: ThreadFeedFilter,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Thread>, u64), AppError> {
         let category_map = self.visible_category_map(actor).await?;
         let visible_ids: Vec<Uuid> = category_map.keys().cloned().collect();
         let per_page = per_page.min(self.max_threads_per_page().await);
-        let filter = ThreadFilter { sort };
+        let filter = ThreadFilter { sort, filter: feed_filter };
         let (mut threads, total) = self
             .threads
             .list_by_tag(tag_slug, &visible_ids, &filter, page, per_page)
@@ -1198,7 +1208,7 @@ impl ThreadUseCase {
             }
         }
 
-        Ok(format!("/files/{key}"))
+        Ok(crate::ports::file_url(&key))
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, thread_id = %thread_id))]

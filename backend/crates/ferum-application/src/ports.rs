@@ -164,35 +164,59 @@ pub enum ForumJob {
 pub trait StorageService: Send + Sync {
     async fn put(&self, key: &str, data: Bytes, content_type: &str) -> Result<(), AppError>;
     async fn delete(&self, key: &str) -> Result<(), AppError>;
+    /// Where the bytes for `key` physically live, right now, under the backend
+    /// currently configured.
+    ///
+    /// **This is a delivery address, not an identity.** It changes when the
+    /// backend changes, when a CDN is put in front, when a bucket is renamed.
+    /// Use it to *serve* a request — see [`file_url`] for what to persist.
     fn public_url(&self, key: &str) -> String;
 
     /// Recovers the CAS key from a URL this application previously produced.
     ///
     /// The inverse of [`public_url`], and it has to exist as a port method
     /// rather than a `strip_prefix` at each call site because the URL shape is
-    /// the *backend's* business and there are now several: same-origin
-    /// `/files/{key}`, a CDN-prefixed variant, and S3's `{cdn}/{key}`.
+    /// the *backend's* business and there are several: same-origin
+    /// `/files/{key}`, a CDN-prefixed variant, S3's `{cdn}/{key}`, and every
+    /// Google-owned host GCS objects can appear under.
     ///
-    /// **Every implementation must also accept the legacy `/files/{key}` form,
-    /// whatever shape it currently emits.** URLs are denormalised into
-    /// `users.avatar_url`, `site_config` and — most awkwardly — the stored HTML
-    /// of every post. Those strings were written before the backend changed and
-    /// are never rewritten, so a deployment that switches to S3 still holds
-    /// years of same-origin URLs. An implementation that only recognised its own
-    /// current output would silently stop finding them, and since these lookups
-    /// drive reference counting, the failure surfaces as files quietly being
-    /// garbage-collected while posts still point at them.
+    /// **Every implementation must also accept the `/files/{key}` form,
+    /// whatever shape it currently emits** — that is the form this application
+    /// persists, and older rows may additionally hold absolute URLs minted
+    /// before [`file_url`] existed. An implementation that only recognised its
+    /// own current output would silently stop finding them, and since these
+    /// lookups drive reference counting, the failure surfaces as files quietly
+    /// being garbage-collected while posts still point at them.
     ///
     /// Returns `None` when the URL is not one of ours — an author may paste any
     /// external image URL into a post.
     fn key_from_url(&self, url: &str) -> Option<String>;
 }
 
-/// The same-origin path prefix every backend must keep understanding.
+/// The same-origin resolver path. Every backend must understand it, and
+/// [`file_url`] is the only thing that should build it.
+pub const FILES_PREFIX: &str = "/files/";
+
+/// The **stable identity** of a stored file: `/files/{key}`.
 ///
-/// Exists as a constant so the legacy contract in [`StorageService::key_from_url`]
-/// is stated once rather than spelled out in each adapter.
-pub const LEGACY_FILES_PREFIX: &str = "/files/";
+/// This — never [`StorageService::public_url`] — is what gets written into
+/// `site_config`, `themes.preview_url` and the stored HTML of every post.
+///
+/// The distinction is the whole reason this function exists. `public_url`
+/// answers "where do the bytes live *today*", and today is not how long a post
+/// lives. Persisting that answer bakes the current bucket, CDN and backend into
+/// content that is never rewritten, and from then on none of the three can be
+/// changed without breaking every link ever written. This form names the file
+/// and lets `/files/` resolve it at request time, so switching backends, adding
+/// a CDN or moving buckets stays a configuration change.
+///
+/// It is the same shape large photo systems settle on: Facebook's Haystack
+/// Directory exists purely to turn a photo id into a delivery URL at read time,
+/// which is what lets warm blobs migrate to f4 behind the same URLs. Storing
+/// the delivery URL instead is the thing that forecloses those options.
+pub fn file_url(key: &str) -> String {
+    format!("{FILES_PREFIX}{key}")
+}
 
 // ─── SearchService ────────────────────────────────────────────────────────────
 

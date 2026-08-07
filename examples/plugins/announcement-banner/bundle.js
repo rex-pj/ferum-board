@@ -1,7 +1,7 @@
 /**
  * Ferum Announcement Banner — Tier 2 Script Plugin (UI Slot: content_before)
  *
- * Registers the <ferum-slot-content-before> custom element.
+ * Registers this plugin's custom element for the `content_before` slot (see TAG).
  * Ferum injects this element server-side into every public page via the
  * plugin_slots.content_before Tera context variable.
  *
@@ -17,6 +17,13 @@
  */
 (function () {
     'use strict';
+
+    // Must equal `ui_slot_element_tag(meta.id, "content_before")` on the server:
+    // `ferum-slot-` + the slug and the slot name, each lowercased with every
+    // non-alphanumeric run folded to one `-`. Named once because three call sites
+    // below must agree — two literals that drift register the element twice or
+    // never, and neither shows up as an error.
+    var TAG = 'ferum-slot-com-ferum-announcement-banner-content-before';
 
     var DISMISS_KEY = 'ferum-banner-dismissed';
 
@@ -60,7 +67,7 @@
                 if (btn) {
                     btn.addEventListener('click', function () {
                         sessionStorage.setItem(DISMISS_KEY, message);
-                        this.closest('ferum-slot-content-before').style.display = 'none';
+                        this.closest(TAG).style.display = 'none';
                     }.bind(btn));
                 }
             }
@@ -73,7 +80,7 @@
         }
     }
 
-    if (!customElements.get('ferum-slot-content-before')) {
-        customElements.define('ferum-slot-content-before', AnnouncementBanner);
+    if (!customElements.get(TAG)) {
+        customElements.define(TAG, AnnouncementBanner);
     }
 })();

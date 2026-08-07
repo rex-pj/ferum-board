@@ -142,6 +142,15 @@ adm-close = Close
 adm-closed = Closed
 adm-color = Color
 adm-color-picker = Color picker
+adm-config-fields = Fields
+# Sits above the plugin's own field reference, rendered from the config_schema
+# section of its manifest. Says plainly that the list is documentation and the
+# textarea is what actually saves — a plugin may declare constraints nothing
+# server-side can check, so "described here" is not "validated on save".
+adm-config-fields-help =
+    What this plugin accepts, from its own manifest. Edit the JSON above — these
+    are notes, not inputs, and not every rule described here is enforced when you
+    save.
 adm-configuration = Configuration
 adm-confirm-ban = Confirm Ban
 adm-confirm-install = Confirm Install
@@ -237,19 +246,6 @@ adm-grants-a-dedicated-postgres-schema = Grants a dedicated Postgres schema (
 adm-group = Group
 adm-hard-ceiling-on-the = Hard ceiling on the
 adm-header-hmac-sha256-a-webhook-is = header (HMAC-SHA256). A webhook is auto-disabled after 5 consecutive delivery failures.
-adm-hero-add-image = Add image
-adm-hero-caption = Caption
-adm-hero-caption-placeholder = e.g. Oak flooring, 3 years in
-adm-hero-empty = No images chosen. The homepage is picking its own from the top-rated products.
-adm-hero-formats = Accepted: JPEG, PNG, WebP, GIF · Max 8 MB each · Up to 4 images
-adm-hero-link = Link
-adm-hero-save = Save hero images
-adm-hero-saved = Homepage hero saved.
-adm-homepage-hero = Homepage hero
-adm-homepage-hero-help =
-    Pick the photographs that open the homepage. Leave this empty and the homepage
-    selects images from the top-rated products automatically — set images here when
-    you want the final say. Order matters: the first image leads the mosaic.
 adm-hook = Hook
 adm-hours-after-creation-users-can-edit = Hours after creation users can edit their own posts/threads
 adm-if = If
@@ -442,6 +438,7 @@ adm-report = Report
 adm-reporter = Reporter
 adm-reports = Reports
 adm-req-min = req / min
+adm-required = Required
 adm-requires-login-to-view-hidden-from = Requires login to view; hidden from guests
 adm-requires-member-trust-level-or-higher = Requires Member trust level or higher (≥30 posts, ≥15 days)
 adm-resolve = Resolve

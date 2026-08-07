@@ -3,8 +3,10 @@ use bytes::Bytes;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait};
 
 use crate::entities::stored_files;
-use ferum_application::ports::{StorageService, LEGACY_FILES_PREFIX};
+use ferum_application::ports::{StorageService, FILES_PREFIX};
 use ferum_application::shared::AppError;
+
+use super::url_shapes::{strip_files_prefix, under_base, without_query_or_fragment};
 
 /// Stores blob bytes in `stored_files.data`.
 ///
@@ -86,19 +88,30 @@ impl StorageService for DatabaseStorageService {
 
     fn public_url(&self, key: &str) -> String {
         match &self.cdn_base_url {
-            Some(base) => format!("{base}{LEGACY_FILES_PREFIX}{key}"),
-            None => format!("{LEGACY_FILES_PREFIX}{key}"),
+            Some(base) => format!("{base}{FILES_PREFIX}{key}"),
+            None => format!("{FILES_PREFIX}{key}"),
         }
     }
 
+    /// Same two rules, same order, as the object-store backends — they live in
+    /// `url_shapes` so this cannot drift from them again.
+    ///
+    /// This used to scan for the last `/files/` anywhere in the string, which
+    /// resolved both shapes in one line and also claimed
+    /// `https://anyone.example.com/files/avatars/a.jpg` as one of ours. Since
+    /// `key_from_url` feeds `decrement_ref` and `delete_by_key`, that turned an
+    /// externally-hosted URL into a way to release a CAS reference belonging to
+    /// something else entirely.
     fn key_from_url(&self, url: &str) -> Option<String> {
-        // Both shapes this backend can have emitted end in the same
-        // `/files/{key}` suffix, so one rule covers the CDN-prefixed form, the
-        // same-origin form, and anything written before `CDN_BASE_URL` was set.
-        // `rfind` rather than `find` so a key that somehow contains the literal
-        // "/files/" still resolves to the last segment.
-        url.rfind(LEGACY_FILES_PREFIX)
-            .map(|i| url[i + LEGACY_FILES_PREFIX.len()..].to_string())
-            .filter(|k| !k.is_empty())
+        let url = without_query_or_fragment(url);
+        // `{cdn}/files/{key}` — this backend's own absolute shape. Reported by
+        // `under_base` as a resolver path, which is exactly what it is.
+        if let Some(base) = &self.cdn_base_url {
+            if let Some(found) = under_base(url, base) {
+                return Some(found.into_key().to_string());
+            }
+        }
+        // `/files/{key}` — the same-origin shape, and what `file_url` persists.
+        strip_files_prefix(url).map(str::to_string)
     }
 }

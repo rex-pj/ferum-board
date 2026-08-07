@@ -15,6 +15,14 @@
 {% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
 
 {% block content %}
+{# Plugin slot: home_feed_top — homepage-only widgets (e.g. the home-hero
+   masthead, a shared chat room). base.html only carries content_before /
+   content_after, which render on every page; a theme that overrides home.html
+   has to render this one itself or homepage plugins silently do nothing here. #}
+{% if plugin_slots.home_feed_top %}
+  {% for slot in plugin_slots.home_feed_top %}{{ slot.html | safe }}{% endfor %}
+{% endif %}
+
 <div class="fac-feed-header">
   <span class="fac-feed-title">
     {% if active_tag %}

@@ -6,6 +6,7 @@ members = [
     "crates/ferum-web",
     "migration",
     "tests/support",
+    "tests/domain",
     "tests/application",
     "tests/infrastructure",
     "tests/web",

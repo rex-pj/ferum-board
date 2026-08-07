@@ -10,16 +10,16 @@
   sidebar — is carried over unchanged, so no behaviour is lost by activating
   this theme.
 
-  CHANGE 1 — Masthead (new)
+  CHANGE 1 — Masthead, now the `home-hero` plugin
     The page used to open on a row of counters. On a young board those counters
-    read as "nobody is here". It now opens on a thesis: what this place is and
-    who writes here, then three claims about how reviewing works here, then one
-    action.
-    Uses site.tagline / site.slogan only — no new context data. The fallback
-    copy (when the operator hasn't set a tagline/slogan) and the rest of the
-    masthead's strings are unique to this theme — see the "Ferum Review theme"
-    section in locales/*/common.ftl, since the default catalog has no
-    equivalent copy to reuse.
+    read as "nobody is here", so it opened on a thesis instead: what this place
+    is, who writes here, and one action.
+    That masthead was built in this file and drew its headline from
+    site.tagline — a field that is simultaneously this page's meta description
+    and its og:description, so one string had to serve two incompatible jobs.
+    It now lives in examples/plugins/home-hero, injected through the
+    plugin_slots.home_feed_top block below, which makes it admin-editable and
+    theme-independent. Nothing renders when that plugin is absent.
 
   CHANGE 2 — Counters gated behind a credibility threshold
     "4 products · 3 reviews" is an anti-signal: it advertises emptiness. The
@@ -33,7 +33,7 @@
   here too, not a re-typed duplicate.
 
   THIS FILE IS THE SOURCE OF TRUTH for the ferum-review theme. It is packaged
-  into examples/themes/ferum-review-1.0.0.zip and installed from there into
+  into examples/themes/ferum-review-1.1.0.zip and installed from there into
   frontend/themes/ferum-review/ via the admin theme-upload flow. Editing the
   installed copy directly is a dead end — the next reinstall of this zip
   overwrites it back to whatever is here. Edit this file, then repackage the
@@ -58,142 +58,21 @@
   {% for slot in plugin_slots.home_feed_top %}{{ slot.html | safe }}{% endfor %}
 {% endif %}
 
-{# ── Masthead — the page's thesis, shown before any feed ──────────────────────
-   Two columns when the catalogue can supply photography, one when it can't. The
-   copy is the constant; the gallery is evidence layered beside it. It is NOT a
-   carousel: every tile is present at once, static, and is a real link into the
-   product it shows — a rotating hero would hide most of these images behind a
-   timer and turn a navigation surface into decoration.
+{# ── Masthead ─────────────────────────────────────────────────────────────────
+   The masthead that used to live here — eyebrow, headline, sub-copy, two actions
+   and a photo mosaic — is now the `home-hero` plugin, injected through the
+   `plugin_slots.home_feed_top` block near the top of this file.
 
-   TWO SOURCES, ONE MOSAIC
-   `hero_tiles` is the operator's curated list, set in Admin → Settings → General
-   → Homepage hero. When it has anything in it, it wins outright — an admin who
-   picked four photographs meant those four. When it is empty the masthead falls
-   back to pulling `primary_image_key` off the top-rated products, so a fresh
-   install still gets a populated hero with no configuration at all.
+   It moved for two reasons. Its headline borrowed `site.tagline`, which is also
+   this page's `<meta name="description">` and its og:description, so a string
+   written to work as one could not work as the other. And it existed only in
+   this theme, so switching themes lost it outright.
 
-   The two sources are gated differently on purpose:
-     · curated  → ≥1 tile. One deliberately-chosen photo is a decision worth honouring.
-     · automatic → ≥2 photos. One machine-picked photo reads as a stock image that
-       wandered in, and the catalogue cannot judge whether a photo is any good.
-
-   The count is resolved BEFORE the section opens because it decides the layout
-   class on the section element itself.
-
-   set_global (not set): the counter is mutated inside the for-loop and read after
-   it, which a block-scoped `set` cannot do across loop iterations. #}
+   Nothing renders here when the plugin is absent (uninstalled, deactivated, or a
+   `--no-default-features` build with `script_plugins` off). That is deliberate:
+   the homepage opens straight onto the feed rather than a half-masthead.
+   See examples/plugins/home-hero/README.md. #}
 {% if not active_tag %}
-{% set curated = hero_tiles | default(value=[]) %}
-{% set_global hero_img_count = 0 %}
-{% set_global show_gallery = false %}
-{% if curated %}
-  {% set_global hero_img_count = curated | length %}
-  {% set_global show_gallery = true %}
-{% else %}
-  {% for p in top_rated %}{% if p.primary_image_key %}{% set_global hero_img_count = hero_img_count + 1 %}{% endif %}{% endfor %}
-  {% if hero_img_count >= 2 %}{% set_global show_gallery = true %}{% endif %}
-{% endif %}
-
-<section class="fr-hero{% if show_gallery %} fr-hero--split{% endif %}">
-  <div class="fr-hero-copy">
-    <p class="fr-hero-eyebrow">{% if site.slogan %}{{ site.slogan }}{% else %}{{ t(k="ui-material-furniture-reviews") }}{% endif %}</p>
-    <h1 class="fr-hero-title">
-      {% if site.tagline %}{{ site.tagline }}{% else %}{{ t(k="ui-real-reviews-from-the-people-who-built-it") }}{% endif %}
-    </h1>
-    <p class="fr-hero-sub">{{ t(k="ui-architects-contractors-log-the-numbers") }}</p>
-
-    {# ── The masthead's two actions ──────────────────────────────────────────
-       This slot used to hold a second search field. partials/nav.html already
-       carries one on every page, so it bought nothing and cost the masthead its
-       only action slot — and it put a second unlabelled role="search" landmark
-       on the page, which a screen reader announces identically to the first.
-
-       One button and one link, no supporting prose. A three-item block of copy
-       was tried in this slot and cut: whatever it said, it restated the paragraph
-       directly above it one type size down, and in this column it wrapped into a
-       ragged 2+1 grid.
-
-       The pair covers both people the page gets: one has something to say about a
-       product they own, the other wants to look before deciding. Contributing is
-       the harder ask and the scarcer supply, so it takes the filled amber.
-
-       The catalogue is a TEXT LINK, not a second button. As an outline button it
-       measured ~277px beside a ~312px primary in a ~590px column, so the row
-       overflowed by a hair and wrapped into two ragged lines. Trimming the
-       padding until it fitted would have made the layout depend on the length of
-       one Vietnamese string, and the next locale breaks it again. A link carries
-       no button padding, so the row has room to spare in any language, and the
-       hierarchy stops being a judgement call.
-
-       Writing needs no product parameter — the composer carries its own product
-       typeahead. Guests go through /login?next=, the same route the product
-       page's review CTA uses. NOT /register: ferum-page-auth.js honours ?next=
-       on the login form only, and the register form hardcodes a redirect back to
-       /login, so a destination handed to /register is silently dropped. There is
-       no register link here on purpose — the topbar and the sidebar's "Join in"
-       panel both already carry one for exactly this visitor. #}
-    <div class="fr-hero-cta">
-      {% if current_user %}
-        <a href="/new-thread" class="btn btn-accent">
-          <i class="fa-solid fa-pen me-2" aria-hidden="true"></i>{{ t(k="ui-write-a-review") }}
-        </a>
-      {% else %}
-        <a href="/login?next=%2Fnew-thread" class="btn btn-accent">
-          <i class="fa-solid fa-pen me-2" aria-hidden="true"></i>{{ t(k="ui-log-in-to-review") }}
-        </a>
-      {% endif %}
-      <a href="/catalog" class="fr-hero-cta-link">
-        {{ t(k="ui-product-catalog") }}<i class="fa-solid fa-arrow-right ms-2 fa-xs" aria-hidden="true"></i>
-      </a>
-    </div>
-  </div>
-
-  {# The mosaic, capped at 4 (a 2×2 grid). In both modes the visible caption is the
-     link's accessible name, so the img itself carries alt="" — duplicating the
-     caption there would make a screen reader announce it twice. A curated tile with
-     a link but no caption has no such name, so it gets an explicit aria-label
-     instead; an unlabelled link is a WCAG failure, not a cosmetic gap.
-
-     The first image is the desktop LCP candidate, hence fetchpriority=high; the
-     rest defer. Hidden below 768px (see theme.css) so the masthead never pushes the
-     feed — the reason people came — under the fold on a phone. #}
-  {% if show_gallery %}
-  <div class="fr-hero-gallery">
-    {% if curated %}
-      {# Curated: an operator-set link is optional, so a tile without one renders as
-         a plain figure rather than an anchor that goes nowhere. #}
-      {% for tile in curated %}
-        {% if tile.link %}
-        <a class="fr-hero-tile" href="{{ tile.link }}"
-           {% if not tile.caption %}aria-label="{{ t(k='ui-featured-image') }}"{% endif %}>
-          <img src="{{ tile.image_url }}" alt=""
-               {% if loop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
-          {% if tile.caption %}<span class="fr-hero-tile-name">{{ tile.caption }}</span>{% endif %}
-        </a>
-        {% else %}
-        <div class="fr-hero-tile">
-          <img src="{{ tile.image_url }}" alt="{{ tile.caption }}"
-               {% if loop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
-          {% if tile.caption %}<span class="fr-hero-tile-name">{{ tile.caption }}</span>{% endif %}
-        </div>
-        {% endif %}
-      {% endfor %}
-    {% else %}
-      {% set_global hero_shown = 0 %}
-      {% for p in top_rated %}
-        {% if p.primary_image_key and hero_shown < 4 %}
-        <a class="fr-hero-tile" href="/catalog/{{ p.slug }}">
-          <img src="/files/{{ p.primary_image_key }}" alt=""
-               {% if hero_shown == 0 %}fetchpriority="high"{% else %}loading="lazy"{% endif %}>
-          <span class="fr-hero-tile-name">{{ p.name }}</span>
-        </a>
-        {% set_global hero_shown = hero_shown + 1 %}
-        {% endif %}
-      {% endfor %}
-    {% endif %}
-  </div>
-  {% endif %}
-</section>
 
 {# ── Browse by type — three always-valid entry points into the catalogue ───────
    The catalogue's only stable, guaranteed-non-empty facet is product_type
@@ -283,7 +162,7 @@
     <a href="/catalog/{{ p.slug }}" class="fr-shelf-card card text-decoration-none shadow-sm">
       <div class="ratio ratio-4x3 bg-body-tertiary rounded-top overflow-hidden">
         {% if p.primary_image_key %}
-          <img src="/files/{{ p.primary_image_key }}" alt="{{ p.name }}" style="object-fit:cover;width:100%;height:100%">
+          <img src="{{ file_url(key=p.primary_image_key) }}" alt="{{ p.name }}" style="object-fit:cover;width:100%;height:100%">
         {% else %}
           <div class="d-flex align-items-center justify-content-center h-100 text-muted">
             <i class="fa-solid fa-couch fa-2x opacity-25" aria-hidden="true"></i>
@@ -343,7 +222,7 @@
         </a>
       </div>
     {% else %}
-      <span class="fw-semibold">{{ t(k="ui-latest-discussions") }}</span>
+      <span class="fw-semibold">{{ t(k="ui-discussions") }}</span>
       {% if watched_count and watched_count > 0 %}
         <a href="/account#preferences" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none ms-2"
            style="pointer-events:auto" title="{{ t(k='ui-manage-watched-categories') }}">
@@ -358,25 +237,13 @@
     {% endif %}
   </div>
 
-  {# Sort tabs — hidden when filtering by tag (tag has no sort meaning) #}
+  {# Sort + filter controls — hidden when filtering by tag (a tag view is
+     already a narrowing, and the sort tabs would silently drop it).
+     Rendered from the shared macro rather than a local copy: this theme's own
+     copy had already drifted from the default theme's, and the href rules now
+     live in Rust where they are unit-tested. #}
   {% if not active_tag %}
-  <div class="fr-sort-tabs">
-    <a href="/?sort=latest" class="fr-sort-tab {% if active_sort == 'latest' or not active_sort %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-clock-rotate-left fa-xs" aria-hidden="true"></i>{{ t(k="ui-activity") }}
-    </a>
-    <a href="/?sort=newest" class="fr-sort-tab {% if active_sort == 'newest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-calendar-plus fa-xs" aria-hidden="true"></i>{{ t(k="ui-newest") }}
-    </a>
-    <a href="/?sort=hottest" class="fr-sort-tab {% if active_sort == 'hottest' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-fire fa-xs" aria-hidden="true"></i>{{ t(k="ui-hottest") }}
-    </a>
-    <a href="/?sort=unanswered" class="fr-sort-tab {% if active_sort == 'unanswered' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-comment-slash fa-xs" aria-hidden="true"></i>{{ t(k="ui-unanswered") }}
-    </a>
-    <a href="/?sort=solved" class="fr-sort-tab {% if active_sort == 'solved' %}fr-sort-tab--active{% endif %}">
-      <i class="fa-solid fa-circle-check fa-xs" aria-hidden="true"></i>{{ t(k="ui-solved") }}
-    </a>
-  </div>
+    {{ m::feed_controls(controls=feed_controls) }}
   {% endif %}
 
   {# Thread list or empty state #}
@@ -390,9 +257,9 @@
       {% if active_tag %}
         <p class="text-secondary mb-3">{{ t(k="ui-no-posts-found-for-the-tag") }} <strong>#{{ active_tag }}</strong>.</p>
         <a href="/" class="btn btn-outline-secondary btn-sm">{{ t(k="ui-view-all-discussions") }}</a>
-      {% elif active_sort == "unanswered" %}
+      {% elif active_filter == "unanswered" %}
         <p class="text-secondary mb-0">{{ t(k="ui-nothing-left-unanswered-nice-work") }}</p>
-      {% elif active_sort == "solved" %}
+      {% elif active_filter == "solved" %}
         <p class="text-secondary mb-0">{{ t(k="ui-no-posts-have-been-marked-solved") }}</p>
       {% else %}
         <p class="text-secondary mb-3">{{ t(k="ui-no-discussions-yet-be-the-first") }}</p>

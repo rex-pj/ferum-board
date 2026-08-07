@@ -690,303 +690,18 @@ time {
 }
 
 /* ============================================================================
-   MASTHEAD — the home page's thesis
+   MASTHEAD — moved out of this theme
    ============================================================================
-   Replaces a row of counters as the first thing on the page. Counters only
-   reassure once they are large; a statement of what the board is works at any
-   size. Search sits inside it because "find this specific material" is the real
-   entry point, not "browse everything". */
+   The .fr-hero* rules that lived here styled a masthead built into
+   templates/home.html. Both are gone: the masthead is now the `home-hero`
+   plugin, which ships its own `.fh-hero*` styles inside bundle.js so it renders
+   on any theme, not just this one.
 
-/* No box. The masthead is type sitting directly on the page ground, the way a
-   publication opens — which is also what separates it from the carded content
-   below. Boxing it made it read as "the first card" rather than the header.
-
-   An earlier revision bled a faint 45° hatch across this area. At 5% over a
-   large field it did not read as letterhead, it read as a rendering artifact —
-   texture you notice without being able to name. Cut. The hatch now appears
-   only where it does real work: filling an empty photo slot. */
-.fr-hero {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0.5rem 0 2rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--bs-border-color);
-}
-
-.fr-hero-eyebrow {
-  display: inline-block;
-  margin: 0 0 0.9rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid var(--fr-accent);
-  font-size: var(--fr-label-size);
-  font-weight: 700;
-  letter-spacing: var(--fr-label-tracking);
-  text-transform: uppercase;
-  color: var(--fr-accent-text);
-}
-.fr-hero-title {
-  margin: 0 0 0.8rem;
-  max-width: 22ch;
-  font-size: clamp(1.6rem, 1.05rem + 2.3vw, 2.55rem);
-  font-weight: 750;
-  letter-spacing: -0.038em;
-  line-height: 1.08;
-  color: var(--bs-emphasis-color);
-  text-wrap: balance;
-}
-.fr-hero-sub {
-  margin: 0 0 1.5rem;
-  max-width: 58ch;
-  font-size: 1rem;
-  line-height: 1.65;
-  color: var(--bs-secondary-color);
-}
-
-/* ── Masthead actions ─────────────────────────────────────────────────────────
-   Replaces the masthead search field (.fr-hero-search, removed): the topbar
-   carries a search on every page, so a second one here duplicated a global
-   control and left the masthead with no action of its own.
-
-   One filled button, one link — NOT two buttons. As an outline button the
-   catalogue measured ~277px beside a ~312px primary in a ~590px copy column, so
-   the row overflowed by a hair and wrapped into two ragged lines. The fix is not
-   to shave padding until it fits: that pins the layout to the length of one
-   Vietnamese label and the next locale breaks it again. A link has no button
-   padding, so the row clears comfortably in any language.
-
-   It also settles the hierarchy. Contributing is the harder ask and the scarcer
-   supply, so it gets the only filled control on the masthead; two filled buttons
-   of equal weight make the reader stop to work out which is the real one. */
-.fr-hero-cta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-}
-.fr-hero-cta .btn {
-  /* inline-flex so min-height centres the label instead of leaving it on the
-     first line of an over-tall button. NF-UX-02. */
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--fr-tap-target);
-  padding-inline: 1.5rem;
-  font-weight: 600;
-}
-.fr-hero-cta-link {
-  display: inline-flex;
-  align-items: center;
-  /* Holds the 44px target on touch even though it is not a button — it is a
-     primary navigation link sitting in the masthead. NF-UX-02. */
-  min-height: var(--fr-tap-target);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--bs-secondary-color);
-  text-decoration: none;
-  transition: color 0.15s var(--fr-ease);
-}
-.fr-hero-cta-link:hover,
-.fr-hero-cta-link:focus-visible {
-  color: var(--fr-accent-text);
-}
-.fr-hero-cta-link:hover .fa-arrow-right {
-  transform: translateX(3px);
-}
-.fr-hero-cta-link .fa-arrow-right {
-  transition: transform 0.15s var(--fr-ease);
-}
-@media (prefers-reduced-motion: reduce) {
-  .fr-hero-cta-link .fa-arrow-right,
-  .fr-hero-cta-link:hover .fa-arrow-right {
-    transition: none;
-    transform: none;
-  }
-}
-
-/* Mobile: the masthead is the whole first screen otherwise, pushing the products
-   and the feed — the reason someone came — entirely below the fold. Tightened so
-   the thesis still lands but real content starts within the first screen. Nothing
-   is removed; the eyebrow/title/sub keep their hierarchy, just less air. */
-@media (max-width: 575.98px) {
-  .fr-hero {
-    padding-bottom: 1.25rem;
-    margin-bottom: 1rem;
-  }
-  .fr-hero-eyebrow {
-    margin-bottom: 0.65rem;
-  }
-  .fr-hero-title {
-    margin-bottom: 0.55rem;
-  }
-  .fr-hero-sub {
-    margin-bottom: 1rem;
-    font-size: 0.9375rem;
-    line-height: 1.5;
-  }
-  /* Stacked on a phone: the button takes the full width — it is the primary tap
-     target and a content-width button next to nothing reads as a stub — and the
-     link centres under it so the two share one axis instead of one being centred
-     and the other ragged left. */
-  .fr-hero-cta {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.25rem;
-  }
-  .fr-hero-cta .btn {
-    justify-content: center;
-  }
-  .fr-hero-cta-link {
-    justify-content: center;
-  }
-}
-
-/* ── Split masthead + photo mosaic ─────────────────────────────────────────────
-   The two-column layout is opt-in via .fr-hero--split, added by the template only
-   when there are ≥2 real product photos to fill the right column. Without the
-   modifier .fr-hero stays the single-column block defined above, so a young board
-   with no photography is unaffected. */
-@media (min-width: 768px) {
-  /* Both columns are stretched to the SAME grid row, so the copy and the mosaic
-     share one top edge and one bottom edge by construction — not by two
-     independently-sized boxes happening to come out the same height.
-
-     The previous value was `align-items: center`, which sized each column to its
-     own content and centred them against each other. Every height input there is
-     data: a longer site tagline, a translation that wraps the title to three
-     lines, 2 photos instead of 4. Whatever the difference was on the day, half of
-     it appeared above and half below, leaving the bottom of the copy column
-     hanging past the bottom of the last photo (and the eyebrow starting above the
-     first one). Stretching removes the variable rather than tuning it. */
-  .fr-hero--split {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-    gap: clamp(1.5rem, 4vw, 3rem);
-    align-items: stretch;
-  }
-  /* The copy is CENTRED against the mosaic, not pinned to its bottom edge.
-     `margin-top: auto` on the last element used to do the pinning, back when that
-     element was a tall search form that filled most of the column. Once the
-     column held only a headline, a paragraph and one button, the same auto margin
-     shoved that button ~260px below the paragraph it belongs to and left a hole
-     in the middle of the masthead — the eye reads the gap as a missing block, not
-     as alignment.
-
-     Centring is the right axis because the mosaic still sets the height — it is
-     just a sane height now (see the clamp on .fr-hero--split .fr-hero-gallery
-     below). The copy block floats as one unit against it, which is also why the
-     pinning approach could never work: there is nothing at the bottom of this
-     column that wants to touch the bottom of a photograph. */
-  .fr-hero--split .fr-hero-copy {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  /* The mosaic gets an EXPLICIT height, and this is the line that decides how
-     tall the whole masthead is.
-
-     It used to say `height: 100%; min-height: 20rem`, which did not do what it
-     reads as. A percentage height against a row that is itself being sized by its
-     content is indefinite, so it resolved to `auto` — and with the tiles' own
-     aspect-ratio switched off just below, every tile fell back to its image's
-     intrinsic height. The photographs, not the layout, were setting the row: three
-     tiles wrapped to two rows came out ~595px against a ~280px copy column, and
-     no vertical alignment can absorb a 300px difference. It only moves the hole
-     (centred: half above and half below; flex-start: all of it under the buttons).
-
-     A definite height fixes the cause. `grid-auto-rows: 1fr` can now divide a real
-     number, so tiles get definite heights, `img { height: 100% }` resolves, and
-     object-fit crops — which it was always meant to do. clamp() keeps it
-     proportional: the floor stops a narrow desktop squashing the photos into a
-     letterbox strip, the ceiling stops a wide one turning the masthead into a
-     billboard. */
-  .fr-hero--split .fr-hero-gallery {
-    height: clamp(18rem, 30vw, 26rem);
-    grid-auto-rows: 1fr;
-  }
-  /* Height comes from the gallery's own rows above, so the fixed 4/3 box has to go
-     or it would fight it. Photos are cropped by `object-fit: cover`, never
-     distorted. This rule is only safe while the gallery height above stays
-     definite — drop that and the tiles have nothing to size against and fall back
-     to their images' intrinsic heights, which is the bug this pair once had. */
-  .fr-hero--split .fr-hero-tile {
-    aspect-ratio: auto;
-    min-height: 0;
-  }
-  /* Exactly two tiles is the one count where filling a full-height row side by
-     side turns landscape product photography into two narrow portraits. Stacked,
-     the same height reads as two banners instead. 3 and 4 already occupy two
-     rows, and 1 (curated-only) already spans the full width. */
-  .fr-hero--split .fr-hero-gallery:has(> .fr-hero-tile:nth-child(2):last-child) {
-    grid-template-columns: 1fr;
-  }
-}
-.fr-hero-copy {
-  min-width: 0; /* let the sub-text and the action row shrink inside the grid track */
-}
-
-.fr-hero-gallery {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-/* Odd counts would otherwise leave a hole in the grid. Promote the odd tile out to
-   a full-width band so the mosaic always reads as a finished block. 2 and 4 tiles
-   tile evenly and need no special case.
-   A single tile only occurs in curated mode — the automatic source requires ≥2. */
-.fr-hero-gallery > .fr-hero-tile:only-child,
-.fr-hero-gallery > .fr-hero-tile:nth-child(3):last-child {
-  grid-column: 1 / -1;
-}
-.fr-hero-tile {
-  position: relative;
-  display: block;
-  aspect-ratio: 4 / 3;
-  overflow: hidden;
-  border: 1px solid var(--bs-border-color);
-  border-radius: var(--bs-border-radius-lg);
-  background: var(--fr-surface-sunken);
-  box-shadow: var(--bs-box-shadow-sm);
-}
-.fr-hero-tile img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.5s var(--fr-ease);
-}
-.fr-hero-tile:hover img {
-  transform: scale(1.05);
-}
-/* Product name over a bottom scrim — always present (so it is the link's
-   accessible name), legible over any photo. */
-.fr-hero-tile-name {
-  position: absolute;
-  inset: auto 0 0 0;
-  padding: 1.4rem 0.65rem 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.2;
-  color: #fff;
-  background: linear-gradient(to top, rgba(2, 6, 23, 0.74), rgba(2, 6, 23, 0));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-@media (prefers-reduced-motion: reduce) {
-  .fr-hero-tile img {
-    transition: none;
-  }
-  .fr-hero-tile:hover img {
-    transform: none;
-  }
-}
-/* On a phone the mosaic would be the whole first screen, pushing the feed out of
-   sight — the same reason the quick links are dropped above. The copy + search
-   carry the masthead alone; the photography returns at ≥768px. */
-@media (max-width: 767.98px) {
-  .fr-hero-gallery {
-    display: none;
-  }
-}
+   Its styles read this theme's tokens with fallbacks — var(--fr-accent,
+   var(--bs-primary)) and friends — so it still looks native here while working
+   on a theme that defines none of them. Nothing needs to be added back on this
+   side; adding .fr-hero rules again would style an element no longer rendered.
+   See examples/plugins/home-hero/. */
 
 /* ── Browse-by-type strip ──────────────────────────────────────────────────────
    Three category doors under the masthead: icon chip, one-word label, a chevron
@@ -1180,6 +895,79 @@ time {
   color: var(--bs-emphasis-color);
   font-weight: 700;
   border-bottom-color: var(--fr-accent);
+}
+
+/* ── Filter chips — the narrowing axis, visually distinct from the tabs ──── */
+/* The tabs above are editorial underlines that pick ONE ordering; these are
+   outlined toggles that ADD or REMOVE a constraint. Two different jobs get two
+   different shapes, otherwise a reader cannot predict which control makes rows
+   disappear. */
+.fr-feed-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 1rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+.fr-feed-controls .fr-sort-tabs {
+  border-bottom: none;
+  padding-right: 0.5rem;
+}
+.fr-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 1.5rem 0.6rem 0.5rem;
+  flex-wrap: wrap;
+}
+.fr-filter-chips__label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bs-tertiary-color);
+}
+.fr-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--fr-tap-target);
+  padding: 0.2rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 550;
+  color: var(--bs-tertiary-color);
+  text-decoration: none;
+  white-space: nowrap;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 2px;
+  background: transparent;
+  transition: color 0.15s var(--fr-ease), border-color 0.15s var(--fr-ease),
+    background-color 0.15s var(--fr-ease);
+}
+.fr-filter-chip:hover {
+  color: var(--bs-body-color);
+  border-color: var(--fr-accent);
+  text-decoration: none;
+}
+.fr-filter-chip--on {
+  color: var(--fr-accent-text);
+  border-color: var(--fr-accent);
+  background: color-mix(in srgb, var(--fr-accent) 12%, transparent);
+  font-weight: 700;
+}
+
+@media (max-width: 575.98px) {
+  .fr-feed-controls {
+    justify-content: flex-start;
+  }
+  .fr-filter-chips {
+    width: 100%;
+    padding-left: 1.5rem;
+  }
+  .fr-filter-chips__label {
+    display: none;
+  }
 }
 
 /* ── Category pill & tags ────────────────────────────────────────────────── */
@@ -1679,7 +1467,8 @@ time {
   .fr-spec-value a,
   .fr-filter-bar .btn,
   .fr-filter-bar .form-select,
-  .fr-sort-tab {
+  .fr-sort-tab,
+  .fr-filter-chip {
     min-height: var(--fr-tap-target);
   }
   .pdp-thumb {

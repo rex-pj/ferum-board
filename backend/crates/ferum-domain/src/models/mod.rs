@@ -43,8 +43,8 @@ pub use tag::{NewTag, Tag};
 pub use thread::{Thread, ThreadStatus};
 pub use user::{TrustLevel, User, UserPreferences};
 pub use plugin::{
-    NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginHook, PluginLog,
-    PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
+    ui_slot_element_tag, NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin,
+    PluginHook, PluginLog, PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
 };
 pub use webhook::Webhook;
 pub use theme::{NewTheme, Theme};

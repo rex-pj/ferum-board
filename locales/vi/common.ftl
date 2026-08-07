@@ -182,7 +182,6 @@ ui-solved = Đã giải quyết
 ui-best-answer = Câu trả lời hay nhất
 ui-mark-best-answer = Chọn câu trả lời hay nhất
 ui-jump-to-best-answer = Tới câu trả lời hay nhất
-ui-latest-discussions = Chủ đề mới nhất
 # Panel sidebar trang chủ: đánh giá mới nhất mỗi sản phẩm, sau khi review đã
 # được tách khỏi feed thảo luận.
 ui-latest-reviews = Đánh giá mới nhất
@@ -191,7 +190,6 @@ ui-a-product = Một sản phẩm
 ui-recent-discussions = Chủ đề gần đây
 ui-trending-now = Đang được quan tâm
 ui-newest = Mới nhất
-ui-hottest = Sôi nổi nhất
 ui-unread = Chưa đọc
 ui-tags = Thẻ
 ui-title = Tiêu đề
@@ -308,7 +306,6 @@ ui-drop-or-choose-image = Kéo thả ảnh vào đây, hoặc bấm để chọn
 
 ui-about = Giới thiệu
 ui-actions = Thao tác
-ui-activity = Hoạt động
 ui-account-status = Trạng thái tài khoản
 ui-summary = Tổng quan
 ui-total-shown = Tổng hiển thị
@@ -556,7 +553,6 @@ ui-you-have-already-reviewed-this-product = Bạn đã đánh giá sản phẩm 
 ## Khác
 
 ui-ferum-board = Ferum Board
-ui-active = Đang hoạt động
 ui-previous-2 = Trước
 ui-next-2 = Sau
 
@@ -676,23 +672,15 @@ ui-related = Liên quan
 ui-in-this-category = trong chuyên mục này
 
 ## Giao diện đánh giá
-# Nội dung riêng của theme ferum-review (phần masthead trên trang chủ) — theme
-# default không có chuỗi tương ứng. Xem
-# frontend/themes/ferum-review/templates/home.html.
+# Nội dung riêng của theme ferum-review — theme default không có chuỗi tương
+# ứng. Xem frontend/themes/ferum-review/templates/home.html.
+#
+# Chuỗi của masthead KHÔNG nằm ở đây nữa: nó đã chuyển sang plugin `home-hero`,
+# nơi quản trị viên tự nhập nội dung theo từng locale trong config của plugin
+# thay vì dịch từ catalog. Xem examples/plugins/home-hero/README.md.
 
-ui-material-furniture-reviews = Đánh giá vật liệu & nội thất
-ui-real-reviews-from-the-people-who-built-it = Đánh giá thực tế từ những người đã thi công và sử dụng
-ui-architects-contractors-log-the-numbers =
-    Kiến trúc sư, nhà thầu và chủ nhà ghi lại những con số quan trọng: độ bền
-    theo thời gian, khả năng chống ẩm, độ khó khi thi công và chi phí thực tế
-    trên mỗi m².
-# Đồng thời là nhãn nút phụ ở masthead (→ /catalog). Dùng lại thay vì đặt thêm
-# key kiểu "duyệt danh mục": đích đến chỉ có một tên, và nên đọc giống nhau ở mọi
-# chỗ trỏ tới nó.
-ui-product-catalog = Danh mục sản phẩm
 ui-discussion-categories = Chuyên mục thảo luận
 ui-browse-by-type = Duyệt theo loại
-ui-featured-image = Ảnh nổi bật
 
 # Hộp thoại xác nhận + thanh đo độ mạnh mật khẩu
 js-confirm = Xác nhận
@@ -854,3 +842,24 @@ js-account-suspended = Tài khoản của bạn đã bị đình chỉ.
 ui-filter-by = Lọc theo:
 ui-active-filters = Bộ lọc đang áp dụng
 ui-clear-all-filters = Bỏ tất cả
+
+## ─── Bảng tin chủ đề: tab sắp xếp + chip lọc ─────────────────────────────────
+# Hai trục, cố ý đặt nhãn tách bạch. Tab sắp xếp đổi thứ tự danh sách; chip lọc
+# bỏ bớt dòng khỏi danh sách. Trước đây chúng là một dải năm tab trông y hệt
+# nhau, trong đó ba cái đổi thứ tự còn hai cái làm chủ đề biến mất.
+#
+# Mỗi nhãn nói đúng việc truy vấn thực sự làm. "Nhiều thảo luận nhất" chứ không
+# phải "Sôi nổi nhất" vì cách sắp xếp không có yếu tố thời gian — nó xếp theo
+# tổng số trả lời mọi thời đại, và một cái nhãn hứa hẹn xu hướng trên một truy
+# vấn không thể diễn đạt điều đó là lỗi mà không test nào bắt được.
+ui-discussions = Thảo luận
+ui-sort-by = Sắp xếp theo
+ui-sort-activity = Hoạt động gần đây
+ui-sort-activity-hint = Chủ đề có trả lời mới nhất
+ui-sort-newest = Mới đăng
+ui-sort-newest-hint = Chủ đề được tạo gần đây nhất
+ui-sort-most-discussed = Nhiều thảo luận nhất
+ui-sort-most-discussed-hint = Chủ đề có nhiều trả lời nhất từ trước tới nay
+ui-filter-label = Lọc
+ui-filter-unanswered-hint = Chỉ chủ đề đang mở mà chưa ai trả lời
+ui-filter-solved-hint = Chỉ chủ đề đã có câu trả lời hay nhất

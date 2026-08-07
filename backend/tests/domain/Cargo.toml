@@ -1,0 +1,18 @@
+[package]
+name = "ferum-domain-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Test-harness crate: no public API to document, and no ```rust doc examples.
+# Skips a rustdoc invocation per crate on every `cargo test`.
+[lib]
+doctest = false
+
+[dependencies]
+# Default features only, deliberately: these tests exercise the pure domain, so
+# they must keep compiling against a `ferum-domain` built with neither the
+# `axum` nor the `sea-orm` glue turned on.
+ferum-domain = { path = "../../crates/ferum-domain" }
+
+serde_json = { workspace = true }

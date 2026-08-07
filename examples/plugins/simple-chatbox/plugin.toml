@@ -11,7 +11,9 @@ author      = "Ferum Team"
 # bundle.js is dual-purpose:
 #   - Evaluated server-side in boa_engine: registers __ferum_rpc handlers.
 #   - Served to the browser at /plugins/com.ferum.simple-chatbox/assets/bundle.js:
-#     registers the <ferum-slot-content-before> custom element.
+#     registers this plugin's `home_feed_top` element (the slot it actually
+#     declares below — this line used to name content_before, which it has
+#     never used).
 # Each half is guarded by a typeof check so it only runs in the environment
 # that actually provides its globals (__ferum_rpc vs. customElements).
 

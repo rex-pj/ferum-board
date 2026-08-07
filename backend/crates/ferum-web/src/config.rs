@@ -40,6 +40,34 @@ pub struct Config {
     /// AWS region for real S3; ignored by MinIO/R2 but still required by the SDK.
     #[serde(default = "default_s3_region")]
     pub s3_region: String,
+
+    // ─── Google Cloud Storage (requires `--features gcs`) ────────────────────
+    /// Presence of this is the toggle, matching every other capability here.
+    /// Wins over `S3_ENDPOINT` when both are set — see `startup.rs`.
+    pub gcs_bucket: Option<String>,
+    /// Optional object-name prefix, for a bucket shared with other workloads.
+    /// Applied on write and stripped on read; objects outside it are treated as
+    /// not ours, so their reference counts are never touched.
+    ///
+    /// **Sharing a bucket is a security decision, not just a naming one.** The
+    /// anonymous-read binding this app needs is *bucket-wide*, so a plain
+    /// `allUsers` grant publishes every other workload's objects too. To share a
+    /// bucket safely, grant the role on a **managed folder** matching this
+    /// prefix instead (requires uniform bucket-level access) — that is the only
+    /// documented way to make a subset of a bucket public.
+    pub gcs_prefix: Option<String>,
+    /// A service-account JSON key inlined into the environment. Convenient for
+    /// platforms that only inject env vars, but it puts a long-lived private key
+    /// into the process environment, where it is visible to anything that can
+    /// read `/proc/self/environ` or a crash dump. Prefer Workload Identity (set
+    /// none of these three and let the metadata server answer) or a mounted file.
+    pub gcs_credentials_json: Option<String>,
+    /// Path to a service-account JSON key file.
+    pub gcs_credentials_file: Option<String>,
+    /// The standard Google ADC variable, read so the app behaves like every
+    /// other Google tool on the host. Used when `GCS_CREDENTIALS_FILE` is unset.
+    pub google_application_credentials: Option<String>,
+
     pub cdn_base_url: Option<String>,
     pub meilisearch_url: Option<String>,
     pub meilisearch_key: Option<String>,
@@ -155,6 +183,21 @@ impl std::fmt::Debug for Config {
                 &self.s3_secret_key.as_ref().map(|_| "[redacted]"),
             )
             .field("s3_region", &self.s3_region)
+            .field("gcs_bucket", &self.gcs_bucket)
+            .field("gcs_prefix", &self.gcs_prefix)
+            // An inlined service-account key is the most sensitive value in this
+            // struct — it authenticates as the service account until revoked.
+            .field(
+                "gcs_credentials_json",
+                &self.gcs_credentials_json.as_ref().map(|_| "[redacted]"),
+            )
+            // Paths, not secrets; printing them is what makes "which credentials
+            // did it actually pick up?" answerable from a log.
+            .field("gcs_credentials_file", &self.gcs_credentials_file)
+            .field(
+                "google_application_credentials",
+                &self.google_application_credentials,
+            )
             .field("cdn_base_url", &self.cdn_base_url)
             .field("meilisearch_url", &self.meilisearch_url)
             .field("meilisearch_index", &self.meilisearch_index)

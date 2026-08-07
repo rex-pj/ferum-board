@@ -18,9 +18,9 @@
   <div class="col-md-5">
     <div class="fr-product-thumb rounded border mb-2 {% if not has_image %}fr-product-thumb--empty{% endif %}">
       {% if product.primary_image_key %}
-        <img id="pdp-main-image" src="/files/{{ product.primary_image_key }}" alt="{{ product.name }}" data-name="{{ product.name }}">
+        <img id="pdp-main-image" src="{{ file_url(key=product.primary_image_key) }}" alt="{{ product.name }}" data-name="{{ product.name }}">
       {% elif product.media %}
-        <img id="pdp-main-image" src="/files/{{ product.media[0].storage_key }}" alt="{{ product.name }}" data-name="{{ product.name }}">
+        <img id="pdp-main-image" src="{{ file_url(key=product.media[0].storage_key) }}" alt="{{ product.name }}" data-name="{{ product.name }}">
       {% else %}
         <div class="text-center">
           <i class="fa-solid fa-couch fa-2x opacity-25 d-block mb-2" aria-hidden="true"></i>
@@ -32,10 +32,10 @@
       <div id="pdp-thumbs" class="pdp-thumbs" role="group" aria-label="{{ t(k='ui-product-images') }}">
         {% for md in product.media %}
           <button type="button" class="pdp-thumb"
-                  data-full="/files/{{ md.storage_key }}"
+                  data-full="{{ file_url(key=md.storage_key) }}"
                   data-caption="{{ md.caption | default(value=product.name) }}"
                   aria-label="View image: {{ md.caption | default(value=product.name) }}">
-            <img src="/files/{{ md.storage_key }}" alt="{{ md.caption | default(value=product.name) }}" loading="lazy">
+            <img src="{{ file_url(key=md.storage_key) }}" alt="{{ md.caption | default(value=product.name) }}" loading="lazy">
           </button>
         {% endfor %}
       </div>

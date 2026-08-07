@@ -3,8 +3,25 @@ name = "ferum-infrastructure"
 version = "0.1.0"
 edition = "2021"
 
+# Tests live in `tests/infrastructure` — see the note in ferum-domain/Cargo.toml.
+[lib]
+test = false
+
 [features]
 s3 = ["dep:aws-sdk-s3", "dep:aws-config"]
+# Native Google Cloud Storage backend. Off by default, like `s3`: it is useless
+# without external infrastructure, which is the line this workspace draws
+# between opt-in and opt-out features.
+#
+# It adds exactly ONE crate — `urlencoding`, already in the tree for ferum-web.
+# `GcsStorageService` speaks the GCS XML API over the `reqwest` this crate
+# already links and signs its OAuth assertion with the `jsonwebtoken` it already
+# links. The published clients were measured against this workspace's lock file
+# and rejected on weight: `google-cloud-storage` 1.17 pulls 178 crates (27 names
+# new here, including tonic/prost/OpenTelemetry) and `gcloud-storage` 1.3 pulls
+# 148 — and BOTH force a second major of `reqwest` (0.13 against our 0.12), the
+# exact silent duplication the workspace dependency table exists to prevent.
+gcs = ["dep:urlencoding"]
 meilisearch = ["dep:meilisearch-sdk"]
 script_plugins = ["dep:boa_engine"]
 # The OPT-IN example dataset behind the setup wizard's checkbox: demo users,
@@ -68,6 +85,11 @@ unic-langid = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 zip = { workspace = true }
+
+# Percent-encodes GCS object names per path segment. Exposes no Cargo features
+# at all, so there is no default set to trim; the workspace pin is the only
+# version statement.
+urlencoding = { workspace = true, optional = true }
 
 aws-sdk-s3 = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }

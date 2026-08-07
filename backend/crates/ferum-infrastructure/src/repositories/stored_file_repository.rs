@@ -168,6 +168,28 @@ impl StoredFileRepository for PgStoredFileRepository {
         Ok(())
     }
 
+    async fn read_data(&self, key: &str) -> Result<Option<(Vec<u8>, String)>, AppError> {
+        Ok(stored_files::Entity::find_by_id(key)
+            .one(&self.db)
+            .await?
+            .and_then(|row| row.data.map(|bytes| (bytes, row.content_type))))
+    }
+
+    async fn clear_data(&self, key: &str) -> Result<(), AppError> {
+        // `update_many` with a NULL expression rather than loading the row and
+        // saving it back: the point of this call is to stop holding the bytes,
+        // and a read-modify-write would pull them into memory to do it.
+        stored_files::Entity::update_many()
+            .col_expr(
+                stored_files::Column::Data,
+                Expr::value(sea_orm::Value::Bytes(None)),
+            )
+            .filter(stored_files::Column::Key.eq(key))
+            .exec(&self.db)
+            .await?;
+        Ok(())
+    }
+
     async fn delete_by_key(&self, key: &str) -> Result<(), AppError> {
         stored_files::Entity::delete_by_id(key)
             .exec(&self.db)

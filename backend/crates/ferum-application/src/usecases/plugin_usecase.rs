@@ -10,8 +10,8 @@ use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::validate_image_magic;
 use ferum_domain::models::plugin::{
-    NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginLog, PluginLogQuery,
-    PluginStatus, PluginTier, PluginUiSlot,
+    ui_slot_element_tag, NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginLog,
+    PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
 };
 use ferum_domain::repositories::plugin_db_repository::PluginDbGateway;
 use ferum_domain::repositories::plugin_repository::PluginRepository;
@@ -137,6 +137,29 @@ impl PluginUseCase {
                 None,
                 None,
                 &format!("Provisioned plugin schema with {} statement(s).", schema_tables.len()),
+            )
+            .await;
+        }
+
+        // Seed config from the manifest's declared defaults. Without this a plugin
+        // installs with `config = {}` however carefully its manifest describes
+        // what it wants, and the operator's first experience is a plugin that
+        // activates cleanly and then does nothing at all — no error, no log line,
+        // nothing to search for. `default` in a JSON Schema means "use this when
+        // the value is absent", and every manifest in examples/ was already
+        // written as if that were honoured here.
+        //
+        // Skipped when it yields nothing, so a plugin declaring no defaults keeps
+        // an untouched `{}` rather than gaining a log line about writing one.
+        let defaults = config_defaults_from_schema(&plugin.manifest);
+        if defaults.as_object().is_some_and(|o| !o.is_empty()) {
+            self.plugins.update_config(plugin.id, defaults).await?;
+            self.append_log(
+                plugin.id,
+                "info",
+                None,
+                None,
+                "Seeded configuration from the manifest's declared defaults.",
             )
             .await;
         }
@@ -418,7 +441,9 @@ impl PluginUseCase {
             .upsert_and_ref(&key, &content_type, size, Some(actor.id))
             .await?;
 
-        Ok(self.storage.public_url(&key))
+        // Plugin media is referenced from plugin-authored markup that this app
+        // does not rewrite — same reasoning as post attachments.
+        Ok(crate::ports::file_url(&key))
     }
 
     // ─── Active UI Slots (public — no auth, for frontend SSR) ─────────────────
@@ -500,7 +525,7 @@ impl PluginUseCase {
     async fn register_ui_slots_from_manifest(&self, plugin: &Plugin) -> Result<(), AppError> {
         self.plugins.delete_ui_slots_for_plugin(plugin.id).await?;
 
-        let slots = manifest_ui_slots(&plugin.manifest, plugin.id);
+        let slots = manifest_ui_slots(&plugin.manifest, plugin.id, &plugin.slug);
         for slot_data in slots {
             self.plugins.create_ui_slot(slot_data).await?;
         }
@@ -681,7 +706,11 @@ fn manifest_schema_tables(manifest: &serde_json::Value) -> Vec<String> {
 }
 
 /// Extract UI slot declarations from manifest ui_slots table.
-fn manifest_ui_slots(manifest: &serde_json::Value, plugin_id: Uuid) -> Vec<NewPluginUiSlot> {
+fn manifest_ui_slots(
+    manifest: &serde_json::Value,
+    plugin_id: Uuid,
+    plugin_slug: &str,
+) -> Vec<NewPluginUiSlot> {
     let ui_slots_obj = match manifest.get("ui_slots").and_then(|v| v.as_object()) {
         Some(obj) => obj,
         None => return vec![],
@@ -692,7 +721,9 @@ fn manifest_ui_slots(manifest: &serde_json::Value, plugin_id: Uuid) -> Vec<NewPl
         .enumerate()
         .filter_map(|(i, (slot_name, slot_def))| {
             let component = slot_def.get("component")?.as_str()?;
-            let custom_element_tag = slot_name_to_element_tag(slot_name);
+            // Same function the repository derives with on read, so the stored
+            // column and what the page actually renders cannot disagree.
+            let custom_element_tag = ui_slot_element_tag(plugin_slug, slot_name);
             let props: Vec<String> = slot_def
                 .get("props")
                 .and_then(|p| p.as_array())
@@ -715,6 +746,37 @@ fn manifest_ui_slots(manifest: &serde_json::Value, plugin_id: Uuid) -> Vec<NewPl
         .collect()
 }
 
+/// Build the starting config from `config_schema.properties.*.default`.
+///
+/// One level deep, deliberately: a `default` on a nested property inside an
+/// object-typed field would have to be merged into whatever the parent's own
+/// `default` already contains, and two sources writing the same path is how a
+/// seeded config ends up disagreeing with itself. A field that wants a
+/// structured starting value declares it whole, on that field.
+///
+/// Only what the manifest actually declares is written — a property with no
+/// `default` stays absent rather than becoming `null`, which for a plugin
+/// reading `Ferum.config.x` are two different answers.
+fn config_defaults_from_schema(manifest: &serde_json::Value) -> serde_json::Value {
+    let properties = manifest
+        .get("config_schema")
+        .and_then(|s| s.get("properties"))
+        .and_then(|p| p.as_object());
+
+    let Some(properties) = properties else {
+        return serde_json::json!({});
+    };
+
+    let seeded: serde_json::Map<String, serde_json::Value> = properties
+        .iter()
+        .filter_map(|(name, prop)| {
+            prop.get("default").map(|d| (name.clone(), d.clone()))
+        })
+        .collect();
+
+    serde_json::Value::Object(seeded)
+}
+
 /// Resolve `{{config.field_name}}` templates against the plugin's config JSON.
 fn resolve_config_template(template: &str, config: &serde_json::Value) -> String {
     let mut result = template.to_string();
@@ -729,12 +791,10 @@ fn resolve_config_template(template: &str, config: &serde_json::Value) -> String
     result
 }
 
-/// Derive a custom element tag name from a slot name.
-/// e.g. "thread.below_posts" → "ferum-slot-thread-below-posts"
-fn slot_name_to_element_tag(slot_name: &str) -> String {
-    let sanitized = slot_name.replace('.', "-").replace('_', "-");
-    format!("ferum-slot-{}", sanitized)
-}
+// The tag-naming rule moved to `ferum_domain::models::plugin::ui_slot_element_tag`
+// so the write path here and the repository's read path share one definition —
+// and so the slug could be folded into the name, which is what lets two plugins
+// occupy the same slot.
 
 /// Validate a config JSON value against a JSON Schema object.
 /// Returns UnprocessableEntity on validation failure.

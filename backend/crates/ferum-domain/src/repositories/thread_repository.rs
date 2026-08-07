@@ -6,48 +6,136 @@ use uuid::Uuid;
 use crate::models::thread::{Thread, ThreadStatus};
 use crate::AppError;
 
-/// Sort/filter preset for thread listing pages (implements F-ORG-04).
-#[derive(Debug, Clone, Default, PartialEq)]
+/// How a thread listing is ORDERED (implements F-ORG-04).
+///
+/// This enum controls `ORDER BY` and **nothing else**. Narrowing the result set
+/// is [`ThreadFeedFilter`]'s job, and the separation is load-bearing: these two
+/// used to be one enum, which made them mutually exclusive in the URL and so
+/// made "unanswered threads, newest first" — the single most useful query a
+/// contributor can ask a forum — unexpressible. It also meant one tab strip
+/// mixed controls that reorder the list with controls that make rows vanish,
+/// under identical affordances.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ThreadSort {
-    /// Most recently active (pinned first, then last_post_at DESC). Default.
+    /// Most recently active (last_post_at DESC). Default.
     #[default]
-    Latest,
-    /// By creation date (pinned first, then created_at DESC).
+    Activity,
+    /// By creation date (created_at DESC).
     Newest,
-    /// By engagement (pinned first, then reply_count DESC).
-    Hottest,
-    /// Open threads with no replies (reply_count = 0, created_at DESC).
-    Unanswered,
-    /// Threads marked as solved (is_solved = true, last_post_at DESC).
-    Solved,
+    /// By volume of discussion (reply_count DESC, then view_count DESC).
+    ///
+    /// Deliberately NOT called "hottest": there is no time decay here, so this
+    /// ranks by all-time discussion volume, not by what is currently busy. The
+    /// label follows the query rather than the other way round.
+    MostReplies,
 }
 
 impl ThreadSort {
+    /// Ordering alone, for callers with no filter axis (the admin thread list).
+    /// Defined through [`parse_feed_query`] so the legacy vocabulary has exactly
+    /// one definition.
     pub fn from_str(s: &str) -> Self {
-        match s {
-            "newest" => Self::Newest,
-            "hottest" => Self::Hottest,
-            "unanswered" => Self::Unanswered,
-            "solved" => Self::Solved,
-            _ => Self::Latest,
-        }
+        parse_feed_query(Some(s), None).0
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Latest => "latest",
+            Self::Activity => "activity",
             Self::Newest => "newest",
-            Self::Hottest => "hottest",
+            Self::MostReplies => "most_replies",
+        }
+    }
+}
+
+/// How a thread listing is NARROWED. Controls `WHERE`, never `ORDER BY`.
+///
+/// The two variants are mutually exclusive by construction, which matches the
+/// data: a thread with zero replies cannot have a best answer, so `Unanswered`
+/// and `Solved` can never both hold.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ThreadFeedFilter {
+    /// No narrowing.
+    #[default]
+    All,
+    /// Open threads nobody has replied to yet.
+    Unanswered,
+    /// Threads whose author or a moderator marked a best answer.
+    Solved,
+}
+
+impl ThreadFeedFilter {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::All => "all",
             Self::Unanswered => "unanswered",
             Self::Solved => "solved",
         }
     }
 }
 
+/// Reads the `?sort=` / `?filter=` pair off a listing URL, accepting both the
+/// current vocabulary and the pre-split one.
+///
+/// The third element is `true` when the input used the legacy vocabulary, so an
+/// HTML handler can answer 301 with the canonical URL. Every legacy value is
+/// still accepted forever — those URLs are bookmarked, linked from posts, and
+/// indexed by search engines, and dropping them would fail silently: the request
+/// would quietly fall back to the default listing with no error anywhere.
+///
+/// This lives in the domain, and is the ONLY place that knows the old spelling.
+/// It is pure — no DB, no HTTP — which is what makes it cheap to test
+/// exhaustively.
+pub fn parse_feed_query(
+    sort: Option<&str>,
+    filter: Option<&str>,
+) -> (ThreadSort, ThreadFeedFilter, bool) {
+    let mut legacy = false;
+
+    let (sort_from_legacy, filter_from_legacy) = match sort {
+        // Pre-split spellings. The two that were really filters carry no sort of
+        // their own, so they resolve to the default ordering they used to have.
+        Some("latest") => {
+            legacy = true;
+            (Some(ThreadSort::Activity), None)
+        }
+        Some("hottest") => {
+            legacy = true;
+            (Some(ThreadSort::MostReplies), None)
+        }
+        Some("unanswered") => {
+            legacy = true;
+            (Some(ThreadSort::Activity), Some(ThreadFeedFilter::Unanswered))
+        }
+        Some("solved") => {
+            legacy = true;
+            (Some(ThreadSort::Activity), Some(ThreadFeedFilter::Solved))
+        }
+        _ => (None, None),
+    };
+
+    let resolved_sort = sort_from_legacy.unwrap_or(match sort {
+        Some("newest") => ThreadSort::Newest,
+        Some("most_replies") => ThreadSort::MostReplies,
+        _ => ThreadSort::Activity,
+    });
+
+    // An explicit `?filter=` always wins over one implied by a legacy `?sort=`:
+    // a caller writing the new vocabulary is stating intent, and mixing the two
+    // is what a half-updated bookmark looks like.
+    let resolved_filter = match filter {
+        Some("unanswered") => ThreadFeedFilter::Unanswered,
+        Some("solved") => ThreadFeedFilter::Solved,
+        Some(_) | None => filter_from_legacy.unwrap_or_default(),
+    };
+
+    (resolved_sort, resolved_filter, legacy)
+}
+
 /// Filter bag passed to all thread list repository methods.
 #[derive(Debug, Clone, Default)]
 pub struct ThreadFilter {
     pub sort: ThreadSort,
+    pub filter: ThreadFeedFilter,
 }
 
 /// Filter bag for the admin thread listing page. All fields are optional;

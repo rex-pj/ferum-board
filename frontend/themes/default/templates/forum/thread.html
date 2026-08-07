@@ -52,7 +52,7 @@
 <div class="card mb-3">
   <div class="card-body d-flex align-items-center gap-3 py-2">
     {% if review_product.primary_image_key %}
-      <img src="/files/{{ review_product.primary_image_key }}" alt="{{ review_product.name }}"
+      <img src="{{ file_url(key=review_product.primary_image_key) }}" alt="{{ review_product.name }}"
            class="rounded flex-shrink-0" style="width:56px;height:56px;object-fit:cover">
     {% else %}
       <span class="rounded bg-body-tertiary d-inline-flex align-items-center justify-content-center flex-shrink-0"

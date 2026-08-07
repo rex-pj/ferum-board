@@ -175,3 +175,185 @@ async fn activate_registers_no_hooks_when_none_were_granted() {
     let result = b.build().activate(&actor, "com.example.test-plugin").await;
     assert!(result.is_ok(), "activate should succeed: {:?}", result);
 }
+
+// ─── Config seeding from manifest defaults ───────────────────────────────────
+//
+// A plugin used to install with `config = {}` no matter what its manifest
+// declared, so `home-hero` activated cleanly and rendered nothing: no error, no
+// log line, nothing to search for. `default` in a JSON Schema means "use this
+// when the value is absent", and every manifest under examples/ was written as
+// if install honoured it.
+//
+// These drive the real `register_extracted`, so they cover the wiring (is the
+// seed written at all, before the status flips to Inactive?) and not just the
+// pure extraction step.
+
+/// Wires up the create → seed → status → reload path shared by the tests below,
+/// capturing whatever config the use case decides to write.
+fn expect_register(
+    b: &mut Uc,
+    plugin_id: Uuid,
+    manifest: serde_json::Value,
+    seen_config: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
+) {
+    let created = make_plugin(plugin_id, manifest, serde_json::json!({}));
+
+    b.plugins.expect_find_by_slug().returning(|_| Ok(None));
+    b.plugins.expect_create().returning({
+        let created = created.clone();
+        move |_| Ok(created.clone())
+    });
+    b.plugins.expect_update_status().returning(|_, _, _| Ok(()));
+    b.plugins.expect_append_log().returning(|_| Ok(()));
+    b.plugins.expect_find_by_id().returning(move |_| Ok(Some(created.clone())));
+    b.plugins.expect_update_config().returning(move |_, config| {
+        seen_config.lock().unwrap().push(config);
+        Ok(())
+    });
+}
+
+async fn register(uc: PluginUseCase, manifest: serde_json::Value) {
+    let actor = AuthUserBuilder::admin().build();
+    uc.register_extracted(
+        &actor,
+        "com.example.test-plugin".to_string(),
+        "Test Plugin".to_string(),
+        "1.0.0".to_string(),
+        PluginTier::Script,
+        manifest,
+        "/tmp/plugins/com.example.test-plugin".to_string(),
+        serde_json::json!({}),
+    )
+    .await
+    .expect("register_extracted should succeed");
+}
+
+#[tokio::test]
+async fn install_seeds_config_from_declared_defaults() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = Uc::new();
+    expect_register(
+        &mut b,
+        Uuid::new_v4(),
+        serde_json::json!({
+            "config_schema": {
+                "type": "object",
+                "properties": {
+                    "message":     { "type": "string",  "default": "Welcome to the forum!" },
+                    "dismissible": { "type": "boolean", "default": true },
+                    "max_history": { "type": "integer", "default": 50 }
+                }
+            }
+        }),
+        Arc::clone(&seen),
+    );
+
+    register(b.build(), serde_json::json!({})).await;
+
+    let written = seen.lock().unwrap();
+    assert_eq!(written.len(), 1, "install must write the seed exactly once");
+    assert_eq!(
+        written[0],
+        serde_json::json!({
+            "message": "Welcome to the forum!",
+            "dismissible": true,
+            "max_history": 50
+        }),
+        "every declared default must be seeded, with its JSON type preserved — \
+         a boolean seeded as the string \"true\" is a config a plugin cannot read"
+    );
+}
+
+/// `home-hero` seeds an object of per-locale copy and an empty tile array. The
+/// nested structure has to survive intact: a seeder that only copied scalars
+/// would leave the masthead with no text, which is the exact bug this replaced.
+#[tokio::test]
+async fn structured_defaults_are_seeded_whole() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = Uc::new();
+    expect_register(
+        &mut b,
+        Uuid::new_v4(),
+        serde_json::json!({
+            "config_schema": {
+                "properties": {
+                    "tiles":   { "type": "array",  "default": [] },
+                    "locales": {
+                        "type": "object",
+                        "default": { "en": { "title": "Hello", "primary_cta": { "label": "Go", "href": "/x" } } }
+                    }
+                }
+            }
+        }),
+        Arc::clone(&seen),
+    );
+
+    register(b.build(), serde_json::json!({})).await;
+
+    let written = seen.lock().unwrap();
+    assert_eq!(
+        written[0]["locales"]["en"]["primary_cta"]["href"],
+        serde_json::json!("/x"),
+        "a nested default must be seeded whole, not flattened or dropped"
+    );
+    assert_eq!(
+        written[0]["tiles"],
+        serde_json::json!([]),
+        "an empty array is a meaningful default and must not be treated as absent"
+    );
+}
+
+/// A property with no `default` stays absent rather than becoming `null`: for a
+/// plugin reading `Ferum.config.x` those are different answers, and a seeded
+/// null would also fail a `required` check the manifest never intended to fail.
+#[tokio::test]
+async fn properties_without_a_default_are_not_seeded_as_null() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut b = Uc::new();
+    expect_register(
+        &mut b,
+        Uuid::new_v4(),
+        serde_json::json!({
+            "config_schema": {
+                "properties": {
+                    "webhook_url": { "type": "string" },
+                    "enabled":     { "type": "boolean", "default": false }
+                }
+            }
+        }),
+        Arc::clone(&seen),
+    );
+
+    register(b.build(), serde_json::json!({})).await;
+
+    let written = seen.lock().unwrap();
+    assert_eq!(written[0], serde_json::json!({ "enabled": false }));
+    assert!(
+        written[0].get("webhook_url").is_none(),
+        "a property with no declared default must be absent, not null"
+    );
+    // `false` is a legitimate default and must not be skipped as "empty".
+    assert_eq!(written[0]["enabled"], serde_json::json!(false));
+}
+
+/// Most plugins declare no config at all. No write, so nothing overwrites the
+/// DB's own `'{}'` default and no log line claims a seed that did not happen.
+#[tokio::test]
+async fn nothing_is_written_when_the_manifest_declares_no_defaults() {
+    for manifest in [
+        serde_json::json!({}),
+        serde_json::json!({ "config_schema": { "type": "object", "required": [] } }),
+        serde_json::json!({ "config_schema": { "properties": { "url": { "type": "string" } } } }),
+    ] {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut b = Uc::new();
+        expect_register(&mut b, Uuid::new_v4(), manifest.clone(), Arc::clone(&seen));
+
+        register(b.build(), serde_json::json!({})).await;
+
+        assert!(
+            seen.lock().unwrap().is_empty(),
+            "update_config must not be called for manifest {manifest}"
+        );
+    }
+}

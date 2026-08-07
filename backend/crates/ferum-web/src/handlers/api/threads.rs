@@ -15,7 +15,7 @@ use ferum_application::constants::MAX_THUMBNAIL_BYTES;
 use ferum_application::permission::PermissionChecker;
 use ferum_application::shared::AppError;
 use ferum_application::usecases::thread_usecase::CreateThreadCmd;
-use ferum_domain::repositories::thread_repository::ThreadSort;
+use ferum_domain::repositories::thread_repository::parse_feed_query;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,16 +49,19 @@ pub async fn list_feed(
 ) -> HandlerResult<impl IntoResponse> {
     let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
 
-    let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
+    // No redirect here, unlike the HTML pages: an API client following a 301 is
+    // best case a wasted round trip and worst case a broken integration, and
+    // there is no search index to keep clean. Legacy spellings simply keep working.
+    let (sort, feed_filter, _legacy) = parse_feed_query(q.sort.as_deref(), q.filter.as_deref());
     let (threads, total) = if let Some(tag_slug) = &q.tag {
         state
             .thread
-            .list_by_tag(auth_user.as_ref(), tag_slug, sort, page, per_page)
+            .list_by_tag(auth_user.as_ref(), tag_slug, sort, feed_filter, page, per_page)
             .await?
     } else {
         state
             .thread
-            .list_feed(auth_user.as_ref(), sort, page, per_page)
+            .list_feed(auth_user.as_ref(), sort, feed_filter, page, per_page)
             .await?
     };
 
@@ -78,10 +81,10 @@ pub async fn list_threads(
 ) -> HandlerResult<impl IntoResponse> {
     let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
 
-    let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
+    let (sort, feed_filter, _legacy) = parse_feed_query(q.sort.as_deref(), q.filter.as_deref());
     let (threads, total) = state
         .thread
-        .list_by_category(auth_user.as_ref(), &category_slug, sort, page, per_page)
+        .list_by_category(auth_user.as_ref(), &category_slug, sort, feed_filter, page, per_page)
         .await?;
 
     Ok(Json(PagedResponse::new(

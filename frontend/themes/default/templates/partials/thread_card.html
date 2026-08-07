@@ -5,7 +5,7 @@
     <img src="{{ thread.thumbnail_url }}" class="fr-thread-thumb d-none d-sm-block" alt="" loading="lazy">
   {% elif thread.review_product_image %}
     {# Review with no thumbnail of its own → show the reviewed product's cover. #}
-    <img src="/files/{{ thread.review_product_image }}" class="fr-thread-thumb d-none d-sm-block" alt="" loading="lazy">
+    <img src="{{ file_url(key=thread.review_product_image) }}" class="fr-thread-thumb d-none d-sm-block" alt="" loading="lazy">
   {% endif %}
 
   <div class="fr-thread-body">

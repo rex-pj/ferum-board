@@ -10,7 +10,7 @@
 <div class="card">
   {# ── Filter bar ──────────────────────────────────────────────── #}
   {% set has_filters = status_filter or category_id_filter or author_id_filter or date_from_filter or date_to_filter %}
-  {% set any_active = search_query or has_filters or (sort_by and sort_by != "latest") %}
+  {% set any_active = search_query or has_filters or (sort_by and sort_by != "activity") %}
 
   <div class="card-header p-0">
     <form method="get" action="/admin/threads">
@@ -55,9 +55,9 @@
         <div class="adm-filter-row px-3 py-2">
 
           <select name="sort_by" class="form-select form-select-sm" style="width:auto">
-            <option value="latest"  {% if sort_by == "latest" or not sort_by %}selected{% endif %}>{{ t(k="adm-latest-activity") }}</option>
+            <option value="activity"  {% if sort_by == "activity" or not sort_by %}selected{% endif %}>{{ t(k="adm-latest-activity") }}</option>
             <option value="newest"  {% if sort_by == "newest"  %}selected{% endif %}>{{ t(k="adm-newest") }}</option>
-            <option value="hottest" {% if sort_by == "hottest" %}selected{% endif %}>{{ t(k="adm-most-replies") }}</option>
+            <option value="most_replies" {% if sort_by == "most_replies" %}selected{% endif %}>{{ t(k="adm-most-replies") }}</option>
           </select>
 
           <div class="vr opacity-25 align-self-stretch"></div>

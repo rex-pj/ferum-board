@@ -24,8 +24,12 @@ pub struct ThreadListQuery {
     pub page: Option<u64>,
     pub per_page: Option<u64>,
     pub tag: Option<String>,
-    /// Sort preset: latest (default) | newest | hottest | unanswered | solved
+    /// Ordering: `activity` (default) | `newest` | `most_replies`.
+    /// The pre-split spellings (`latest`, `hottest`, `unanswered`, `solved`) are
+    /// still accepted — see `parse_feed_query`.
     pub sort: Option<String>,
+    /// Narrowing: `unanswered` | `solved`. Absent = every thread.
+    pub filter: Option<String>,
 }
 
 // ─── Nested response types ─────────────────────────────────────────────────────

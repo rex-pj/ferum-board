@@ -242,7 +242,9 @@ impl UserUseCase {
             }
         }
 
-        Ok(self.storage.public_url(&key))
+        // Same form the repository returns on read, so an avatar has ONE URL
+        // whether you just uploaded it or reloaded the page. See `ports::file_url`.
+        Ok(crate::ports::file_url(&key))
     }
 
     // ─── Cover — CAS upload flow ──────────────────────────────────────────────
@@ -292,7 +294,9 @@ impl UserUseCase {
             }
         }
 
-        Ok(self.storage.public_url(&key))
+        // Same form the repository returns on read, so an avatar has ONE URL
+        // whether you just uploaded it or reloaded the page. See `ports::file_url`.
+        Ok(crate::ports::file_url(&key))
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]

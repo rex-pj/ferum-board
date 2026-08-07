@@ -134,14 +134,6 @@ error-logo-too-large = Logo phải nhỏ hơn hoặc bằng { $limit_mb } MB.
 error-logo-invalid-type = Logo phải là ảnh JPEG, PNG, WebP hoặc GIF.
 error-favicon-too-large = Favicon phải nhỏ hơn hoặc bằng { $limit_kb } KB.
 error-favicon-invalid-type = Favicon phải là ảnh ICO, PNG, GIF hoặc JPEG. Không chấp nhận SVG.
-error-hero-image-too-large = Mỗi ảnh hero trang chủ phải nhỏ hơn hoặc bằng { $limit_mb } MB.
-error-hero-image-invalid-type = Ảnh hero phải là ảnh JPEG, PNG, WebP hoặc GIF.
-error-hero-tiles-full = Hero trang chủ chỉ chứa { $limit } ảnh. Hãy xoá bớt một ảnh trước khi thêm.
-error-hero-image-unknown = Ảnh này không nằm trong số ảnh hero đã tải lên. Hãy tải lại trang và thử lại.
-error-hero-image-duplicate = Không thể dùng cùng một ảnh cho hai ô hero.
-error-hero-link-invalid = Liên kết hero phải bắt đầu bằng / hoặc http:// hoặc https://.
-error-hero-link-too-long = Liên kết hero phải có tối đa { $limit } ký tự.
-error-hero-caption-too-long = Chú thích hero phải có tối đa { $limit } ký tự.
 
 ## ─── Hồ sơ & tùy chọn ────────────────────────────────────────────────────────
 

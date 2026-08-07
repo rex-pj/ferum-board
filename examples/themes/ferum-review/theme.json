@@ -2,7 +2,7 @@
   "slug": "ferum-review",
   "name": "Ferum Review",
   "author": "Ferum Board",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Minimalist, data-driven skin for interior & building-material review boards: slate structure, warm concrete surfaces, amber rating accent. Child of the default theme.",
   "parent": "default",
   "color_scheme": "light"

@@ -896,3 +896,72 @@ async fn every_catalogue_tab_renders_the_rails_review_panel() {
         );
     }
 }
+
+// ─── file_url() ──────────────────────────────────────────────────────────────
+//
+// Templates stopped hand-assembling `/files/{{ key }}` and now call the
+// `file_url()` Tera function, so that `ports::file_url` stays the single
+// definition of the resolver path. That move introduced a failure mode the
+// parse-only guards in `tera_templates.rs` cannot see: Tera parses a call to an
+// unregistered function perfectly happily and only fails when the template is
+// rendered. A missing registration would therefore ship as a 500 on the product
+// page rather than a build error.
+
+/// Tera auto-escapes `/` to `&#x2F;` in HTML output, so a rendered `src` reads
+/// `&#x2F;files&#x2F;…`. Browsers decode character references inside attribute
+/// values, so this resolves correctly — and it is not new: the old
+/// `src="/files/{{ key }}"` already escaped the slashes *inside* the key the
+/// same way. Escaping is kept rather than piped through `| safe`, which would
+/// let a storage key containing a quote break out of the attribute.
+fn decode_slashes(html: &str) -> String {
+    html.replace("&#x2F;", "/")
+}
+
+#[tokio::test]
+async fn a_product_with_an_image_renders_the_resolver_path() {
+    // Every other product fixture in this file carries `primary_image_key:
+    // null`, so the `{% if %}` guarding the `<img>` was never taken and the call
+    // was never rendered. Supplying a key is the whole point of this test.
+    let mut with_image = product("Milano Sofa", "milano-sofa");
+    with_image["primary_image_key"] =
+        json!("products/0123456789abcdef0123456789abcdef.jpg");
+
+    let mut ctx = catalog_ctx();
+    ctx.insert("products", &json!([with_image]));
+
+    let html = render_catalog(&ctx).await;
+
+    assert!(
+        decode_slashes(&html)
+            .contains(r#"src="/files/products/0123456789abcdef0123456789abcdef.jpg""#),
+        "file_url() must be registered and must mint the resolver path; got:\n{html}"
+    );
+}
+
+#[tokio::test]
+async fn file_url_is_registered_for_every_installed_locale() {
+    // `TeraEngine` builds one Tera per locale. A function registered on only the
+    // default instance would leave the Vietnamese catalogue page rendering a
+    // 500 while English worked — the kind of fault that reaches production
+    // because nobody browses in the second language.
+    let mut with_image = product("Ghế Milano", "ghe-milano");
+    with_image["primary_image_key"] = json!("products/aaaabbbbccccddddeeeeffff00001111.jpg");
+
+    let mut ctx = catalog_ctx();
+    ctx.insert("products", &json!([with_image]));
+
+    let html = engine()
+        .await
+        .render(
+            &Locale::parse("vi").expect("vi is a valid tag"),
+            "default/templates/catalog/index.html",
+            &ctx,
+        )
+        .await
+        .expect("catalog/index.html must render in Vietnamese too");
+
+    assert!(
+        decode_slashes(&html).contains("/files/products/aaaabbbbccccddddeeeeffff00001111.jpg"),
+        "file_url() is missing from the `vi` Tera instance"
+    );
+}

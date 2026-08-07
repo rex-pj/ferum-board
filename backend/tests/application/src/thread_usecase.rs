@@ -43,6 +43,8 @@ impl StoredFileRepository for SpyStoredFiles {
     async fn upsert_and_ref(&self, _: &str, _: &str, _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
     async fn upsert_staged(&self, _: &str, _: &str, _: i64, _: Option<uuid::Uuid>) -> Result<(), AppError> { Ok(()) }
     async fn increment_ref(&self, _: &str) -> Result<(), AppError> { Ok(()) }
+    async fn read_data(&self, _: &str) -> Result<Option<(Vec<u8>, String)>, AppError> { Ok(None) }
+    async fn clear_data(&self, _: &str) -> Result<(), AppError> { Ok(()) }
     async fn decrement_ref(&self, key: &str) -> Result<i32, AppError> {
         self.dereferenced.lock().unwrap().push(key.to_string());
         Ok(0)
@@ -662,7 +664,7 @@ async fn list_feed_excludes_reviews_category_for_guest() {
 
     let result = b
         .build()
-        .list_feed(None, ferum_domain::repositories::thread_repository::ThreadSort::Latest, 1, 20)
+        .list_feed(None, ferum_domain::repositories::thread_repository::ThreadSort::Activity, ferum_domain::repositories::thread_repository::ThreadFeedFilter::All, 1, 20)
         .await;
     assert!(result.is_ok(), "guest feed should build without the reviews category");
 }
@@ -697,7 +699,7 @@ async fn list_feed_keeps_reviews_when_user_explicitly_watches_it() {
 
     let result = b
         .build()
-        .list_feed(Some(&actor), ferum_domain::repositories::thread_repository::ThreadSort::Latest, 1, 20)
+        .list_feed(Some(&actor), ferum_domain::repositories::thread_repository::ThreadSort::Activity, ferum_domain::repositories::thread_repository::ThreadFeedFilter::All, 1, 20)
         .await;
     assert!(result.is_ok(), "an explicit watch on reviews must survive the exclusion");
 }

@@ -2,7 +2,7 @@
   "slug": "ferum-sumi",
   "name": "Ferum Sumi",
   "author": "Ferum Board",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Japanese-inspired theme: washi paper background, sumi ink type, a vermillion hanko accent. Demonstrates CSS + HTML template customization.",
   "parent": "default",
   "color_scheme": "light"

@@ -109,7 +109,10 @@ pub async fn threads(
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("search_query", &search);
     ctx.insert("status_filter", &status_filter);
-    ctx.insert("sort_by", &q.sort_by.clone().unwrap_or_else(|| "latest".to_string()));
+    // Echo the PARSED sort, not the raw input: a bookmark still holding a
+    // pre-split spelling then lights up the right option in the dropdown instead
+    // of showing nothing selected while the list is in fact sorted.
+    ctx.insert("sort_by", sort.as_str());
     ctx.insert("category_options", &category_options);
     ctx.insert("category_id_filter", &category_id.map(|c| c.to_string()).unwrap_or_default());
     ctx.insert("author_id_filter", &author_id.map(|a| a.to_string()).unwrap_or_default());

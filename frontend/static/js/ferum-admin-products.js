@@ -582,7 +582,7 @@
     if (!items.length) { g.innerHTML = '<span class="text-muted small">No images yet.</span>'; return; }
     g.innerHTML = items.map(function (md) {
       return '<div class="fr-thumb">' +
-        '<img src="/files/' + escapeHtml(md.storage_key) + '" alt="">' +
+        '<img src="' + escapeHtml(md.url) + '" alt="">' +
         '<button type="button" class="fr-thumb-remove" data-media="' + md.id + '" ' +
         'title="Remove image" aria-label="Remove image">&times;</button></div>';
     }).join('');

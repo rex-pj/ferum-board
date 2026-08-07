@@ -1,7 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::middleware::AuthUser;
 use ferum_application::constants::MAX_PAGE;
+use ferum_domain::repositories::thread_repository::{ThreadFeedFilter, ThreadSort};
 
 /// A single rendered plugin Web Component element for a UI slot.
 /// Pre-rendered as HTML so Tera can output it with `{{ slot.html | safe }}`.
@@ -74,6 +75,128 @@ impl CurrentUserCtx {
 impl From<&AuthUser> for CurrentUserCtx {
     fn from(u: &AuthUser) -> Self {
         Self::from_auth(u, 0)
+    }
+}
+
+// ─── Thread feed controls ─────────────────────────────────────────────────────
+//
+// The listing has two independent axes — ORDER (sort tabs) and NARROWING (filter
+// chips) — and every link has to carry the axis the reader did *not* just touch,
+// or clicking a sort silently discards their filter. Building those URLs here
+// rather than in Tera is deliberate on three counts: the rule has one definition
+// instead of one per theme, it is unit-testable without rendering anything, and
+// a theme author cannot get it subtly wrong while still producing a page that
+// looks right.
+
+/// Query-string tail carrying every non-default axis, each part keeping its
+/// leading `&` so callers can append it after an existing `?page=N`.
+///
+/// Defaults are omitted so the default view stays at the bare URL instead of a
+/// second address rendering identical content.
+pub fn feed_query_tail(
+    sort: ThreadSort,
+    filter: ThreadFeedFilter,
+    tag: Option<&str>,
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(tag) = tag {
+        parts.push(format!("&tag={tag}"));
+    }
+    if sort != ThreadSort::default() {
+        parts.push(format!("&sort={}", sort.as_str()));
+    }
+    if filter != ThreadFeedFilter::default() {
+        parts.push(format!("&filter={}", filter.as_str()));
+    }
+    parts.join("")
+}
+
+/// A full listing URL. Also the 301 target when a request arrives spelled the
+/// pre-split way.
+pub fn feed_url(
+    base: &str,
+    sort: ThreadSort,
+    filter: ThreadFeedFilter,
+    tag: Option<&str>,
+) -> String {
+    match feed_query_tail(sort, filter, tag).strip_prefix('&') {
+        Some(rest) => format!("{base}?{rest}"),
+        None => base.to_string(),
+    }
+}
+
+/// One control in the feed's tab strip or chip row.
+#[derive(Serialize, Clone)]
+pub struct FeedControlCtx {
+    /// Wire value of this axis — `activity`, `unanswered`, …
+    pub key: String,
+    /// Where clicking goes. For a chip that is already `on`, this is the URL
+    /// with the filter REMOVED — that is what makes it a toggle without a line
+    /// of JavaScript.
+    pub href: String,
+    /// `ui-*` catalog key for the visible label.
+    pub label_key: String,
+    /// `ui-*` catalog key for the tooltip that says what the query really does.
+    pub hint_key: String,
+    /// FontAwesome class.
+    pub icon: String,
+    pub active: bool,
+}
+
+/// Both axes of the thread feed's controls, ready to render.
+#[derive(Serialize, Clone)]
+pub struct FeedControlsCtx {
+    /// Reorder the list. Nothing disappears.
+    pub sorts: Vec<FeedControlCtx>,
+    /// Narrow the list. Rows disappear.
+    pub filters: Vec<FeedControlCtx>,
+}
+
+impl FeedControlsCtx {
+    pub fn build(base_url: &str, sort: ThreadSort, filter: ThreadFeedFilter) -> Self {
+        let sorts = [
+            (ThreadSort::Activity, "fa-clock-rotate-left", "ui-sort-activity"),
+            (ThreadSort::Newest, "fa-calendar-plus", "ui-sort-newest"),
+            (ThreadSort::MostReplies, "fa-comments", "ui-sort-most-discussed"),
+        ]
+        .into_iter()
+        .map(|(candidate, icon, label_key)| FeedControlCtx {
+            key: candidate.as_str().to_string(),
+            // The active filter rides along, so changing the order never
+            // silently drops the narrowing the reader asked for.
+            href: feed_url(base_url, candidate, filter, None),
+            label_key: label_key.to_string(),
+            hint_key: format!("{label_key}-hint"),
+            icon: icon.to_string(),
+            active: candidate == sort,
+        })
+        .collect();
+
+        let filters = [
+            (ThreadFeedFilter::Unanswered, "fa-comment-slash", "ui-unanswered", "ui-filter-unanswered-hint"),
+            (ThreadFeedFilter::Solved, "fa-circle-check", "ui-solved", "ui-filter-solved-hint"),
+        ]
+        .into_iter()
+        .map(|(candidate, icon, label_key, hint_key)| {
+            let on = candidate == filter;
+            FeedControlCtx {
+                key: candidate.as_str().to_string(),
+                // Pressing an active chip clears it; the sort survives either way.
+                href: feed_url(
+                    base_url,
+                    sort,
+                    if on { ThreadFeedFilter::All } else { candidate },
+                    None,
+                ),
+                label_key: label_key.to_string(),
+                hint_key: hint_key.to_string(),
+                icon: icon.to_string(),
+                active: on,
+            }
+        })
+        .collect();
+
+        Self { sorts, filters }
     }
 }
 
@@ -437,31 +560,6 @@ pub struct NavCategoryCtx {
     pub name: String,
     pub color: Option<String>,
     pub children: Vec<NavCategoryCtx>,
-}
-
-/// One admin-curated tile in the homepage masthead mosaic.
-///
-/// This is both the shape persisted as JSON in the `home_hero_tiles` site_config
-/// key and the shape handed to the template, deliberately: a second near-identical
-/// struct to convert between would be two places to forget a field.
-///
-/// Curation exists because the automatic fallback — pulling `primary_image_key`
-/// off the top-rated products — cannot judge a photograph. When an operator has
-/// set tiles here they win outright; when the list is empty the homepage reverts
-/// to the automatic selection, so a fresh install still gets a populated masthead.
-#[derive(Serialize, Deserialize, Clone, Default)]
-pub struct HeroTileCtx {
-    /// CAS URL (`/files/<key>`) of the uploaded image. The upload endpoint is the
-    /// only writer, which is what lets the save endpoint treat any URL it has not
-    /// seen before as an injection attempt.
-    pub image_url: String,
-    /// Where the tile navigates. Empty means "render the photo, don't link it" —
-    /// validated by `is_safe_external_link`, never rendered raw from user input.
-    #[serde(default)]
-    pub link: String,
-    /// Overlay text. Doubles as the link's accessible name when `link` is set.
-    #[serde(default)]
-    pub caption: String,
 }
 
 /// One row of the homepage "latest reviews" panel.

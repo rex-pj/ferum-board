@@ -83,16 +83,3 @@ impl From<f64> for TransArg {
 pub fn error_key(code: &str) -> String {
     format!("error-{}", code.replace('_', "-"))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn error_key_is_kebab_cased_and_prefixed() {
-        assert_eq!(error_key("thread_locked"), "error-thread-locked");
-        assert_eq!(error_key("not_author"), "error-not-author");
-        // Already single-word codes still get the namespace prefix.
-        assert_eq!(error_key("unauthorized"), "error-unauthorized");
-    }
-}

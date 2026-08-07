@@ -70,6 +70,23 @@ pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     .await
     .is_ok();
 
+    // Read from the cached background probe — never probed here. A readiness
+    // endpoint that makes an outbound request per call is an amplifier: anyone
+    // who can reach it can make this process hammer the object store.
+    //
+    // `"checking"` until the first probe lands, which is a real state and not a
+    // failure. Reported but deliberately NOT part of `db_ok`: unreadable uploads
+    // are a degraded site, not an unusable one. Text, login and moderation all
+    // still work, and pulling the instance out of rotation over broken images
+    // would convert a partial outage into a total one.
+    let uploads = state
+        .upload_read_status
+        .read()
+        .await
+        .as_ref()
+        .map(|probe| probe.label())
+        .unwrap_or("checking");
+
     let status = if db_ok {
         StatusCode::OK
     } else {
@@ -82,6 +99,10 @@ pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
             "status": if db_ok { "ready" } else { "unavailable" },
             "database": if db_ok { "ok" } else { "unreachable" },
             "cache": if cache_ok { "ok" } else { "unreachable" },
+            // "same-origin" | "readable" | "forbidden" | "unknown" | "checking".
+            // `forbidden` means every uploaded image on the site is a broken
+            // link — worth alerting on, but see above for why it is not a 503.
+            "uploads": uploads,
         })),
     )
 }

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 
-use ferum_application::ports::{StorageService, LEGACY_FILES_PREFIX};
+use ferum_application::ports::{StorageService, FILES_PREFIX};
 use ferum_domain::AppError;
 
 /// No-op `StorageService` for tests where blob bytes are not the subject.
@@ -23,12 +23,12 @@ impl StorageService for NoopStorageService {
     }
 
     fn public_url(&self, key: &str) -> String {
-        format!("{LEGACY_FILES_PREFIX}{key}")
+        format!("{FILES_PREFIX}{key}")
     }
 
     fn key_from_url(&self, url: &str) -> Option<String> {
-        url.rfind(LEGACY_FILES_PREFIX)
-            .map(|i| url[i + LEGACY_FILES_PREFIX.len()..].to_string())
+        url.rfind(FILES_PREFIX)
+            .map(|i| url[i + FILES_PREFIX.len()..].to_string())
             .filter(|k| !k.is_empty())
     }
 }

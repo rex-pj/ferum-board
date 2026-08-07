@@ -67,6 +67,21 @@ pub trait StoredFileRepository: Send + Sync {
     /// Returns 0 if the key does not exist.
     async fn decrement_ref(&self, key: &str) -> Result<i32, AppError>;
 
+    /// Reads back bytes held in the row, with their content type.
+    ///
+    /// Exists for one caller: promoting a post attachment out of database
+    /// staging once a post publishes it. `None` when the row is absent or its
+    /// bytes already live in an object store.
+    async fn read_data(&self, key: &str) -> Result<Option<(Vec<u8>, String)>, AppError>;
+
+    /// Drops the bytes from the row, keeping the metadata and `ref_count`.
+    ///
+    /// The second half of promotion, and **it must run after** the object-store
+    /// write has succeeded, never before: `data` is the only copy until that
+    /// write lands, so clearing first turns a failed upload into permanent data
+    /// loss. Same ordering rule as "bytes before row" on the way in.
+    async fn clear_data(&self, key: &str) -> Result<(), AppError>;
+
     /// Permanently delete the DB row (called by GC after ref_count hits 0).
     async fn delete_by_key(&self, key: &str) -> Result<(), AppError>;
 

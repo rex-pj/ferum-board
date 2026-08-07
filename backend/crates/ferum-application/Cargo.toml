@@ -3,6 +3,10 @@ name = "ferum-application"
 version = "0.1.0"
 edition = "2021"
 
+# Tests live in `tests/application` — see the note in ferum-domain/Cargo.toml.
+[lib]
+test = false
+
 [dependencies]
 ferum-domain = { path = "../ferum-domain" }
 

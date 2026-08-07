@@ -1,0 +1,105 @@
+[meta]
+id          = "com.ferum.home-hero"
+name        = "Home Hero"
+version     = "1.0.0"
+tier        = "script"
+min_ferum   = "0.1.0"
+description = "An admin-editable homepage masthead — eyebrow, headline, sub-copy, two calls to action and a photo mosaic — served into the home_feed_top slot. Content is read live from plugin config, so editing it takes effect on the next page load with no reactivation."
+author      = "Ferum Team"
+
+# ─── Script entry point ───────────────────────────────────────────────────────
+# bundle.js is dual-purpose, the same shape as simple-chatbox:
+#   - Evaluated server-side in boa_engine: registers the `get_content` RPC
+#     handler, which returns this plugin's own config row.
+#   - Served to the browser at /plugins/com.ferum.home-hero/assets/bundle.js:
+#     registers this plugin's `home_feed_top` element, which calls that
+#     RPC and renders the masthead.
+# Each half is guarded by a typeof check so it only runs where its globals exist.
+
+[script]
+bundle_file = "bundle.js"
+
+# ─── Config schema ────────────────────────────────────────────────────────────
+# Ferum's config editor is a raw JSON textarea; it does not build a form from
+# this section. It DOES render these titles and descriptions as a field
+# reference beneath the textarea (admin/plugins/detail.html), so this is the only
+# place a rule reaches the operator who is typing the config — write for that
+# reader, not for a developer with the README open. Keep it in step with
+# README.md.
+#
+# Content is NOT delivered through [ui_slots.*].props. Props are baked into the
+# plugin_ui_slots row at activation time and `resolve_config_template`
+# ({{config.x}}) is only applied to webhook URLs, never to props — so a
+# props-carried headline would need a deactivate/activate cycle after every
+# edit. The `get_content` RPC below reads `Ferum.config` on each call instead.
+
+[config_schema]
+type     = "object"
+required = []
+
+[config_schema.properties.default_locale]
+type        = "string"
+title       = "Fallback locale"
+description = "Used when the page's language has no entry under `locales` — e.g. \"vi\". If it names a locale that is also missing, the first locale listed is used."
+default     = "en"
+
+[config_schema.properties.locales]
+type        = "object"
+title       = "Masthead text, per language"
+description = "Keyed by language code and matched against the page's language: exact first, then the base subtag (a page in \"en-US\" uses \"en\"). Each entry may set eyebrow, title, subtitle, primary_cta and secondary_cta; the last two are { label, href }. Anything you leave out is simply not drawn. Links must start with / or with http:// or https:// — anything else is dropped when the masthead renders."
+
+# Seeded into the plugin's config at install (see `config_defaults_from_schema`),
+# so activating it produces a real masthead rather than a blank homepage the
+# operator has to diagnose. Placeholder copy that is obviously meant to be
+# rewritten beats an empty page that looks like the plugin is broken.
+#
+# Sub-tables rather than one inline table: TOML inline tables must fit on a
+# single line, and this is four paragraphs across two languages.
+
+[config_schema.properties.locales.default.en]
+eyebrow   = "Material & furniture reviews"
+title     = "Real reviews from the people who built it"
+subtitle  = "Architects, contractors and homeowners log the numbers that matter: how it wears, how it handles damp, how hard it was to fit, and what it actually cost per m²."
+primary_cta   = { label = "Write a review",  href = "/new-thread" }
+secondary_cta = { label = "Product catalog", href = "/catalog" }
+
+[config_schema.properties.locales.default.vi]
+eyebrow   = "Đánh giá vật liệu & nội thất"
+title     = "Đánh giá thật từ người đã thi công"
+subtitle  = "Kiến trúc sư, nhà thầu và chủ nhà ghi lại những con số quan trọng: độ bền theo thời gian, khả năng chống ẩm, độ khó khi thi công và chi phí thực tế trên mỗi m²."
+primary_cta   = { label = "Viết đánh giá",      href = "/new-thread" }
+secondary_cta = { label = "Danh mục sản phẩm",  href = "/catalog" }
+
+[config_schema.properties.tiles]
+type        = "array"
+title       = "Photo mosaic (up to 4)"
+description = "Each tile is { image_url, caption, link }; link may be omitted and the photo then renders unlinked. IMPORTANT — image_url must be an address on this site (/files/…) or on your configured CDN. An image hosted anywhere else is blocked by the browser's Content-Security-Policy: the tile is blank, and nothing is written to the server log. To get a usable address, attach the image to a post or reuse a product photo and copy its /files/… path. Note also that these images are not reference-counted: if the post you took the address from is deleted, the file can be cleaned up and the tile goes blank."
+# Empty, not a sample: no image address is valid on an install this plugin has
+# never seen, and a tile pointing at a key that does not exist renders a blank
+# box. The masthead drops to its single-column layout until tiles are added.
+default     = []
+
+# ─── Capabilities ─────────────────────────────────────────────────────────────
+# No before-hooks and no after-events: this plugin never observes forum activity,
+# it only answers a read of its own configuration.
+
+[capabilities]
+hooks = []
+rpc   = ["get_content"]
+
+# ─── UI Slots ─────────────────────────────────────────────────────────────────
+# home_feed_top is the homepage-only injection point, rendered inside home.html
+# above the feed — not content_before/content_after, which live in base.html and
+# would put a masthead on every page including login and thread views.
+#
+# The custom element tag is DERIVED, by `ui_slot_element_tag(meta.id, slot name)`
+# in ferum-domain, and cannot be overridden here — so bundle.js must spell the
+# same name. It carries the plugin slug, which is what lets several plugins share
+# one slot; they render in `load_order` order (adjustable per placement from
+# Admin → Plugins → … → UI slots), with the slug as the tiebreak.
+#
+# props is empty on purpose — see the config_schema note above.
+
+[ui_slots.home_feed_top]
+component = "/plugins/com.ferum.home-hero/assets/bundle.js"
+props = []

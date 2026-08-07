@@ -9,7 +9,8 @@ author      = "Ferum Team"
 
 # ─── Script entry point ───────────────────────────────────────────────────────
 # Dual-purpose bundle.js: RPC handlers run server-side in boa_engine; the
-# <ferum-slot-sidebar-left-top> custom element runs client-side in the browser.
+# this plugin's `sidebar_left_top` element runs client-side in the browser (the
+# exact tag is the TAG constant in bundle.js).
 # Each half is guarded by a typeof check — see bundle.js header comment.
 
 [script]

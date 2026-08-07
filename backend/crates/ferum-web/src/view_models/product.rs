@@ -425,6 +425,18 @@ impl From<ProductListItem> for ProductResponse {
 pub struct ProductMediaResponse {
     pub id: Uuid,
     pub storage_key: String,
+    /// Resolver URL for `storage_key`, so client code never has to know the
+    /// shape of one.
+    ///
+    /// Templates call the `file_url()` Tera function; JavaScript cannot, and the
+    /// admin media grids were assembling `'/files/' + storage_key` by hand.
+    /// Serialising it here keeps `ports::file_url` the single definition instead
+    /// of leaving a second copy in a `.js` file that no compiler checks.
+    ///
+    /// `storage_key` is retained: it is the identity the API's own callers key
+    /// on (delete, reorder), and removing it would be a breaking change for
+    /// something this field does not replace.
+    pub url: String,
     pub kind: String,
     pub caption: Option<String>,
     pub position: i32,
@@ -434,6 +446,7 @@ impl From<ProductMedia> for ProductMediaResponse {
     fn from(m: ProductMedia) -> Self {
         Self {
             id: m.id,
+            url: ferum_application::ports::file_url(&m.storage_key),
             storage_key: m.storage_key,
             kind: m.kind,
             caption: m.caption,

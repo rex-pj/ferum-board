@@ -8,22 +8,33 @@ description = "Displays a configurable announcement banner at the top of every p
 author      = "Ferum Team"
 
 # ─── Script entry point ───────────────────────────────────────────────────────
-# bundle.js registers the <ferum-slot-content-before> custom element.
+# bundle.js registers this plugin's element for the `content_before` slot; the
+# exact name is `ui_slot_element_tag(meta.id, "content_before")` — see [ui_slots].
 # This file is served at /plugins/com.ferum.announcement-banner/assets/bundle.js
 
 [script]
 bundle_file = "bundle.js"
 
 # ─── Config schema ────────────────────────────────────────────────────────────
-# Rendered as a form in Admin → Plugins → Announcement Banner → Configuration.
-# NOTE: config is stored in the DB and is NOT automatically bridged to the
-# custom element. The element reads its config from the data-* attributes
-# declared in [ui_slots.*].props below. To update displayed content after a
-# config change you must deactivate and re-activate the plugin so that
-# register_ui_slots re-reads the manifest and rewrites the slot row.
+# The config editor is a raw JSON textarea, NOT a generated form — but these
+# titles and descriptions are rendered beneath it as a field reference, so they
+# are what an operator actually reads. Write them for that reader.
 #
-# For truly dynamic config (no reactivation needed), have bundle.js call
-# GET /api/plugins/com.ferum.announcement-banner/config (not yet in core).
+# `default` here is seeded into the plugin's config at install, so the banner has
+# a message the moment it is activated.
+#
+# THE PROPS BELOW ARE A SEPARATE COPY OF THESE VALUES, AND THAT IS THIS PLUGIN'S
+# ONE ROUGH EDGE. `[ui_slots.*].props` are baked into the plugin_ui_slots row at
+# activation and `resolve_config_template` ({{config.x}}) is applied only to
+# webhook URLs, never to props — so editing the config here does NOT change what
+# the banner displays until the plugin is deactivated and activated again, which
+# rewrites the row from the manifest.
+#
+# examples/plugins/home-hero shows the way around it: declare no props, expose an
+# RPC action that returns `Ferum.config`, and have the element fetch it on
+# connect. Config edits then land on the next page load. That pattern is the one
+# to copy for anything whose content changes after install; this plugin keeps
+# props because it is also the smallest possible demonstration of them.
 
 [config_schema]
 type     = "object"
@@ -57,21 +68,29 @@ hooks = []
 # Ferum reads this section at activation time and inserts one row per slot into
 # the plugin_ui_slots table. On every page request the server calls
 # PluginUiRuntime::active_ui_slots(), builds HTML like:
-#   <ferum-slot-content-before
+#   <ferum-slot-com-ferum-announcement-banner-content-before
 #       data-message="Welcome to the forum!"
 #       data-kind="info"
 #       data-dismissible="true">
-#   </ferum-slot-content-before>
+#   </ferum-slot-com-ferum-announcement-banner-content-before>
 # and injects it into the Tera context as plugin_slots.content_before.
 #
-# Slot name → custom element tag mapping (auto-derived):
-#   content_before  →  ferum-slot-content-before
-#   content_after   →  ferum-slot-content-after
-#   navbar_end      →  ferum-slot-navbar-end
+# The element name is `ui_slot_element_tag(meta.id, <slot name>)`: `ferum-slot-`
+# plus the slug plus the slot name, each lowercased with every non-alphanumeric
+# run folded to a single `-`. It is not configurable, and bundle.js must spell
+# the same string — it is the `TAG` constant there.
+#
+# THE SLUG IS IN THE NAME so that several plugins can occupy one slot. Named
+# after the slot alone, two plugins in `content_before` would both define the
+# same element: the server emits one tag per slot ROW, so the plugin that
+# registered first would render into BOTH of them and the other into neither,
+# with nothing logged. Widgets sharing a slot render in `load_order` order.
 #
 # `component` — path at which bundle.js is served (relative to APP_URL).
 # `props`     — static HTML attribute strings added to the element at activation
-#               time. Edit these and re-activate to change displayed values.
+#               time. NOT re-resolved from config: see the config_schema note
+#               above for why these values and the defaults up there are two
+#               copies, and what to do instead in a plugin whose content changes.
 
 [ui_slots.content_before]
 component = "/plugins/com.ferum.announcement-banner/assets/bundle.js"

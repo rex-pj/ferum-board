@@ -9,7 +9,8 @@ use crate::entities::{sea_orm_active_enums, tags, thread_tags, thread_thumbnails
 use ferum_application::shared::AppError;
 use ferum_domain::models::thread::{Thread, ThreadStatus};
 use ferum_domain::repositories::thread_repository::{
-    AdminThreadFilter, NewThread, ThreadFilter, ThreadRepository, ThreadSort, UpdateThread,
+    AdminThreadFilter, NewThread, ThreadFeedFilter, ThreadFilter, ThreadRepository, ThreadSort,
+    UpdateThread,
 };
 
 use crate::observability::slow_query_threshold_ms;
@@ -122,45 +123,53 @@ fn domain_status_to_entity(s: &ThreadStatus) -> sea_orm_active_enums::ThreadStat
     }
 }
 
-/// Returns (extra_where_fragment, order_by_clause) for the given ThreadFilter.
-/// `extra_where_fragment` is empty or starts with " AND ".
-fn sort_clauses(filter: &ThreadFilter) -> (&'static str, &'static str) {
-    match filter.sort {
-        ThreadSort::Latest => (
-            "",
-            "ORDER BY t.is_pinned DESC, t.last_post_at DESC NULLS LAST",
-        ),
-        ThreadSort::Newest => (
-            "",
-            "ORDER BY t.is_pinned DESC, t.created_at DESC",
-        ),
-        ThreadSort::Hottest => (
-            "",
-            "ORDER BY t.is_pinned DESC, t.reply_count DESC, t.view_count DESC",
-        ),
-        ThreadSort::Unanswered => (
-            " AND t.reply_count = 0 AND t.status = 'open'",
-            "ORDER BY t.is_pinned DESC, t.created_at DESC",
-        ),
-        ThreadSort::Solved => (
-            " AND t.is_solved = true",
-            "ORDER BY t.is_pinned DESC, t.last_post_at DESC NULLS LAST",
-        ),
+/// The ORDER BY clause. Depends on the sort, and on the filter only to decide
+/// whether pinned threads float.
+///
+/// **Pinned threads lead the default feed and nothing else.** A pin says "read
+/// this first" about the category as a whole; it is not a claim that the thread
+/// is the most discussed one, nor that it is unanswered. Letting `is_pinned`
+/// head every ordering meant a pinned announcement with no replies sat on top of
+/// "most discussed" permanently, and ate a slot in a filtered list the reader
+/// had explicitly narrowed.
+fn order_by_clause(filter: &ThreadFilter) -> &'static str {
+    let pinned_first = filter.filter == ThreadFeedFilter::All
+        && matches!(filter.sort, ThreadSort::Activity | ThreadSort::Newest);
+
+    match (filter.sort, pinned_first) {
+        (ThreadSort::Activity, true) => "ORDER BY t.is_pinned DESC, t.last_post_at DESC NULLS LAST",
+        (ThreadSort::Activity, false) => "ORDER BY t.last_post_at DESC NULLS LAST",
+        (ThreadSort::Newest, true) => "ORDER BY t.is_pinned DESC, t.created_at DESC",
+        (ThreadSort::Newest, false) => "ORDER BY t.created_at DESC",
+        // Never pinned-first: this one is a ranking, and a pin is not a rank.
+        (ThreadSort::MostReplies, _) => "ORDER BY t.reply_count DESC, t.view_count DESC",
     }
 }
 
-/// Returns the extra WHERE condition for count queries from the given ThreadFilter.
-/// Mirrors the `extra_where_fragment` half of `sort_clauses()`, but as a typed sea_query
-/// expression so the COUNT queries don't need raw SQL string concatenation.
-fn sort_condition(filter: &ThreadFilter) -> Option<SimpleExpr> {
-    match filter.sort {
-        ThreadSort::Unanswered => Some(
+/// The extra WHERE fragment for the given filter. Empty, or starts with " AND ".
+///
+/// Must stay semantically identical to [`filter_condition`], which expresses the
+/// same predicate for the COUNT queries — a listing whose total disagrees with
+/// its own rows is worse than either being wrong alone.
+fn filter_fragment(filter: &ThreadFilter) -> &'static str {
+    match filter.filter {
+        ThreadFeedFilter::All => "",
+        ThreadFeedFilter::Unanswered => " AND t.reply_count = 0 AND t.status = 'open'",
+        ThreadFeedFilter::Solved => " AND t.is_solved = true",
+    }
+}
+
+/// The typed sea_query twin of [`filter_fragment`], used by the COUNT queries so
+/// they need no raw SQL string concatenation. Keep the two in step.
+fn filter_condition(filter: &ThreadFilter) -> Option<SimpleExpr> {
+    match filter.filter {
+        ThreadFeedFilter::All => None,
+        ThreadFeedFilter::Unanswered => Some(
             Expr::col(threads::Column::ReplyCount)
                 .eq(0i32)
                 .and(Expr::col(threads::Column::Status).eq(Expr::cust("'open'::thread_status"))),
         ),
-        ThreadSort::Solved => Some(Expr::col(threads::Column::IsSolved).eq(true)),
-        _ => None,
+        ThreadFeedFilter::Solved => Some(Expr::col(threads::Column::IsSolved).eq(true)),
     }
 }
 
@@ -335,7 +344,8 @@ impl ThreadRepository for PgThreadRepository {
     ) -> Result<(Vec<Thread>, u64), AppError> {
         let t0 = std::time::Instant::now();
         let offset = page.saturating_sub(1) * per_page;
-        let (extra_where, order_by) = sort_clauses(filter);
+        let extra_where = filter_fragment(filter);
+        let order_by = order_by_clause(filter);
 
         let data_sql = format!(
             "{ENRICHED_SELECT}
@@ -367,7 +377,7 @@ impl ThreadRepository for PgThreadRepository {
                     .and_where(Expr::col(threads::Column::DeletedAt).is_null())
                     .and_where(hide_pending_product_cond())
                     .to_owned();
-                if let Some(cond) = sort_condition(filter) {
+                if let Some(cond) = filter_condition(filter) {
                     count_q.and_where(cond);
                 }
                 let (count_sql, count_vals) = count_q.build(PostgresQueryBuilder);
@@ -406,7 +416,8 @@ impl ThreadRepository for PgThreadRepository {
         }
         let t0 = std::time::Instant::now();
         let offset = page.saturating_sub(1) * per_page;
-        let (extra_where, order_by) = sort_clauses(filter);
+        let extra_where = filter_fragment(filter);
+        let order_by = order_by_clause(filter);
 
         // Build $1, $2, ... placeholders for the IN clause
         let placeholders: Vec<String> = (1..=category_ids.len()).map(|i| format!("${i}")).collect();
@@ -445,7 +456,7 @@ impl ThreadRepository for PgThreadRepository {
                     .and_where(Expr::col(threads::Column::DeletedAt).is_null())
                     .and_where(hide_pending_product_cond())
                     .to_owned();
-                if let Some(cond) = sort_condition(filter) {
+                if let Some(cond) = filter_condition(filter) {
                     count_q.and_where(cond);
                 }
                 let (count_sql, count_vals) = count_q.build(PostgresQueryBuilder);
@@ -529,7 +540,8 @@ impl ThreadRepository for PgThreadRepository {
     ) -> Result<(Vec<Thread>, u64), AppError> {
         let t0 = std::time::Instant::now();
         let offset = page.saturating_sub(1) * per_page;
-        let (extra_where, order_by) = sort_clauses(filter);
+        let extra_where = filter_fragment(filter);
+        let order_by = order_by_clause(filter);
 
         let cat_filter = if category_ids.is_empty() {
             String::new()
@@ -564,7 +576,7 @@ impl ThreadRepository for PgThreadRepository {
                 Expr::col(threads::Column::CategoryId).is_in(category_ids.to_vec()),
             );
         }
-        if let Some(cond) = sort_condition(filter) {
+        if let Some(cond) = filter_condition(filter) {
             count_q.and_where(cond);
         }
         let (count_sql, count_vals) = count_q.build(PostgresQueryBuilder);
@@ -838,10 +850,16 @@ impl ThreadRepository for PgThreadRepository {
             format!("WHERE {}", where_parts.join(" AND "))
         };
 
+        // Exhaustive on purpose — no `_` arm. The admin list has no feed filter
+        // axis, so it reuses the ordering only; keeping pinned-first here is
+        // right because this is a management view, where pins are the rows an
+        // admin most often came to act on.
         let order_by = match filter.sort {
+            ThreadSort::Activity => "ORDER BY t.is_pinned DESC, t.last_post_at DESC NULLS LAST",
             ThreadSort::Newest => "ORDER BY t.is_pinned DESC, t.created_at DESC",
-            ThreadSort::Hottest => "ORDER BY t.is_pinned DESC, t.reply_count DESC, t.view_count DESC",
-            _ => "ORDER BY t.is_pinned DESC, t.last_post_at DESC NULLS LAST",
+            ThreadSort::MostReplies => {
+                "ORDER BY t.is_pinned DESC, t.reply_count DESC, t.view_count DESC"
+            }
         };
 
         let limit_pos = pos;

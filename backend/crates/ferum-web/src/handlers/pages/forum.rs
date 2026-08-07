@@ -1,6 +1,6 @@
 use axum::extract::{Extension, Path, Query, State};
 use axum::http::HeaderMap;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 use tera::Context;
 
@@ -10,11 +10,10 @@ use crate::middleware::AuthUser;
 use ferum_domain::models::ThreadStatus;
 use ferum_domain::models::product::ProductStatus;
 use ferum_domain::repositories::product_repository::{ProductListFilter, ProductSort};
-use ferum_domain::repositories::thread_repository::ThreadSort;
-use crate::handlers::admin::api::config::HERO_TILES_KEY;
+use ferum_domain::repositories::thread_repository::parse_feed_query;
 use crate::view_models::page_context::{
-    CategoryCtx, HeroTileCtx, LatestReviewCtx, PaginationCtx, PostCtx, ReactionSummaryCtx, TagCtx,
-    ThreadDetailCtx, ForumGroupCtx,
+    feed_query_tail, feed_url, CategoryCtx, FeedControlsCtx, LatestReviewCtx,
+    PaginationCtx, PostCtx, ReactionSummaryCtx, TagCtx, ThreadDetailCtx, ForumGroupCtx,
 };
 use crate::view_models::product::{ProductResponse, RatingStatsResponse};
 use ferum_domain::models::reaction::ReactionKind;
@@ -60,7 +59,11 @@ pub struct ListQuery {
     pub per_page: Option<u64>,
     pub tag: Option<String>,
     pub sort: Option<String>,
+    /// Narrows the row set — `unanswered` | `solved`. Absent = no narrowing.
+    /// A separate axis from `sort` on purpose; see `parse_feed_query`.
+    pub filter: Option<String>,
 }
+
 
 /// Build the "latest reviews" rail panel: newest review per product, joined to
 /// the product it reviews and the score it gave.
@@ -114,44 +117,42 @@ pub(crate) async fn latest_reviews_ctx(state: &AppState) -> Vec<LatestReviewCtx>
         .collect()
 }
 
-/// Operator-curated masthead tiles, read from the in-process config cache — no DB
-/// hit on the hottest page of the site.
-///
-/// Empty means "not curated", which the template reads as its cue to fall back to
-/// automatic product photography. A malformed value degrades the same way instead
-/// of erroring: a bad config row must not be able to take the homepage down.
-async fn hero_tiles_ctx(state: &AppState) -> Vec<HeroTileCtx> {
-    state
-        .site_config_cache
-        .read()
-        .await
-        .get(HERO_TILES_KEY)
-        .filter(|v| !v.is_empty())
-        .and_then(|v| serde_json::from_str::<Vec<HeroTileCtx>>(v).ok())
-        .unwrap_or_default()
-}
-
-#[tracing::instrument(skip_all, fields(page = q.page, sort = q.sort.as_deref(), tag = q.tag.as_deref()))]
+#[tracing::instrument(skip_all, fields(page = q.page, sort = q.sort.as_deref(), filter = q.filter.as_deref(), tag = q.tag.as_deref()))]
 pub async fn home(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
     Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ListQuery>,
-) -> Result<impl IntoResponse, PageError> {
+) -> Result<Response, PageError> {
     let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
 
-    let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
+    let (sort, feed_filter, legacy) =
+        parse_feed_query(q.sort.as_deref(), q.filter.as_deref());
+    // A pre-split URL is answered once, permanently, at its new address: these
+    // are bookmarked and indexed, so serving them in place would keep the old
+    // vocabulary alive in search results indefinitely. `page` is dropped because
+    // the row set is unchanged and page 1 is the honest landing spot.
+    if legacy {
+        return Ok(Redirect::permanent(&feed_url(
+            "/",
+            sort,
+            feed_filter,
+            q.tag.as_deref(),
+        ))
+        .into_response());
+    }
     let sort_str = sort.as_str().to_string();
+    let filter_str = feed_filter.as_str().to_string();
 
     let (threads, total) = if let Some(tag_slug) = &q.tag {
         state
             .thread
-            .list_by_tag(auth_user.as_ref(), tag_slug, sort, page, per_page)
+            .list_by_tag(auth_user.as_ref(), tag_slug, sort, feed_filter, page, per_page)
             .await?
     } else {
         state
             .thread
-            .list_feed(auth_user.as_ref(), sort, page, per_page)
+            .list_feed(auth_user.as_ref(), sort, feed_filter, page, per_page)
             .await?
     };
 
@@ -175,14 +176,7 @@ pub async fn home(
         None => 0,
     };
 
-    let mut extra_parts: Vec<String> = Vec::new();
-    if let Some(tag) = &q.tag {
-        extra_parts.push(format!("&tag={tag}"));
-    }
-    if sort_str != "latest" {
-        extra_parts.push(format!("&sort={sort_str}"));
-    }
-    let extra_params = extra_parts.join("");
+    let extra_params = feed_query_tail(sort, feed_filter, q.tag.as_deref());
 
     // ── Homepage market data ────────────────────────────────────────────────
     // Only on the primary view (no tag filter, first page) — pagination and tag
@@ -273,19 +267,19 @@ pub async fn home(
     ctx.insert("total_categories", &total_categories);
     ctx.insert("active_tag", &q.tag);
     ctx.insert("active_sort", &sort_str);
+    ctx.insert("active_filter", &filter_str);
+    ctx.insert("feed_controls", &FeedControlsCtx::build("/", sort, feed_filter));
     ctx.insert("watched_count", &watched_count);
     ctx.insert("top_rated", &top_rated);
     ctx.insert("shelf_mode", &shelf_mode);
-    // Not gated on `show_market`: curation is an explicit operator choice, so it
-    // holds wherever the masthead renders — including page 2, where the automatic
-    // product data is deliberately not fetched.
-    ctx.insert("hero_tiles", &hero_tiles_ctx(&state).await);
     ctx.insert("latest_reviews", &latest_reviews);
     ctx.insert("total_products", &total_products);
     ctx.insert("total_reviews", &total_reviews);
     ctx.insert("avg_rating", &avg_rating);
 
-    render_with_theme_in(&state, &req_locale, &active, "home.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "home.html", &ctx)
+        .await
+        .map(IntoResponse::into_response)
 }
 
 #[tracing::instrument(skip_all)]
@@ -361,10 +355,25 @@ pub async fn category(
     Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Path(slug): Path<String>,
     Query(q): Query<ListQuery>,
-) -> Result<impl IntoResponse, PageError> {
+) -> Result<Response, PageError> {
     let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
-    let sort = ThreadSort::from_str(q.sort.as_deref().unwrap_or("latest"));
+    let (sort, feed_filter, legacy) =
+        parse_feed_query(q.sort.as_deref(), q.filter.as_deref());
+    // Ahead of the category lookup, and that is safe: the target is a pure
+    // function of the slug the caller already typed, so a hidden category and a
+    // nonexistent one redirect identically and the follow-up request is what
+    // decides between 404 and content. NF-SC-13 is enforced there, unchanged.
+    if legacy {
+        return Ok(Redirect::permanent(&feed_url(
+            &format!("/forum/{slug}"),
+            sort,
+            feed_filter,
+            None,
+        ))
+        .into_response());
+    }
     let sort_str = sort.as_str().to_string();
+    let filter_str = feed_filter.as_str().to_string();
 
     let category = state
         .category
@@ -373,7 +382,7 @@ pub async fn category(
 
     let (threads, total) = state
         .thread
-        .list_by_category(auth_user.as_ref(), &slug, sort, page, per_page)
+        .list_by_category(auth_user.as_ref(), &slug, sort, feed_filter, page, per_page)
         .await?;
 
     let active = active_theme(&state).await;
@@ -433,11 +442,7 @@ pub async fn category(
         can_post: PermissionChecker::user_can_create_post(auth_user.as_ref(), &category),
     };
 
-    let extra_params = if sort_str != "latest" {
-        format!("&sort={sort_str}")
-    } else {
-        String::new()
-    };
+    let extra_params = feed_query_tail(sort, feed_filter, None);
 
     let parent_category: Option<CategoryCtx> = category.parent_id.and_then(|parent_id| {
         all_categories.iter().find(|c| c.id == parent_id).map(|c| CategoryCtx {
@@ -468,9 +473,16 @@ pub async fn category(
     ctx.insert("pagination", &PaginationCtx::new(page, per_page, total, extra_params));
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("active_sort", &sort_str);
+    ctx.insert("active_filter", &filter_str);
+    ctx.insert(
+        "feed_controls",
+        &FeedControlsCtx::build(&format!("/forum/{}", category.slug), sort, feed_filter),
+    );
     ctx.insert("active_category_slug", &category.slug);
 
-    render_with_theme_in(&state, &req_locale, &active, "forum/category.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "forum/category.html", &ctx)
+        .await
+        .map(IntoResponse::into_response)
 }
 
 #[tracing::instrument(skip(state, auth_user, headers, q), fields(slug))]

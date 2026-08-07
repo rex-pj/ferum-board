@@ -220,7 +220,7 @@
     g.innerHTML = '';
     // Already stored — removing one deletes it straight away.
     savedMedia.forEach(function (md) {
-      g.appendChild(thumb('/files/' + md.storage_key, function () { deleteMedia(md.id); }));
+      g.appendChild(thumb(md.url, function () { deleteMedia(md.id); }));
     });
     // Picked in this session — uploaded when the form is saved.
     pendingImages.forEach(function (p, i) {

@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::entities::{plugin_hooks, plugin_logs, plugin_ui_slots, plugins, sea_orm_active_enums};
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::{
-    NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin, PluginHook, PluginLog,
-    PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
+    ui_slot_element_tag, NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin,
+    PluginHook, PluginLog, PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
 };
 use ferum_domain::repositories::plugin_repository::PluginRepository;
 
@@ -99,13 +99,20 @@ fn hook_from_entity(m: plugin_hooks::Model) -> PluginHook {
 }
 
 fn slot_from_entity(m: plugin_ui_slots::Model, plugin_slug: String) -> PluginUiSlot {
+    // Derived, not read from `m.custom_element_tag`. The column is written at
+    // activation and nothing rewrites it afterwards, so a row created under an
+    // older naming rule would keep naming an element no bundle defines — and the
+    // failure is silent, because an unknown custom element renders as an empty
+    // inline box. Deriving here leaves exactly one authority for the name and
+    // makes such rows self-correcting instead of quietly dead.
+    let custom_element_tag = ui_slot_element_tag(&plugin_slug, &m.slot_name);
     PluginUiSlot {
         id: m.id,
         plugin_id: m.plugin_id,
         plugin_slug,
         slot_name: m.slot_name,
         asset_url: m.asset_url,
-        custom_element_tag: m.custom_element_tag,
+        custom_element_tag,
         props: m.props,
         load_order: m.load_order,
         is_active: m.is_active,
@@ -305,13 +312,33 @@ impl PluginRepository for PgPluginRepository {
             .map(|p| (p.id, p.slug))
             .collect();
 
-        Ok(slots
+        let mut slots: Vec<PluginUiSlot> = slots
             .into_iter()
             .map(|m| {
                 let slug = slug_map.get(&m.plugin_id).cloned().unwrap_or_default();
                 slot_from_entity(m, slug)
             })
-            .collect())
+            .collect();
+
+        // `load_order` alone does not decide the order. It is seeded per plugin
+        // from that plugin's own position in its manifest, so two plugins that
+        // each declare one slot both arrive at 100 — and the SQL sort then leaves
+        // their relative order to whatever the planner returns, which can differ
+        // between two requests on the same data. Widgets swapping places on
+        // refresh is the kind of bug nobody manages to reproduce.
+        //
+        // Slug is the tiebreak because it is stable and visible: an operator who
+        // wants a specific order sets `load_order` through
+        // PATCH /api/admin/plugins/:slug/ui-slots/:slot_id, and until they do,
+        // alphabetical is at least an answer they can predict.
+        slots.sort_by(|a, b| {
+            a.load_order
+                .cmp(&b.load_order)
+                .then_with(|| a.plugin_slug.cmp(&b.plugin_slug))
+                .then_with(|| a.slot_name.cmp(&b.slot_name))
+        });
+
+        Ok(slots)
     }
 
     async fn ui_slots_for_plugin(&self, plugin_id: Uuid) -> Result<Vec<PluginUiSlot>, AppError> {
