@@ -569,6 +569,28 @@ async fn update_tags_non_author_without_edit_any_perm_returns_forbidden() {
     assert!(matches!(result, Err(AppError::Forbidden(c)) if c == "edit_window_expired"));
 }
 
+/// Opening a thread needs `thread.create`, not just `post.create`.
+///
+/// The two were one gate for a long time: `create` called `can_create_post`,
+/// so `thread.create` was seeded and grantable while nothing read it, and
+/// revoking it in /admin/permissions did nothing. This pins the separation —
+/// a member allowed to reply is not thereby allowed to start a topic.
+#[tokio::test]
+async fn create_requires_thread_create_permission() {
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perm("post.create") // deliberately WITHOUT thread.create
+        .build();
+
+    let mut b = Uc::new();
+    b.categories
+        .expect_find_by_id()
+        .return_once(|_| Ok(Some(make_category(ids::category_a()))));
+
+    let result = b.build().create(&actor, review_cmd(None)).await;
+    assert!(matches!(result, Err(AppError::Forbidden(c)) if c == "permission_denied"));
+}
+
 // ─── create: one review per author per product ───────────────────────────────
 //
 // `uq_threads_product_author` (migration 28) is the real guarantee; these cover
@@ -592,7 +614,7 @@ fn review_cmd(product_id: Option<uuid::Uuid>) -> ferum_application::usecases::th
 async fn create_rejects_second_review_of_same_product() {
     let actor = AuthUserBuilder::member()
         .with_id(ids::user_a())
-        .with_perm("post.create")
+        .with_perms(&["post.create", "thread.create"])
         .build();
     let existing = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
 
@@ -609,7 +631,7 @@ async fn create_rejects_second_review_of_same_product() {
 async fn create_allows_first_review_of_product() {
     let actor = AuthUserBuilder::member()
         .with_id(ids::user_a())
-        .with_perm("post.create")
+        .with_perms(&["post.create", "thread.create"])
         .build();
     let created = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
 
@@ -708,7 +730,7 @@ async fn list_feed_keeps_reviews_when_user_explicitly_watches_it() {
 async fn create_skips_review_check_for_non_product_thread() {
     let actor = AuthUserBuilder::member()
         .with_id(ids::user_a())
-        .with_perm("post.create")
+        .with_perms(&["post.create", "thread.create"])
         .build();
     let created = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
 

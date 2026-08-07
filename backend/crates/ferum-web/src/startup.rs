@@ -441,12 +441,16 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     );
 
     // ─── Redis or in-memory fallbacks ────────────────────────────────────────
-    let (cache, rate_limiter_raw, job_queue, notification_bus): (
+    // Named because both arms of the match below must spell it out, and the
+    // bare tuple tripped clippy::type_complexity.
+    type RedisBackedPorts = (
         Arc<dyn CacheService>,
         Arc<dyn RateLimiter>,
         Arc<dyn JobQueue>,
         Arc<dyn NotificationBus>,
-    ) = match &config.redis_url {
+    );
+    let (cache, rate_limiter_raw, job_queue, notification_bus): RedisBackedPorts =
+        match &config.redis_url {
         Some(url) => {
             tracing::info!("REDIS_URL set — using Redis cache and rate limiter");
             let executor = Arc::new(JobExecutor::new(

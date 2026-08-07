@@ -601,7 +601,7 @@ async fn publish_post_with(
         storage.clone(),
         // Nothing in `create` uploads, so the same spy stands in for staging;
         // what matters is only whether it is present at all.
-        has_staging.then(|| storage as Arc<dyn StorageService>),
+        has_staging.then_some(storage as Arc<dyn StorageService>),
     );
 
     let mut command = cmd(thread_id);

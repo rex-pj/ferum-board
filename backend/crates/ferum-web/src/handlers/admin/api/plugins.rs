@@ -65,10 +65,10 @@ pub async fn upload_plugin(
     let plugins_dir = PathBuf::from(&state.plugins_dir);
     let tmp_slug = format!("__tmp_upload_{}", uuid::Uuid::new_v4().simple());
     let extracted_path = package_extractor::extract(&pkg_bytes, &plugins_dir, &tmp_slug)
-        .map_err(|e| { let _ = package_extractor::remove_plugin_dir(&plugins_dir.join(&tmp_slug).to_string_lossy()); e })?;
+        .inspect_err(|_e| { let _ = package_extractor::remove_plugin_dir(&plugins_dir.join(&tmp_slug).to_string_lossy()); })?;
 
     let manifest = manifest_loader::load_from_dir(&extracted_path)
-        .map_err(|e| { let _ = package_extractor::remove_plugin_dir(&extracted_path.to_string_lossy()); e })?;
+        .inspect_err(|_e| { let _ = package_extractor::remove_plugin_dir(&extracted_path.to_string_lossy()); })?;
 
     let _ = package_extractor::remove_plugin_dir(&extracted_path.to_string_lossy());
 
@@ -155,9 +155,8 @@ pub async fn install_plugin(
             granted_capabilities,
         )
         .await
-        .map_err(|e| {
+        .inspect_err(|_e| {
             let _ = package_extractor::remove_plugin_dir(&install_path.to_string_lossy());
-            e
         })?;
 
     Ok((

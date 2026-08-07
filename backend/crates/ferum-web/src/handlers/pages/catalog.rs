@@ -244,7 +244,7 @@ pub async fn catalog_index(
     ctx.insert("filter_params", &params.join(""));
     ctx.insert(
         "can_submit_product",
-        &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
+        &auth_user.as_ref().is_some_and(|u| PermissionChecker::can_submit_products(u).is_ok()),
     );
 
     render_with_theme_in(&state, &req_locale, &active, "catalog/index.html", &ctx).await
@@ -284,7 +284,7 @@ pub async fn materials_index(
     ctx.insert("catalog_tab", "materials");
     ctx.insert(
         "can_submit_product",
-        &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
+        &auth_user.as_ref().is_some_and(|u| PermissionChecker::can_submit_products(u).is_ok()),
     );
     let categories = state.product.list_categories().await.unwrap_or_default();
     catalog_rail_ctx(&state, &mut ctx, &categories).await;
@@ -319,7 +319,7 @@ pub async fn brands_index(
     ctx.insert("catalog_tab", "brands");
     ctx.insert(
         "can_submit_product",
-        &auth_user.as_ref().map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
+        &auth_user.as_ref().is_some_and(|u| PermissionChecker::can_submit_products(u).is_ok()),
     );
     let categories = state.product.list_categories().await.unwrap_or_default();
     catalog_rail_ctx(&state, &mut ctx, &categories).await;
@@ -504,7 +504,7 @@ pub async fn catalog_detail(
     // Curators get an edit affordance on the product itself, rather than having
     // to find it again in the admin catalogue.
     let can_manage =
-        auth_user.as_ref().map_or(false, |u| PermissionChecker::can_manage_products(u).is_ok());
+        auth_user.as_ref().is_some_and(|u| PermissionChecker::can_manage_products(u).is_ok());
     ctx.insert("can_manage_product", &can_manage);
     // Whoever submitted this product, excluding curators (who already have the
     // controls and need no notice). Drives the explanatory note: once an entry is

@@ -22,7 +22,7 @@ pub async fn threads(
 
     let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
     let search = q.q.clone().unwrap_or_default();
-    let sort = ThreadSort::from_str(q.sort_by.as_deref().unwrap_or("latest"));
+    let sort = ThreadSort::from_label(q.sort_by.as_deref().unwrap_or("latest"));
     let status_filter = q.status.clone().unwrap_or_default();
     let category_id = parse_opt_uuid(q.category_id.as_deref());
     let author_id = parse_opt_uuid(q.author_id.as_deref());

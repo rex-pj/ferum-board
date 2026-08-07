@@ -19,7 +19,7 @@ use ferum_domain::repositories::thread_repository::ThreadRepository;
 /// Four fills one card row at every breakpoint; the tab header links to the
 /// rest. Enough to answer "does this product exist here?" without burying the
 /// discussions under a wall of catalogue.
-pub const PRODUCT_PREVIEW_LIMIT: u64 = 4;
+const PRODUCT_PREVIEW_LIMIT: u64 = 4;
 
 /// Which slice of results the caller wants. Mirrors the tabs on the results
 /// page, and decides which kind gets paginated and which (if any) is reduced to

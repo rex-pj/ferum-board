@@ -58,6 +58,22 @@ pub fn require_page_auth(auth_user: Option<AuthUser>) -> Result<AuthUser, PageEr
     auth_user.ok_or(PageError::Unauthorized)
 }
 
+/// The `/login` redirect for a member-only page, carrying a `next` pointer so a
+/// signed-out visitor lands on the page they asked for instead of the homepage.
+///
+/// `require_page_auth` above is the admin/mod counterpart and deliberately does
+/// NOT carry `next` — those pages send the visitor to a bare `/login`. The two
+/// are separate on purpose; this one exists so the `?next=` shape has a single
+/// definition rather than being spelled out at each member page that needs it.
+///
+/// `next` is expected to be an in-site path — a literal (`/account`) or one
+/// built from a slug (`/edit-thread/{slug}`). It is not percent-encoded,
+/// because slugs are already URL-safe by construction; feeding this a
+/// user-supplied string would want encoding first.
+pub(crate) fn login_redirect(next: &str) -> Response {
+    axum::response::Redirect::to(&format!("/login?next={next}")).into_response()
+}
+
 pub(super) async fn active_theme(state: &AppState) -> String {
     let _lat = crate::telemetry::Latency::start("active_theme");
     let slug = state.active_theme_cache.read().await.clone();

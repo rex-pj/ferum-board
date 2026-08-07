@@ -1146,6 +1146,7 @@ a.fr-panel-row:hover {
 }
 
 /* The tab strip owns the underline when it sits inside the wrapper. */
+
 .fr-feed-controls .fr-sort-tabs { border-bottom: none; }
 
 .fr-filter-chips {

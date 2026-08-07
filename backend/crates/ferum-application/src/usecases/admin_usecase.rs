@@ -489,7 +489,7 @@ impl AdminUseCase {
     ) -> Result<(), AppError> {
         PermissionChecker::can_manage_users(actor)?;
         self.users.find_by_id(id).await?.or_not_found()?;
-        self.users.set_trust_level(id, level.clone()).await?;
+        self.users.set_trust_level(id, level).await?;
 
         // `trust_level` is carried in the access token, not re-read per request
         // like permissions are — so without this a demotion would not take

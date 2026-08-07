@@ -75,7 +75,7 @@ async fn follow_returns_true_when_not_already_following() {
     let uc = FollowUseCase::new(Arc::new(follows), Arc::new(users), Arc::new(events));
     let result = uc.follow(&actor, target_id).await;
 
-    assert_eq!(result.unwrap(), true);
+    assert!(result.unwrap());
 }
 
 #[tokio::test]
@@ -98,7 +98,7 @@ async fn follow_returns_true_immediately_when_already_following() {
     let uc = FollowUseCase::new(Arc::new(follows), Arc::new(users), Arc::new(events));
     let result = uc.follow(&actor, target_id).await;
 
-    assert_eq!(result.unwrap(), true);
+    assert!(result.unwrap());
 }
 
 #[tokio::test]

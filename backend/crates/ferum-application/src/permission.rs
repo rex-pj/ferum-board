@@ -25,7 +25,7 @@ impl PermissionChecker {
                 }
             }
             ViewPolicy::StaffOnly => {
-                let u = user.ok_or_else(|| AppError::NotFound)?;
+                let u = user.ok_or(AppError::NotFound)?;
                 // MOD_VIEW_REPORTS is the minimum moderation capability — any mod assigned to
                 // this category (or globally) should be able to see staff_only categories.
                 // MOD_WARN is NOT used here: a mod who can view/resolve reports but cannot
@@ -80,6 +80,49 @@ impl PermissionChecker {
             PostPolicy::Closed => unreachable!(),
         };
         if !user.has_perm_in(perm::MOD_WARN, category.id) && !user.meets_trust(category_min) {
+            return Err(AppError::forbidden("trust_level_insufficient"));
+        }
+
+        Ok(())
+    }
+
+    /// Starting a new thread in `category`.
+    ///
+    /// Everything `can_create_post` enforces (ban, category visibility, closed
+    /// categories, `post.create`, the category's trust floor) plus `thread.create`
+    /// on top — which is the whole point of the key existing. Opening a topic and
+    /// replying to one are different acts, and a forum that wants reply-only
+    /// members has no way to say so if the two share a single permission.
+    ///
+    /// Until this existed, `thread.create` was seeded, listed in
+    /// /admin/permissions and grantable, while no code path read it: revoking it
+    /// changed nothing. The system roles grant it to member, moderator and admin
+    /// exactly as they grant `post.create`, so enforcing it takes nothing away
+    /// from anyone on a default install.
+    pub fn can_create_thread(user: &AuthUser, category: &Category) -> Result<(), AppError> {
+        Self::can_create_post(user, category)?;
+
+        if !user.has_perm_in(perm::THREAD_CREATE, category.id) {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+
+        Ok(())
+    }
+
+    /// Reacting to a post.
+    ///
+    /// The trust floor used to be written inline in `ReactionUseCase::add` as a
+    /// bare `trust_level < Basic`, which matched `reaction.add`'s declared
+    /// min_trust by coincidence rather than by construction, and left the RBAC
+    /// half of the permission unchecked. Both halves live here now.
+    pub fn can_react(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
+
+        if !user.has_perm(perm::REACTION_ADD) {
+            return Err(AppError::forbidden("permission_denied"));
+        }
+
+        if !user.meets_trust(TrustLevel::Basic) {
             return Err(AppError::forbidden("trust_level_insufficient"));
         }
 

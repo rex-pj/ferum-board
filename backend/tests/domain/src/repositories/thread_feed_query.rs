@@ -135,7 +135,7 @@ fn as_str_round_trips_through_the_parser() {
     }
 }
 
-/// `ThreadSort::from_str` is the ordering-only door used by the admin list. It
+/// `ThreadSort::from_label` is the ordering-only door used by the admin list. It
 /// must agree with the full parser rather than carry a second table.
 #[test]
 fn thread_sort_from_str_agrees_with_the_full_parser() {
@@ -150,7 +150,7 @@ fn thread_sort_from_str_agrees_with_the_full_parser() {
         "junk",
     ] {
         assert_eq!(
-            ThreadSort::from_str(input),
+            ThreadSort::from_label(input),
             parse_feed_query(Some(input), None).0,
             "input={input}"
         );

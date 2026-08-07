@@ -36,6 +36,10 @@ pub struct ModerationUseCase {
 }
 
 impl ModerationUseCase {
+    // Constructor injection: every argument is a port this use case depends on.
+    // Bundling them into a params struct would just move the same list one file
+    // away and add a type whose only purpose is to carry it.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         reports: Arc<dyn ReportRepository>,
         posts: Arc<dyn PostRepository>,
@@ -290,14 +294,14 @@ impl ModerationUseCase {
         if report.status != ferum_domain::models::report::ReportStatus::Pending {
             return Err(AppError::invalid("report_already_resolved"));
         }
-        self.reports.update_status(report_id, status.clone(), actor.id, moderator_notes).await?;
+        self.reports.update_status(report_id, status, actor.id, moderator_notes).await?;
 
         let _ = self.cache.del("stats:dashboard").await;
 
         self.audit_log_repo
             .append(ferum_domain::models::audit_log::AuditLog::user_action(
                 actor.id,
-                &format!("report.{}", format!("{:?}", status).to_lowercase()),
+                format!("report.{}", format!("{:?}", status).to_lowercase()),
                 "report",
                 report_id,
                 None,
@@ -479,6 +483,12 @@ impl ModerationUseCase {
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
+    // Five of these are filter criteria and would read better as an
+    // `AuditLogFilter` struct — the domain already has `AdminThreadFilter` in
+    // that shape. Left as-is here deliberately: that change reaches the
+    // repository trait and its Pg implementation, which does not belong in a
+    // lint-cleanup commit.
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_audit_log(
         &self,
         actor: &AuthUser,
@@ -511,10 +521,10 @@ impl ModerationUseCase {
             .await
     }
 
-    pub async fn search_users<'a>(
+    pub async fn search_users(
         &self,
         actor: &AuthUser,
-        search: Option<&'a str>,
+        search: Option<&str>,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<ferum_domain::models::User>, u64), AppError> {

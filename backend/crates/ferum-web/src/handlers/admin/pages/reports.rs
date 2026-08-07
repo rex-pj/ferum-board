@@ -119,9 +119,9 @@ pub async fn audit_log(
         std::collections::HashMap::new();
     for log in &logs {
         if let Some(aid) = log.actor_id {
-            if !actor_names.contains_key(&aid) {
+            if let std::collections::hash_map::Entry::Vacant(e) = actor_names.entry(aid) {
                 if let Ok(Some(u)) = state.user_repo.find_by_id(aid).await {
-                    actor_names.insert(aid, u.username);
+                    e.insert(u.username);
                 }
             }
         }
@@ -138,32 +138,32 @@ pub async fn audit_log(
     for log in &logs {
         match log.target_type.as_str() {
             "user" => {
-                if !target_user_names.contains_key(&log.target_id) {
+                if let std::collections::hash_map::Entry::Vacant(e) = target_user_names.entry(log.target_id) {
                     if let Ok(Some(u)) = state.user_repo.find_by_id(log.target_id).await {
-                        target_user_names.insert(log.target_id, u.username);
+                        e.insert(u.username);
                     }
                 }
             }
             "thread" => {
-                if !target_thread_info.contains_key(&log.target_id) {
+                if let std::collections::hash_map::Entry::Vacant(e) = target_thread_info.entry(log.target_id) {
                     if let Ok(Some(t)) = state.thread.threads.find_by_id(log.target_id).await {
-                        target_thread_info.insert(log.target_id, (t.title, t.slug));
+                        e.insert((t.title, t.slug));
                     }
                 }
             }
             "post" => {
-                if !target_thread_info.contains_key(&log.target_id) {
+                if let std::collections::hash_map::Entry::Vacant(e) = target_thread_info.entry(log.target_id) {
                     if let Ok(Some(p)) = state.moderation.posts.find_by_id(log.target_id).await {
                         if let Ok(Some(t)) = state.thread.threads.find_by_id(p.thread_id).await {
-                            target_thread_info.insert(log.target_id, (t.title, t.slug));
+                            e.insert((t.title, t.slug));
                         }
                     }
                 }
             }
             "category" => {
-                if !target_category_info.contains_key(&log.target_id) {
+                if let std::collections::hash_map::Entry::Vacant(e) = target_category_info.entry(log.target_id) {
                     if let Ok(Some(c)) = state.category.categories.find_by_id(log.target_id).await {
-                        target_category_info.insert(log.target_id, (c.name, c.slug));
+                        e.insert((c.name, c.slug));
                     }
                 }
             }

@@ -837,7 +837,7 @@ async fn the_body_predicate_actually_uses_idx_posts_fts() {
     let plan = txn
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            &format!(
+            format!(
                 "EXPLAIN SELECT t.id FROM threads t WHERE t.id IN ({})",
                 ferum_infrastructure::search::postgres_fts::POST_MATCH_SUBQUERY
             ),

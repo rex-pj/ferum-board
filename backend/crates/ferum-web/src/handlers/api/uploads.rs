@@ -88,7 +88,8 @@ pub async fn serve_plugin_asset(
     }
 }
 
-fn content_type_for_path(path: &PathBuf) -> &'static str {
+// `std::path::Path` spelled out: this module imports `axum::extract::Path`.
+fn content_type_for_path(path: &std::path::Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
         Some("js") | Some("mjs") => "application/javascript",
         Some("css") => "text/css",

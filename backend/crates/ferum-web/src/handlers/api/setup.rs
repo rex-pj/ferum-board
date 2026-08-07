@@ -28,15 +28,12 @@ pub async fn run(
     // Rate limit: 5 attempts per 15 minutes per IP
     let ip = crate::middleware::rate_limit::extract_client_ip(&headers, state.trusted_proxy_count);
     let rl_key = format!("rl:setup:run:{}", ip);
-    match state
+    if let Ok(RateLimitResult::Denied { retry_after }) = state
         .rate_limiter
         .check(&rl_key, 5, Duration::from_secs(900))
         .await
     {
-        Ok(RateLimitResult::Denied { retry_after }) => {
-            return Err(AppError::TooManyRequests(retry_after.as_secs()).into());
-        }
-        _ => {}
+        return Err(AppError::TooManyRequests(retry_after.as_secs()).into());
     }
     body.validate()
         .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;

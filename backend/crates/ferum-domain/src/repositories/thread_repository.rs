@@ -34,7 +34,12 @@ impl ThreadSort {
     /// Ordering alone, for callers with no filter axis (the admin thread list).
     /// Defined through [`parse_feed_query`] so the legacy vocabulary has exactly
     /// one definition.
-    pub fn from_str(s: &str) -> Self {
+    ///
+    /// Named `from_label` rather than `from_str` because it is infallible: an
+    /// unrecognised label falls back to the default ordering instead of
+    /// failing. `FromStr` returns a `Result`, so implementing that trait would
+    /// mean inventing an error this function does not have.
+    pub fn from_label(s: &str) -> Self {
         parse_feed_query(Some(s), None).0
     }
 

@@ -61,7 +61,7 @@ async fn add_already_bookmarked_returns_true_without_inserting() {
     // expect_add NOT set — must not be called
 
     let result = build(bm, th).add(&actor, ids::thread_a()).await;
-    assert_eq!(result.unwrap(), true);
+    assert!(result.unwrap());
 }
 
 #[tokio::test]
@@ -78,7 +78,7 @@ async fn add_new_bookmark_inserts_and_returns_true() {
     bm.expect_add().return_once(move |_, _| Ok(bookmark));
 
     let result = build(bm, th).add(&actor, ids::thread_a()).await;
-    assert_eq!(result.unwrap(), true);
+    assert!(result.unwrap());
 }
 
 // ─── remove ───────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ async fn remove_succeeds_returns_false() {
     bm.expect_remove().return_once(|_, _| Ok(()));
 
     let result = build(bm, MockThreadRepository::new()).remove(&actor, ids::thread_a()).await;
-    assert_eq!(result.unwrap(), false);
+    assert!(!result.unwrap());
 }
 
 // ─── list ─────────────────────────────────────────────────────────────────────

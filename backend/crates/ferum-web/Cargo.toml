@@ -41,7 +41,6 @@ ferum-infrastructure = { path = "../ferum-infrastructure", default-features = fa
 migration = { path = "../../migration" }
 
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 axum = { workspace = true, features = ["macros", "multipart"] }
 bytes = { workspace = true }
 chrono = { workspace = true }

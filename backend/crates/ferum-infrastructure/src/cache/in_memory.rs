@@ -16,6 +16,12 @@ pub struct InMemoryCacheService {
     store: Arc<DashMap<String, CacheEntry>>,
 }
 
+impl Default for InMemoryCacheService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryCacheService {
     pub fn new() -> Self {
         Self {

@@ -9,7 +9,6 @@ use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::post::Post;
 use ferum_domain::models::reaction::ReactionKind;
-use ferum_domain::models::user::TrustLevel;
 use ferum_domain::repositories::post_repository::PostRepository;
 use ferum_domain::repositories::reaction_repository::ReactionRepository;
 use ferum_domain::repositories::thread_repository::ThreadRepository;
@@ -67,10 +66,7 @@ impl ReactionUseCase {
         post_id: Uuid,
         kind: ReactionKind,
     ) -> Result<Vec<(ReactionKind, u64)>, AppError> {
-        PermissionChecker::require_not_banned(actor)?;
-        if actor.trust_level < TrustLevel::Basic {
-            return Err(AppError::forbidden("trust_level_insufficient"));
-        }
+        PermissionChecker::can_react(actor)?;
 
         let post = self.find_active_post(post_id).await?;
 

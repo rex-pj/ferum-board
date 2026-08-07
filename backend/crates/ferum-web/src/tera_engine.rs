@@ -59,9 +59,9 @@ impl TeraEngine {
     /// so the site still renders (with keys showing through) rather than having
     /// no templates at all.
     fn build_all(
-        themes_dir: &PathBuf,
-        admin_templates_dir: &PathBuf,
-        static_dir: &PathBuf,
+        themes_dir: &std::path::Path,
+        admin_templates_dir: &std::path::Path,
+        static_dir: &std::path::Path,
         translator: &Arc<dyn Translator>,
     ) -> Result<Instances> {
         let mut locales = translator.available_locales();
@@ -105,9 +105,9 @@ impl TeraEngine {
     /// the fail-closed path cannot be reached through `TeraEngine::new` without
     /// a broken template checked into the repository.
     pub fn build_tera(
-        themes_dir: &PathBuf,
-        admin_templates_dir: &PathBuf,
-        static_dir: &PathBuf,
+        themes_dir: &std::path::Path,
+        admin_templates_dir: &std::path::Path,
+        static_dir: &std::path::Path,
         locale: &Locale,
         translator: &Arc<dyn Translator>,
     ) -> Result<Tera> {
@@ -485,7 +485,7 @@ impl TeraEngine {
 /// every `ferum-page-*.js`, `ferum-admin-products.js`, or any theme stylesheet —
 /// left the token unchanged and browsers kept serving the stale copy that
 /// `Cache-Control: max-age=86400` had pinned for up to a day.
-fn compute_asset_version(static_dir: &PathBuf, themes_dir: &PathBuf) -> String {
+fn compute_asset_version(static_dir: &std::path::Path, themes_dir: &std::path::Path) -> String {
     /// Newest mtime among the immediate files of `dir`, as seconds since epoch.
     fn newest_in(dir: &std::path::Path) -> Option<u64> {
         std::fs::read_dir(dir)
@@ -532,7 +532,7 @@ fn group_thousands(n: i64, sep: &str) -> String {
     let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
     let bytes = digits.as_bytes();
     for (i, b) in bytes.iter().enumerate() {
-        if i > 0 && (bytes.len() - i) % 3 == 0 {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
             out.push_str(sep);
         }
         out.push(*b as char);
@@ -577,7 +577,7 @@ fn read_all(files: &[(PathBuf, Option<String>)]) -> Vec<(String, String)> {
 /// (`"{slug}/templates/{page}"`), which is exactly what `render_with_theme`
 /// builds its candidate list from, so the slug is the name's first path segment.
 type ThemeFiles = Vec<(PathBuf, Option<String>)>;
-fn partition_theme_files(themes_dir: &PathBuf) -> (ThemeFiles, Vec<(String, ThemeFiles)>) {
+fn partition_theme_files(themes_dir: &std::path::Path) -> (ThemeFiles, Vec<(String, ThemeFiles)>) {
     use std::collections::BTreeMap;
 
     let mut default_theme: ThemeFiles = Vec::new();
@@ -599,7 +599,7 @@ fn partition_theme_files(themes_dir: &PathBuf) -> (ThemeFiles, Vec<(String, Them
 
 /// Walk `dir` recursively and return `(path, Some(name))` pairs for all `.html` files.
 /// Names always use forward slashes regardless of OS path separator.
-fn collect_html_templates(dir: &PathBuf) -> Vec<(PathBuf, Option<String>)> {
+fn collect_html_templates(dir: &std::path::Path) -> Vec<(PathBuf, Option<String>)> {
     let mut out = Vec::new();
     if dir.exists() {
         walk_html_dir(dir, dir, &mut out);
@@ -607,7 +607,7 @@ fn collect_html_templates(dir: &PathBuf) -> Vec<(PathBuf, Option<String>)> {
     out
 }
 
-fn walk_html_dir(base: &PathBuf, current: &PathBuf, out: &mut Vec<(PathBuf, Option<String>)>) {
+fn walk_html_dir(base: &std::path::Path, current: &std::path::Path, out: &mut Vec<(PathBuf, Option<String>)>) {
     let Ok(entries) = std::fs::read_dir(current) else { return };
     let mut entries: Vec<_> = entries.flatten().collect();
     entries.sort_by_key(|e| e.path());
@@ -615,7 +615,7 @@ fn walk_html_dir(base: &PathBuf, current: &PathBuf, out: &mut Vec<(PathBuf, Opti
         let path = entry.path();
         if path.is_dir() {
             walk_html_dir(base, &path, out);
-        } else if path.extension().map_or(false, |e| e == "html") {
+        } else if path.extension().is_some_and(|e| e == "html") {
             if let Ok(rel) = path.strip_prefix(base) {
                 let name = rel
                     .components()

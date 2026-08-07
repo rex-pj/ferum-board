@@ -1,9 +1,9 @@
-/// SRP: all cross-cutting observability helpers live here.
-/// Business logic never imports `std::time::Instant` or formats log strings directly.
-///
-/// DIP: every helper depends on the `tracing` abstraction.
-/// The concrete subscriber (stdout / JSON / OTLP) is wired once in `main::init_tracing` —
-/// no code change needed here when the destination changes.
+//! SRP: all cross-cutting observability helpers live here.
+//! Business logic never imports `std::time::Instant` or formats log strings directly.
+//!
+//! DIP: every helper depends on the `tracing` abstraction.
+//! The concrete subscriber (stdout / JSON / OTLP) is wired once in `main::init_tracing` —
+//! no code change needed here when the destination changes.
 
 /// RAII guard that emits a `tracing::debug!` event with the elapsed time when dropped.
 ///

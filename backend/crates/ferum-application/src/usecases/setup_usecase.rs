@@ -26,6 +26,8 @@ pub struct SetupUseCase {
 }
 
 impl SetupUseCase {
+    // Constructor injection: every argument is a port this use case depends on.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         users: Arc<dyn UserRepository>,
         roles: Arc<dyn RoleRepository>,

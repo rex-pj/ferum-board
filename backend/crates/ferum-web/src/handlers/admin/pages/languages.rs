@@ -71,10 +71,11 @@ pub async fn languages(
                 .filter(|key| state.translator.has_key(locale, key))
                 .count();
             let total = canonical_keys.len();
-            let coverage = if total == 0 {
-                100
-            } else {
-                ((translated * 100) / total) as u32
+            let coverage = match (translated * 100).checked_div(total) {
+                // No keys at all means nothing is untranslated, so report 100%
+                // rather than 0% — an empty catalog is complete, not empty.
+                None => 100,
+                Some(pct) => pct as u32,
             };
 
             LocaleRow {

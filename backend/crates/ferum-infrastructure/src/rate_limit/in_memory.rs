@@ -17,6 +17,12 @@ pub struct InMemoryRateLimiter {
     store: Arc<DashMap<String, Window>>,
 }
 
+impl Default for InMemoryRateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryRateLimiter {
     pub fn new() -> Self {
         let store: Arc<DashMap<String, Window>> = Arc::new(DashMap::new());

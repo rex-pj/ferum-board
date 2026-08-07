@@ -388,7 +388,7 @@ pub async fn search(
         "can_submit_product",
         &auth_user
             .as_ref()
-            .map_or(false, |u| PermissionChecker::can_submit_products(u).is_ok()),
+            .is_some_and(|u| PermissionChecker::can_submit_products(u).is_ok()),
     );
 
     render_with_theme_in(&state, &req_locale, &active, "search.html", &ctx).await

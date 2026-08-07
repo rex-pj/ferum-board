@@ -37,9 +37,9 @@ pub async fn queue(
     // Batch-fetch author usernames.
     let mut author_names: HashMap<Uuid, String> = HashMap::new();
     for post in &posts {
-        if !author_names.contains_key(&post.author_id) {
+        if let std::collections::hash_map::Entry::Vacant(e) = author_names.entry(post.author_id) {
             if let Ok(Some(u)) = state.user_repo.find_by_id(post.author_id).await {
-                author_names.insert(post.author_id, u.username);
+                e.insert(u.username);
             }
         }
     }
@@ -47,9 +47,9 @@ pub async fn queue(
     // Batch-fetch thread slugs + titles.
     let mut thread_info: HashMap<Uuid, (String, String)> = HashMap::new();
     for post in &posts {
-        if !thread_info.contains_key(&post.thread_id) {
+        if let std::collections::hash_map::Entry::Vacant(e) = thread_info.entry(post.thread_id) {
             if let Ok(Some(t)) = state.thread.threads.find_by_id(post.thread_id).await {
-                thread_info.insert(post.thread_id, (t.slug, t.title));
+                e.insert((t.slug, t.title));
             }
         }
     }

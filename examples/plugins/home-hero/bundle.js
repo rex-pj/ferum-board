@@ -74,10 +74,17 @@ if (typeof __ferum_rpc === 'object') {
     }
 
     // Config is admin-entered text, so a URL out of it is input, not a
-    // constant. Mirrors the server's `is_safe_external_link`: a site-relative
-    // path, or an explicit http(s) origin. Rejecting everything else is what
-    // keeps `javascript:` out of an href. A protocol-relative `//host` is
-    // refused too — it reads as a path and behaves as an origin.
+    // constant. Accepts a site-relative path or an explicit http(s) origin;
+    // rejecting everything else is what keeps `javascript:` out of an href. A
+    // protocol-relative `//host` is refused too — it reads as a path and
+    // behaves as an origin.
+    //
+    // This is the ONLY place that check now happens. The masthead used to be
+    // site_config, and the admin endpoint that wrote it validated links with
+    // `is_safe_external_link` server-side; that endpoint went away with the
+    // move to this plugin, and the Rust helper went with it. Plugin config is
+    // a raw JSON textarea with no per-field validation, so anything weakened
+    // here is not caught anywhere else.
     function safeUrl(raw) {
         var u = (raw == null ? '' : String(raw)).trim();
         if (!u) return '';

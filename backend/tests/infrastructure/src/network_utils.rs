@@ -6,6 +6,9 @@ fn v4(a: u8, b: u8, c: u8, d: u8) -> IpAddr {
     IpAddr::V4(Ipv4Addr::new(a, b, c, d))
 }
 
+// Mirrors `Ipv6Addr::new`, which takes eight groups because an IPv6 address
+// has eight groups.
+#[allow(clippy::too_many_arguments)]
 fn v6(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> IpAddr {
     IpAddr::V6(Ipv6Addr::new(a, b, c, d, e, f, g, h))
 }

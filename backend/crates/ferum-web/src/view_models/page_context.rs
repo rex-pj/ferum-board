@@ -233,7 +233,7 @@ impl PaginationCtx {
         // The macro also loops `range(1..=total_pages)` to render a five-link
         // window, so this incidentally stops that being a 2,500-iteration loop
         // on every render.
-        let total_pages = ((total + per_page - 1) / per_page).min(MAX_PAGE);
+        let total_pages = total.div_ceil(per_page).min(MAX_PAGE);
         Self {
             page,
             per_page,

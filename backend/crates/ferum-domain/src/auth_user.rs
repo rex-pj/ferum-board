@@ -43,7 +43,7 @@ impl AuthUser {
             || self
                 .category_permissions
                 .get(&category_id)
-                .map_or(false, |p| p.contains(key))
+                .is_some_and(|p| p.contains(key))
     }
 
     /// Returns true if the user has the permission globally OR in ANY category scope.

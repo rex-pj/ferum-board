@@ -162,7 +162,7 @@ async fn set_trust_level_and_read_back() {
         TrustLevel::Leader,
         TrustLevel::New,
     ] {
-        repo.set_trust_level(user.id, level.clone())
+        repo.set_trust_level(user.id, level)
             .await
             .expect("set_trust_level executes");
         let found = repo

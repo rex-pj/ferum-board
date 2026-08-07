@@ -51,9 +51,15 @@ impl UserRoleAssignment {
 // ── Permission key constants ──────────────────────────────────────────────────
 pub mod perm {
     // Content
+    //
+    // NOT here, and deliberately: `thread.edit_own` and `thread.delete_own`.
+    // Editing or deleting your own thread is gated by authorship — the edit
+    // window for the former, `require_author_or_mod` for the latter — and never
+    // by an RBAC grant. They existed as keys for a long time without a single
+    // call site, so revoking them in /admin/permissions did nothing at all. A
+    // permission that cannot be enforced is worse than no permission, because
+    // the panel promises a control that is not there.
     pub const THREAD_CREATE: &str = "thread.create";
-    pub const THREAD_EDIT_OWN: &str = "thread.edit_own";
-    pub const THREAD_DELETE_OWN: &str = "thread.delete_own";
     pub const THREAD_EDIT_ANY: &str = "thread.edit_any";
     pub const THREAD_DELETE_ANY: &str = "thread.delete_any";
     pub const THREAD_PIN: &str = "thread.pin";
@@ -67,7 +73,8 @@ pub mod perm {
 
     pub const REACTION_ADD: &str = "reaction.add";
     pub const FILE_UPLOAD: &str = "file.upload";
-    pub const LINK_EMBED: &str = "link.embed";
+    // `link.embed` was removed for the same reason: no markdown, sanitiser or
+    // post path has ever consulted it.
     pub const TAG_CREATE: &str = "tag.create";
 
     // Catalog (furniture review) — curation of the product/material catalog.
@@ -145,8 +152,6 @@ pub struct SystemRoleDef {
 pub const PERMISSIONS: &[PermissionDef] = &[
     // ── Content ──────────────────────────────────────────────────────────────
     PermissionDef { key: perm::THREAD_CREATE,     description: "Create new threads",                  group_name: "content", min_trust: TrustLevel::Basic },
-    PermissionDef { key: perm::THREAD_EDIT_OWN,   description: "Edit own threads (within 24h)",       group_name: "content", min_trust: TrustLevel::New },
-    PermissionDef { key: perm::THREAD_DELETE_OWN, description: "Delete own threads",                  group_name: "content", min_trust: TrustLevel::New },
     PermissionDef { key: perm::THREAD_EDIT_ANY,   description: "Edit any thread title",               group_name: "content", min_trust: TrustLevel::New },
     PermissionDef { key: perm::THREAD_DELETE_ANY, description: "Delete any thread",                   group_name: "content", min_trust: TrustLevel::New },
     PermissionDef { key: perm::THREAD_PIN,        description: "Pin / unpin threads",                 group_name: "content", min_trust: TrustLevel::New },
@@ -158,7 +163,6 @@ pub const PERMISSIONS: &[PermissionDef] = &[
     PermissionDef { key: perm::POST_DELETE_ANY,   description: "Delete any post",                     group_name: "content", min_trust: TrustLevel::New },
     PermissionDef { key: perm::REACTION_ADD,      description: "Add reactions to posts",              group_name: "content", min_trust: TrustLevel::Basic },
     PermissionDef { key: perm::FILE_UPLOAD,       description: "Upload files and images",             group_name: "content", min_trust: TrustLevel::Member },
-    PermissionDef { key: perm::LINK_EMBED,        description: "Embed links in posts",                group_name: "content", min_trust: TrustLevel::Member },
     PermissionDef { key: perm::TAG_CREATE,        description: "Create new tags",                     group_name: "content", min_trust: TrustLevel::Member },
     // ── Catalog ──────────────────────────────────────────────────────────────
     PermissionDef { key: perm::PRODUCT_MANAGE,    description: "Manage the product / material catalog",       group_name: "catalog", min_trust: TrustLevel::New },
@@ -184,11 +188,11 @@ pub const PERMISSIONS: &[PermissionDef] = &[
 ];
 
 const MODERATOR_GRANTS: &[&str] = &[
-    perm::THREAD_CREATE, perm::THREAD_EDIT_OWN, perm::THREAD_DELETE_OWN,
+    perm::THREAD_CREATE,
     perm::THREAD_EDIT_ANY, perm::THREAD_DELETE_ANY,
     perm::THREAD_PIN, perm::THREAD_LOCK, perm::THREAD_MOVE,
     perm::POST_CREATE, perm::POST_EDIT_OWN, perm::POST_DELETE_OWN, perm::POST_DELETE_ANY,
-    perm::REACTION_ADD, perm::FILE_UPLOAD, perm::LINK_EMBED, perm::TAG_CREATE,
+    perm::REACTION_ADD, perm::FILE_UPLOAD, perm::TAG_CREATE,
     perm::PRODUCT_SUBMIT,
     perm::REPORT_CREATE,
     perm::MOD_VIEW_REPORTS, perm::MOD_RESOLVE,
@@ -196,9 +200,9 @@ const MODERATOR_GRANTS: &[&str] = &[
 ];
 
 const MEMBER_GRANTS: &[&str] = &[
-    perm::THREAD_CREATE, perm::THREAD_EDIT_OWN, perm::THREAD_DELETE_OWN,
+    perm::THREAD_CREATE,
     perm::POST_CREATE, perm::POST_EDIT_OWN, perm::POST_DELETE_OWN,
-    perm::REACTION_ADD, perm::FILE_UPLOAD, perm::LINK_EMBED, perm::TAG_CREATE,
+    perm::REACTION_ADD, perm::FILE_UPLOAD, perm::TAG_CREATE,
     perm::PRODUCT_SUBMIT,
     perm::REPORT_CREATE,
 ];

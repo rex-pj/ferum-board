@@ -104,7 +104,7 @@ impl ThreadUseCase {
             .map(|e| *e.key())
             .collect::<Vec<_>>()
             .into_iter()
-            .filter_map(|k| self.view_count_buffer.remove(&k).map(|(k, v)| (k, v)))
+            .filter_map(|k| self.view_count_buffer.remove(&k))
             .collect();
 
         for (thread_id, count) in snapshot {
@@ -660,7 +660,7 @@ impl ThreadUseCase {
             .await?
             .or_not_found()?;
 
-        PermissionChecker::can_create_post(actor, &category)?;
+        PermissionChecker::can_create_thread(actor, &category)?;
 
         if !validate_thread_title(&cmd.title) {
             return Err(AppError::invalid("thread_title_length"));

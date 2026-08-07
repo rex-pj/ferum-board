@@ -49,21 +49,33 @@ impl Uc {
 
 #[tokio::test]
 async fn add_banned_user_returns_forbidden() {
-    let actor = AuthUserBuilder::member().banned().build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").banned().build();
     let result = Uc::new().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
+/// Reacting needs the `reaction.add` grant, not just Basic trust.
+///
+/// `add` used to check only the ban flag and a hardcoded trust floor, so the
+/// RBAC half of `reaction.add` went unread and revoking it did nothing.
+#[tokio::test]
+async fn add_requires_reaction_add_permission() {
+    // AuthUserBuilder::member() carries no permissions of its own.
+    let actor = AuthUserBuilder::member().build();
+    let result = Uc::new().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    assert!(matches!(result, Err(AppError::Forbidden(c)) if c == "permission_denied"));
+}
+
 #[tokio::test]
 async fn add_trust_level_new_returns_forbidden() {
-    let actor = AuthUserBuilder::member().with_trust(TrustLevel::New).build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_trust(TrustLevel::New).build();
     let result = Uc::new().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
 #[tokio::test]
 async fn add_post_not_found_returns_not_found() {
-    let actor = AuthUserBuilder::member().build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").build();
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(|_| Ok(None));
     let result = b.build().add(&actor, ids::post_a(), ReactionKind::Like).await;
@@ -72,7 +84,7 @@ async fn add_post_not_found_returns_not_found() {
 
 #[tokio::test]
 async fn add_deleted_post_returns_not_found() {
-    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
     let mut post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
     post.is_deleted = true;
 
@@ -84,7 +96,7 @@ async fn add_deleted_post_returns_not_found() {
 
 #[tokio::test]
 async fn add_own_post_returns_forbidden() {
-    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
     let post = make_post(ids::post_a(), ids::thread_a(), actor.id); // same author
 
     let mut b = Uc::new();
@@ -95,7 +107,7 @@ async fn add_own_post_returns_forbidden() {
 
 #[tokio::test]
 async fn add_idempotent_when_already_reacted() {
-    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
     let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
 
     use ferum_domain::models::reaction::Reaction;
@@ -117,7 +129,7 @@ async fn add_idempotent_when_already_reacted() {
 
 #[tokio::test]
 async fn add_like_succeeds_and_publishes_event() {
-    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
     let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
     let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b());
 
@@ -143,7 +155,7 @@ async fn add_like_succeeds_and_publishes_event() {
 
 #[tokio::test]
 async fn add_helpful_triggers_trust_score_increment() {
-    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
     let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
     let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b());
 

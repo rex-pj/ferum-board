@@ -1,5 +1,5 @@
 use axum::extract::{Extension, Path, Query, State};
-use axum::response::{IntoResponse, Redirect};
+use axum::response::IntoResponse;
 use serde::Deserialize;
 use tera::Context;
 
@@ -10,7 +10,7 @@ use crate::view_models::page_context::{CategoryCtx, TagCtx};
 use ferum_application::permission::PermissionChecker;
 use ferum_domain::models::product::ProductStatus;
 
-use super::{active_theme, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme_in, user_ctx, PageError};
+use super::{active_theme, login_redirect, nav_categories_ctx, post_policy_str, view_policy_str, render_with_theme_in, user_ctx, PageError};
 
 #[derive(Deserialize)]
 pub struct NewThreadQuery {
@@ -29,7 +29,7 @@ pub async fn new_thread(
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
         Some(u) => u,
-        None => return Ok(Redirect::to("/login?next=/new-thread").into_response()),
+        None => return Ok(login_redirect("/new-thread")),
     };
 
     let categories = state.category.list_visible(Some(&auth_user)).await?;
@@ -96,7 +96,7 @@ pub async fn edit_thread(
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
         Some(u) => u,
-        None => return Ok(Redirect::to(&format!("/login?next=/edit-thread/{slug}")).into_response()),
+        None => return Ok(login_redirect(&format!("/edit-thread/{slug}"))),
     };
 
     let thread = state

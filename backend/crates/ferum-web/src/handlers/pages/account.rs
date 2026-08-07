@@ -1,5 +1,5 @@
 use axum::extract::{Extension, Query, State};
-use axum::response::{IntoResponse, Redirect};
+use axum::response::IntoResponse;
 use tera::Context;
 
 use crate::app_state::AppState;
@@ -10,7 +10,7 @@ use crate::view_models::page_context::{
 };
 use ferum_domain::models::ThreadStatus;
 
-use super::{active_theme, nav_categories_ctx, render_with_theme_in, user_ctx, PageError, PageQuery};
+use super::{active_theme, login_redirect, nav_categories_ctx, render_with_theme_in, user_ctx, PageError, PageQuery};
 
 pub async fn account(
     State(state): State<AppState>,
@@ -19,7 +19,7 @@ pub async fn account(
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
         Some(u) => u,
-        None => return Ok(Redirect::to("/login?next=/account").into_response()),
+        None => return Ok(login_redirect("/account")),
     };
 
     let prefs = state
@@ -96,7 +96,7 @@ pub async fn notifications(
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
         Some(u) => u,
-        None => return Ok(Redirect::to("/login?next=/notifications").into_response()),
+        None => return Ok(login_redirect("/notifications")),
     };
 
     let page = q.page.unwrap_or(1).max(1);
@@ -141,7 +141,7 @@ pub async fn bookmarks(
 ) -> Result<impl IntoResponse, PageError> {
     let auth_user = match auth_user {
         Some(u) => u,
-        None => return Ok(Redirect::to("/login?next=/bookmarks").into_response()),
+        None => return Ok(login_redirect("/bookmarks")),
     };
 
     let page = q.page.unwrap_or(1).max(1);

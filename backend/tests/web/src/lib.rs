@@ -8,5 +8,6 @@
 #[cfg(test)] mod template_keys;
 #[cfg(test)] mod tera_engine;
 #[cfg(test)] mod tera_templates;
+#[cfg(test)] mod theme_inheritance;
 #[cfg(test)] mod utils;
 #[cfg(test)] mod view_models;

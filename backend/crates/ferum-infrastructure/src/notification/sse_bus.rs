@@ -15,6 +15,12 @@ pub struct SseBroadcaster {
     senders: Arc<DashMap<Uuid, Vec<UnboundedSender<String>>>>,
 }
 
+impl Default for SseBroadcaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SseBroadcaster {
     pub fn new() -> Self {
         let senders: Arc<DashMap<Uuid, Vec<UnboundedSender<String>>>> = Arc::new(DashMap::new());

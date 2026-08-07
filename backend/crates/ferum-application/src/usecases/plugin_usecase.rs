@@ -82,6 +82,7 @@ impl PluginUseCase {
     ///
     /// Returns the plugin with status = Inactive (DB default is `installing`,
     /// but this method immediately transitions to `inactive` before returning).
+    #[allow(clippy::too_many_arguments)]
     pub async fn register_extracted(
         &self,
         actor: &AuthUser,

@@ -52,7 +52,7 @@ impl CircuitBreaker {
         let mut last = self.last_failure_at.lock().unwrap();
 
         // Reset counter if failures are outside the window
-        if last.map_or(true, |t: Instant| t.elapsed() > self.window) {
+        if last.is_none_or(|t: Instant| t.elapsed() > self.window) {
             self.failure_count.store(0, Ordering::SeqCst);
         }
 
