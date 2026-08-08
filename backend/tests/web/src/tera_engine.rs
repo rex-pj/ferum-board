@@ -48,6 +48,14 @@ impl Translator for StubTranslator {
     fn default_locale_keys(&self) -> Vec<String> {
         Vec::new()
     }
+    fn js_strings(
+        &self,
+        _locale: &ferum_domain::Locale,
+    ) -> std::sync::Arc<std::collections::BTreeMap<String, String>> {
+        // These stubs exist to drive template rendering, not i18n; the `js-`
+        // dictionary only reaches the <meta> tag, which no test here reads.
+        Default::default()
+    }
     async fn reload(&self) -> std::result::Result<(), ferum_application::shared::AppError> {
         Ok(())
     }
@@ -307,6 +315,14 @@ impl Translator for FormatTranslator {
     fn default_locale_keys(&self) -> Vec<String> {
         Vec::new()
     }
+    fn js_strings(
+        &self,
+        _locale: &ferum_domain::Locale,
+    ) -> std::sync::Arc<std::collections::BTreeMap<String, String>> {
+        // These stubs exist to drive template rendering, not i18n; the `js-`
+        // dictionary only reaches the <meta> tag, which no test here reads.
+        Default::default()
+    }
     async fn reload(&self) -> std::result::Result<(), ferum_application::shared::AppError> {
         Ok(())
     }
@@ -391,6 +407,14 @@ fn translated_output_is_html_escaped() {
         }
         fn default_locale_keys(&self) -> Vec<String> {
             Vec::new()
+        }
+        fn js_strings(
+            &self,
+            _locale: &ferum_domain::Locale,
+        ) -> std::sync::Arc<std::collections::BTreeMap<String, String>> {
+            // These stubs exist to drive template rendering, not i18n; the `js-`
+            // dictionary only reaches the <meta> tag, which no test here reads.
+            Default::default()
         }
         async fn reload(&self) -> std::result::Result<(), ferum_application::shared::AppError> {
             Ok(())

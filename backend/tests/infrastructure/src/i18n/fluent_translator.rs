@@ -204,3 +204,89 @@ async fn no_bidi_isolation_marks_in_output() {
     assert_eq!(out, "Hi Bo");
     assert!(!out.contains('\u{2068}'), "unexpected bidi isolate in {out:?}");
 }
+
+// ─── js_strings ───────────────────────────────────────────────────────────────
+//
+// The `js-` dictionary the browser reads out of `<meta name="ferum-i18n">`.
+// It used to be assembled per page render — clone the whole default key set,
+// filter it, Fluent-format each survivor — and is now resolved once per catalog
+// load. These pin the contract that move has to preserve: the same keys, the
+// same fallback rule, and a fresh answer after `reload`.
+
+#[tokio::test]
+async fn js_strings_contains_only_the_js_namespace() {
+    let f = Fixture::new("js-scope");
+    f.write(
+        "en",
+        "c.ftl",
+        "js-save = Save\nui-save = Save\nadm-save = Save\nerror-nope = Nope\n",
+    );
+
+    let t = translator_over(vec![f.0.clone()]).await;
+    let dict = t.js_strings(&Locale::default_locale());
+
+    assert_eq!(dict.len(), 1, "only the js- namespace may be shipped: {dict:?}");
+    assert_eq!(dict.get("js-save").map(String::as_str), Some("Save"));
+}
+
+#[tokio::test]
+async fn js_strings_resolves_each_locale_in_its_own_language() {
+    let f = Fixture::new("js-locales");
+    f.write("en", "c.ftl", "js-reply = Reply\n");
+    f.write("vi", "c.ftl", "js-reply = Trả lời\n");
+
+    let t = translator_over(vec![f.0.clone()]).await;
+    let vi = Locale::parse("vi").expect("vi is a valid tag");
+
+    assert_eq!(
+        t.js_strings(&Locale::default_locale()).get("js-reply").map(String::as_str),
+        Some("Reply")
+    );
+    assert_eq!(t.js_strings(&vi).get("js-reply").map(String::as_str), Some("Trả lời"));
+}
+
+#[tokio::test]
+async fn js_strings_has_the_same_shape_in_every_locale_falling_back_for_gaps() {
+    let f = Fixture::new("js-gap");
+    f.write("en", "c.ftl", "js-reply = Reply\njs-cancel = Cancel\n");
+    // `vi` translates one of the two. The dictionary must still carry BOTH keys
+    // — a key missing from the map makes `Ferum.t()` render a raw key, whereas
+    // falling back gives the visitor English, which is what the server would
+    // have rendered for the same key.
+    f.write("vi", "c.ftl", "js-reply = Trả lời\n");
+
+    let t = translator_over(vec![f.0.clone()]).await;
+    let vi = Locale::parse("vi").expect("vi is a valid tag");
+    let dict = t.js_strings(&vi);
+
+    assert_eq!(dict.len(), 2, "shape must match the default locale: {dict:?}");
+    assert_eq!(dict.get("js-reply").map(String::as_str), Some("Trả lời"));
+    assert_eq!(dict.get("js-cancel").map(String::as_str), Some("Cancel"));
+}
+
+#[tokio::test]
+async fn js_strings_is_rebuilt_by_reload() {
+    let f = Fixture::new("js-reload");
+    f.write("en", "c.ftl", "js-save = Save\n");
+
+    let t = translator_over(vec![f.0.clone()]).await;
+    assert_eq!(t.js_strings(&Locale::default_locale()).get("js-save").map(String::as_str), Some("Save"));
+
+    // Precomputing at load time is only correct if a reload refreshes it —
+    // otherwise a language-pack upload would update every server-rendered
+    // string while the browser kept the old ones.
+    f.write("en", "c.ftl", "js-save = Store\n");
+    t.reload().await.expect("reload must succeed");
+
+    assert_eq!(
+        t.js_strings(&Locale::default_locale()).get("js-save").map(String::as_str),
+        Some("Store")
+    );
+}
+
+#[tokio::test]
+async fn js_strings_on_an_empty_catalog_is_empty_rather_than_a_panic() {
+    let f = Fixture::new("js-empty");
+    let t = translator_over(vec![f.0.clone()]).await;
+    assert!(t.js_strings(&Locale::default_locale()).is_empty());
+}

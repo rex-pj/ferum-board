@@ -171,23 +171,15 @@ pub(super) async fn plugin_ctx_data(
 /// put every string — including admin copy a visitor can never see — into every
 /// page's HTML, and it would grow without bound as the site is translated.
 ///
-/// Derived from the *default locale's* key set so the dictionary has the same
-/// shape in every language; a key the current locale hasn't translated resolves
-/// through the fallback chain, exactly as it would server-side.
+/// This used to *build* the dictionary here, on every render: clone the entire
+/// default key set (`ui-`, `js-`, `adm-` and `error-` alike), filter it, then
+/// Fluent-format each survivor. It is now resolved once per catalog load inside
+/// the translator and handed back as an `Arc` — see [`Translator::js_strings`].
 pub fn js_strings_for(
     state: &AppState,
     locale: &ferum_domain::Locale,
-) -> std::collections::BTreeMap<String, String> {
-    state
-        .translator
-        .default_locale_keys()
-        .into_iter()
-        .filter(|k| k.starts_with("js-"))
-        .map(|key| {
-            let text = state.translator.translate(locale, &key, &[]);
-            (key, text)
-        })
-        .collect()
+) -> std::sync::Arc<std::collections::BTreeMap<String, String>> {
+    state.translator.js_strings(locale)
 }
 
 /// Renders a themed page in the default locale.

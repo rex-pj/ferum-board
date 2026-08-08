@@ -31,7 +31,7 @@
 //! in-flight renders finish against the old catalog, exactly like the theme
 //! hot-reload's `Arc<Tera>` swap.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
@@ -103,6 +103,14 @@ struct Catalogs {
     /// Canonical key set, from the default locale. Coverage percentages in the
     /// admin UI are computed against this.
     default_keys: Vec<String>,
+    /// Pre-resolved `js-` dictionary per locale — see [`Translator::js_strings`].
+    ///
+    /// Built here rather than per render because every page load used to walk
+    /// the full key set and Fluent-format ~150 messages to produce a value that
+    /// only ever changes when these catalogs are rebuilt. It is swapped in with
+    /// the rest of this struct, so a reload updates it atomically alongside the
+    /// bundles it was derived from — the two can never disagree.
+    js_strings: HashMap<Locale, Arc<BTreeMap<String, String>>>,
 }
 
 impl Catalogs {
@@ -111,7 +119,18 @@ impl Catalogs {
             by_locale: HashMap::new(),
             order: Vec::new(),
             default_keys: Vec::new(),
+            js_strings: HashMap::new(),
         }
+    }
+
+    /// Resolves `key` through `locale`'s fallback chain. Shared by `translate`
+    /// and by the `js-` precomputation so the dictionary the browser gets and
+    /// the text the server renders come from one resolution rule.
+    fn resolve(&self, locale: &Locale, key: &str, args: &[(&str, TransArg)]) -> Option<String> {
+        locale
+            .fallback_chain()
+            .into_iter()
+            .find_map(|candidate| self.by_locale.get(&candidate)?.format(key, args))
     }
 }
 
@@ -155,17 +174,11 @@ impl FluentTranslator {
 #[async_trait]
 impl Translator for FluentTranslator {
     fn translate(&self, locale: &Locale, key: &str, args: &[(&str, TransArg)]) -> String {
-        let catalogs = self.snapshot();
-
-        // `fallback_chain` already terminates at the default locale, so this
-        // covers "regional narrows to base" and "anything narrows to default"
-        // in one pass.
-        for candidate in locale.fallback_chain() {
-            if let Some(catalog) = catalogs.by_locale.get(&candidate) {
-                if let Some(text) = catalog.format(key, args) {
-                    return text;
-                }
-            }
+        // `resolve` walks `fallback_chain`, which already terminates at the
+        // default locale — that covers "regional narrows to base" and "anything
+        // narrows to default" in one pass.
+        if let Some(text) = self.snapshot().resolve(locale, key, args) {
+            return text;
         }
 
         // Nothing resolved anywhere. Render the key so the gap is visible in the
@@ -188,6 +201,20 @@ impl Translator for FluentTranslator {
 
     fn default_locale_keys(&self) -> Vec<String> {
         self.snapshot().default_keys.clone()
+    }
+
+    fn js_strings(&self, locale: &Locale) -> Arc<BTreeMap<String, String>> {
+        let catalogs = self.snapshot();
+        catalogs
+            .js_strings
+            .get(locale)
+            .or_else(|| catalogs.js_strings.get(&Locale::default_locale()))
+            .map(Arc::clone)
+            // A locale with no precomputed entry means `load_catalogs` produced
+            // nothing at all. Serve an empty dictionary rather than paying to
+            // rebuild one per request: `Ferum.t()` then renders raw keys, which
+            // is the same visible degradation `translate` chooses.
+            .unwrap_or_default()
     }
 
     async fn reload(&self) -> Result<(), AppError> {
@@ -257,11 +284,49 @@ fn load_catalogs(roots: &[PathBuf]) -> Catalogs {
         })
         .unwrap_or_default();
 
-    Catalogs {
+    let mut catalogs = Catalogs {
         by_locale,
         order,
         default_keys,
-    }
+        js_strings: HashMap::new(),
+    };
+    catalogs.js_strings = build_js_strings(&catalogs);
+    catalogs
+}
+
+/// Resolves the `js-` dictionary once per installed locale.
+///
+/// The key set comes from the default locale so every language ships the same
+/// shape — a key `vi` has not translated resolves through the fallback chain to
+/// English, which is what the server would render for it anyway. Doing this at
+/// load time is the whole point: it is ~150 Fluent formats per locale, paid once
+/// per catalog build instead of once per HTTP request.
+fn build_js_strings(catalogs: &Catalogs) -> HashMap<Locale, Arc<BTreeMap<String, String>>> {
+    let js_keys: Vec<&String> = catalogs
+        .default_keys
+        .iter()
+        .filter(|k| k.starts_with("js-"))
+        .collect();
+
+    catalogs
+        .order
+        .iter()
+        .map(|locale| {
+            let dict: BTreeMap<String, String> = js_keys
+                .iter()
+                .map(|key| {
+                    // Same fallback rule and same "render the key" degradation
+                    // as `translate`, so a missing string looks identical
+                    // whether the browser or the server drew it.
+                    let text = catalogs
+                        .resolve(locale, key, &[])
+                        .unwrap_or_else(|| (*key).clone());
+                    ((*key).clone(), text)
+                })
+                .collect();
+            (locale.clone(), Arc::new(dict))
+        })
+        .collect()
 }
 
 /// Reads one root directory, returning `(locale, merged_source)` per locale

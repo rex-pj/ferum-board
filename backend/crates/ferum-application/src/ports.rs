@@ -2,6 +2,8 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -652,6 +654,21 @@ pub trait Translator: Send + Sync {
     /// Every key defined in the default locale. The canonical key set that
     /// coverage percentages are computed against.
     fn default_locale_keys(&self) -> Vec<String>;
+
+    /// The `js-` dictionary the browser reads out of `<meta name="ferum-i18n">`,
+    /// resolved in `locale`.
+    ///
+    /// Returned as an `Arc` because it is **built once per catalog load, not per
+    /// render**. Every page called `default_locale_keys()` (cloning the whole
+    /// key vector — every `ui-`, `js-`, `adm-` and `error-` key), filtered it to
+    /// the `js-` prefix, and then ran a Fluent format per surviving key, on
+    /// every single request. The result is a pure function of (catalogs, locale)
+    /// and both only change on `reload`, so it belongs there.
+    ///
+    /// Keyed on the *default* locale's key set so the dictionary has the same
+    /// shape in every language; a key the requested locale has not translated
+    /// resolves through the fallback chain exactly as it would server-side.
+    fn js_strings(&self, locale: &Locale) -> Arc<BTreeMap<String, String>>;
 
     /// Re-reads catalogs from disk and atomically swaps them in. Called after a
     /// language pack upload or an admin string override, mirroring
