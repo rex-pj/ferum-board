@@ -670,6 +670,15 @@ ui-browse-by-type = Browse by type
 # the `window.Ferum.i18n` dictionary that `base.html` emits. Only these keys are
 # shipped to the client — the full catalog stays on the server.
 
+# Relative timestamps, rendered by Ferum.timeAgo. Compact by design — they sit
+# under avatars and in list rows. The absolute fallback past ~30 days goes
+# through Ferum.formatDate, which uses <html lang> rather than a key.
+js-time-just-now = just now
+js-time-minutes = { $n }m ago
+js-time-hours = { $n }h ago
+js-time-days = { $n }d ago
+js-time-weeks = { $n }w ago
+
 js-network-error = Network error. Please try again.
 js-failed-to-load = Failed to load.
 js-passwords-do-not-match = Passwords do not match.

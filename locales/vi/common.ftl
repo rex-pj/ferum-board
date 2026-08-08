@@ -86,6 +86,14 @@ action-go-home = Về trang chủ
 
 ## ─── Thông báo phía trình duyệt ──────────────────────────────────────────────
 
+# Mốc thời gian tương đối do Ferum.timeAgo dựng. Tiếng Việt không chia số nhiều
+# nên không cần nhánh plural như bản tiếng Anh.
+js-time-just-now = vừa xong
+js-time-minutes = { $n } phút trước
+js-time-hours = { $n } giờ trước
+js-time-days = { $n } ngày trước
+js-time-weeks = { $n } tuần trước
+
 js-network-error = Lỗi kết nối. Vui lòng thử lại.
 js-failed-to-load = Không tải được.
 js-passwords-do-not-match = Mật khẩu nhập lại không khớp.

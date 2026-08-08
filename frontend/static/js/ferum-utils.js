@@ -25,24 +25,32 @@
   }
 
   // ── Relative timestamps ────────────────────────────────────────────
-  // NOTE: the relative strings below are still English-only. Translating them
-  // needs `js-` catalog entries with plural handling in both locales, which is
-  // a change of its own; the absolute fallback is fixed here because it shares
-  // `formatDate` with the reply card.
+  // Through the catalog: these render on every list row and post header, and
+  // were the largest block of hardcoded English left on the public pages.
+  //
+  // `Ferum.t` is defined lower in this file but only *called* at render time,
+  // so the reference resolves. Past ~30 days this hands off to `formatDate`,
+  // which localises through <html lang> rather than through a key.
   function timeAgo(dateStr) {
     var d = new Date(dateStr), s = Math.floor((Date.now() - d) / 1000);
-    if (s < 60)      return 'just now';
-    if (s < 3600)    return Math.floor(s / 60) + 'm ago';
-    if (s < 86400)   return Math.floor(s / 3600) + 'h ago';
-    if (s < 604800)  return Math.floor(s / 86400) + 'd ago';
-    if (s < 2592000) return Math.floor(s / 604800) + 'w ago';
+    if (s < 60)      return Ferum.t('js-time-just-now');
+    if (s < 3600)    return Ferum.t('js-time-minutes', { n: Math.floor(s / 60) });
+    if (s < 86400)   return Ferum.t('js-time-hours',   { n: Math.floor(s / 3600) });
+    if (s < 604800)  return Ferum.t('js-time-days',    { n: Math.floor(s / 86400) });
+    if (s < 2592000) return Ferum.t('js-time-weeks',   { n: Math.floor(s / 604800) });
     return formatDate(dateStr);
   }
 
   function initRelativeTimes() {
     document.querySelectorAll('time[data-rel]').forEach(function (el) {
       var dt = el.getAttribute('datetime');
-      if (dt) { el.title = new Date(dt).toLocaleString(); el.textContent = timeAgo(dt); }
+      // The tooltip carries the exact time; `toLocaleString()` with no locale
+      // uses the *browser's*, which can differ from the language the page is
+      // rendered in. Pinned to the page locale so the two agree.
+      if (dt) {
+        el.title = new Date(dt).toLocaleString(pageLocale());
+        el.textContent = timeAgo(dt);
+      }
     });
   }
 
