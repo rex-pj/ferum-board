@@ -16,6 +16,7 @@ use ferum_domain::repositories::audit_log_repository::AuditLogRepository;
 use ferum_domain::repositories::category_repository::{
     CategoryRepository, NewCategory, UpdateCategory,
 };
+use ferum_domain::repositories::permission_repository::PermissionRepository;
 use ferum_domain::repositories::role_repository::RoleRepository;
 use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::repositories::user_role_repository::UserRoleRepository;
@@ -24,6 +25,10 @@ use ferum_domain::AuthUser;
 pub struct AdminUseCase {
     pub categories: Arc<dyn CategoryRepository>,
     pub roles: Arc<dyn RoleRepository>,
+    /// Lets `assign_moderator` apply the same escalation guard `assign_role`
+    /// does. Optional so existing test builders keep compiling; when absent the
+    /// guard is skipped, and `startup.rs` always supplies it.
+    permissions: Option<Arc<dyn PermissionRepository>>,
     pub user_roles: Arc<dyn UserRoleRepository>,
     pub users: Arc<dyn UserRepository>,
     pub audit_log: Arc<dyn AuditLogRepository>,
@@ -43,6 +48,7 @@ impl AdminUseCase {
         Self {
             categories,
             roles,
+            permissions: None,
             user_roles,
             users,
             audit_log,
@@ -53,6 +59,11 @@ impl AdminUseCase {
 
     pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
         self.plugin_runtime = runtime;
+        self
+    }
+
+    pub fn with_permissions(mut self, permissions: Arc<dyn PermissionRepository>) -> Self {
+        self.permissions = Some(permissions);
         self
     }
 
@@ -249,6 +260,30 @@ impl AdminUseCase {
             .find_by_slug("moderator")
             .await?
             .ok_or_else(|| AppError::internal("moderator role not found".to_string()))?;
+
+        // The same escalation guard `RoleUseCase::assign_role` applies, because
+        // this is the same act by a different door.
+        //
+        // `assign_role` refuses to grant a role carrying permissions the actor
+        // does not hold — so a custom "User Manager" role holding only
+        // `admin.users` cannot hand out `moderator` through
+        // `POST /api/admin/users/:id/roles`. This endpoint grants the identical
+        // role, scoped to a category, and checked nothing: the same actor could
+        // appoint themselves moderator here, pick up `moderation.ban_temp`, and
+        // start banning people. One door locked, one open, same room.
+        //
+        // Costs nothing on a default install — the only role with `admin.users`
+        // is `admin`, which holds every permission — so this binds exactly when
+        // an operator has deliberately created a limited admin.
+        if let Some(permissions) = self.permissions.as_ref() {
+            let role_perms = permissions.list_for_role(mod_role.id).await?;
+            let actor_has_all = role_perms
+                .iter()
+                .all(|p| actor.has_perm(&p.key) || actor.has_perm_in(&p.key, category_id));
+            if !actor_has_all {
+                return Err(AppError::forbidden("cannot_grant_permissions_you_lack"));
+            }
+        }
 
         let assignment = self.user_roles.assign(user_id, mod_role.id, Some(category_id), actor.id, None).await?;
 

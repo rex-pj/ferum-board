@@ -646,7 +646,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             Arc::new(PgAuditLogRepository::new(pg_write.clone())),
             cache.clone(),
         )
-        .with_plugin_runtime(plugin_hooks.clone()),
+        .with_plugin_runtime(plugin_hooks.clone())
+        .with_permissions(permission_repo.clone()),
     );
 
     let role = Arc::new(RoleUseCase::new(
