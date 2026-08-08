@@ -423,6 +423,8 @@ async fn reset_password_success() {
         .withf(move |key, _, _| key == format!("user:session_epoch:{user_id}"))
         .times(1)
         .returning(|_, _, _| Ok(()));
+    // Asserted on its own in `reset_password_revokes_refresh_tokens`.
+    cache.expect_del_prefix().returning(|_| Ok(()));
 
     let mut hasher = MockPasswordHasher::new();
     hasher.expect_hash().returning(|_| Ok("$2b$12$newhash".to_string()));
@@ -435,6 +437,41 @@ async fn reset_password_success() {
         token: "validtoken".to_string(),
         new_password: "Password1!".to_string(),
     }).await.is_ok());
+}
+
+/// The session epoch only withdraws *access* tokens — it is compared against
+/// `iat`, and a refresh mints a token stamped `now`, which always clears it.
+/// So a reset that does not also drop the refresh keys leaves the attacker able
+/// to mint a fresh access token for the whole refresh lifetime (7 days by
+/// default), which is precisely the access the reset exists to end.
+#[tokio::test]
+async fn reset_password_revokes_refresh_tokens() {
+    let user_id = Uuid::new_v4();
+    let mut tokens = MockTokenService::new();
+    tokens.expect_verify_email_token().returning(move |_, _| Ok(user_id));
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set_nx().returning(|_, _, _| Ok(true));
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache
+        .expect_del_prefix()
+        .withf(move |prefix| prefix == format!("refresh:{user_id}:"))
+        .times(1)
+        .returning(|_| Ok(()));
+
+    let mut hasher = MockPasswordHasher::new();
+    hasher.expect_hash().returning(|_| Ok("$2b$12$newhash".to_string()));
+
+    let mut users = MockUserRepository::new();
+    users.expect_set_password_hash().returning(|_, _| Ok(()));
+
+    let uc = build_uc(users, MockRoleRepository::new(), MockUserRoleRepository::new(), hasher, tokens, cache, MockJobQueue::new());
+    uc.reset_password(ResetPasswordCmd {
+        token: "validtoken".to_string(),
+        new_password: "Password1!".to_string(),
+    })
+    .await
+    .unwrap();
 }
 
 // ─── verify_email ──────────────────────────────────────────────────────────

@@ -134,15 +134,20 @@ impl UserUseCase {
 
         // Changing a password must end sessions opened with the old one —
         // otherwise a token stolen before the change keeps working until it
-        // expires on its own. Only possible where a cache is wired; without one
-        // there is nowhere to publish the epoch and behaviour is unchanged.
+        // expires on its own. Refresh tokens included: the session epoch only
+        // withdraws access tokens that already exist, and a refresh mints one
+        // stamped `now`, which clears the epoch by construction. Only possible
+        // where a cache is wired; without one there is nowhere to publish the
+        // epoch and behaviour is unchanged.
         //
         // Returns the epoch so the caller can mint the replacement token with a
         // matching `iat`; anything earlier would be revoked by the very epoch
         // this call just published, logging the user out of the session they
         // are currently using.
         let epoch = match &self.cache {
-            Some(cache) => Some(crate::usecases::invalidate_sessions(cache.as_ref(), actor.id).await),
+            Some(cache) => {
+                Some(crate::usecases::revoke_all_sessions(cache.as_ref(), actor.id).await)
+            }
             None => None,
         };
         Ok(epoch)

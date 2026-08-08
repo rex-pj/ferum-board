@@ -386,7 +386,7 @@ impl AuthUseCase {
     #[tracing::instrument(skip(self), fields(user_id = %user_id))]
     pub async fn logout_all(&self, user_id: Uuid) -> Result<(), AppError> {
         self.cache
-            .del_prefix(&format!("refresh:{}:", user_id))
+            .del_prefix(&crate::usecases::refresh_token_prefix(user_id))
             .await
             .ok();
         crate::usecases::invalidate_sessions(self.cache.as_ref(), user_id).await;
@@ -436,10 +436,10 @@ impl AuthUseCase {
         let hash = self.hasher.hash(&cmd.new_password).await?;
         self.users.set_password_hash(user_id, hash).await?;
 
-        // A password reset is usually a response to compromise; leaving the
-        // attacker's existing access token working for up to another hour
-        // defeats the point of the reset.
-        crate::usecases::invalidate_sessions(self.cache.as_ref(), user_id).await;
+        // A password reset is usually a response to compromise, so it has to end
+        // every session, not just the access tokens: a surviving refresh token
+        // keeps minting fresh ones straight past the session epoch.
+        crate::usecases::revoke_all_sessions(self.cache.as_ref(), user_id).await;
 
         Ok(())
     }

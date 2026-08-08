@@ -415,7 +415,7 @@ impl ModerationUseCase {
                 .await
                 .ok();
         }
-        self.cache.del_prefix(&format!("refresh:{}:", user_id)).await.ok();
+        self.cache.del_prefix(&crate::usecases::refresh_token_prefix(user_id)).await.ok();
 
         // Invalidate user roles cache so next request re-resolves permissions
         self.cache.del(&format!("user:roles:{}", user_id)).await.ok();

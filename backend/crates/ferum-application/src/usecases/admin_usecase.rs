@@ -382,7 +382,7 @@ impl AdminUseCase {
             .set(&format!("user:banned:{}", id), "1", ttl)
             .await
             .ok();
-        self.cache.del_prefix(&format!("refresh:{}:", id)).await.ok();
+        self.cache.del_prefix(&crate::usecases::refresh_token_prefix(id)).await.ok();
         self.cache.del(&format!("user:roles:{}", id)).await.ok();
 
         self.audit_log

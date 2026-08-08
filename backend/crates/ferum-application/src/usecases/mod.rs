@@ -30,7 +30,16 @@ pub(crate) fn refresh_token_key(user_id: uuid::Uuid, token: &str) -> String {
     let mut h = Sha256::new();
     h.update(token.as_bytes());
     let digest = h.finalize();
-    format!("refresh:{}:{}", user_id, hex::encode(&digest[..16]))
+    format!("{}{}", refresh_token_prefix(user_id), hex::encode(&digest[..16]))
+}
+
+/// The key prefix covering *every* refresh token held for `user_id`.
+///
+/// One definition because `del_prefix` with a mistyped prefix silently deletes
+/// nothing, and the failure is invisible: the caller still returns success and
+/// the sessions it meant to end keep working.
+pub(crate) fn refresh_token_prefix(user_id: uuid::Uuid) -> String {
+    format!("refresh:{user_id}:")
 }
 
 /// Builds an `AccessTokenClaims` struct from a `User`. Callers pass the expiry
@@ -113,4 +122,36 @@ pub async fn invalidate_sessions(
         );
     }
     epoch
+}
+
+/// Ends **every** session for `user_id`: the refresh tokens first, then the
+/// access tokens already issued.
+///
+/// [`invalidate_sessions`] alone is not enough for a credential change, and the
+/// gap is not obvious. The session epoch is compared against a token's `iat`, so
+/// it withdraws access tokens that already exist — but a refresh mints a *new*
+/// one stamped with the current second, which clears the epoch by construction.
+/// Leave the refresh keys in place and whoever holds one keeps minting valid
+/// access tokens for the whole refresh lifetime (7 days by default), which is
+/// exactly the access a password reset exists to revoke.
+///
+/// Order matters: dropping the refresh keys first means a refresh racing this
+/// call either fails outright or produces a token the epoch then revokes. Doing
+/// it the other way round leaves a window where the race wins.
+///
+/// Both halves are best-effort — a cache failure must not turn a successful
+/// password change into an error — but the refresh failure is logged at WARN
+/// because, unlike the epoch, nothing else will retract those tokens.
+pub async fn revoke_all_sessions(
+    cache: &dyn crate::ports::CacheService,
+    user_id: uuid::Uuid,
+) -> i64 {
+    if let Err(e) = cache.del_prefix(&refresh_token_prefix(user_id)).await {
+        tracing::warn!(
+            user_id = %user_id,
+            error = %e,
+            "failed to drop refresh tokens; existing sessions can still mint access tokens"
+        );
+    }
+    invalidate_sessions(cache, user_id).await
 }

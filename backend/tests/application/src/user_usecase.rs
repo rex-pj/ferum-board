@@ -5,6 +5,7 @@ use ferum_application::usecases::user_usecase::{UpdateProfileCmd, UserUseCase};
 use ferum_domain::AppError;
 use ferum_test_support::fixtures::{make_user, AuthUserBuilder};
 use ferum_test_support::mocks::{
+    cache_service::MockCacheService,
     job_queue::NoopJobQueue,
     password_hasher::MockPasswordHasher,
     storage_service::NoopStorageService,
@@ -157,4 +158,36 @@ async fn change_password_success() {
 
     let uc = build_uc(users, hasher);
     assert!(uc.change_password(&actor, "CorrectPass1!", "NewPassword1!").await.is_ok());
+}
+
+/// The session epoch withdraws access tokens only — it is compared against
+/// `iat`, and refreshing mints one stamped `now`, which always clears it. A
+/// password change that leaves the refresh keys in place therefore ends no
+/// other session at all: whoever holds a refresh cookie keeps minting access
+/// tokens for its full lifetime. See the sibling test in `auth_usecase.rs`.
+#[tokio::test]
+async fn change_password_revokes_refresh_tokens() {
+    let actor_id = Uuid::new_v4();
+    let actor = AuthUserBuilder::member().with_id(actor_id).build();
+    let mut user = make_user(actor_id);
+    user.password_hash = Some("$2b$12$hash".to_string());
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(user.clone())));
+    users.expect_set_password_hash().returning(|_, _| Ok(()));
+
+    let mut hasher = MockPasswordHasher::new();
+    hasher.expect_verify().returning(|_, _| Ok(true));
+    hasher.expect_hash().returning(|_| Ok("$2b$12$newhash".to_string()));
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache
+        .expect_del_prefix()
+        .withf(move |prefix| prefix == format!("refresh:{actor_id}:"))
+        .times(1)
+        .returning(|_| Ok(()));
+
+    let uc = build_uc(users, hasher).with_cache(Arc::new(cache));
+    uc.change_password(&actor, "CorrectPass1!", "NewPassword1!").await.unwrap();
 }
