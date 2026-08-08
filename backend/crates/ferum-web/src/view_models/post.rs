@@ -64,6 +64,16 @@ impl From<Post> for PostResponse {
                 role: p.author_role.clone(),
             });
 
+        // Redacted for a deleted post. The row is still serialised — clients
+        // render a tombstone and dropping it would renumber every later post —
+        // but the text must not ride along. See `Post::readable_content`.
+        //
+        // Read before `reactions` is moved out of `p` below.
+        let (content_md, content_html) = {
+            let (md, html) = p.readable_content();
+            (md.to_string(), html.to_string())
+        };
+
         let reactions = p
             .reactions
             .into_iter()
@@ -84,8 +94,8 @@ impl From<Post> for PostResponse {
             thread_id: p.thread_id,
             author_id: p.author_id,
             parent_id: p.parent_id,
-            content_md: p.content_md,
-            content_html: p.content_html,
+            content_md,
+            content_html,
             status: format!("{:?}", p.status).to_lowercase(),
             is_deleted: p.is_deleted,
             edited_at: p.edited_at,

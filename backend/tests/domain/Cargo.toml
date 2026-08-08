@@ -16,3 +16,8 @@ doctest = false
 ferum-domain = { path = "../../crates/ferum-domain" }
 
 serde_json = { workspace = true }
+# For building domain fixtures inline. Both are already part of the domain's own
+# public types (`Uuid` ids, `DateTime<Utc>` timestamps), so this adds nothing to
+# the tree that `ferum-domain` does not already pull in.
+uuid = { workspace = true }
+chrono = { workspace = true }

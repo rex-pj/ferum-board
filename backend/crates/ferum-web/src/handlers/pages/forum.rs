@@ -586,9 +586,12 @@ pub async fn thread_detail(
                         .unwrap_or_else(|| post_author.clone()),
                     author_avatar_url: p.author_avatar_url.clone(),
                     author_trust_level: p.author_role.clone().unwrap_or_default(),
-                    // Deleted content is never sent to the client, regardless of viewer.
-                    content_md: if is_deleted { String::new() } else { p.content_md.clone() },
-                    content_html: if is_deleted { String::new() } else { p.content_html.clone() },
+                    // Deleted content is never sent to the client, regardless of
+                    // viewer. Shared with the JSON API through
+                    // `Post::readable_content`, which is where this rule used to
+                    // exist only as the inline copy below.
+                    content_md: p.readable_content().0.to_string(),
+                    content_html: p.readable_content().1.to_string(),
                     created_at: p.created_at.to_rfc3339(),
                     edited_at: p.edited_at.map(|d| d.to_rfc3339()),
                     is_best_answer: Some(p.id) == thread.best_answer_id,
