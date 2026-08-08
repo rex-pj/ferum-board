@@ -471,9 +471,18 @@ ui-use-at-least-8-characters = Use at least 8 characters
 ui-use-specific-keywords = Use specific keywords
 ui-use-the-category-filter-to-narrow = Use the category filter to narrow results
 ui-username = Username
+# Brands only: `brands.is_verified`, which a curator sets from /admin/products.
+# That one really is checked by a human, unlike the review badge below.
 ui-verified = Verified
-ui-verified-purchase = Verified purchase
-ui-verified-purchases-only = Verified purchases only
+
+# The reviewer ticked "I bought or used this" on the review form. Nothing
+# checks it, so the wording must not imply that anything did — see the badge in
+# catalog/product.html. When a real verification mechanism exists it gets its
+# own key rather than quietly changing the meaning of this one.
+ui-self-reported-purchase = Says they bought it
+ui-self-reported-purchase-hint =
+    The reviewer says they bought or used this. We have not verified it.
+ui-self-reported-purchases-only = Self-reported buyers only
 ui-view-all = View all
 ui-view-all-discussions = View all discussions
 ui-view-product = View product

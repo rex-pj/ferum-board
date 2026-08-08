@@ -87,7 +87,11 @@
       <span class="display-6 fw-bold lh-1">{{ review_rating.overall }}<span class="fs-5 text-muted">/5</span></span>
       <span class="fs-4">{{ m::rating_stars(value=review_rating.overall) }}</span>
       {% if review_rating.verified_purchase %}
-        <span class="badge text-bg-success align-self-center"><i class="fa-solid fa-circle-check me-1" aria-hidden="true"></i>{{ t(k="ui-verified-purchase") }}</span>
+        {# Secondary, not success, and a "wrote this" icon rather than a check:
+           nothing verifies this flag, so it must not borrow the visual language
+           of something that was checked. #}
+        <span class="badge text-bg-secondary align-self-center"
+              title="{{ t(k='ui-self-reported-purchase-hint') }}"><i class="fa-solid fa-user-pen me-1" aria-hidden="true"></i>{{ t(k="ui-self-reported-purchase") }}</span>
       {% endif %}
     </div>
     <div class="row g-2">

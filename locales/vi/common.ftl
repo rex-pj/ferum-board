@@ -287,8 +287,15 @@ ui-origin = Xuất xứ
 ui-style = Phong cách
 ui-overall = Tổng thể
 ui-average-rating = Điểm trung bình
-ui-verified-purchase = Đã mua hàng
+# Chỉ dùng cho thương hiệu: `brands.is_verified`, do quản trị viên đặt tay.
+# Cái này được người thật kiểm chứng, khác với huy hiệu đánh giá bên dưới.
 ui-verified = Đã xác minh
+
+# Người đánh giá tự tích "Tôi đã mua hoặc dùng sản phẩm này" trên form. Không có
+# gì kiểm chứng điều đó, nên câu chữ không được ngụ ý là đã kiểm chứng.
+ui-self-reported-purchase = Tự khai đã mua
+ui-self-reported-purchase-hint =
+    Người đánh giá nói đã mua hoặc dùng sản phẩm này. Chúng tôi chưa xác minh.
 ui-no-reviews-yet = Chưa có đánh giá nào
 ui-view-product = Xem sản phẩm
 ui-all-categories = Tất cả chuyên mục
@@ -527,7 +534,7 @@ ui-your-submission-pending = Sản phẩm này đang chờ quản trị viên du
 ui-your-submission-published = Bạn đã thêm sản phẩm này, giờ thuộc danh mục chung — hãy báo quản trị viên nếu cần sửa.
 ui-not-rated = Chưa chấm điểm
 ui-i-have-actually-bought-or-used = Tôi đã thực sự mua hoặc dùng sản phẩm này
-ui-verified-purchases-only = Chỉ người đã mua hàng
+ui-self-reported-purchases-only = Chỉ người tự khai đã mua
 ui-review-summary = Tổng quan đánh giá
 ui-rating-distribution = Phân bố điểm đánh giá
 ui-rating-headline-aria =
