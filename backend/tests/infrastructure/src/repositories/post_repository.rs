@@ -446,3 +446,66 @@ async fn content_md_by_thread_returns_one_entry_per_post_not_a_set() {
 
     db.teardown().await;
 }
+
+/// `list_by_thread` and `position_in_thread` must agree on the ordering, or a
+/// deep link lands on the wrong page.
+///
+/// `position_in_thread` has always counted "posts before this one" as
+/// `created_at <` OR (`created_at =` AND `id <`) — an explicit total order.
+/// `list_by_thread` ordered by `created_at` alone, which is not one: on exact
+/// ties the planner may return either row first, so a post could repeat on one
+/// page and never appear on another, and the computed position disagreed with
+/// where the post actually rendered. Ties are not exotic — bulk-seeded and
+/// imported threads produce them routinely.
+#[tokio::test]
+async fn list_by_thread_and_position_in_thread_agree_on_tied_timestamps() {
+    use sea_orm::{ActiveModelTrait, Set};
+
+    let db = TestDb::new("post_order_tiebreak").await;
+    let repo = PgPostRepository::new(db.conn.clone());
+
+    let user = make_user(&db.conn, 1).await;
+    let cat = make_category(&db.conn, "general").await;
+    let thread = make_thread(&db.conn, cat.id, user.id, 1).await;
+
+    // Four posts sharing one timestamp to the microsecond.
+    let tied_at = chrono::Utc::now().fixed_offset();
+    for _ in 0..4 {
+        let m = ferum_infrastructure::entities::posts::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            thread_id: Set(thread.id),
+            author_id: Set(user.id),
+            content_md: Set("tied".to_string()),
+            content_html: Set("<p>tied</p>".to_string()),
+            created_at: Set(tied_at),
+            ..Default::default()
+        };
+        m.insert(&db.conn).await.expect("insert tied post");
+    }
+
+    // Page through two at a time and confirm every post is seen exactly once.
+    let (page1, total) = repo.list_by_thread(thread.id, None, 1, 2).await.unwrap();
+    let (page2, _) = repo.list_by_thread(thread.id, None, 2, 2).await.unwrap();
+    assert_eq!(total, 4);
+
+    let mut seen: Vec<Uuid> = page1.iter().chain(page2.iter()).map(|p| p.id).collect();
+    let unique = seen.clone().into_iter().collect::<std::collections::HashSet<_>>();
+    seen.sort();
+    assert_eq!(unique.len(), 4, "no post may repeat or vanish across pages: {seen:?}");
+
+    // And each post's computed position matches where it actually rendered.
+    for (index, post) in page1.iter().chain(page2.iter()).enumerate() {
+        let position = repo
+            .position_in_thread(thread.id, post.id, None)
+            .await
+            .unwrap()
+            .expect("visible post has a position");
+        assert_eq!(
+            position as usize, index,
+            "position_in_thread disagrees with list_by_thread for {}",
+            post.id
+        );
+    }
+
+    db.teardown().await;
+}

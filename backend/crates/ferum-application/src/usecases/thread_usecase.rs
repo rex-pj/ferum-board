@@ -876,8 +876,14 @@ impl ThreadUseCase {
             let tag = match self.tags.find_by_slug(&tag_slug).await? {
                 Some(t) => t,
                 None => {
+                    // Refused, not skipped. `create` returns this same error for
+                    // the same situation; this path used to `continue`, so
+                    // editing a thread's tags silently dropped every new one and
+                    // reported success — the user saw their chips vanish on
+                    // reload with nothing having said why, and got a different
+                    // answer here than when creating the same thread.
                     if !actor.has_perm(perm::TAG_CREATE) {
-                        continue;
+                        return Err(AppError::forbidden("tag_create_permission_required"));
                     }
                     self.tags
                         .create(ferum_domain::models::tag::NewTag {

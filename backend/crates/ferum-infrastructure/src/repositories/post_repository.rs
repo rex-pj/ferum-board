@@ -115,7 +115,13 @@ impl PostRepository for PgPostRepository {
         let query = posts::Entity::find()
             .filter(posts::Column::ThreadId.eq(thread_id))
             .filter(visibility_condition(viewer_id))
-            .order_by_asc(posts::Column::CreatedAt);
+            .order_by_asc(posts::Column::CreatedAt)
+            // Tiebreaker: `created_at` alone is not a total order, and an
+            // ambiguous ORDER BY lets the planner return two same-instant rows
+            // in either order per page — so one can repeat on page 2 while the
+            // other is never shown. Bulk-seeded and imported threads produce
+            // exact ties routinely.
+            .order_by_asc(posts::Column::Id);
 
         let (total, rows) = tokio::try_join!(
             query.clone().count(&self.db),
@@ -228,7 +234,9 @@ impl PostRepository for PgPostRepository {
             .join(JoinType::InnerJoin, posts::Relation::Threads.def())
             .filter(threads::Column::CategoryId.is_in(category_ids.to_vec()))
             .filter(threads::Column::DeletedAt.is_null())
-            .order_by_desc(posts::Column::CreatedAt);
+            .order_by_desc(posts::Column::CreatedAt)
+            // Total order — see `list_by_thread`.
+            .order_by_desc(posts::Column::Id);
 
         let (total, rows) = tokio::try_join!(
             query.clone().count(&self.db),
@@ -273,7 +281,9 @@ impl PostRepository for PgPostRepository {
         let mut query = posts::Entity::find()
             .filter(posts::Column::Status.eq(sea_orm_active_enums::PostStatus::Pending))
             .filter(posts::Column::IsDeleted.eq(false))
-            .order_by_asc(posts::Column::CreatedAt);
+            .order_by_asc(posts::Column::CreatedAt)
+            // Total order — see `list_by_thread`.
+            .order_by_asc(posts::Column::Id);
 
         // Both filters live on `threads`, so join once if either is present —
         // joining per-filter would duplicate the join and the result rows.

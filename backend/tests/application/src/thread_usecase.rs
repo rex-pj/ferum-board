@@ -526,22 +526,49 @@ async fn update_tags_author_within_window_replaces_thread_tags() {
     assert!(result.is_ok());
 }
 
+/// Refused, not silently skipped.
+///
+/// This used to assert the opposite — that the unknown tag was dropped and the
+/// call still reported success. That is what the code did, and it is the wrong
+/// behaviour: `ThreadUseCase::create` returns `tag_create_permission_required`
+/// for exactly this situation, so the same user adding the same tag got an
+/// error when starting a thread and silent success when editing one. The chips
+/// simply vanished on reload with nothing having said why.
 #[tokio::test]
-async fn update_tags_unknown_tag_without_create_perm_is_skipped() {
+async fn update_tags_unknown_tag_without_create_perm_is_refused() {
     let actor = AuthUserBuilder::member().with_id(ids::user_a()).build(); // no tag.create perm
     let thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
 
     let mut b = Uc::new();
     b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
     b.tags.expect_find_by_slug().return_once(|_| Ok(None));
-    // No create() expectation — must not attempt to create a tag without permission.
+    // Must neither create the tag nor write a silently-emptied tag set.
+    b.tags.expect_create().never();
+    b.tags.expect_replace_thread_tags().never();
+
+    let result = b.build().update_tags(&actor, ids::thread_a(), vec!["brand-new-tag".to_string()]).await;
+    assert!(
+        matches!(&result, Err(AppError::Forbidden(c)) if c == "tag_create_permission_required"),
+        "got {result:?}"
+    );
+}
+
+/// Removing every tag is still allowed — an empty *requested* set is a real
+/// edit, unlike an empty set that is the residue of dropped tags.
+#[tokio::test]
+async fn update_tags_can_clear_all_tags() {
+    let actor = AuthUserBuilder::member().with_id(ids::user_a()).build();
+    let thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
+
+    let mut b = Uc::new();
+    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
     b.tags
         .expect_replace_thread_tags()
         .withf(|_, tag_ids: &[uuid::Uuid]| tag_ids.is_empty())
+        .times(1)
         .return_once(|_, _| Ok(()));
 
-    let result = b.build().update_tags(&actor, ids::thread_a(), vec!["brand-new-tag".to_string()]).await;
-    assert!(result.is_ok());
+    b.build().update_tags(&actor, ids::thread_a(), vec![]).await.unwrap();
 }
 
 #[tokio::test]
