@@ -44,9 +44,19 @@ pub trait PostRepository: Send + Sync {
     /// the same image hold two references, and both must be released.
     async fn content_md_by_thread(&self, thread_id: Uuid) -> Result<Vec<String>, AppError>;
     async fn set_status(&self, id: Uuid, status: PostStatus) -> Result<(), AppError>;
+    /// A user's own posts, restricted to `category_ids`.
+    ///
+    /// `category_ids` is the set of categories the *viewer* may see, resolved by
+    /// the use case. It is a hard restriction and an **empty slice yields no
+    /// rows**, never "unfiltered" — this backs a public, unauthenticated
+    /// endpoint, so the failure mode has to be silence rather than disclosure.
+    /// Contrast `list_pending`, whose `allowed_category_ids: Option<_>` uses
+    /// `None` for "unrestricted"; the two are deliberately different types so
+    /// one cannot be passed where the other is meant.
     async fn list_by_author(
         &self,
         author_id: Uuid,
+        category_ids: &[Uuid],
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError>;

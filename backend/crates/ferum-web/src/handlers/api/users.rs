@@ -55,6 +55,7 @@ pub async fn list_user_threads(
 
 pub async fn list_user_posts(
     State(state): State<AppState>,
+    Extension(auth_user): Extension<Option<AuthUser>>,
     Path(username): Path<String>,
     Query(q): Query<ThreadListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
@@ -67,7 +68,10 @@ pub async fn list_user_posts(
 
     let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 50)?;
 
-    let (posts, total) = state.post.list_by_author(user.id, page, per_page).await?;
+    let (posts, total) = state
+        .post
+        .list_by_author(auth_user.as_ref(), user.id, page, per_page)
+        .await?;
 
     Ok(Json(PagedResponse::new(
         posts.into_iter().map(PostResponse::from).collect(),

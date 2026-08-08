@@ -215,7 +215,7 @@ async fn list_by_author_includes_thread_context() {
 
     // list_by_author does a secondary SELECT against threads to get slug + title
     let (posts, total) = repo
-        .list_by_author(user.id, 1, 20)
+        .list_by_author(user.id, &[cat.id], 1, 20)
         .await
         .expect("list_by_author with thread JOIN executes");
 
@@ -225,6 +225,34 @@ async fn list_by_author_includes_thread_context() {
         "thread_slug must be populated from secondary JOIN");
     assert_eq!(posts[0].thread_title.as_deref(), Some("Thread 1"),
         "thread_title must be populated from secondary JOIN");
+
+    db.teardown().await;
+}
+
+/// The visibility restriction is a hard filter, and an empty allow-list is the
+/// fail-closed case — it must yield nothing rather than everything. This backs a
+/// public unauthenticated endpoint, so getting it the wrong way round publishes
+/// every post in the forum.
+#[tokio::test]
+async fn list_by_author_excludes_posts_outside_the_allowed_categories() {
+    let db = TestDb::new("post_list_by_author_cat_filter").await;
+    let repo = PgPostRepository::new(db.conn.clone());
+
+    let user = make_user(&db.conn, 1).await;
+    let visible = make_category(&db.conn, "general").await;
+    let hidden = make_category(&db.conn, "staff").await;
+    let in_visible = make_thread(&db.conn, visible.id, user.id, 1).await;
+    let in_hidden = make_thread(&db.conn, hidden.id, user.id, 2).await;
+    make_post(&db.conn, in_visible.id, user.id, PostStatus::Published).await;
+    make_post(&db.conn, in_hidden.id, user.id, PostStatus::Published).await;
+
+    let (posts, total) = repo.list_by_author(user.id, &[visible.id], 1, 20).await.unwrap();
+    assert_eq!(total, 1, "only the post in the allowed category counts");
+    assert_eq!(posts[0].thread_id, in_visible.id);
+
+    let (posts, total) = repo.list_by_author(user.id, &[], 1, 20).await.unwrap();
+    assert_eq!(total, 0, "an empty allow-list must match nothing, not everything");
+    assert!(posts.is_empty());
 
     db.teardown().await;
 }

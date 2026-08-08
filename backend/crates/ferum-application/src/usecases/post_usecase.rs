@@ -752,14 +752,36 @@ impl PostUseCase {
             .await
     }
 
-    #[tracing::instrument(skip(self), fields(author_id = %author_id, page = page))]
+    /// A user's published posts, as seen by `actor`.
+    ///
+    /// The viewer is not optional context here, it is the access control. This
+    /// backs `GET /api/users/:username/posts`, which is public and
+    /// unauthenticated, and it used to take no viewer at all — so every post
+    /// body written in a `staff_only` category was readable by anyone who knew
+    /// a username. The intersection below is the same one
+    /// `ThreadUseCase::list_by_author` has always applied to the thread half of
+    /// the very same profile page.
+    #[tracing::instrument(skip(self, actor), fields(author_id = %author_id, page = page))]
     pub async fn list_by_author(
         &self,
+        actor: Option<&AuthUser>,
         author_id: Uuid,
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
-        let (mut posts, total) = self.posts.list_by_author(author_id, page, per_page.min(50)).await?;
+        let visible: Vec<Uuid> = self
+            .categories
+            .list_all()
+            .await?
+            .iter()
+            .filter(|c| PermissionChecker::can_view_category(actor, c).is_ok())
+            .map(|c| c.id)
+            .collect();
+
+        let (mut posts, total) = self
+            .posts
+            .list_by_author(author_id, &visible, page, per_page.min(50))
+            .await?;
         if let Ok(Some(user)) = self.users.find_by_id(author_id).await {
             for post in posts.iter_mut() {
                 post.author_username = Some(user.username.clone());

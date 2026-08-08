@@ -205,16 +205,29 @@ impl PostRepository for PgPostRepository {
     async fn list_by_author(
         &self,
         author_id: Uuid,
+        category_ids: &[Uuid],
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Post>, u64), AppError> {
         use std::collections::HashMap;
+
+        // Fails closed: no visible category means no rows. Returning early also
+        // avoids emitting `IN ()`, which Sea-ORM renders as a false predicate
+        // but only by convention — this makes the intent explicit.
+        if category_ids.is_empty() {
+            return Ok((vec![], 0));
+        }
 
         let offset = (page.saturating_sub(1)) * per_page;
         let query = posts::Entity::find()
             .filter(posts::Column::AuthorId.eq(author_id))
             .filter(posts::Column::IsDeleted.eq(false))
             .filter(posts::Column::Status.eq(sea_orm_active_enums::PostStatus::Published))
+            // The category lives on the thread, so the visibility restriction
+            // has to reach it through a join.
+            .join(JoinType::InnerJoin, posts::Relation::Threads.def())
+            .filter(threads::Column::CategoryId.is_in(category_ids.to_vec()))
+            .filter(threads::Column::DeletedAt.is_null())
             .order_by_desc(posts::Column::CreatedAt);
 
         let (total, rows) = tokio::try_join!(

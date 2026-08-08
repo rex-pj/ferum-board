@@ -705,3 +705,57 @@ async fn a_file_that_failed_to_publish_stays_staged_and_private() {
         "a failed increment must not promote: {journal:?}"
     );
 }
+
+// ─── list_by_author: category visibility ──────────────────────────────────────
+
+/// `/api/users/:username/posts` is public and unauthenticated. Every sibling
+/// read path (`ThreadUseCase::list_by_author`, the feed, search) intersects the
+/// result with the categories the viewer may see; this one used to take no
+/// viewer at all, so a guest could read the full body of every post made in a
+/// `staff_only` category — the exact disclosure NF-SC-13 forbids.
+#[tokio::test]
+async fn list_by_author_excludes_categories_the_viewer_cannot_see() {
+    let public = make_category(ids::category_a());
+    let mut staff = make_category(ids::category_b());
+    staff.slug = "staff".to_string();
+    staff.view_policy = ferum_domain::models::category::ViewPolicy::StaffOnly;
+
+    let mut b = PostUseCaseBuilder::new();
+    b.categories
+        .expect_list_all()
+        .returning(move || Ok(vec![public.clone(), staff.clone()]));
+    // The repository must be asked for the public category only — never for the
+    // staff-only one.
+    b.posts
+        .expect_list_by_author()
+        .withf(|_, category_ids, _, _| category_ids == [ids::category_a()])
+        .times(1)
+        .returning(|_, _, _, _| Ok((vec![], 0)));
+    b.users.expect_find_by_id().returning(|_| Ok(None));
+
+    let uc = b.build();
+    uc.list_by_author(None, ids::user_a(), 1, 20).await.unwrap();
+}
+
+/// A guest who can see nothing must get nothing, not everything. The empty
+/// allow-list is the fail-closed case and has to stay one.
+#[tokio::test]
+async fn list_by_author_returns_nothing_when_no_category_is_visible() {
+    let mut staff = make_category(ids::category_b());
+    staff.view_policy = ferum_domain::models::category::ViewPolicy::StaffOnly;
+
+    let mut b = PostUseCaseBuilder::new();
+    b.categories
+        .expect_list_all()
+        .returning(move || Ok(vec![staff.clone()]));
+    b.posts
+        .expect_list_by_author()
+        .withf(|_, category_ids: &[Uuid], _, _| category_ids.is_empty())
+        .returning(|_, _, _, _| Ok((vec![], 0)));
+    b.users.expect_find_by_id().returning(|_| Ok(None));
+
+    let uc = b.build();
+    let (posts, total) = uc.list_by_author(None, ids::user_a(), 1, 20).await.unwrap();
+    assert!(posts.is_empty());
+    assert_eq!(total, 0);
+}
