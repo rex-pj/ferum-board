@@ -22,11 +22,67 @@ impl Default for InMemoryCacheService {
     }
 }
 
+/// How often expired entries are swept. Matches `InMemoryRateLimiter`'s cadence;
+/// the cost is one `retain` pass over the map, and entries are still evicted
+/// lazily on read in between, so this only has to catch what is never read again.
+const EVICT_INTERVAL: Duration = Duration::from_secs(300);
+
 impl InMemoryCacheService {
     pub fn new() -> Self {
-        Self {
-            store: Arc::new(DashMap::new()),
-        }
+        let store: Arc<DashMap<String, CacheEntry>> = Arc::new(DashMap::new());
+
+        // Sweep expired entries periodically.
+        //
+        // Without this the map only ever shrinks when the *same key* is read
+        // again after expiring — and most keys here are never read again. They
+        // are per-user and per-session: `user:roles:{uuid}`, `user:banned:{uuid}`,
+        // the session-epoch key, cached preferences. Every visitor who ever
+        // authenticates leaves entries behind that nothing revisits once their
+        // TTL passes, so the map grew for the life of the process.
+        //
+        // This is the fallback cache — it is what runs whenever `REDIS_URL` is
+        // unset, which is the documented dev profile and every single-instance
+        // install. Redis expires its own keys, so this concerns only the
+        // in-process path.
+        //
+        // `Weak` + `break`: the task must not keep the map alive by holding a
+        // strong `Arc`, or the eviction loop becomes its own leak. Same shape as
+        // `InMemoryRateLimiter::new`, which already did this correctly.
+        let store_weak = Arc::downgrade(&store);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(EVICT_INTERVAL);
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                let Some(map) = store_weak.upgrade() else { break };
+                let removed = Self::sweep(&map);
+                if removed > 0 {
+                    tracing::debug!(removed, remaining = map.len(), "in-memory cache swept");
+                }
+            }
+        });
+
+        Self { store }
+    }
+
+    /// Drops every expired entry, returning how many were removed.
+    ///
+    /// Split out from the interval task so it can be driven directly: the task
+    /// itself fires every five minutes, which no test is going to wait for, and
+    /// the eviction *rule* is the part worth pinning.
+    fn sweep(store: &DashMap<String, CacheEntry>) -> usize {
+        let before = store.len();
+        store.retain(|_, entry| !Self::is_expired(entry));
+        before - store.len()
+    }
+
+    /// Drops every expired entry, returning how many were removed.
+    ///
+    /// `pub` for the test that asserts entries which are never read again are
+    /// still reclaimed — the exact case the periodic sweep exists for, and the
+    /// one that lazy eviction on read cannot cover.
+    pub fn evict_expired(&self) -> usize {
+        Self::sweep(&self.store)
     }
 
     fn is_expired(entry: &CacheEntry) -> bool {

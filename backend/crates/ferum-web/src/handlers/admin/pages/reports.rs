@@ -114,62 +114,141 @@ pub async fn audit_log(
         None => String::new(),
     };
 
-    // Batch-fetch actor usernames for unique actor_ids in this page.
-    let mut actor_names: std::collections::HashMap<uuid::Uuid, String> =
-        std::collections::HashMap::new();
-    for log in &logs {
-        if let Some(aid) = log.actor_id {
-            if let std::collections::hash_map::Entry::Vacant(e) = actor_names.entry(aid) {
-                if let Ok(Some(u)) = state.user_repo.find_by_id(aid).await {
-                    e.insert(u.username);
+    // ── Resolve actor and target labels in a fixed number of queries ─────────
+    //
+    // This used to be a `find_by_id` inside a loop over `logs`, per actor and
+    // again per target — with the `"post"` arm doing two chained lookups of its
+    // own. A page of 50 entries could issue over a hundred round-trips, under a
+    // comment that said "Batch-fetch". It now costs four queries plus one for
+    // posts, regardless of page size, using the `find_many_by_ids` methods the
+    // repositories already expose.
+
+    // Gather every id this page needs, deduplicated, before asking for anything.
+    let mut actor_ids: Vec<uuid::Uuid> = Vec::new();
+    let mut user_target_ids: Vec<uuid::Uuid> = Vec::new();
+    let mut thread_target_ids: Vec<uuid::Uuid> = Vec::new();
+    let mut post_target_ids: Vec<uuid::Uuid> = Vec::new();
+    let mut category_target_ids: Vec<uuid::Uuid> = Vec::new();
+    {
+        let mut seen_actors = std::collections::HashSet::new();
+        let mut seen_targets = std::collections::HashSet::new();
+        for log in &logs {
+            if let Some(aid) = log.actor_id {
+                if seen_actors.insert(aid) {
+                    actor_ids.push(aid);
                 }
+            }
+            if !seen_targets.insert((log.target_type.as_str(), log.target_id)) {
+                continue;
+            }
+            match log.target_type.as_str() {
+                "user" => user_target_ids.push(log.target_id),
+                "thread" => thread_target_ids.push(log.target_id),
+                "post" => post_target_ids.push(log.target_id),
+                "category" => category_target_ids.push(log.target_id),
+                _ => {}
             }
         }
     }
 
-    // Batch-fetch target labels and URLs by target_type.
-    let mut target_user_names: std::collections::HashMap<uuid::Uuid, String> =
-        std::collections::HashMap::new();
+    // An actor is a user, so both user lookups are one query. Categories come
+    // from `list_all` — the set is small (two levels, bounded by what an admin
+    // creates) and it is the same read the nav already performs, so a targeted
+    // query would buy nothing.
+    let (actors_and_targets, threads, posts, categories) = tokio::join!(
+        async {
+            let ids: Vec<uuid::Uuid> = actor_ids
+                .iter()
+                .chain(user_target_ids.iter())
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            if ids.is_empty() {
+                return Vec::new();
+            }
+            state.user_repo.find_many_by_ids(&ids).await.unwrap_or_default()
+        },
+        async {
+            if thread_target_ids.is_empty() {
+                return Vec::new();
+            }
+            state
+                .thread
+                .threads
+                .find_many_by_ids(&thread_target_ids)
+                .await
+                .unwrap_or_default()
+        },
+        async {
+            if post_target_ids.is_empty() {
+                return Vec::new();
+            }
+            state
+                .moderation
+                .posts
+                .find_many_by_ids(&post_target_ids)
+                .await
+                .unwrap_or_default()
+        },
+        async {
+            if category_target_ids.is_empty() {
+                return Vec::new();
+            }
+            state.category.categories.list_all().await.unwrap_or_default()
+        },
+    );
+
+    let users_by_id: std::collections::HashMap<uuid::Uuid, String> = actors_and_targets
+        .into_iter()
+        .map(|u| (u.id, u.username))
+        .collect();
+
+    // A `"post"` entry is labelled with the thread that contains it, so the
+    // posts resolved above name a second round of threads to fetch. One extra
+    // query, not one per post.
     let mut target_thread_info: std::collections::HashMap<uuid::Uuid, (String, String)> =
         std::collections::HashMap::new(); // id → (title, slug)
-    let mut target_category_info: std::collections::HashMap<uuid::Uuid, (String, String)> =
-        std::collections::HashMap::new(); // id → (name, slug)
-
-    for log in &logs {
-        match log.target_type.as_str() {
-            "user" => {
-                if let std::collections::hash_map::Entry::Vacant(e) = target_user_names.entry(log.target_id) {
-                    if let Ok(Some(u)) = state.user_repo.find_by_id(log.target_id).await {
-                        e.insert(u.username);
-                    }
-                }
+    for t in threads {
+        target_thread_info.insert(t.id, (t.title, t.slug));
+    }
+    if !posts.is_empty() {
+        let parent_ids: Vec<uuid::Uuid> = posts
+            .iter()
+            .map(|p| p.thread_id)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        let parents: std::collections::HashMap<uuid::Uuid, (String, String)> = state
+            .thread
+            .threads
+            .find_many_by_ids(&parent_ids)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| (t.id, (t.title, t.slug)))
+            .collect();
+        // Key by the POST's id: the render below looks the entry up by
+        // `l.target_id`, which for a post entry is the post, not its thread.
+        for p in &posts {
+            if let Some(info) = parents.get(&p.thread_id) {
+                target_thread_info.insert(p.id, info.clone());
             }
-            "thread" => {
-                if let std::collections::hash_map::Entry::Vacant(e) = target_thread_info.entry(log.target_id) {
-                    if let Ok(Some(t)) = state.thread.threads.find_by_id(log.target_id).await {
-                        e.insert((t.title, t.slug));
-                    }
-                }
-            }
-            "post" => {
-                if let std::collections::hash_map::Entry::Vacant(e) = target_thread_info.entry(log.target_id) {
-                    if let Ok(Some(p)) = state.moderation.posts.find_by_id(log.target_id).await {
-                        if let Ok(Some(t)) = state.thread.threads.find_by_id(p.thread_id).await {
-                            e.insert((t.title, t.slug));
-                        }
-                    }
-                }
-            }
-            "category" => {
-                if let std::collections::hash_map::Entry::Vacant(e) = target_category_info.entry(log.target_id) {
-                    if let Ok(Some(c)) = state.category.categories.find_by_id(log.target_id).await {
-                        e.insert((c.name, c.slug));
-                    }
-                }
-            }
-            _ => {}
         }
     }
+
+    let wanted_categories: std::collections::HashSet<uuid::Uuid> =
+        category_target_ids.into_iter().collect();
+    let target_category_info: std::collections::HashMap<uuid::Uuid, (String, String)> = categories
+        .into_iter()
+        .filter(|c| wanted_categories.contains(&c.id))
+        .map(|c| (c.id, (c.name, c.slug)))
+        .collect();
+
+    // Actors and user targets share one map — both are usernames keyed by user
+    // id, and splitting them only ever meant fetching the same row twice.
+    let actor_names = &users_by_id;
+    let target_user_names = &users_by_id;
 
     let entries: Vec<AuditLogCtx> = logs
         .into_iter()

@@ -112,3 +112,44 @@ async fn exists_returns_false_for_missing_key() {
     let c = InMemoryCacheService::new();
     assert!(!c.exists("missing").await);
 }
+
+// ─── Periodic eviction ────────────────────────────────────────────────────────
+//
+// The lazy path — an expired entry dropped when its own key is read again —
+// was the ONLY reclamation this cache had, and it does not cover the keys that
+// actually accumulate. `user:roles:{uuid}`, `user:banned:{uuid}` and the
+// session-epoch key are per-user: once a visitor stops returning, nothing ever
+// reads them again, so they sat in the map for the life of the process. These
+// assert the sweep that now runs on an interval, driven directly rather than by
+// waiting five minutes for it.
+
+#[tokio::test]
+async fn sweep_reclaims_entries_that_are_never_read_again() {
+    let c = InMemoryCacheService::new();
+    c.set("user:roles:a", "[]", Duration::from_millis(20)).await.unwrap();
+    c.set("user:roles:b", "[]", Duration::from_millis(20)).await.unwrap();
+
+    tokio::time::sleep(Duration::from_millis(60)).await;
+
+    // Note: neither key is read before the sweep. That is the whole point —
+    // lazy-on-read eviction would never have touched them.
+    assert_eq!(c.evict_expired(), 2);
+}
+
+#[tokio::test]
+async fn sweep_leaves_live_entries_alone() {
+    let c = InMemoryCacheService::new();
+    c.set("expiring", "v", Duration::from_millis(20)).await.unwrap();
+    c.set("living", "v", Duration::from_secs(60)).await.unwrap();
+
+    tokio::time::sleep(Duration::from_millis(60)).await;
+
+    assert_eq!(c.evict_expired(), 1);
+    assert_eq!(c.get("living").await.unwrap(), "v");
+}
+
+#[tokio::test]
+async fn sweep_on_an_empty_cache_removes_nothing() {
+    let c = InMemoryCacheService::new();
+    assert_eq!(c.evict_expired(), 0);
+}
