@@ -207,9 +207,25 @@ impl UserRepository for PgUserRepository {
         Ok(result)
     }
 
+    /// Case-insensitive, and that is load-bearing rather than a courtesy.
+    ///
+    /// `validate_username` permits any alphanumeric, so usernames carry case,
+    /// while `extract_mentions` lowercases what it captures before looking it
+    /// up. With a `=` comparison, `@TrungLe` resolved to no row and the mention
+    /// notification was simply never created — no error, nothing in the logs,
+    /// just a notification that does not arrive. `register` used the same
+    /// lookup for its uniqueness check, so `Alice` could also register
+    /// alongside an existing `alice`.
+    ///
+    /// Matched through `lower()` on both sides so the expression matches
+    /// `idx_users_username_lower` (migration 000032) and stays an index scan.
+    /// Postgres `lower()` is not locale-aware for non-ASCII, which is fine here:
+    /// the validator admits `char::is_alphanumeric`, but a mention can only
+    /// capture `[a-zA-Z0-9_]`, so the two sides agree over the range that
+    /// matters.
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, AppError> {
         Ok(user_select()
-            .filter(users::Column::Username.eq(username))
+            .filter(Expr::expr(Func::lower(Expr::col(users::Column::Username))).eq(username.to_lowercase()))
             .into_model::<UserRow>()
             .one(&self.db)
             .await?

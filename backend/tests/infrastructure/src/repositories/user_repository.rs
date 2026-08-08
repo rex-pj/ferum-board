@@ -129,6 +129,40 @@ async fn create_and_find_by_username_returns_user() {
     db.teardown().await;
 }
 
+/// Usernames permit uppercase (`validate_username` allows any alphanumeric),
+/// but this lookup compared with `=`. Two things broke on that, both silently:
+///
+///   * `extract_mentions` lowercases what it captures before looking it up, so
+///     `@TrungLe` resolved to nothing and the mention notification was never
+///     sent — no error, just a notification that does not arrive.
+///   * `register` used the same lookup for its uniqueness check, so `Alice`
+///     could register alongside an existing `alice`.
+#[tokio::test]
+async fn find_by_username_is_case_insensitive() {
+    let db = TestDb::new("user_find_username_case").await;
+    let repo = PgUserRepository::new(db.conn.clone());
+
+    let mut cmd = new_user(3);
+    cmd.username = "TrungLe".to_string();
+    let user = repo.create(cmd).await.expect("create user");
+
+    for spelling in ["TrungLe", "trungle", "TRUNGLE", "trungLE"] {
+        let found = repo
+            .find_by_username(spelling)
+            .await
+            .expect("find_by_username executes")
+            .unwrap_or_else(|| panic!("{spelling} should resolve to the same account"));
+        assert_eq!(found.id, user.id, "{spelling}");
+    }
+
+    assert!(
+        repo.find_by_username("trungl").await.unwrap().is_none(),
+        "case-insensitive must not mean prefix-matching"
+    );
+
+    db.teardown().await;
+}
+
 #[tokio::test]
 async fn find_many_by_ids_returns_correct_subset() {
     let db = TestDb::new("user_find_many_by_ids").await;
