@@ -4,7 +4,7 @@ use uuid::Uuid;
 use ferum_application::usecases::admin_usecase::{AdminUseCase, CreateCategoryCmd};
 use ferum_domain::AppError;
 use ferum_domain::models::category::{PostPolicy, ViewPolicy};
-use ferum_test_support::fixtures::{make_category, make_user, AuthUserBuilder};
+use ferum_test_support::fixtures::{make_assignment, make_category, make_role, make_user, AuthUserBuilder};
 use ferum_test_support::mocks::{
     audit_log_repository::NoopAuditLogRepository,
     cache_service::MockCacheService,
@@ -368,4 +368,104 @@ async fn unban_success() {
     );
     let result = uc.unban(&actor, target_id).await;
     assert!(result.is_ok());
+}
+
+// ─── assign_moderator: permission cache ───────────────────────────────────────
+
+/// Effective permissions are resolved from `user:roles:{id}`, cached for five
+/// minutes. `revoke_moderator` drops that key so the revocation takes effect on
+/// the next request; `assign_moderator` did not, so a freshly appointed
+/// moderator held no moderation permission in their new category until the
+/// entry happened to expire — up to five minutes of an admin action that
+/// visibly succeeded and did nothing.
+#[tokio::test]
+async fn assign_moderator_invalidates_the_target_permission_cache() {
+    let actor = AuthUserBuilder::member().with_perm("admin.users").build();
+    let target = Uuid::new_v4();
+    let cat_id = Uuid::new_v4();
+    let role_id = Uuid::new_v4();
+
+    let mut categories = MockCategoryRepository::new();
+    categories
+        .expect_find_by_id()
+        .returning(move |_| Ok(Some(make_category(cat_id))));
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(make_user(target))));
+
+    let mut roles = MockRoleRepository::new();
+    roles
+        .expect_find_by_slug()
+        .returning(move |_| Ok(Some(make_role(role_id, "moderator"))));
+
+    let mut user_roles = MockUserRoleRepository::new();
+    user_roles
+        .expect_assign()
+        .returning(move |_, _, _, _, _| Ok(make_assignment(target, role_id)));
+
+    let mut cache = MockCacheService::new();
+    cache
+        .expect_del()
+        .withf(move |key| key == format!("user:roles:{target}"))
+        .times(1)
+        .returning(|_| Ok(()));
+
+    let uc = build_uc(categories, roles, user_roles, users, cache);
+    uc.assign_moderator(&actor, cat_id, target).await.unwrap();
+}
+
+// ─── verify_user_email: trust level ───────────────────────────────────────────
+
+/// Verifying an email is what lifts a user from `New` to `Basic`, and `Basic` is
+/// the floor for posting. Both self-service paths (`verify_email` via the
+/// emailed token, and auto-verify at registration) set it; the admin button did
+/// not, so an admin could "verify" an account and the user would still be told
+/// `trust_level_insufficient` on their first post, with nothing explaining why.
+#[tokio::test]
+async fn admin_email_verification_also_promotes_to_basic() {
+    let actor = AuthUserBuilder::member().with_perm("admin.users").build();
+    let target = Uuid::new_v4();
+
+    // `make_user` is verified by default; an admin only ever presses this button
+    // on an account that is not.
+    let mut unverified = make_user(target);
+    unverified.is_email_verified = false;
+    unverified.trust_level = ferum_domain::models::user::TrustLevel::New;
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(unverified.clone())));
+    users.expect_set_email_verified().times(1).returning(|_| Ok(()));
+    users
+        .expect_set_trust_level()
+        .withf(|_, level| *level == ferum_domain::models::user::TrustLevel::Basic)
+        .times(1)
+        .returning(|_, _| Ok(()));
+
+    let uc = build_uc(
+        MockCategoryRepository::new(), MockRoleRepository::new(),
+        MockUserRoleRepository::new(), users, MockCacheService::new(),
+    );
+    uc.verify_user_email(&actor, target).await.unwrap();
+}
+
+/// Only a promotion, never a demotion: re-verifying a Regular's address must not
+/// knock them back down to Basic.
+#[tokio::test]
+async fn admin_email_verification_does_not_demote_an_established_user() {
+    let actor = AuthUserBuilder::member().with_perm("admin.users").build();
+    let target = Uuid::new_v4();
+    let mut established = make_user(target);
+    established.is_email_verified = true;
+    established.trust_level = ferum_domain::models::user::TrustLevel::Regular;
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(established.clone())));
+    users.expect_set_email_verified().returning(|_| Ok(()));
+    users.expect_set_trust_level().never();
+
+    let uc = build_uc(
+        MockCategoryRepository::new(), MockRoleRepository::new(),
+        MockUserRoleRepository::new(), users, MockCacheService::new(),
+    );
+    uc.verify_user_email(&actor, target).await.unwrap();
 }

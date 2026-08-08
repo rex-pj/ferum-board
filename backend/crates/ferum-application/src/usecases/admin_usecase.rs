@@ -252,6 +252,13 @@ impl AdminUseCase {
 
         let assignment = self.user_roles.assign(user_id, mod_role.id, Some(category_id), actor.id, None).await?;
 
+        // Effective permissions are resolved from this key and cached for five
+        // minutes. `revoke_moderator` has always dropped it; this side did not,
+        // so a newly appointed moderator held none of their new permissions
+        // until the entry happened to expire — an admin action that reported
+        // success and then did nothing for up to five minutes.
+        self.cache.del(&format!("user:roles:{}", user_id)).await.ok();
+
         self.audit_log
             .append(AuditLog::user_action(
                 actor.id,
@@ -521,10 +528,28 @@ impl AdminUseCase {
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
+    /// Mark an account's address verified on the owner's behalf.
+    ///
+    /// Verification is what lifts a user from `New` to `Basic`, and `Basic` is
+    /// the floor for posting — so the promotion is half of what verification
+    /// *means*, not a side effect. Both self-service paths do it
+    /// (`AuthUseCase::verify_email` via the emailed token, and auto-verify at
+    /// registration when no SMTP transport is configured); this one did not, so
+    /// an admin could verify an account and the user would still be refused
+    /// with `trust_level_insufficient` on their first post, with nothing on
+    /// either screen explaining why.
+    ///
+    /// Guarded on the current state for the same reason `verify_email` is: this
+    /// only ever promotes. Re-verifying an established member must not knock a
+    /// Regular back down to Basic.
     pub async fn verify_user_email(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.users.find_by_id(id).await?.or_not_found()?;
-        self.users.set_email_verified(id).await
+        let user = self.users.find_by_id(id).await?.or_not_found()?;
+        if user.is_email_verified {
+            return Ok(());
+        }
+        self.users.set_email_verified(id).await?;
+        self.users.set_trust_level(id, TrustLevel::Basic).await
     }
 
     /// Lightweight user search for remote-select pickers (author/actor filters).
