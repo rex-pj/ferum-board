@@ -263,3 +263,65 @@ async fn temp_ban_success() {
     let result = uc.temp_ban(&actor, target_id, "spam".to_string(), until).await;
     assert!(result.is_ok());
 }
+
+/// `moderation.ban_temp` and `admin.ban_permanent` are separate permissions
+/// precisely so a moderator cannot end an account outright. With no ceiling on
+/// `until`, a moderator holding only the first could pass a date centuries out
+/// and get exactly the effect of the second — the split enforced nothing.
+#[tokio::test]
+async fn temp_ban_refuses_a_duration_beyond_the_ceiling() {
+    let target_id = Uuid::new_v4();
+    let target_user = make_user(target_id);
+    let actor = AuthUserBuilder::member().with_perm("moderation.ban_temp").build();
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(target_user.clone())));
+    // Reached only if the guard fails to fire, which is what makes this assert.
+    users.expect_update().never();
+
+    let uc = build_uc(
+        MockReportRepository::new(), MockPostRepository::new(), MockThreadRepository::new(),
+        users, MockNotificationRepository::new(), MockCacheService::new(),
+        MockEventPublisher::new(),
+    );
+
+    let forever = chrono::Utc::now() + chrono::Duration::days(365 * 100);
+    let result = uc.temp_ban(&actor, target_id, "spam".to_string(), forever).await;
+    assert!(
+        matches!(&result, Err(AppError::Invalid { code, .. }) if code == "ban_duration_too_long"),
+        "expected ban_duration_too_long, got {result:?}"
+    );
+}
+
+/// The ceiling is a ceiling, not a narrowing: a ban right up to the limit is
+/// still a legitimate moderator action and must go through.
+#[tokio::test]
+async fn temp_ban_allows_a_duration_at_the_ceiling() {
+    let target_id = Uuid::new_v4();
+    let target_user = make_user(target_id);
+    let actor = AuthUserBuilder::member().with_perm("moderation.ban_temp").build();
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(target_user.clone())));
+    users.expect_update().returning(move |_, _| Ok(make_user(target_id)));
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache.expect_del_prefix().returning(|_| Ok(()));
+    cache.expect_del().returning(|_| Ok(()));
+
+    let mut events = MockEventPublisher::new();
+    events.expect_publish().returning(|_| ());
+
+    let uc = build_uc(
+        MockReportRepository::new(), MockPostRepository::new(), MockThreadRepository::new(),
+        users, MockNotificationRepository::new(), cache, events,
+    );
+
+    // A minute inside the limit, to stay clear of the clock advancing between
+    // the test computing the date and the use case checking it.
+    let until = chrono::Utc::now()
+        + chrono::Duration::days(ferum_application::constants::MAX_TEMP_BAN_DAYS)
+        - chrono::Duration::minutes(1);
+    uc.temp_ban(&actor, target_id, "spam".to_string(), until).await.unwrap();
+}

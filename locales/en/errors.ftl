@@ -82,6 +82,9 @@ error-report-target-required = A report must reference a post or a thread.
 error-report-already-resolved = This report has already been handled.
 error-reason-too-long =
     Please keep the reason to { $limit } characters or fewer.
+error-ban-duration-too-long =
+    A temporary ban can last at most { $max_days } days. A longer ban is a
+    permanent one and needs the permanent-ban permission.
 
 ## ─── Products & reviews ──────────────────────────────────────────────────────
 

@@ -96,6 +96,9 @@ error-report-target-required = Báo cáo phải tham chiếu tới một bài vi
 error-report-already-resolved = Báo cáo này đã được xử lý.
 error-reason-too-long =
     Vui lòng viết lý do trong vòng { $limit } ký tự.
+error-ban-duration-too-long =
+    Khoá tạm thời tối đa { $max_days } ngày. Lâu hơn thế là khoá vĩnh viễn và
+    cần quyền khoá vĩnh viễn.
 
 ## ─── Sản phẩm & đánh giá ─────────────────────────────────────────────────────
 

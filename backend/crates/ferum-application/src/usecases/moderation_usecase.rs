@@ -5,7 +5,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::constants::MAX_BAN_REASON_LEN;
+use crate::constants::{MAX_BAN_REASON_LEN, MAX_TEMP_BAN_DAYS};
 use crate::dto::ReportWithContext;
 use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
@@ -371,6 +371,25 @@ impl ModerationUseCase {
             return Err(AppError::invalid_with("reason_too_long", [("limit", MAX_BAN_REASON_LEN.into())]));
         }
         PermissionChecker::can_ban_temp(actor)?;
+
+        // What actually separates `moderation.ban_temp` from
+        // `admin.ban_permanent`. Without it a moderator could pass a date
+        // centuries out and end an account permanently — including an admin's —
+        // while holding neither the permission nor, on the audit trail, the
+        // appearance of having done so. Checked here rather than only in the
+        // handler so the rule holds for every caller of this use case.
+        //
+        // A ban already in the past is the handler's business (it is a bad
+        // request, not an over-reach); this is only the upper bound.
+        // `chrono::Duration`, spelled out: `Duration` in this module is
+        // `std::time::Duration`, which has no `days` and does not add to a
+        // `DateTime`.
+        if until > Utc::now() + chrono::Duration::days(MAX_TEMP_BAN_DAYS) {
+            return Err(AppError::invalid_with(
+                "ban_duration_too_long",
+                [("max_days", MAX_TEMP_BAN_DAYS.into())],
+            ));
+        }
 
         self.users.find_by_id(user_id).await?.or_not_found()?;
 

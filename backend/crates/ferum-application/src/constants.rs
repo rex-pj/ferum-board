@@ -87,6 +87,18 @@ pub const MAX_UPLOAD_BYTES_PER_WINDOW: i64 = 100 * 1024 * 1024; // 100 MB
 pub const MAX_POST_CONTENT_BYTES: usize = 100 * 1024; // 100 KB
 pub const MAX_BAN_REASON_LEN: usize = 1_000;
 
+/// Longest ban `moderation.ban_temp` can express.
+///
+/// This is what makes `moderation.ban_temp` and `admin.ban_permanent` two
+/// different powers rather than two names for one. There was no ceiling, so a
+/// moderator could pass `until = 9999-12-31` and end an account for good —
+/// including an admin's — without holding `admin.ban_permanent` at all.
+///
+/// A year is well past any cooling-off purpose while still being a ban that
+/// visibly expires. Anything longer is a permanent ban and should be asked for
+/// as one, by someone who holds that permission.
+pub const MAX_TEMP_BAN_DAYS: i64 = 365;
+
 pub const MIN_THREAD_TITLE_LEN: usize = 5;
 pub const MAX_THREAD_TITLE_LEN: usize = 255;
 pub const MAX_TAGS_PER_THREAD: usize = 5;
