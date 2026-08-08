@@ -308,16 +308,29 @@
   // ── Shared Alpine.js data factory — tag chip input ─────────────────────
   // Exposed globally so Alpine can resolve it via x-data="tagChipInput()"
   // and x-data="tagChipInput([...existing tags...])"
+  //
+  // The one implementation. The compose and edit pages each carried their own
+  // near-identical copy that shadowed this one at load time — which is the only
+  // reason the wrong limit here was not reaching users, and would have stopped
+  // being true the moment a third page used the shared factory as intended.
+  //
+  // MAX_TAGS must match `MAX_TAGS_PER_THREAD` in the backend's constants.rs.
+  // This said 10 while the server takes the first 5 and drops the rest without
+  // a word, so a user could add ten tags, watch them all appear as chips, save,
+  // and find five of them gone with nothing having reported a problem.
+  var MAX_TAGS = 5;
+
   window.tagChipInput = function (initialTags) {
     var seedNames = (initialTags || []).map(function (t) {
       return typeof t === 'string' ? t : (t.name || t);
     });
     return {
       tags: seedNames,
+      maxTags: MAX_TAGS,
       current: '',
       add: function () {
         var t = this.current.trim().replace(/,+$/, '');
-        if (t && !this.tags.includes(t) && this.tags.length < 10) this.tags.push(t);
+        if (t && !this.tags.includes(t) && this.tags.length < MAX_TAGS) this.tags.push(t);
         this.current = '';
       },
       checkComma: function (e) {

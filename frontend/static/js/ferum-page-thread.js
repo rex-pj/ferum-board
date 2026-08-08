@@ -56,7 +56,10 @@
     var avatarHtml = u.avatar_url
       ? '<img src="' + escHtml(u.avatar_url) + '" class="fr-avatar fr-avatar--38" alt="' + escHtml(u.display_name) + '" loading="lazy">'
       : '<div class="fr-avatar--placeholder fr-avatar--38" aria-label="' + escHtml(u.display_name) + '">' + (u.display_name || '?')[0].toUpperCase() + '</div>';
-    var dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    // Through Ferum.formatDate so this card matches the server-rendered ones
+    // around it. It used to name 'en-US' inline, which put an English date on a
+    // Vietnamese page next to dates in Vietnamese.
+    var dateStr = Ferum.formatDate(new Date());
     return '<div class="card mb-3" id="post-' + escHtml(post.id) + '">' +
       '<div class="card-body">' +
         '<div class="d-flex justify-content-between align-items-start mb-3">' +
@@ -137,6 +140,12 @@
     _editInFlight[postId] = true;
     if (saveBtn) saveBtn.disabled = true;
 
+    // Released in `finally`, not per-branch. Cleared only on the two failure
+    // paths before, so a *successful* save left the flag set and the button
+    // disabled for the rest of the page's life: reopening the editor and
+    // saving again hit the guard on the first line and returned silently, with
+    // no request, no error and no visible reason. One post, one edit per page
+    // load.
     try {
       var res = await FerumApi.posts.update(postId, content);
       if (res.ok) {
@@ -158,11 +167,10 @@
       } else {
         var body = await res.json().catch(function () { return {}; });
         showToast((body.error && body.error.message) || Ferum.t('js-failed-save-changes'));
-        if (saveBtn) saveBtn.disabled = false;
-        delete _editInFlight[postId];
       }
     } catch (_) {
       showToast(Ferum.t('js-network-error'));
+    } finally {
       if (saveBtn) saveBtn.disabled = false;
       delete _editInFlight[postId];
     }

@@ -36,24 +36,8 @@
     return state;
   };
 
-  // tagChipInput used only on this page (max 5 tags, no initial seed)
-  window.tagChipInput = function () {
-    return {
-      tags: [],
-      current: '',
-      add: function () {
-        var t = this.current.trim().replace(/,+$/, '');
-        if (t && !this.tags.includes(t) && this.tags.length < 5) this.tags.push(t);
-        this.current = '';
-      },
-      checkComma: function (e) {
-        if (e.key === ',') { e.preventDefault(); this.add(); }
-      },
-      remove: function (idx) {
-        if (idx >= 0 && idx < this.tags.length) this.tags.splice(idx, 1);
-      },
-    };
-  };
+  // tagChipInput comes from ferum-api.js — one implementation, one tag limit.
+  // The copy that used to live here was identical bar the seeding it did not do.
 
   // ── Product review: searchable typeahead + rating block orchestration ──
   var _ratingDims = ['overall', 'durability', 'materials', 'comfort', 'aesthetics', 'value_for_money'];

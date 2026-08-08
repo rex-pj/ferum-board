@@ -6,7 +6,29 @@
 (function (win) {
   'use strict';
 
+  // ── Dates ──────────────────────────────────────────────────────────
+  // The locale the server rendered this page in, from <html lang>. Every
+  // client-side date goes through here rather than naming a locale inline: a
+  // Vietnamese reader was getting "Feb 3, 2026" from JS-built markup next to
+  // server-rendered dates in their own language, on the same screen.
+  function pageLocale() {
+    return document.documentElement.getAttribute('lang') || 'en';
+  }
+
+  /// Day-precision date, e.g. the timestamp on a freshly posted reply.
+  function formatDate(dateStr) {
+    return new Date(dateStr).toLocaleDateString(pageLocale(), {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
   // ── Relative timestamps ────────────────────────────────────────────
+  // NOTE: the relative strings below are still English-only. Translating them
+  // needs `js-` catalog entries with plural handling in both locales, which is
+  // a change of its own; the absolute fallback is fixed here because it shares
+  // `formatDate` with the reply card.
   function timeAgo(dateStr) {
     var d = new Date(dateStr), s = Math.floor((Date.now() - d) / 1000);
     if (s < 60)      return 'just now';
@@ -14,7 +36,7 @@
     if (s < 86400)   return Math.floor(s / 3600) + 'h ago';
     if (s < 604800)  return Math.floor(s / 86400) + 'd ago';
     if (s < 2592000) return Math.floor(s / 604800) + 'w ago';
-    return d.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
+    return formatDate(dateStr);
   }
 
   function initRelativeTimes() {
@@ -442,6 +464,8 @@
     initPasswordToggle:   initPasswordToggle,
     initPasswordStrength: initPasswordStrength,
     escapeHtml:           escapeHtml,
+    formatDate:           formatDate,
+    pageLocale:           pageLocale,
   };
 }(window));
 
