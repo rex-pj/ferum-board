@@ -244,13 +244,20 @@ pub async fn create_thread(
     let content_md = content_md
         .ok_or_else(|| AppError::UnprocessableEntity("content_md is required".to_string()))?;
 
-    if title.len() < 5 || title.len() > 255 {
-        return Err(
-            AppError::UnprocessableEntity("Title must be 5–255 characters".to_string()).into(),
-        );
-    }
-    if content_md.is_empty() {
-        return Err(AppError::UnprocessableEntity("Content is required".to_string()).into());
+    // Title length is `ThreadUseCase::create`'s to enforce, and it does so
+    // before any write, so there is no orphan to avoid by checking here first.
+    // The copy that used to live here counted `title.len()` — *bytes* — against
+    // the same 5–255 bounds the validator applies to *characters*. On a
+    // Vietnamese board that is roughly a 1.5–3× difference, so titles the
+    // validator accepts were refused by the handler that never reached it, with
+    // a hardcoded English sentence that also contradicted the catalog.
+    //
+    // Content is different: `PostUseCase::create` only sees it after the thread
+    // row exists, so an empty body there costs a compensating delete. Checked
+    // here to keep the operation atomic, trimmed to match what the use case
+    // actually rejects, and through the catalog so the message is translated.
+    if content_md.trim().is_empty() {
+        return Err(AppError::invalid("post_content_empty").into());
     }
     if thumbnail.is_some() {
         PermissionChecker::can_upload(actor)?;
@@ -414,14 +421,8 @@ pub async fn update_thread(
         .into());
     }
 
-    if let Some(ref t) = title {
-        if t.len() < 5 || t.len() > 255 {
-            return Err(AppError::UnprocessableEntity(
-                "Title must be 5–255 characters".to_string(),
-            )
-            .into());
-        }
-    }
+    // No title-length check here either — `ThreadUseCase::update_title` owns it
+    // and counts characters, not bytes. See `create_thread`.
     if thumbnail.is_some() {
         PermissionChecker::can_upload(actor)?;
     }

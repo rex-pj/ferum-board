@@ -1,6 +1,7 @@
 use ferum_application::validators::{
     is_reserved_slug, validate_bio, validate_display_name, validate_image_magic,
-    validate_password, validate_slug_format, validate_username, validate_website,
+    validate_password, validate_slug_format, validate_thread_title, validate_username,
+    validate_website,
 };
 
 #[cfg(test)] mod markdown;
@@ -213,4 +214,38 @@ fn random_bytes_rejected() {
 #[test]
 fn data_too_short_rejected() {
     assert!(!validate_image_magic(&[0xFF, 0xD8]));
+}
+
+// ─── validate_thread_title ────────────────────────────────────────────────────
+//
+// Counted in characters, not bytes. The API handler used to re-check the same
+// bounds against `title.len()`, which is bytes — so on a Vietnamese board, where
+// a character costs 1–3 bytes, titles this validator accepts were refused before
+// they ever reached it. The handler's copy is gone; these pin the semantics so a
+// future one cannot quietly reintroduce the byte count.
+
+#[test]
+fn thread_title_at_the_character_limit_is_accepted() {
+    assert!(validate_thread_title(&"a".repeat(255)));
+}
+
+#[test]
+fn thread_title_past_the_character_limit_is_rejected() {
+    assert!(!validate_thread_title(&"a".repeat(256)));
+}
+
+#[test]
+fn thread_title_length_counts_characters_not_bytes() {
+    // 200 Vietnamese characters — well inside the 255-character limit, and well
+    // past 255 *bytes*, which is exactly the case the old handler refused.
+    let vietnamese = "ế".repeat(200);
+    assert!(vietnamese.len() > 255, "fixture must exceed the byte bound to be meaningful");
+    assert_eq!(vietnamese.chars().count(), 200);
+    assert!(validate_thread_title(&vietnamese));
+}
+
+#[test]
+fn thread_title_below_the_minimum_is_rejected() {
+    assert!(!validate_thread_title("abcd"));
+    assert!(validate_thread_title("abcde"));
 }
