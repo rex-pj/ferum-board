@@ -365,6 +365,70 @@ async fn edit_other_users_post_without_permission_returns_forbidden() {
     assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
+/// Locking a thread means the conversation is closed. `create` refuses, and
+/// `ThreadUseCase::update_title` refuses — but `can_edit_post` never saw the
+/// thread's status, so the author could still rewrite the body of any post in
+/// it. Locking a thread over its content left that content editable.
+#[tokio::test]
+async fn edit_in_a_locked_thread_is_refused_for_the_author() {
+    let actor = member_with_post_perm();
+    let post = make_post(ids::post_a(), ids::thread_a(), actor.id);
+    let mut thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
+    thread.status = ThreadStatus::Locked;
+
+    let mut b = PostUseCaseBuilder::new();
+    b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
+    b.posts.expect_update_content().never();
+
+    let result = b.build().edit(&actor, ids::post_a(), "rewritten".to_string()).await;
+    assert!(matches!(&result, Err(AppError::Forbidden(c)) if c == "thread_locked"),
+        "expected thread_locked, got {result:?}");
+}
+
+/// A lock is a moderation action, and `thread.edit_any` is the permission that
+/// overrides it everywhere else (`update_title` already works this way). A
+/// moderator must still be able to redact a post in a thread they just locked —
+/// which is often exactly why they locked it.
+#[tokio::test]
+async fn edit_in_a_locked_thread_is_allowed_with_edit_any() {
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perms(&["thread.edit_any"])
+        .build();
+    let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
+    let mut thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b());
+    thread.status = ThreadStatus::Locked;
+    let updated = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
+
+    let mut b = PostUseCaseBuilder::new();
+    b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
+    b.posts.expect_update_content().return_once(move |_, _, _, _| Ok(updated));
+
+    b.build().edit(&actor, ids::post_a(), "redacted".to_string()).await.unwrap();
+}
+
+/// A deleted thread is gone as far as readers are concerned, so its posts are
+/// not editable either — `find_live_thread` is the rule everywhere else, and
+/// `edit` was reading the thread without applying it.
+#[tokio::test]
+async fn edit_in_a_deleted_thread_is_refused() {
+    let actor = member_with_post_perm();
+    let post = make_post(ids::post_a(), ids::thread_a(), actor.id);
+    let mut thread = make_thread(ids::thread_a(), ids::category_a(), actor.id);
+    thread.status = ThreadStatus::Deleted;
+    thread.deleted_at = Some(chrono::Utc::now());
+
+    let mut b = PostUseCaseBuilder::new();
+    b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
+    b.posts.expect_update_content().never();
+
+    let result = b.build().edit(&actor, ids::post_a(), "rewritten".to_string()).await;
+    assert!(matches!(result, Err(AppError::NotFound)), "got {result:?}");
+}
+
 // ─── extract_attachment_keys ──────────────────────────────────────────────────
 
 mod attachment_keys {

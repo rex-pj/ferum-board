@@ -47,11 +47,22 @@ pub fn thread_can_mark_best_answer(
 
 /// Mirrors `PermissionChecker::can_edit_post` (minus the 24h window, same
 /// rationale as `thread_can_edit`).
-pub fn post_can_edit(user: Option<&AuthUser>, post_author_id: Uuid, category_id: Uuid) -> bool {
+///
+/// `is_locked` is here for the same reason it is on `thread_can_edit`: a locked
+/// thread refuses author edits and grants them to `thread.edit_any`. Unlike the
+/// edit window, this one *is* mirrored — the window expires silently mid-session
+/// so the button has to stay and explain itself on submit, whereas a lock is a
+/// visible state change the reader can see for themselves.
+pub fn post_can_edit(
+    user: Option<&AuthUser>,
+    post_author_id: Uuid,
+    category_id: Uuid,
+    is_locked: bool,
+) -> bool {
     let has_edit_any = user.is_some_and(|u| u.has_perm_in(perm::THREAD_EDIT_ANY, category_id));
     let is_own = user.is_some_and(|u| u.id == post_author_id);
     let has_edit_own = user.is_some_and(|u| u.has_perm(perm::POST_EDIT_OWN));
-    has_edit_any || (is_own && has_edit_own)
+    has_edit_any || (is_own && has_edit_own && !is_locked)
 }
 
 /// Mirrors `PermissionChecker::can_delete_post`.

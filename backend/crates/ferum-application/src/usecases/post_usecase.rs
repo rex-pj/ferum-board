@@ -619,7 +619,13 @@ impl PostUseCase {
             DEFAULT_POST_EDIT_WINDOW_HOURS,
         )
         .await;
-        PermissionChecker::can_edit_post(actor, &post, thread.category_id, edit_window_hours)?;
+        PermissionChecker::can_edit_post(
+            actor,
+            &post,
+            thread.category_id,
+            thread.status,
+            edit_window_hours,
+        )?;
 
         let hook_ctx = crate::ports::HookContext {
             hook_name: "before_post_edit".to_string(),

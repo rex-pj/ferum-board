@@ -5,6 +5,7 @@ use crate::shared::AppError;
 use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 use ferum_domain::models::post::Post;
 use ferum_domain::models::role::perm;
+use ferum_domain::models::thread::ThreadStatus;
 use ferum_domain::models::user::TrustLevel;
 use ferum_domain::AuthUser;
 
@@ -131,21 +132,36 @@ impl PermissionChecker {
 
     // ─── Post editing ─────────────────────────────────────────────────────────
 
+    /// `thread_status` is the status of the thread the post lives in.
+    ///
+    /// It is a parameter rather than something the caller checks separately
+    /// because leaving it out is what made locking a thread a half-measure:
+    /// `PostUseCase::create` refused on `Locked` and `ThreadUseCase::update_title`
+    /// refused on `Locked`, but this did not, so the author of any post in a
+    /// locked thread could still rewrite its body. Locking a thread *over its
+    /// content* left that content editable by the person who wrote it.
     pub fn can_edit_post(
         user: &AuthUser,
         post: &Post,
         category_id: Uuid,
+        thread_status: ThreadStatus,
         edit_window_hours: i64,
     ) -> Result<(), AppError> {
         Self::require_not_banned(user)?;
 
-        if post.is_deleted {
+        if post.is_deleted || thread_status == ThreadStatus::Deleted {
             return Err(AppError::NotFound);
         }
 
-        // Moderators with post.edit_any in this category can edit any post
+        // Moderators with post.edit_any in this category can edit any post —
+        // including in a locked thread, which is often exactly why they locked
+        // it. Same override `update_title` grants.
         if user.has_perm_in(perm::THREAD_EDIT_ANY, category_id) {
             return Ok(());
+        }
+
+        if thread_status == ThreadStatus::Locked {
+            return Err(AppError::forbidden("thread_locked"));
         }
 
         if post.author_id != user.id {

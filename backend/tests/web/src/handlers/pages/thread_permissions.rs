@@ -154,14 +154,14 @@ fn mark_best_answer_unrelated_perm_is_false() {
 #[test]
 fn post_can_edit_guest_is_false() {
     let (author, _, cat, _) = ids();
-    assert!(!post_can_edit(None, author, cat));
+    assert!(!post_can_edit(None, author, cat, false));
 }
 
 #[test]
 fn post_can_edit_own_post_with_edit_own_perm_is_true() {
     let (author, _, cat, _) = ids();
     let u = user(author, &[perm::POST_EDIT_OWN], &[]);
-    assert!(post_can_edit(Some(&u), author, cat));
+    assert!(post_can_edit(Some(&u), author, cat, false));
 }
 
 #[test]
@@ -170,21 +170,39 @@ fn post_can_edit_own_post_without_edit_own_perm_is_false() {
     // post.edit_own permission, same as PermissionChecker::can_edit_post.
     let (author, _, cat, _) = ids();
     let u = user(author, &[], &[]);
-    assert!(!post_can_edit(Some(&u), author, cat));
+    assert!(!post_can_edit(Some(&u), author, cat, false));
 }
 
 #[test]
 fn post_can_edit_mod_with_thread_edit_any_in_category_is_true() {
     let (author, other, cat, _) = ids();
     let u = user(other, &[], &[(cat, perm::THREAD_EDIT_ANY)]);
-    assert!(post_can_edit(Some(&u), author, cat));
+    assert!(post_can_edit(Some(&u), author, cat, false));
 }
 
 #[test]
 fn post_can_edit_mod_with_thread_edit_any_in_different_category_is_false() {
     let (author, other, cat, other_cat) = ids();
     let u = user(other, &[], &[(other_cat, perm::THREAD_EDIT_ANY)]);
-    assert!(!post_can_edit(Some(&u), author, cat));
+    assert!(!post_can_edit(Some(&u), author, cat, false));
+}
+
+/// Mirrors the `thread_locked` refusal `PermissionChecker::can_edit_post` now
+/// makes. Rendering the button here while the server refuses the submit is the
+/// drift this whole module exists to prevent.
+#[test]
+fn post_can_edit_own_post_in_locked_thread_is_false() {
+    let (author, _, cat, _) = ids();
+    let u = user(author, &[perm::POST_EDIT_OWN], &[]);
+    assert!(!post_can_edit(Some(&u), author, cat, true));
+}
+
+/// …and the override survives the lock, matching `thread_can_edit`.
+#[test]
+fn post_can_edit_mod_with_thread_edit_any_in_locked_thread_is_true() {
+    let (author, other, cat, _) = ids();
+    let u = user(other, &[], &[(cat, perm::THREAD_EDIT_ANY)]);
+    assert!(post_can_edit(Some(&u), author, cat, true));
 }
 
 // ─── post_can_delete ──────────────────────────────────────────────────────────

@@ -611,7 +611,8 @@ pub async fn thread_detail(
                     is_deleted,
                     is_pending,
                     is_own,
-                    can_edit: !is_deleted && post_can_edit(auth_user.as_ref(), p.author_id, thread.category_id),
+                    can_edit: !is_deleted
+                        && post_can_edit(auth_user.as_ref(), p.author_id, thread.category_id, is_locked),
                     can_delete: !is_deleted && post_can_delete(auth_user.as_ref(), p.author_id, thread.category_id),
                 }
             })
