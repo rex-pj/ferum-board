@@ -9,7 +9,7 @@ impl MigrationName for Migration {
     }
 }
 
-// Supports the case-insensitive `find_by_username`.
+// Enforces and supports case-insensitive usernames.
 //
 // `validate_username` admits any alphanumeric, so usernames carry case, but
 // `extract_mentions` lowercases what it captures before looking the user up.
@@ -25,30 +25,51 @@ impl MigrationName for Migration {
 // The expression is written exactly as the query builds it; a difference of a
 // single function call and Postgres silently declines to use it.
 //
-// ── Deliberately NOT UNIQUE ──────────────────────────────────────────────────
+// ── UNIQUE, and what that costs ──────────────────────────────────────────────
 //
-// A unique index here is the right end state — it is what would actually stop
-// `Alice` and `alice` from coexisting, rather than merely stopping the *next*
-// one from being created. It is not done here because `CREATE UNIQUE INDEX`
-// fails outright on any database that already contains such a pair, which would
-// turn a routine deploy into a failed one with the application refusing to
-// start. Adding it needs a collision audit first:
+// Unique because the application check alone only stops the *next* collision:
+// it cannot remove a pair that already exists, and while one exists
+// `find_by_username` resolves to whichever row Postgres happens to return
+// first — non-deterministically, so the same login form can reach two different
+// accounts on two requests. Only the constraint makes the invariant true rather
+// than merely intended.
 //
+// `CREATE UNIQUE INDEX` fails outright on a database that already holds such a
+// pair, and that failure blocks startup because migrations run at boot. That is
+// the correct trade for this project, which is pre-release and whose data is
+// disposable — but it is a real edge for anyone restoring an old dump, so the
+// audit and the repair are written out here rather than left to be rediscovered
+// from a stack trace:
+//
+//     -- what collides
 //     SELECT lower(username), count(*), array_agg(username)
 //     FROM users GROUP BY 1 HAVING count(*) > 1;
 //
-// and a decision about what to do with whatever it returns — renaming an
-// account is not something a migration should choose on an operator's behalf.
+//     -- one way to repair: keep the oldest, suffix the rest
+//     UPDATE users u SET username = u.username || '-' || left(u.id::text, 4)
+//     WHERE EXISTS (
+//         SELECT 1 FROM users o
+//         WHERE lower(o.username) = lower(u.username)
+//           AND o.created_at < u.created_at
+//     );
+//
+// Renaming somebody's account is a product decision, so the repair is offered
+// and not performed.
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .get_connection()
-            .execute_unprepared(
-                "CREATE INDEX IF NOT EXISTS idx_users_username_lower \
-                 ON users (lower(username))",
-            )
+        let conn = manager.get_connection();
+        // Drop the non-unique form first. An earlier revision of *this* file
+        // created it, so a database migrated from that revision already has the
+        // name taken by a plain index — and `CREATE UNIQUE INDEX IF NOT EXISTS`
+        // would then find the name present and quietly do nothing, leaving the
+        // constraint absent while `seaql_migrations` records it as applied.
+        conn.execute_unprepared("DROP INDEX IF EXISTS idx_users_username_lower")
             .await?;
+        conn.execute_unprepared(
+            "CREATE UNIQUE INDEX idx_users_username_lower ON users (lower(username))",
+        )
+        .await?;
         Ok(())
     }
 
