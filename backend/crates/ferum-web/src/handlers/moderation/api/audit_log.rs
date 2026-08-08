@@ -19,7 +19,7 @@ pub async fn list_audit_log(
     let actor = auth_user.require_auth()?;
     PermissionChecker::can_view_reports(actor, None)?;
 
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 30, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 30, ferum_application::constants::MAX_LIST_PAGE_SIZE)?;
 
     let (logs, total) = state
         .moderation

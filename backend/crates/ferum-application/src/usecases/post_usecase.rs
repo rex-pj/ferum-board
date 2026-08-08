@@ -332,6 +332,21 @@ impl PostUseCase {
         }
     }
 
+    /// The admin-configured ceiling on post-list page size.
+    ///
+    /// Public for the same reason as [`ThreadUseCase::max_page_size`]: the
+    /// handler must build its `PaginationCtx` from the number the list is
+    /// actually clamped to, or it advertises pages that do not exist and hides
+    /// posts that do.
+    pub async fn max_page_size(&self) -> u64 {
+        get_config_u64(
+            self.site_config.as_ref(),
+            "max_posts_per_page",
+            DEFAULT_MAX_POSTS_PER_PAGE,
+        )
+        .await
+    }
+
     #[tracing::instrument(skip_all, fields(thread_id = %thread_id, page = page))]
     pub async fn list_by_thread(
         &self,
@@ -786,7 +801,7 @@ impl PostUseCase {
 
         let (mut posts, total) = self
             .posts
-            .list_by_author(author_id, &visible, page, per_page.min(50))
+            .list_by_author(author_id, &visible, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE))
             .await?;
         if let Ok(Some(user)) = self.users.find_by_id(author_id).await {
             for post in posts.iter_mut() {

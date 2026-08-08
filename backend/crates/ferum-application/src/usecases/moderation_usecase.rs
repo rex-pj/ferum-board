@@ -107,7 +107,7 @@ impl ModerationUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
-        self.reports.list_by_reporter(actor.id, page, per_page.min(50)).await
+        self.reports.list_by_reporter(actor.id, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE)).await
     }
 
     // ─── Report queue (moderator) ─────────────────────────────────────────────
@@ -129,7 +129,7 @@ impl ModerationUseCase {
                 None,
                 cat_ids.as_deref(),
                 page,
-                per_page.min(50),
+                per_page.min(crate::constants::MAX_LIST_PAGE_SIZE),
             )
             .await
     }
@@ -153,7 +153,7 @@ impl ModerationUseCase {
         per_page: u64,
     ) -> Result<(Vec<Report>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.reports.list_all(status, target_type, q, None, page, per_page.min(50)).await
+        self.reports.list_all(status, target_type, q, None, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE)).await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, page = page))]
@@ -168,7 +168,7 @@ impl ModerationUseCase {
     ) -> Result<(Vec<ReportWithContext>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
         let (reports, total) =
-            self.reports.list_all(status, target_type, q, None, page, per_page.min(50)).await?;
+            self.reports.list_all(status, target_type, q, None, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE)).await?;
 
         Ok((self.enrich_reports(reports).await?, total))
     }
@@ -178,7 +178,7 @@ impl ModerationUseCase {
     /// Batched on purpose. The obvious per-row shape — `threads.find_by_id` for a
     /// thread report, `posts.find_by_id` then `threads.find_by_id` for a post
     /// report — costs up to two round trips per row, so a full page at the
-    /// endpoint's `per_page.min(50)` ceiling was up to 100 sequential queries to
+    /// endpoint's `MAX_LIST_PAGE_SIZE` ceiling was up to 100 sequential queries to
     /// render one moderator screen. This does it in at most four, regardless of
     /// page size: reporters, directly-reported threads, reported posts, then the
     /// threads those posts belong to.
@@ -466,7 +466,7 @@ impl ModerationUseCase {
         PermissionChecker::can_view_reports(actor, None)?;
         let cat_ids = actor.permitted_category_ids(ferum_domain::models::role::perm::MOD_VIEW_REPORTS);
         self.reports
-            .list_all(status, target_type, q, cat_ids.as_deref(), page, per_page.min(50))
+            .list_all(status, target_type, q, cat_ids.as_deref(), page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE))
             .await
     }
 
@@ -486,7 +486,7 @@ impl ModerationUseCase {
         let cat_ids = actor.permitted_category_ids(ferum_domain::models::role::perm::MOD_VIEW_REPORTS);
         let (reports, total) = self
             .reports
-            .list_all(status, target_type, q, cat_ids.as_deref(), page, per_page.min(50))
+            .list_all(status, target_type, q, cat_ids.as_deref(), page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE))
             .await?;
 
         Ok((self.enrich_reports(reports).await?, total))
@@ -536,7 +536,7 @@ impl ModerationUseCase {
         };
 
         self.audit_log_repo
-            .list(effective_actor_id, target_type, action_contains, created_from, created_to, page, per_page.min(50))
+            .list(effective_actor_id, target_type, action_contains, created_from, created_to, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE))
             .await
     }
 

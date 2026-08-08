@@ -95,7 +95,7 @@ impl FollowUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<(Follow, User)>, u64), AppError> {
-        self.follows.list_following(user_id, page, per_page.min(50)).await
+        self.follows.list_following(user_id, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE)).await
     }
 
     pub async fn list_followers(
@@ -104,7 +104,7 @@ impl FollowUseCase {
         page: u64,
         per_page: u64,
     ) -> Result<(Vec<(Follow, User)>, u64), AppError> {
-        self.follows.list_followers(user_id, page, per_page.min(50)).await
+        self.follows.list_followers(user_id, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE)).await
     }
 }
 

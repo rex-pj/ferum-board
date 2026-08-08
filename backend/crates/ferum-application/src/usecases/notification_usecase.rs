@@ -26,7 +26,7 @@ impl NotificationUseCase {
     ) -> Result<(Vec<Notification>, u64), AppError> {
         PermissionChecker::require_not_banned(actor)?;
         self.notifications
-            .list_for_user(actor.id, page, per_page.min(50))
+            .list_for_user(actor.id, page, per_page.min(crate::constants::MAX_LIST_PAGE_SIZE))
             .await
     }
 

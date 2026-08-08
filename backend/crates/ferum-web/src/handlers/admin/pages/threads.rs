@@ -20,7 +20,7 @@ pub async fn threads(
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
 
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.thread.max_page_size().await)?;
     let search = q.q.clone().unwrap_or_default();
     let sort = ThreadSort::from_label(q.sort_by.as_deref().unwrap_or("latest"));
     let status_filter = q.status.clone().unwrap_or_default();

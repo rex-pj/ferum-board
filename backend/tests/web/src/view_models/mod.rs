@@ -126,6 +126,52 @@ fn small_result_sets_are_unaffected() {
     assert!(p.has_next);
 }
 
+// ─── The pager must be built from the page size actually served ───────────────
+//
+// `PaginationCtx` has no way to detect a `per_page` that disagrees with the one
+// the query ran under — it just divides. So the invariant lives at the call
+// sites, and this is what breaks when they get it wrong.
+
+/// Every row must be reachable: the last page has to reach `total`.
+///
+/// Handlers used to call `paginate(.., 100)` and hand the *requested* 100 to
+/// `PaginationCtx`, while the use case clamped the query to 30. This is that
+/// arithmetic, and it is why `?per_page=100` on a 250-thread forum showed 30
+/// rows a page, advertised 3 pages, and left 160 threads with no page to sit on.
+#[test]
+fn a_pager_built_from_the_requested_page_size_hides_rows() {
+    let requested = 100;
+    let served = 30; // what the use case clamped to
+    let total = 250;
+
+    let wrong = PaginationCtx::simple(1, requested, total);
+    assert_eq!(wrong.total_pages, 3);
+    assert!(
+        wrong.total_pages * served < total,
+        "3 pages × 30 rows = 90 of 250 — the rest were unreachable"
+    );
+
+    let right = PaginationCtx::simple(1, served, total);
+    assert!(
+        right.total_pages * served >= total,
+        "built from the served size, the last page reaches the last row"
+    );
+}
+
+/// The handler ceiling and the use-case ceiling are now the same constant for
+/// every list without an admin-configurable page size. If someone re-introduces
+/// a bare `100` at one end this stays green — it is the constant's existence
+/// that is pinned, not each call site — but it documents the contract the
+/// constant carries.
+#[test]
+fn the_shared_list_ceiling_is_reachable_in_whole_pages() {
+    let cap = ferum_application::constants::MAX_LIST_PAGE_SIZE;
+    let total = cap * 3 + 1;
+    let p = PaginationCtx::simple(1, cap, total);
+    assert_eq!(p.total_pages, 4);
+    assert!(p.total_pages * cap >= total);
+}
+
 // ─── Feed control URLs ────────────────────────────────────────────────────────
 //
 // The listing has two independent axes — ORDER (sort tabs) and NARROWING (filter

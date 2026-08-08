@@ -446,7 +446,7 @@ impl AdminUseCase {
                 created_from,
                 created_to,
                 page,
-                per_page.min(50),
+                per_page.min(crate::constants::MAX_LIST_PAGE_SIZE),
             )
             .await
     }
@@ -540,7 +540,13 @@ impl AdminUseCase {
     ) -> Result<(Vec<User>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
         self.users
-            .list_paginated(page.max(1), per_page.clamp(1, 50), q, Some("username"), Some("asc"))
+            .list_paginated(
+                page.max(1),
+                per_page.clamp(1, crate::constants::MAX_LIST_PAGE_SIZE),
+                q,
+                Some("username"),
+                Some("asc"),
+            )
             .await
     }
 }

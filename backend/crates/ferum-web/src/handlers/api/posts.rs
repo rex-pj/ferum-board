@@ -18,7 +18,7 @@ pub async fn list_posts(
     Path(thread_id): Path<Uuid>,
     Query(q): Query<PostListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.post.max_page_size().await)?;
 
     let (posts, total) = state
         .post

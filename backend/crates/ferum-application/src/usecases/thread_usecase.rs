@@ -128,11 +128,24 @@ impl ThreadUseCase {
         self
     }
 
-    async fn max_threads_per_page(&self) -> u64 {
+    /// The admin-configured ceiling on thread-list page size.
+    ///
+    /// **Public because the handler has to build its pagination from the same
+    /// number this clamps to.** It used to be private, so handlers passed
+    /// `paginate(..., 100)` and then `PaginationCtx::new(page, 100, total)`
+    /// while the list itself came back clamped to 30 — the navigation
+    /// advertised `total/100` pages, every page after the first was offset by
+    /// 30, and everything past `30 × total_pages` was unreachable with no error
+    /// anywhere. `?per_page=100` on a busy forum was enough to trigger it.
+    pub async fn max_page_size(&self) -> u64 {
         match &self.site_config {
             Some(sc) => get_config_u64(sc.as_ref(), "max_threads_per_page", DEFAULT_MAX_THREADS_PER_PAGE).await,
             None => DEFAULT_MAX_THREADS_PER_PAGE,
         }
+    }
+
+    async fn max_threads_per_page(&self) -> u64 {
+        self.max_page_size().await
     }
 
     async fn post_edit_window_hours(&self) -> i64 {

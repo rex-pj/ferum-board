@@ -99,6 +99,18 @@ pub const MAX_BAN_REASON_LEN: usize = 1_000;
 /// as one, by someone who holds that permission.
 pub const MAX_TEMP_BAN_DAYS: i64 = 365;
 
+/// Ceiling on `per_page` for the list endpoints that have no admin-configurable
+/// page size of their own (reports, audit log, notifications, bookmarks,
+/// follows, a user's posts).
+///
+/// **A handler's `paginate` ceiling must equal the ceiling its use case
+/// applies.** When they differ the request is silently served at the lower one
+/// while `PaginationCtx`/`PagedResponse` compute `total_pages` from the higher,
+/// so the navigation advertises too few pages and the rows past the last
+/// advertised one become unreachable — with no error anywhere. That is why this
+/// is one named constant rather than a `50` written at each end.
+pub const MAX_LIST_PAGE_SIZE: u64 = 50;
+
 pub const MIN_THREAD_TITLE_LEN: usize = 5;
 pub const MAX_THREAD_TITLE_LEN: usize = 255;
 pub const MAX_TAGS_PER_THREAD: usize = 5;

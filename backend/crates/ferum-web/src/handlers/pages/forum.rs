@@ -124,7 +124,7 @@ pub async fn home(
     Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<ListQuery>,
 ) -> Result<Response, PageError> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.thread.max_page_size().await)?;
 
     let (sort, feed_filter, legacy) =
         parse_feed_query(q.sort.as_deref(), q.filter.as_deref());
@@ -356,7 +356,7 @@ pub async fn category(
     Path(slug): Path<String>,
     Query(q): Query<ListQuery>,
 ) -> Result<Response, PageError> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.thread.max_page_size().await)?;
     let (sort, feed_filter, legacy) =
         parse_feed_query(q.sort.as_deref(), q.filter.as_deref());
     // Ahead of the category lookup, and that is safe: the target is a pure
@@ -495,7 +495,11 @@ pub async fn thread_detail(
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
     let page = q.page.unwrap_or(1).max(1);
-    let per_page = 20u64;
+    // Asked for rather than hardcoded to 20: `list_by_thread` clamps to this
+    // same configured value, and building the pager from a different number is
+    // what makes posts past the last advertised page unreachable. Lowering
+    // `max_posts_per_page` below 20 used to do exactly that.
+    let per_page = state.post.max_page_size().await;
 
     let guest_fp = crate::utils::guest_fingerprint(&headers);
     let thread = state

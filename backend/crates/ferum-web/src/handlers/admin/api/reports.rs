@@ -17,7 +17,7 @@ pub async fn list_reports(
     Query(q): Query<ReportListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, ferum_application::constants::MAX_LIST_PAGE_SIZE)?;
 
     let status = q.status.as_deref().and_then(|s| match s {
         "pending" => Some(ReportStatus::Pending),
@@ -45,7 +45,7 @@ pub async fn list_audit_log(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 30, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 30, ferum_application::constants::MAX_LIST_PAGE_SIZE)?;
 
     let (logs, total) = state
         .admin

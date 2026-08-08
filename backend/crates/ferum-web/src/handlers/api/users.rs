@@ -38,7 +38,7 @@ pub async fn list_user_threads(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.thread.max_page_size().await)?;
 
     let (threads, total) = state
         .thread
@@ -66,7 +66,7 @@ pub async fn list_user_posts(
         .await?
         .ok_or(AppError::NotFound)?;
 
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 50)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, ferum_application::constants::MAX_LIST_PAGE_SIZE)?;
 
     let (posts, total) = state
         .post

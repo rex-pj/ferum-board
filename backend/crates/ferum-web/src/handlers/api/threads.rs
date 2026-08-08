@@ -47,7 +47,7 @@ pub async fn list_feed(
     Extension(auth_user): Extension<Option<AuthUser>>,
     Query(q): Query<ThreadListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.thread.max_page_size().await)?;
 
     // No redirect here, unlike the HTML pages: an API client following a 301 is
     // best case a wasted round trip and worst case a broken integration, and
@@ -79,7 +79,7 @@ pub async fn list_threads(
     Query(q): Query<ThreadListQuery>,
     Path(category_slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.thread.max_page_size().await)?;
 
     let (sort, feed_filter, _legacy) = parse_feed_query(q.sort.as_deref(), q.filter.as_deref());
     let (threads, total) = state
