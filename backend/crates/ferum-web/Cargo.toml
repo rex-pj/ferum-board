@@ -66,6 +66,10 @@ tokio = { workspace = true, features = [
 ] }
 tokio-stream = { workspace = true }
 tower = { workspace = true }
+# `compression-gzip` + `compression-br` back the `CompressionLayer` in
+# `routings/mod.rs`. Deflate and zstd are deliberately left out: every browser
+# that sends `deflate` also sends gzip, and zstd support is still narrow enough
+# that compiling a third encoder buys nothing a client would choose.
 tower-http = { workspace = true, features = [
     "cors",
     "trace",
@@ -73,6 +77,8 @@ tower-http = { workspace = true, features = [
     "fs",
     "set-header",
     "limit",
+    "compression-gzip",
+    "compression-br",
 ] }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

@@ -67,5 +67,5 @@ pub async fn reports(
     ctx.insert("count_resolved",  &counts.resolved);
     ctx.insert("count_dismissed", &counts.dismissed);
 
-    render_admin(&state, &req_locale, "mod/reports.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/reports.html", ctx).await
 }

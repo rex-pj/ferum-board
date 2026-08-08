@@ -117,7 +117,7 @@ fn ctx_with_schema(config_schema: serde_json::Value) -> Context {
 async fn render(config_schema: serde_json::Value) -> String {
     engine()
         .await
-        .render(&Locale::default_locale(), TEMPLATE, &ctx_with_schema(config_schema))
+        .render(&Locale::default_locale(), TEMPLATE, ctx_with_schema(config_schema))
         .await
         .expect("admin/plugins/detail.html must render")
 }

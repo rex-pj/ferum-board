@@ -25,5 +25,5 @@ pub async fn settings(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("config", &configs);
 
-    render_admin(&state, &req_locale, "admin/settings.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/settings.html", ctx).await
 }

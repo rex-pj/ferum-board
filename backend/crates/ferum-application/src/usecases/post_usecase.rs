@@ -947,27 +947,37 @@ fn parse_trust_level(s: &str) -> TrustLevel {
 /// referenced, stay staged, and are eventually collected out from under posts
 /// that still display them.
 pub fn extract_attachment_keys(content: &str) -> HashSet<String> {
-    // The literal `post-attachments/` still pins the namespace, and the
-    // extensions are the exact set `content_type_to_ext` can return for the
-    // content types `upload_attachment` accepts (jpeg/png/webp/gif) — not a
-    // loose `[a-z0-9]+`, which would happily match `.exe`. The leading `/` keeps
-    // the key at a path boundary, so it cannot be reached by gluing text onto
-    // the end of some unrelated word.
-    let re = Regex::new(r"/(post-attachments/[0-9a-f]{32}\.(?:jpg|png|webp|gif))")
-        .expect("valid regex");
-    re.captures_iter(content)
+    ATTACHMENT_KEY_RE
+        .captures_iter(content)
         .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
         .collect()
 }
 
+/// The literal `post-attachments/` pins the namespace, and the extensions are
+/// the exact set `content_type_to_ext` can return for the content types
+/// `upload_attachment` accepts (jpeg/png/webp/gif) — not a loose `[a-z0-9]+`,
+/// which would happily match `.exe`. The leading `/` keeps the key at a path
+/// boundary, so it cannot be reached by gluing text onto the end of some
+/// unrelated word.
+///
+/// Compiled once. Regex construction is not free — it parses, builds an NFA and
+/// may build a DFA — and this ran on every post create and every post edit.
+static ATTACHMENT_KEY_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    Regex::new(r"/(post-attachments/[0-9a-f]{32}\.(?:jpg|png|webp|gif))").expect("valid regex")
+});
+
 fn extract_mentions(content: &str) -> Vec<String> {
-    let re = Regex::new(r"@([a-zA-Z0-9_]{3,32})").expect("valid regex");
     let mut seen = HashSet::new();
-    re.captures_iter(content)
+    MENTION_RE
+        .captures_iter(content)
         .filter_map(|c| c.get(1).map(|m| m.as_str().to_lowercase()))
         .filter(|u| seen.insert(u.clone()))
         .collect()
 }
+
+/// Compiled once — see [`ATTACHMENT_KEY_RE`].
+static MENTION_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"@([a-zA-Z0-9_]{3,32})").expect("valid regex"));
 
 async fn render_content(md: &str) -> Result<String, crate::shared::AppError> {
     let md = md.to_owned();

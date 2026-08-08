@@ -198,7 +198,7 @@ pub async fn render_with_theme(
     state: &AppState,
     active_theme: &str,
     page_key: &str,
-    ctx: &Context,
+    ctx: Context,
 ) -> Result<Html<String>, PageError> {
     render_with_theme_in(
         state,
@@ -222,12 +222,11 @@ pub async fn render_with_theme_in(
     req_locale: &crate::middleware::locale::RequestLocale,
     active_theme: &str,
     page_key: &str,
-    ctx: &Context,
+    mut ctx: Context,
 ) -> Result<Html<String>, PageError> {
     let locale = &req_locale.locale;
     let (plugin_slots, plugin_assets) = plugin_ctx_data(state).await;
     let theme_bs_theme = state.active_theme_color_scheme_cache.read().await.clone();
-    let mut ctx = ctx.clone();
     ctx.insert("plugin_slots", &plugin_slots);
     ctx.insert("plugin_assets", &plugin_assets);
     ctx.insert("theme_bs_theme", &theme_bs_theme);
@@ -255,7 +254,7 @@ pub async fn render_with_theme_in(
         .await
         .unwrap_or_else(|| format!("{}/templates/{}", DEFAULT_THEME_SLUG, page_key));
 
-    let html = state.tera.render(locale, &template_name, &ctx).await?;
+    let html = state.tera.render(locale, &template_name, ctx).await?;
     Ok(Html(html))
 }
 
@@ -392,7 +391,7 @@ pub async fn render_404_page(
     ctx.insert("site", &crate::handlers::admin::site_ctx(state).await);
     ctx.insert("active_theme", &active);
     ctx.insert("current_user", &user_ctx(state, auth_user).await);
-    match render_with_theme_in(state, req_locale, &active, "errors/404.html", &ctx).await {
+    match render_with_theme_in(state, req_locale, &active, "errors/404.html", ctx).await {
         Ok(html) => (StatusCode::NOT_FOUND, html).into_response(),
         Err(_) => (StatusCode::NOT_FOUND, Html(STATIC_404_HTML)).into_response(),
     }
@@ -408,7 +407,7 @@ pub async fn render_error_page(
     ctx.insert("site", &crate::handlers::admin::site_ctx(state).await);
     ctx.insert("active_theme", &active);
     ctx.insert("current_user", &user_ctx(state, auth_user).await);
-    match render_with_theme_in(state, req_locale, &active, "errors/error.html", &ctx).await {
+    match render_with_theme_in(state, req_locale, &active, "errors/error.html", ctx).await {
         Ok(html) => (StatusCode::INTERNAL_SERVER_ERROR, html).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Html(STATIC_ERROR_HTML)).into_response(),
     }

@@ -391,5 +391,5 @@ pub async fn search(
             .is_some_and(|u| PermissionChecker::can_submit_products(u).is_ok()),
     );
 
-    render_with_theme_in(&state, &req_locale, &active, "search.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "search.html", ctx).await
 }

@@ -247,7 +247,7 @@ pub async fn catalog_index(
         &auth_user.as_ref().is_some_and(|u| PermissionChecker::can_submit_products(u).is_ok()),
     );
 
-    render_with_theme_in(&state, &req_locale, &active, "catalog/index.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/index.html", ctx).await
 }
 
 /// GET /materials — public reference list of materials, grouped by category,
@@ -289,7 +289,7 @@ pub async fn materials_index(
     let categories = state.product.list_categories().await.unwrap_or_default();
     catalog_rail_ctx(&state, &mut ctx, &categories).await;
 
-    render_with_theme_in(&state, &req_locale, &active, "catalog/materials.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/materials.html", ctx).await
 }
 
 /// GET /brands — public brand directory; each entry links into the catalog
@@ -324,7 +324,7 @@ pub async fn brands_index(
     let categories = state.product.list_categories().await.unwrap_or_default();
     catalog_rail_ctx(&state, &mut ctx, &categories).await;
 
-    render_with_theme_in(&state, &req_locale, &active, "catalog/brands.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/brands.html", ctx).await
 }
 
 /// Sort/filter controls for the review list on a product page.
@@ -523,5 +523,5 @@ pub async fn catalog_detail(
         &(can_manage || (is_own_submission && product_is_draft)),
     );
 
-    render_with_theme_in(&state, &req_locale, &active, "catalog/product.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "catalog/product.html", ctx).await
 }

@@ -24,11 +24,17 @@ fn product_type_str(t: ProductType) -> &'static str {
 /// with Tera's `| safe` filter, so any tags left in here become stored XSS —
 /// strip everything down to plain text before it leaves this service.
 fn sanitize_excerpt(text: String) -> String {
-    ammonia::Builder::new()
-        .tags(std::collections::HashSet::new())
-        .clean(&text)
-        .to_string()
+    EXCERPT_SANITIZER.clean(&text).to_string()
 }
+
+/// Built once — this runs per result row, and `Builder::new()` populates the
+/// crate's default allow-lists before `.tags()` empties them again.
+static EXCERPT_SANITIZER: std::sync::LazyLock<ammonia::Builder<'static>> =
+    std::sync::LazyLock::new(|| {
+        let mut builder = ammonia::Builder::new();
+        builder.tags(std::collections::HashSet::new());
+        builder
+    });
 
 pub struct MeilisearchService {
     client: Client,

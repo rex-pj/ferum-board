@@ -178,5 +178,5 @@ pub async fn log(
     ctx.insert("date_from_filter", &date_from_str);
     ctx.insert("date_to_filter", &date_to_str);
 
-    render_admin(&state, &req_locale, "mod/log.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/log.html", ctx).await
 }

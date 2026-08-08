@@ -193,7 +193,7 @@ async fn render(template: &str, ctx: tera::Context) -> String {
     )
     .expect("engine builds");
     engine
-        .render(&ferum_domain::Locale::parse("vi").unwrap(), template, &ctx)
+        .render(&ferum_domain::Locale::parse("vi").unwrap(), template, ctx)
         .await
         .unwrap_or_else(|e| panic!("render {template} failed: {e}"))
 }

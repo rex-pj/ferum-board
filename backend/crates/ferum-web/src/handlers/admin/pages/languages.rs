@@ -98,7 +98,7 @@ pub async fn languages(
     ctx.insert("locales", &rows);
     ctx.insert("locales_dir", &state.locales_dir);
 
-    render_admin(&state, &req_locale, "admin/languages.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/languages.html", ctx).await
 }
 
 #[derive(Deserialize)]

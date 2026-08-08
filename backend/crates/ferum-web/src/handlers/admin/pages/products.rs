@@ -48,5 +48,5 @@ pub async fn products(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("product_categories", &categories);
 
-    render_admin(&state, &req_locale, "admin/products/list.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/products/list.html", ctx).await
 }

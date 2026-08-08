@@ -58,7 +58,7 @@ pub async fn themes(
         ctx.insert("flash_error", &msg);
     }
 
-    render_admin(&state, &req_locale, "admin/themes.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/themes.html", ctx).await
 }
 
 pub async fn upload_theme(

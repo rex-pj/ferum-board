@@ -120,5 +120,5 @@ pub async fn threads(
     ctx.insert("date_from_filter", &date_from);
     ctx.insert("date_to_filter", &date_to);
 
-    render_admin(&state, &req_locale, "admin/threads.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/threads.html", ctx).await
 }

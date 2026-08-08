@@ -83,7 +83,7 @@ pub async fn account(
     ctx.insert("account_status", &account_status);
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme_in(&state, &req_locale, &active, "app/account.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/account.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -128,7 +128,7 @@ pub async fn notifications(
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme_in(&state, &req_locale, &active, "app/notifications.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/notifications.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -196,7 +196,7 @@ pub async fn bookmarks(
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme_in(&state, &req_locale, &active, "app/bookmarks.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/bookmarks.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }

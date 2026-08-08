@@ -337,6 +337,28 @@ pub fn build_router(
     // Order: `negotiate_locale` outermost (it sets the `Locale` extension), then
     // `translate_errors`, which reads that extension and rewrites error bodies on
     // the way out — including errors from layers that never reach a handler.
+    // Compression is the OUTERMOST layer, and that placement is load-bearing in
+    // one direction: `translate_errors` (below) collects the response body with
+    // `to_bytes` to rewrite the error message inside it. Anything that reads a
+    // body must see it uncompressed, so the encoder has to sit outside — it runs
+    // first on the request and last on the response, encoding whatever the stack
+    // finally produced.
+    //
+    // Applies to `/static` and `/themes` too, which is the point: those are
+    // served by `ServeDir` from disk uncompressed, and they are the bulk of the
+    // bytes a first-time visitor downloads (~520 KB of CSS/JS, dominated by
+    // Bootstrap and FontAwesome). `ServeDir`'s ETag and 304 handling is
+    // unaffected — a conditional request that matches never reaches the encoder,
+    // because there is no body to encode.
+    //
+    // Both encoders are offered and the client's `Accept-Encoding` picks; br
+    // compresses text better, gzip is the universal fallback. Responses without a
+    // compressible `Content-Type` (images, fonts, already-compressed archives)
+    // are passed through untouched by `CompressionLayer` itself.
+    let compression = tower_http::compression::CompressionLayer::new()
+        .gzip(true)
+        .br(true);
+
     Router::new()
         .fallback_service(routed)
         .layer(middleware::from_fn_with_state(
@@ -344,6 +366,7 @@ pub fn build_router(
             translate_errors,
         ))
         .layer(middleware::from_fn_with_state(state, negotiate_locale))
+        .layer(compression)
 }
 
 /// Build a CORS layer from a comma-separated origin list.

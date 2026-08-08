@@ -88,7 +88,7 @@ pub async fn categories(
     ctx.insert("categories", &categories_ctx);
     ctx.insert("search_query", &search);
 
-    render_admin(&state, &req_locale, "admin/categories/list.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/categories/list.html", ctx).await
 }
 
 pub async fn category_moderators(
@@ -127,5 +127,5 @@ pub async fn category_moderators(
     ctx.insert("category_name", &category_name);
     ctx.insert("moderators", &moderators);
 
-    render_admin(&state, &req_locale, "admin/categories/moderators.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/categories/moderators.html", ctx).await
 }

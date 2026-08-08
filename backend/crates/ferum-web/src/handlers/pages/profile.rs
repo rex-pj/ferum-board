@@ -76,5 +76,5 @@ pub async fn user_profile(
     ctx.insert("profile", &profile);
     ctx.insert("nav_categories", &nav_categories);
 
-    render_with_theme_in(&state, &req_locale, &active, "user/profile.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "user/profile.html", ctx).await
 }

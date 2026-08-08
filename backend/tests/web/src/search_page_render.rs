@@ -134,7 +134,7 @@ fn thread_hit(title: &str, slug: &str) -> serde_json::Value {
     })
 }
 
-async fn render(ctx: &Context) -> String {
+async fn render(ctx: Context) -> String {
     engine()
         .await
         .render(&Locale::default_locale(), "default/templates/search.html", ctx)
@@ -151,7 +151,7 @@ async fn renders_the_all_tab_with_both_kinds() {
     ctx.insert("thread_total", &25u64);
     ctx.insert("total_all", &37u64);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("Milano Sofa"), "product card must render");
     assert!(html.contains("Sofa after 2 years"), "thread row must render");
@@ -177,7 +177,7 @@ async fn renders_products_tab_with_an_unrated_product() {
     ctx.insert("products", &json!([unrated]));
     ctx.insert("product_total", &1u64);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("Oak Table"));
     assert!(
@@ -219,7 +219,7 @@ async fn empty_product_tab_offers_the_matching_discussions() {
     ctx.insert("thread_total", &25u64);
     ctx.insert("total_all", &25u64);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("tab=threads"), "cross-tab recovery link");
     assert!(html.contains("25 matching discussions"));
@@ -236,7 +236,7 @@ async fn empty_results_offer_product_submission_when_permitted() {
     let mut ctx = base_ctx();
     ctx.insert("can_submit_product", &true);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("add_product=1"), "submission CTA is offered");
     assert!(html.contains("name=sofa"), "pre-filled with the query");
@@ -247,7 +247,7 @@ async fn search_backend_failure_is_not_reported_as_no_results() {
     let mut ctx = base_ctx();
     ctx.insert("search_error", &true);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("temporarily unavailable"));
     assert!(
@@ -266,7 +266,7 @@ async fn renders_in_vietnamese() {
 
     let html = engine()
         .await
-        .render(&Locale::parse("vi").expect("vi is a valid tag"), "default/templates/search.html", &ctx)
+        .render(&Locale::parse("vi").expect("vi is a valid tag"), "default/templates/search.html", ctx)
         .await
         .expect("search.html must render in vi");
 
@@ -301,7 +301,7 @@ async fn products_tab_shows_the_catalogue_taxonomy_not_the_forum_one() {
     ctx.insert("active_tab", "products");
     with_one_category(&mut ctx);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains(r#"name="pcat""#), "catalogue category is offered");
     assert!(html.contains(r#"name="brand_id""#), "brand facet is offered");
@@ -318,7 +318,7 @@ async fn discussions_tab_keeps_the_category_filter_but_hides_product_facets() {
     ctx.insert("active_tab", "threads");
     with_one_category(&mut ctx);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("id=\"searchCategory\""), "category filter is offered");
     assert!(
@@ -337,7 +337,7 @@ async fn discussions_tab_offers_a_sort_control() {
     ctx.insert("results", &json!([thread_hit("Sofa after 2 years", "sofa-2y")]));
     ctx.insert("thread_total", &1u64);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains(r#"name="tsort""#), "discussions can be sorted");
     assert!(html.contains(r#"id="searchTsort""#), "the thread sort control renders");
@@ -361,7 +361,7 @@ async fn all_tab_previews_are_sort_free_but_counted() {
     ctx.insert("thread_total", &1u64);
     ctx.insert("total_all", &3u64);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(
         !html.contains(r#"name="tsort""#) && !html.contains(r#"name="psort""#),
@@ -391,7 +391,7 @@ async fn empty_intersection_offers_the_specific_filter_to_drop() {
         &json!({ "without_category": 40, "without_facets": 8 }),
     );
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("Without the product filters: 8 products"));
     assert!(html.contains("Without the category: 40 results"));
@@ -405,7 +405,7 @@ async fn a_relaxation_worth_nothing_is_not_offered() {
     ctx.insert("has_relaxation", &false);
     ctx.insert("relaxed", &json!({ "without_category": 0, "without_facets": null }));
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(!html.contains("No match for this combination"));
 }
@@ -422,7 +422,7 @@ async fn facets_survive_a_trip_through_the_discussions_tab() {
     ctx.insert("active_psort", "top_rated");
     ctx.insert("facet_params", "&type=furniture&psort=top_rated");
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(
         html.contains(r#"<input type="hidden" name="type" value="furniture">"#),
@@ -456,7 +456,7 @@ async fn active_filters_render_as_individually_removable_chips() {
         ]),
     );
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("Sofa"), "first chip renders");
     assert!(html.contains("Milano"), "second chip renders");
@@ -475,7 +475,7 @@ async fn a_single_filter_gets_no_clear_all() {
         &json!([{ "kind": "name", "label": "Sofa", "remove_url": "/search?q=sofa&tab=products" }]),
     );
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
     assert!(html.contains("Sofa"));
     assert!(
         !html.contains("Clear all"),
@@ -491,7 +491,7 @@ async fn sorting_alone_produces_no_filter_chips() {
     ctx.insert("active_tab", "products");
     ctx.insert("active_psort", "top_rated");
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
     assert!(!html.contains("fr-search-chips"));
 }
 
@@ -507,7 +507,7 @@ async fn a_product_type_chip_is_rendered_through_the_shared_label_macro() {
         &json!([{ "kind": "code", "label": "furniture", "remove_url": "/search?q=sofa&tab=products" }]),
     );
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
     assert!(html.contains("Furniture"), "the code is resolved to its label");
     assert!(
         !html.contains(">furniture<"),
@@ -523,7 +523,7 @@ async fn facet_controls_are_labelled_by_axis_not_by_all_something() {
     let mut ctx = base_ctx();
     ctx.insert("active_tab", "products");
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     for gone in ["All product categories", "All types", "All brands", "All materials"] {
         assert!(!html.contains(gone), "{gone:?} should no longer label a control");
@@ -542,7 +542,7 @@ async fn the_all_tab_carries_no_filter_controls() {
     let mut ctx = base_ctx();
     with_one_category(&mut ctx);
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(!html.contains(r#"id="searchCategory""#));
     assert!(!html.contains(r#"<select name="brand_id""#));
@@ -571,7 +571,7 @@ fn catalog_ctx() -> Context {
     ctx
 }
 
-async fn render_catalog(ctx: &Context) -> String {
+async fn render_catalog(ctx: Context) -> String {
     engine()
         .await
         .render(
@@ -588,7 +588,7 @@ async fn catalog_offers_the_category_filter() {
     let mut ctx = catalog_ctx();
     ctx.insert("active_category_id", "00000000-0000-0000-0000-000000000010");
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert!(html.contains(r#"name="category_id""#), "category filter is offered");
     assert!(
@@ -603,7 +603,7 @@ async fn catalog_offers_the_category_filter() {
 #[tokio::test]
 async fn catalog_filters_match_the_search_page_pattern() {
     let ctx = catalog_ctx();
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert!(html.contains("fr-refine-filters"), "shared facet group");
     assert!(html.contains("fr-refine-toggle"), "mobile disclosure, as on search");
@@ -656,7 +656,7 @@ async fn catalog_shows_removable_filter_chips() {
         ]),
     );
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert!(html.contains("fr-search-chips"), "chip row renders");
     assert!(html.contains("fr-search-catchip"), "each chip is a removable pill");
@@ -675,7 +675,7 @@ async fn catalog_pagination_carries_every_active_filter() {
         "&q=sofa&type=furniture&category_id=00000000-0000-0000-0000-000000000010&sort=top_rated",
     );
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     for expected in [
         "/catalog?page=1&amp;q=sofa",
@@ -697,7 +697,7 @@ async fn the_tab_strip_precedes_the_filter_controls() {
     let mut ctx = base_ctx();
     ctx.insert("active_tab", "products");
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     let tabs = html.find("fr-search-tabs").expect("tab strip renders");
     let refine = html.find("fr-refine-controls").expect("filter row renders");
@@ -721,7 +721,7 @@ async fn the_mobile_filter_disclosure_shows_how_many_are_active() {
         ]),
     );
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(html.contains("fr-refine-toggle"), "the disclosure exists");
     assert!(html.contains("(2)"), "and says how many filters are set");
@@ -736,7 +736,7 @@ async fn an_unsubmitted_search_shows_neither_tabs_nor_filters() {
     ctx.insert("query", "");
     ctx.insert("query_encoded", "");
 
-    let html = render(&ctx).await;
+    let html = render(ctx).await;
 
     assert!(!html.contains("fr-search-tabs"));
     assert!(!html.contains("fr-refine-controls"));
@@ -758,7 +758,7 @@ async fn catalog_rail_marks_the_active_category() {
     let mut ctx = catalog_ctx();
     ctx.insert("active_category_id", "00000000-0000-0000-0000-000000000010");
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert!(html.contains("fr-right-col"), "the catalogue renders a right rail");
     assert!(
@@ -776,7 +776,7 @@ async fn catalog_rail_category_links_keep_the_other_filters() {
     ctx.insert("category_link_params", "&q=sofa&brand_id=b1");
     ctx.insert("catalog_all_url", "/catalog?q=sofa&brand_id=b1");
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert!(
         html.contains("/catalog?category_id=00000000-0000-0000-0000-000000000010&amp;q=sofa&amp;brand_id=b1"),
@@ -796,7 +796,7 @@ async fn catalog_rail_does_not_duplicate_the_submission_action() {
     let mut ctx = catalog_ctx();
     ctx.insert("can_submit_product", &true);
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert_eq!(
         html.matches("add_product=1").count(),
@@ -816,7 +816,7 @@ async fn catalog_tab_rule_spans_the_whole_action_row() {
     let mut ctx = catalog_ctx();
     ctx.insert("can_submit_product", &true);
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert!(
         html.contains("fr-catalog-nav"),
@@ -841,8 +841,7 @@ async fn catalog_rail_renders_on_the_tabs_that_have_no_category_filter() {
         .await
         .render(
             &Locale::default_locale(),
-            "default/templates/catalog/brands.html",
-            &ctx,
+            "default/templates/catalog/brands.html", ctx,
         )
         .await
         .expect("brands.html must render with the shared rail");
@@ -886,7 +885,7 @@ async fn every_catalogue_tab_renders_the_rails_review_panel() {
 
         let html = engine()
             .await
-            .render(&Locale::default_locale(), template, &ctx)
+            .render(&Locale::default_locale(), template, ctx)
             .await
             .unwrap_or_else(|e| panic!("{template} must render with a populated rail: {e}"));
 
@@ -929,7 +928,7 @@ async fn a_product_with_an_image_renders_the_resolver_path() {
     let mut ctx = catalog_ctx();
     ctx.insert("products", &json!([with_image]));
 
-    let html = render_catalog(&ctx).await;
+    let html = render_catalog(ctx).await;
 
     assert!(
         decode_slashes(&html)
@@ -954,8 +953,7 @@ async fn file_url_is_registered_for_every_installed_locale() {
         .await
         .render(
             &Locale::parse("vi").expect("vi is a valid tag"),
-            "default/templates/catalog/index.html",
-            &ctx,
+            "default/templates/catalog/index.html", ctx,
         )
         .await
         .expect("catalog/index.html must render in Vietnamese too");

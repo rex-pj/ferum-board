@@ -72,10 +72,9 @@ pub async fn render_admin(
     state: &AppState,
     req_locale: &crate::middleware::locale::RequestLocale,
     template: &str,
-    ctx: &Context,
+    mut ctx: Context,
 ) -> Result<Html<String>, PageError> {
     let locale = &req_locale.locale;
-    let mut ctx = ctx.clone();
     ctx.insert("default_theme_slug", DEFAULT_THEME_SLUG);
     ctx.insert("locale", locale.as_str());
     ctx.insert("current_path", &req_locale.canonical_path);
@@ -95,7 +94,7 @@ pub async fn render_admin(
     // otherwise every client-rendered admin message would show a raw key.
     ctx.insert("js_strings", &crate::handlers::pages::js_strings_for(state, locale));
 
-    let html = state.tera.render(locale, template, &ctx).await?;
+    let html = state.tera.render(locale, template, ctx).await?;
     Ok(Html(html))
 }
 

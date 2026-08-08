@@ -15,7 +15,7 @@ pub async fn setup(
     // they can reach the language setting.
     let html = state
         .tera
-        .render(&locale, "setup.html", &Context::new())
+        .render(&locale, "setup.html", Context::new())
         .await?;
     Ok(Html(html))
 }

@@ -79,5 +79,5 @@ pub async fn threads(
     ctx.insert("q", &search_query);
     ctx.insert("status", &status_filter);
 
-    render_admin(&state, &req_locale, "mod/threads.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/threads.html", ctx).await
 }

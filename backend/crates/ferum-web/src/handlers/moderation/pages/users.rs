@@ -78,5 +78,5 @@ pub async fn users(
     ctx.insert("q", &search.unwrap_or_default());
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
 
-    render_admin(&state, &req_locale, "mod/users.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/users.html", ctx).await
 }

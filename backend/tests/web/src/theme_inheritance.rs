@@ -77,7 +77,7 @@ async fn render(theme: &str) -> String {
         .render(
             &Locale::default_locale(),
             &format!("{theme}/templates/home.html"),
-            &ctx(theme),
+            ctx(theme),
         )
         .await
         .unwrap_or_else(|e| panic!("{theme} home.html must render: {e:?}"))

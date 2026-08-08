@@ -122,9 +122,43 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Resolves when the process is asked to stop, so `axum::serve` can drain
+/// in-flight requests (NF-OP-03).
+///
+/// **SIGTERM is the one that matters in production, and it used to be missing.**
+/// `docker stop`, a Compose restart, and a Kubernetes pod eviction all send
+/// SIGTERM and only escalate to SIGKILL after a grace period; nothing in a
+/// container ever sends SIGINT. So while this listened for Ctrl-C alone, the
+/// documented deployment profiles (B and C, both `restart: unless-stopped`)
+/// terminated the process outright on every deploy and every restart, cutting
+/// whatever requests were in flight. Ctrl-C stays because it is what a developer
+/// presses locally.
 async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("failed to install CTRL+C handler");
-    tracing::info!("Shutdown signal received, draining requests…");
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install CTRL+C handler");
+        "SIGINT"
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+        "SIGTERM"
+    };
+    // Windows has no SIGTERM. `pending()` never resolves, so the `select!` below
+    // reduces to waiting on Ctrl-C alone — the previous behaviour, which is the
+    // correct one on a platform that cannot deliver the other signal.
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<&str>();
+
+    let signal = tokio::select! {
+        s = ctrl_c => s,
+        s = terminate => s,
+    };
+
+    tracing::info!(signal, "Shutdown signal received, draining requests…");
 }

@@ -197,7 +197,7 @@ pub async fn upload_plugin(
     // the default here would mix two languages on one screen.
     let html = state
         .tera
-        .render(&req_locale.locale, "admin/plugin_review_partial.html", &ctx)
+        .render(&req_locale.locale, "admin/plugin_review_partial.html", ctx)
         .await
         .map_err(|e| PageError::Internal(anyhow::anyhow!("Render error: {:?}", e)))?;
     Ok(Html(html))
@@ -344,7 +344,7 @@ pub async fn plugins(
         ctx.insert("flash_error", &msg);
     }
 
-    render_admin(&state, &req_locale, "admin/plugins.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/plugins.html", ctx).await
 }
 
 pub async fn activate_plugin(
@@ -466,7 +466,7 @@ pub async fn plugin_detail(
     ctx.insert("flash_success", &flash_success);
     ctx.insert("flash_error", &flash_error);
 
-    render_admin(&state, &req_locale, "admin/plugins/detail.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/plugins/detail.html", ctx).await
 }
 
 pub async fn save_config(

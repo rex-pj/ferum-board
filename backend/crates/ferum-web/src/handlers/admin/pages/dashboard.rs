@@ -41,5 +41,5 @@ pub async fn dashboard(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("stats", &stats_ctx);
 
-    render_admin(&state, &req_locale, "admin/dashboard.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/dashboard.html", ctx).await
 }

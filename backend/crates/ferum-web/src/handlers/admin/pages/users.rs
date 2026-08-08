@@ -89,7 +89,7 @@ pub async fn users(
     ctx.insert("sort_by", &sort_by.unwrap_or_default());
     ctx.insert("sort_dir", &sort_dir.unwrap_or_else(|| "desc".to_string()));
 
-    render_admin(&state, &req_locale, "admin/users/list.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/users/list.html", ctx).await
 }
 
 #[tracing::instrument(skip(state, auth_user), fields(user_id = %id))]
@@ -164,5 +164,5 @@ pub async fn user_detail(
     ctx.insert("profile", &profile);
     ctx.insert("all_roles", &all_roles_ctx);
 
-    render_admin(&state, &req_locale, "admin/users/detail.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/users/detail.html", ctx).await
 }

@@ -83,7 +83,7 @@ pub async fn new_thread(
     ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
     ctx.insert("can_submit_product", &can_submit_product);
 
-    render_with_theme_in(&state, &req_locale, &active, "app/new_thread.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/new_thread.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -163,7 +163,7 @@ pub async fn edit_thread(
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
 
-    render_with_theme_in(&state, &req_locale, &active, "app/edit_thread.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "app/edit_thread.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }

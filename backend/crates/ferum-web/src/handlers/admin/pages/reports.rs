@@ -66,7 +66,7 @@ pub async fn reports(
     ctx.insert("count_resolved",  &counts.resolved);
     ctx.insert("count_dismissed", &counts.dismissed);
 
-    render_admin(&state, &req_locale, "admin/moderation/reports.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/moderation/reports.html", ctx).await
 }
 
 #[tracing::instrument(skip_all, fields(page = q.page, q = q.q.as_deref()))]
@@ -236,5 +236,5 @@ pub async fn audit_log(
     ctx.insert("date_from_filter", &date_from);
     ctx.insert("date_to_filter", &date_to);
 
-    render_admin(&state, &req_locale, "admin/moderation/audit_log.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/moderation/audit_log.html", ctx).await
 }

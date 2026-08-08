@@ -277,7 +277,7 @@ pub async fn home(
     ctx.insert("total_reviews", &total_reviews);
     ctx.insert("avg_rating", &avg_rating);
 
-    render_with_theme_in(&state, &req_locale, &active, "home.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "home.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -345,7 +345,7 @@ pub async fn forum_index(
     ctx.insert("total_threads", &total_threads);
     ctx.insert("total_categories", &total_categories);
 
-    render_with_theme_in(&state, &req_locale, &active, "forum/index.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "forum/index.html", ctx).await
 }
 
 #[tracing::instrument(skip(state, auth_user, q), fields(slug))]
@@ -480,7 +480,7 @@ pub async fn category(
     );
     ctx.insert("active_category_slug", &category.slug);
 
-    render_with_theme_in(&state, &req_locale, &active, "forum/category.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "forum/category.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -706,7 +706,7 @@ pub async fn thread_detail(
     ctx.insert("review_rating", &review_rating);
     ctx.insert("is_review", &is_review);
 
-    render_with_theme_in(&state, &req_locale, &active, "forum/thread.html", &ctx).await
+    render_with_theme_in(&state, &req_locale, &active, "forum/thread.html", ctx).await
 }
 
 /// GET /go/post/{id} — resolves a post to the thread page + pagination offset

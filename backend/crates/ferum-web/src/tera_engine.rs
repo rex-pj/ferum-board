@@ -432,11 +432,18 @@ impl TeraEngine {
     /// `spawn_blocking` below: that is precisely why the locale is carried in
     /// the instance rather than in a task-local, which would not survive the
     /// hop off the async task.
+    /// `ctx` is taken **by value** so it can be moved onto the blocking pool.
+    /// It used to be `&Context` and was cloned here — a `Context` is a
+    /// `HashMap<String, Value>` holding the page's entire materialised view
+    /// model (on a thread page, twenty posts' worth of `content_html`), so that
+    /// was a deep copy of the largest object in the request, on every request.
+    /// `render_with_theme_in` cloned it a second time to insert its own keys;
+    /// both copies are gone now that ownership flows through.
     pub async fn render(
         &self,
         locale: &Locale,
         template_name: &str,
-        ctx: &Context,
+        ctx: Context,
     ) -> Result<String> {
         // Clone the Arc<Tera> (one atomic increment) while holding the read lock briefly,
         // then release the lock before the CPU-bound render. This avoids copying all
@@ -446,7 +453,6 @@ impl TeraEngine {
         let lock_us = lock_start.elapsed().as_micros() as u64;
 
         let name = template_name.to_string();
-        let ctx = ctx.clone();
         let name2 = name.clone();
 
         let render_start = std::time::Instant::now();

@@ -108,5 +108,5 @@ pub async fn queue(
     ctx.insert("categories", &categories_ctx);
     ctx.insert("category_id_filter", &category_id_str);
 
-    render_admin(&state, &req_locale, "mod/queue.html", &ctx).await
+    render_admin(&state, &req_locale, "mod/queue.html", ctx).await
 }

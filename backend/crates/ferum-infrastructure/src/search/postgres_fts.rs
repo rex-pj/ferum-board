@@ -2,11 +2,21 @@ use async_trait::async_trait;
 use sea_orm::{DatabaseConnection, DbBackend, FromQueryResult, Statement};
 use uuid::Uuid;
 
+/// Strips everything but the `<b>` markers `ts_headline` inserts.
+///
+/// Built once, and that matters more here than it looks: this is called **per
+/// result row**, and `ammonia::Builder::new()` populates the crate's default
+/// allow-lists before `.tags()` throws them away again. A 100-row search page
+/// was building and discarding 100 of them.
+static HEADLINE_SANITIZER: std::sync::LazyLock<ammonia::Builder<'static>> =
+    std::sync::LazyLock::new(|| {
+        let mut builder = ammonia::Builder::new();
+        builder.tags(["b"].iter().cloned().collect());
+        builder
+    });
+
 fn sanitize_headline(html: String) -> String {
-    ammonia::Builder::new()
-        .tags(["b"].iter().cloned().collect())
-        .clean(&html)
-        .to_string()
+    HEADLINE_SANITIZER.clean(&html).to_string()
 }
 
 use ferum_application::ports::{

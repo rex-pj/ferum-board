@@ -42,7 +42,7 @@ pub async fn roles(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("roles", &roles_ctx);
 
-    render_admin(&state, &req_locale, "admin/roles/list.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/roles/list.html", ctx).await
 }
 
 #[tracing::instrument(skip(state, auth_user), fields(role_id = %id))]
@@ -119,7 +119,7 @@ pub async fn role_detail(
     ctx.insert("role_perm_keys", &role_perm_keys);
     ctx.insert("permission_groups", &permission_groups);
 
-    render_admin(&state, &req_locale, "admin/roles/detail.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/roles/detail.html", ctx).await
 }
 
 pub async fn permissions(
@@ -167,5 +167,5 @@ pub async fn permissions(
     ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
     ctx.insert("permission_groups", &permission_groups);
 
-    render_admin(&state, &req_locale, "admin/permissions.html", &ctx).await
+    render_admin(&state, &req_locale, "admin/permissions.html", ctx).await
 }

@@ -46,7 +46,7 @@ pub async fn login(
     ctx.insert("error", &q.error);
     ctx.insert("verified", &q.verified.is_some());
 
-    render_with_theme_in(&state, &req_locale, &active, "auth/login.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/login.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -73,7 +73,7 @@ pub async fn register(
     ctx.insert("active_theme", &active);
     ctx.insert("registration_open", &registration_open);
 
-    render_with_theme_in(&state, &req_locale, &active, "auth/register.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/register.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -93,7 +93,7 @@ pub async fn forgot_password(
     ctx.insert("current_user", &Option::<CurrentUserCtx>::None);
     ctx.insert("active_theme", &active);
 
-    render_with_theme_in(&state, &req_locale, &active, "auth/forgot_password.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/forgot_password.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
@@ -115,7 +115,7 @@ pub async fn reset_password(
     ctx.insert("active_theme", &active);
     ctx.insert("token", &q.token.unwrap_or_default());
 
-    render_with_theme_in(&state, &req_locale, &active, "auth/reset_password.html", &ctx)
+    render_with_theme_in(&state, &req_locale, &active, "auth/reset_password.html", ctx)
         .await
         .map(IntoResponse::into_response)
 }
