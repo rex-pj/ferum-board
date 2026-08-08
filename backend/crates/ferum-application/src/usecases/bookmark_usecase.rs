@@ -7,17 +7,28 @@ use crate::shared::{AppError, OptionExt};
 use ferum_domain::models::bookmark::Bookmark;
 use ferum_domain::models::thread::Thread;
 use ferum_domain::repositories::bookmark_repository::BookmarkRepository;
+use ferum_domain::repositories::category_repository::CategoryRepository;
 use ferum_domain::repositories::thread_repository::ThreadRepository;
 use ferum_domain::AuthUser;
 
 pub struct BookmarkUseCase {
     pub bookmarks: Arc<dyn BookmarkRepository>,
     pub threads: Arc<dyn ThreadRepository>,
+    /// So `add` can check the thread's category is one the actor may see.
+    /// Without it, a bookmark on a `staff_only` thread was accepted and the
+    /// thread's title then rendered on the bookmarks page — the one place a
+    /// restricted title could reach a reader who had never been allowed to open
+    /// it.
+    pub categories: Arc<dyn CategoryRepository>,
 }
 
 impl BookmarkUseCase {
-    pub fn new(bookmarks: Arc<dyn BookmarkRepository>, threads: Arc<dyn ThreadRepository>) -> Self {
-        Self { bookmarks, threads }
+    pub fn new(
+        bookmarks: Arc<dyn BookmarkRepository>,
+        threads: Arc<dyn ThreadRepository>,
+        categories: Arc<dyn CategoryRepository>,
+    ) -> Self {
+        Self { bookmarks, threads, categories }
     }
 
     pub async fn is_bookmarked(&self, user_id: Uuid, thread_id: Uuid) -> Result<bool, AppError> {
@@ -38,6 +49,16 @@ impl BookmarkUseCase {
         ) {
             return Err(AppError::NotFound);
         }
+
+        // Checked before the idempotency shortcut so a hidden category answers
+        // 404 either way — otherwise the two answers differ and that difference
+        // reports whether the thread exists.
+        let category = self
+            .categories
+            .find_by_id(thread.category_id)
+            .await?
+            .or_not_found()?;
+        PermissionChecker::can_view_category(Some(actor), &category)?;
 
         if self.bookmarks.find(actor.id, thread_id).await?.is_some() {
             return Ok(true);

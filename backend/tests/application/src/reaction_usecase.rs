@@ -4,8 +4,9 @@ use ferum_application::usecases::reaction_usecase::ReactionUseCase;
 use ferum_domain::AppError;
 use ferum_domain::models::reaction::ReactionKind;
 use ferum_domain::models::user::TrustLevel;
-use ferum_test_support::fixtures::{ids, make_post, make_thread, AuthUserBuilder};
+use ferum_test_support::fixtures::{ids, make_category, make_post, make_thread, AuthUserBuilder};
 use ferum_test_support::mocks::{
+    category_repository::MockCategoryRepository,
     event_publisher::MockEventPublisher,
     post_repository::MockPostRepository,
     reaction_repository::MockReactionRepository,
@@ -19,6 +20,7 @@ struct Uc {
     reactions: MockReactionRepository,
     posts: MockPostRepository,
     threads: MockThreadRepository,
+    categories: MockCategoryRepository,
     users: MockUserRepository,
     events: MockEventPublisher,
 }
@@ -29,9 +31,23 @@ impl Uc {
             reactions: MockReactionRepository::new(),
             posts: MockPostRepository::new(),
             threads: MockThreadRepository::new(),
+            categories: MockCategoryRepository::new(),
             users: MockUserRepository::new(),
             events: MockEventPublisher::new(),
         }
+    }
+
+    /// Stub the thread + category lookups that `add`/`remove` now perform, with
+    /// an ordinary public category. Tests about *visibility* set these up
+    /// themselves; everything else just needs the path to be open.
+    fn in_a_public_category(mut self) -> Self {
+        self.threads
+            .expect_find_by_id()
+            .returning(move |_| Ok(Some(make_thread(ids::thread_a(), ids::category_a(), ids::user_b()))));
+        self.categories
+            .expect_find_by_id()
+            .returning(move |_| Ok(Some(make_category(ids::category_a()))));
+        self
     }
 
     fn build(self) -> ReactionUseCase {
@@ -39,6 +55,7 @@ impl Uc {
             Arc::new(self.reactions),
             Arc::new(self.posts),
             Arc::new(self.threads),
+            Arc::new(self.categories),
             Arc::new(self.users),
             Arc::new(self.events),
         )
@@ -78,7 +95,7 @@ async fn add_post_not_found_returns_not_found() {
     let actor = AuthUserBuilder::member().with_perm("reaction.add").build();
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(|_| Ok(None));
-    let result = b.build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    let result = b.in_a_public_category().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(matches!(result, Err(AppError::NotFound)));
 }
 
@@ -90,7 +107,7 @@ async fn add_deleted_post_returns_not_found() {
 
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
-    let result = b.build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    let result = b.in_a_public_category().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(matches!(result, Err(AppError::NotFound)));
 }
 
@@ -101,7 +118,7 @@ async fn add_own_post_returns_forbidden() {
 
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
-    let result = b.build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    let result = b.in_a_public_category().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
@@ -123,7 +140,7 @@ async fn add_idempotent_when_already_reacted() {
     b.reactions.expect_find().return_once(move |_, _, _| Ok(Some(existing)));
     b.reactions.expect_counts_by_post().return_once(|_| Ok(vec![]));
 
-    let result = b.build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    let result = b.in_a_public_category().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(result.is_ok());
 }
 
@@ -131,12 +148,10 @@ async fn add_idempotent_when_already_reacted() {
 async fn add_like_succeeds_and_publishes_event() {
     let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
     let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
-    let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b());
 
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
     b.reactions.expect_find().return_once(|_, _, _| Ok(None));
-    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
     b.reactions.expect_add().return_once(|_, _, _| {
         Ok(ferum_domain::models::reaction::Reaction {
             post_id: ids::post_a(),
@@ -149,7 +164,7 @@ async fn add_like_succeeds_and_publishes_event() {
     b.reactions.expect_counts_by_post().return_once(|_| Ok(vec![]));
     // Like does NOT trigger trust_score increment — expect_increment_trust_score NOT set
 
-    let result = b.build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    let result = b.in_a_public_category().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(result.is_ok());
 }
 
@@ -157,12 +172,10 @@ async fn add_like_succeeds_and_publishes_event() {
 async fn add_helpful_triggers_trust_score_increment() {
     let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
     let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
-    let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b());
 
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
     b.reactions.expect_find().return_once(|_, _, _| Ok(None));
-    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
     b.reactions.expect_add().return_once(|_, _, _| {
         Ok(ferum_domain::models::reaction::Reaction {
             post_id: ids::post_a(),
@@ -175,7 +188,7 @@ async fn add_helpful_triggers_trust_score_increment() {
     b.reactions.expect_counts_by_post().return_once(|_| Ok(vec![]));
     b.users.expect_increment_trust_score().return_once(|_, _| Ok(()));
 
-    let result = b.build().add(&actor, ids::post_a(), ReactionKind::Helpful).await;
+    let result = b.in_a_public_category().build().add(&actor, ids::post_a(), ReactionKind::Helpful).await;
     assert!(result.is_ok());
 }
 
@@ -196,7 +209,7 @@ async fn remove_deleted_post_returns_not_found() {
 
     let mut b = Uc::new();
     b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
-    let result = b.build().remove(&actor, ids::post_a(), ReactionKind::Like).await;
+    let result = b.in_a_public_category().build().remove(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(matches!(result, Err(AppError::NotFound)));
 }
 
@@ -220,7 +233,7 @@ async fn remove_like_publishes_event_without_trust_change() {
     b.reactions.expect_counts_by_post().return_once(|_| Ok(vec![]));
     // Like removal does NOT trigger trust_score decrement
 
-    let result = b.build().remove(&actor, ids::post_a(), ReactionKind::Like).await;
+    let result = b.in_a_public_category().build().remove(&actor, ids::post_a(), ReactionKind::Like).await;
     assert!(result.is_ok());
 }
 
@@ -244,6 +257,50 @@ async fn remove_helpful_decrements_trust_score() {
     b.reactions.expect_counts_by_post().return_once(|_| Ok(vec![]));
     b.users.expect_increment_trust_score().return_once(|_, _| Ok(()));
 
-    let result = b.build().remove(&actor, ids::post_a(), ReactionKind::Helpful).await;
+    let result = b.in_a_public_category().build().remove(&actor, ids::post_a(), ReactionKind::Helpful).await;
     assert!(result.is_ok());
+}
+
+// ─── category visibility ──────────────────────────────────────────────────────
+
+/// Reacting is a write into a category, and it fires a notification to the post's
+/// author — but the reaction path resolved the post and stopped there, never
+/// looking at the category's `view_policy`. Anyone with a post id could react
+/// inside a `staff_only` category they are not allowed to read.
+#[tokio::test]
+async fn add_in_a_staff_only_category_is_not_found_for_an_outsider() {
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
+    let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
+    let mut category = make_category(ids::category_a());
+    category.view_policy = ferum_domain::models::category::ViewPolicy::StaffOnly;
+
+    let mut b = Uc::new();
+    b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    b.categories.expect_find_by_id().return_once(move |_| Ok(Some(category)));
+    b.reactions.expect_add().never();
+
+    let result = b.in_a_public_category().build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    // 404, not 403 — a staff_only category must not confirm it exists (NF-SC-13).
+    assert!(matches!(result, Err(AppError::NotFound)), "got {result:?}");
+}
+
+/// A thread whose thread row is gone is gone: its posts must not accept new
+/// reactions, notifications or trust-score changes.
+#[tokio::test]
+async fn add_in_a_deleted_thread_is_not_found() {
+    let actor = AuthUserBuilder::member().with_perm("reaction.add").with_id(ids::user_a()).build();
+    let post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
+    let mut thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b());
+    thread.status = ferum_domain::models::thread::ThreadStatus::Deleted;
+    thread.deleted_at = Some(chrono::Utc::now());
+
+    let mut b = Uc::new();
+    b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    // Deliberately not `in_a_public_category` — the deleted thread *is* the case
+    // under test, so it is stubbed here.
+    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
+    b.reactions.expect_add().never();
+
+    let result = b.build().add(&actor, ids::post_a(), ReactionKind::Like).await;
+    assert!(matches!(result, Err(AppError::NotFound)), "got {result:?}");
 }

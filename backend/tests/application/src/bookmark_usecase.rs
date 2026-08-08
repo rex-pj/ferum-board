@@ -2,16 +2,32 @@ use std::sync::Arc;
 
 use ferum_application::usecases::bookmark_usecase::BookmarkUseCase;
 use ferum_domain::AppError;
-use ferum_test_support::fixtures::{ids, make_bookmark, make_thread, AuthUserBuilder};
+use ferum_test_support::fixtures::{ids, make_bookmark, make_category, make_thread, AuthUserBuilder};
 use ferum_test_support::mocks::{
     bookmark_repository::MockBookmarkRepository,
+    category_repository::MockCategoryRepository,
     thread_repository::MockThreadRepository,
 };
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
+/// Defaults the category to a public one, since that is the uninteresting case
+/// for every test that is not about visibility. Use `build_with_category` to
+/// vary it.
 fn build(bookmarks: MockBookmarkRepository, threads: MockThreadRepository) -> BookmarkUseCase {
-    BookmarkUseCase::new(Arc::new(bookmarks), Arc::new(threads))
+    let mut categories = MockCategoryRepository::new();
+    categories
+        .expect_find_by_id()
+        .returning(move |_| Ok(Some(make_category(ids::category_a()))));
+    BookmarkUseCase::new(Arc::new(bookmarks), Arc::new(threads), Arc::new(categories))
+}
+
+fn build_with_category(
+    bookmarks: MockBookmarkRepository,
+    threads: MockThreadRepository,
+    categories: MockCategoryRepository,
+) -> BookmarkUseCase {
+    BookmarkUseCase::new(Arc::new(bookmarks), Arc::new(threads), Arc::new(categories))
 }
 
 // ─── add ──────────────────────────────────────────────────────────────────────
@@ -122,4 +138,59 @@ async fn list_caps_per_page_at_50() {
 
     let result = build(bm, MockThreadRepository::new()).list(&actor, 1, 100).await;
     assert!(result.is_ok());
+}
+
+// ─── category visibility ──────────────────────────────────────────────────────
+
+/// Bookmarking never checked `view_policy`. The bookmarks page then renders the
+/// thread's title, so a restricted title could reach a reader who was never
+/// allowed to open the thread — the only path by which that could happen.
+#[tokio::test]
+async fn add_in_a_staff_only_category_is_not_found_for_an_outsider() {
+    let actor = AuthUserBuilder::member().build();
+
+    let mut th = MockThreadRepository::new();
+    th.expect_find_by_id()
+        .returning(move |_| Ok(Some(make_thread(ids::thread_a(), ids::category_a(), ids::user_b()))));
+
+    let mut cats = MockCategoryRepository::new();
+    cats.expect_find_by_id().returning(move |_| {
+        let mut c = make_category(ids::category_a());
+        c.view_policy = ferum_domain::models::category::ViewPolicy::StaffOnly;
+        Ok(Some(c))
+    });
+
+    let mut bm = MockBookmarkRepository::new();
+    bm.expect_add().never();
+
+    let result = build_with_category(bm, th, cats).add(&actor, ids::thread_a()).await;
+    assert!(matches!(result, Err(AppError::NotFound)), "got {result:?}");
+}
+
+/// A moderator assigned to that category still can, so this narrows nothing for
+/// the people the category is for.
+#[tokio::test]
+async fn add_in_a_staff_only_category_is_allowed_for_staff() {
+    let actor = AuthUserBuilder::member()
+        .with_category_perm(ids::category_a(), "moderation.view_reports")
+        .build();
+
+    let mut th = MockThreadRepository::new();
+    th.expect_find_by_id()
+        .returning(move |_| Ok(Some(make_thread(ids::thread_a(), ids::category_a(), ids::user_b()))));
+
+    let mut cats = MockCategoryRepository::new();
+    cats.expect_find_by_id().returning(move |_| {
+        let mut c = make_category(ids::category_a());
+        c.view_policy = ferum_domain::models::category::ViewPolicy::StaffOnly;
+        Ok(Some(c))
+    });
+
+    let mut bm = MockBookmarkRepository::new();
+    bm.expect_find().returning(|_, _| Ok(None));
+    bm.expect_add()
+        .times(1)
+        .returning(move |_, _| Ok(make_bookmark(ids::user_a(), ids::thread_a())));
+
+    build_with_category(bm, th, cats).add(&actor, ids::thread_a()).await.unwrap();
 }

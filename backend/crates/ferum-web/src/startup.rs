@@ -717,6 +717,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             reaction_repo.clone(),
             post_repo.clone(),
             thread_repo.clone(),
+            category_repo.clone(),
             user_repo.clone(),
             event_bus.clone(),
         )
@@ -772,7 +773,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         .with_cache(cache.clone()),
     );
 
-    let bookmark = Arc::new(BookmarkUseCase::new(bookmark_repo, thread_repo.clone()));
+    let bookmark = Arc::new(BookmarkUseCase::new(
+        bookmark_repo,
+        thread_repo.clone(),
+        category_repo.clone(),
+    ));
     let follow_repo = Arc::new(PgFollowRepository::new(pg_write.clone()));
     let follow = Arc::new(FollowUseCase::new(
         follow_repo,
