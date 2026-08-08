@@ -817,6 +817,19 @@ impl PostUseCase {
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, post_id = %id))]
     pub async fn approve_post(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         let post = self.posts.find_by_id(id).await?.or_not_found()?;
+        // A rejected post is soft-deleted but keeps `status = Pending` —
+        // `soft_delete` does not touch the status column — so `is_pending()`
+        // alone is not enough to tell "awaiting review" from "already refused".
+        //
+        // Approving a rejected post published a row that can never render
+        // (`visibility_condition` filters `is_deleted`) while incrementing
+        // `threads.reply_count` and the author's `post_count` for it. Nothing
+        // reconciles those counters, so the inflation was permanent. The queue
+        // UI hides rejected posts, but this endpoint is reachable directly from
+        // a stale tab or a second moderator working the same queue.
+        if post.is_deleted {
+            return Err(AppError::NotFound);
+        }
         if !post.status.is_pending() {
             return Err(AppError::invalid("post_not_pending_approval"));
         }
@@ -862,6 +875,13 @@ impl PostUseCase {
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, post_id = %id))]
     pub async fn reject_post(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         let post = self.posts.find_by_id(id).await?.or_not_found()?;
+        // Same guard as `approve_post`, for the same reason: a rejected post
+        // keeps `status = Pending`, so without this a second reject would run
+        // the whole path again — including `sync_attachment_refs`, whose
+        // decrements are only safe once per post.
+        if post.is_deleted {
+            return Err(AppError::NotFound);
+        }
         if !post.status.is_pending() {
             return Err(AppError::invalid("post_not_pending_approval"));
         }
@@ -875,15 +895,12 @@ impl PostUseCase {
         {
             return Err(AppError::forbidden("permission_denied"));
         }
-        let was_already_deleted = post.is_deleted;
         self.posts.soft_delete(id, actor.id).await?;
 
-        // A rejected post never becomes visible, so its attachments must not stay
-        // published. `is_pending` above stays true after a soft delete, so this
-        // path is re-enterable — guard the deref exactly as `delete` does.
-        if !was_already_deleted {
-            self.sync_attachment_refs(&post.content_md, "").await;
-        }
+        // A rejected post never becomes visible, so its attachments must not
+        // stay published. Unconditional now: the `is_deleted` guard above makes
+        // this path single-entry, so the decrements cannot be applied twice.
+        self.sync_attachment_refs(&post.content_md, "").await;
         Ok(())
     }
 }

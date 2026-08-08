@@ -238,6 +238,64 @@ async fn create_post_content_too_large_returns_unprocessable() {
         "expected post_content_too_long, got {result:?}");
 }
 
+// ─── approval queue ───────────────────────────────────────────────────────────
+
+/// `reject_post` soft-deletes but leaves `status = Pending`, so a rejected post
+/// stays pending forever. `approve_post` only checked `is_pending()`, so calling
+/// it on an already-rejected post published a row that can never render — and
+/// incremented `threads.reply_count` and the author's `post_count` for it,
+/// permanently, with nothing to reconcile them against.
+///
+/// The queue UI hides rejected posts (`list_pending` filters `is_deleted`), but
+/// `POST /api/mod/queue/:id/approve` is reachable directly — a stale tab, a
+/// double-click, or two moderators working the queue at once.
+#[tokio::test]
+async fn approving_an_already_rejected_post_is_refused() {
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perms(&["moderation.view_reports"])
+        .build();
+
+    let mut post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
+    post.status = ferum_domain::models::post::PostStatus::Pending;
+    post.is_deleted = true; // rejected earlier
+
+    let mut b = PostUseCaseBuilder::new();
+    b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    // The counters are the damage: neither may move.
+    b.posts.expect_set_status().never();
+    b.threads.expect_update_reply_stats().never();
+    b.users.expect_increment_post_count().never();
+
+    let result = b.build().approve_post(&actor, ids::post_a()).await;
+    assert!(matches!(result, Err(AppError::NotFound)), "got {result:?}");
+}
+
+/// The ordinary path still works — this is a guard on the deleted case, not a
+/// narrowing of approval.
+#[tokio::test]
+async fn approving_a_live_pending_post_publishes_it() {
+    let actor = AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perms(&["moderation.view_reports"])
+        .build();
+
+    let mut post = make_post(ids::post_a(), ids::thread_a(), ids::user_b());
+    post.status = ferum_domain::models::post::PostStatus::Pending;
+    let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_b());
+
+    let mut b = PostUseCaseBuilder::new();
+    b.posts.expect_find_by_id().return_once(move |_| Ok(Some(post)));
+    b.threads.expect_find_by_id().return_once(move |_| Ok(Some(thread)));
+    b.posts.expect_set_status().times(1).returning(|_, _| Ok(()));
+    b.threads.expect_update_reply_stats().times(1).returning(|_, _, _| Ok(()));
+    b.users.expect_increment_post_count().times(1).returning(|_, _| Ok(()));
+    b.users.expect_find_by_id().returning(|_| Ok(None));
+    b.events.expect_publish().returning(|_| ());
+
+    b.build().approve_post(&actor, ids::post_a()).await.unwrap();
+}
+
 // ─── delete ───────────────────────────────────────────────────────────────────
 
 #[tokio::test]
