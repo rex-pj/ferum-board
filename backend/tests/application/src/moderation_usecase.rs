@@ -9,10 +9,12 @@ use ferum_test_support::mocks::{
     cache_service::MockCacheService,
     event_publisher::MockEventPublisher,
     notification_repository::MockNotificationRepository,
+    permission_resolver::FixedPermissionResolver,
     post_repository::MockPostRepository,
     report_repository::MockReportRepository,
     thread_repository::MockThreadRepository,
     user_repository::MockUserRepository,
+    user_role_repository::MockUserRoleRepository,
 };
 
 fn build_uc(
@@ -34,6 +36,34 @@ fn build_uc(
         Arc::new(events),
         Arc::new(cache),
     )
+}
+
+/// `build_uc` plus the staff lookup, with the *target* resolving to `target_perms`.
+///
+/// Separate from `build_uc` because most tests do not exercise the staff rule
+/// and wiring a resolver into all of them would obscure what they are about.
+fn build_uc_with_target_perms(
+    users: MockUserRepository,
+    notifications: MockNotificationRepository,
+    cache: MockCacheService,
+    events: MockEventPublisher,
+    resolver: FixedPermissionResolver,
+) -> ModerationUseCase {
+    let mut user_roles = MockUserRoleRepository::new();
+    // The assignments themselves are irrelevant — FixedPermissionResolver
+    // ignores them and answers with the permission set under test.
+    user_roles.expect_list_for_user().returning(|_| Ok(vec![]));
+
+    build_uc(
+        MockReportRepository::new(),
+        MockPostRepository::new(),
+        MockThreadRepository::new(),
+        users,
+        notifications,
+        cache,
+        events,
+    )
+    .with_staff_lookup(Arc::new(user_roles), Arc::new(resolver))
 }
 
 // ─── create_report ─────────────────────────────────────────────────────────
@@ -324,4 +354,170 @@ async fn temp_ban_allows_a_duration_at_the_ceiling() {
         + chrono::Duration::days(ferum_application::constants::MAX_TEMP_BAN_DAYS)
         - chrono::Duration::minutes(1);
     uc.temp_ban(&actor, target_id, "spam".to_string(), until).await.unwrap();
+}
+
+// ─── who a moderator may act on ───────────────────────────────────────────────
+//
+// Nothing checked this before: `warn_user` and `temp_ban` verified the actor's
+// permission and then acted on whatever user id they were handed. A moderator
+// could ban the site owner, and — with `until` unbounded, as it also was —
+// permanently. The comment in the source claimed the case was "handled by the
+// fact that admins have all permissions", which does not follow.
+
+fn a_moderator() -> ferum_domain::AuthUser {
+    AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perms(&["moderation.warn", "moderation.ban_temp"])
+        .build()
+}
+
+fn an_admin() -> ferum_domain::AuthUser {
+    AuthUserBuilder::member()
+        .with_id(ids::user_a())
+        .with_perms(&["admin.users", "moderation.warn", "moderation.ban_temp"])
+        .build()
+}
+
+fn one_day_out() -> chrono::DateTime<chrono::Utc> {
+    chrono::Utc::now() + chrono::Duration::hours(24)
+}
+
+#[tokio::test]
+async fn a_moderator_cannot_ban_an_admin() {
+    let mut users = MockUserRepository::new();
+    users.expect_update().never();
+
+    let uc = build_uc_with_target_perms(
+        users,
+        MockNotificationRepository::new(),
+        MockCacheService::new(),
+        MockEventPublisher::new(),
+        FixedPermissionResolver::global(&["admin.users"]),
+    );
+
+    let result = uc.temp_ban(&a_moderator(), ids::user_b(), "spam".into(), one_day_out()).await;
+    assert!(
+        matches!(&result, Err(AppError::Forbidden(c)) if c == "cannot_moderate_staff"),
+        "got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_moderator_cannot_warn_another_moderator() {
+    let mut users = MockUserRepository::new();
+    users.expect_update().never();
+
+    let uc = build_uc_with_target_perms(
+        users,
+        MockNotificationRepository::new(),
+        MockCacheService::new(),
+        MockEventPublisher::new(),
+        FixedPermissionResolver::global(&["moderation.warn"]),
+    );
+
+    let result = uc.warn_user(&a_moderator(), ids::user_b(), "rude".into()).await;
+    assert!(
+        matches!(&result, Err(AppError::Forbidden(c)) if c == "cannot_moderate_staff"),
+        "got {result:?}"
+    );
+}
+
+/// A category-scoped moderator is still staff when seen from outside that
+/// category — the protection cannot depend on where the actor happens to stand.
+#[tokio::test]
+async fn a_moderator_cannot_ban_a_category_scoped_moderator() {
+    let mut users = MockUserRepository::new();
+    users.expect_update().never();
+
+    let uc = build_uc_with_target_perms(
+        users,
+        MockNotificationRepository::new(),
+        MockCacheService::new(),
+        MockEventPublisher::new(),
+        FixedPermissionResolver::in_category(ids::category_a(), &["moderation.view_reports"]),
+    );
+
+    let result = uc.temp_ban(&a_moderator(), ids::user_b(), "spam".into(), one_day_out()).await;
+    assert!(
+        matches!(&result, Err(AppError::Forbidden(c)) if c == "cannot_moderate_staff"),
+        "got {result:?}"
+    );
+}
+
+/// The rule narrows nothing for ordinary moderation, which is the point.
+#[tokio::test]
+async fn a_moderator_can_still_ban_an_ordinary_member() {
+    let target = ids::user_b();
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(make_user(target))));
+    users.expect_update().times(1).returning(move |_, _| Ok(make_user(target)));
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache.expect_del_prefix().returning(|_| Ok(()));
+    cache.expect_del().returning(|_| Ok(()));
+
+    let mut events = MockEventPublisher::new();
+    events.expect_publish().returning(|_| ());
+
+    let uc = build_uc_with_target_perms(
+        users,
+        MockNotificationRepository::new(),
+        cache,
+        events,
+        FixedPermissionResolver::none(),
+    );
+
+    uc.temp_ban(&a_moderator(), target, "spam".into(), one_day_out()).await.unwrap();
+}
+
+/// An admin may act on staff — that is what "escalate to admin" means, and it
+/// is the escape hatch that makes the rule above workable.
+#[tokio::test]
+async fn an_admin_can_ban_a_moderator() {
+    let target = ids::user_b();
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(make_user(target))));
+    users.expect_update().times(1).returning(move |_, _| Ok(make_user(target)));
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache.expect_del_prefix().returning(|_| Ok(()));
+    cache.expect_del().returning(|_| Ok(()));
+
+    let mut events = MockEventPublisher::new();
+    events.expect_publish().returning(|_| ());
+
+    let uc = build_uc_with_target_perms(
+        users,
+        MockNotificationRepository::new(),
+        cache,
+        events,
+        FixedPermissionResolver::global(&["moderation.warn"]),
+    );
+
+    uc.temp_ban(&an_admin(), target, "abuse of tools".into(), one_day_out()).await.unwrap();
+}
+
+/// Including an admin: a self-ban locks the actor out of their own account, and
+/// for a sole administrator there is no way back through the UI.
+#[tokio::test]
+async fn nobody_can_ban_themselves() {
+    let admin = an_admin();
+    let mut users = MockUserRepository::new();
+    users.expect_update().never();
+
+    let uc = build_uc_with_target_perms(
+        users,
+        MockNotificationRepository::new(),
+        MockCacheService::new(),
+        MockEventPublisher::new(),
+        FixedPermissionResolver::global(&["admin.users"]),
+    );
+
+    let result = uc.temp_ban(&admin, admin.id, "oops".into(), one_day_out()).await;
+    assert!(
+        matches!(&result, Err(AppError::Forbidden(c)) if c == "cannot_moderate_self"),
+        "got {result:?}"
+    );
 }

@@ -748,7 +748,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             event_bus.clone(),
             cache.clone(),
         )
-        .with_plugin_runtime(plugin_hooks.clone()),
+        .with_plugin_runtime(plugin_hooks.clone())
+        .with_staff_lookup(user_role_repo.clone(), permission_resolver.clone()),
     );
 
     let search = Arc::new(SearchUseCase::new(

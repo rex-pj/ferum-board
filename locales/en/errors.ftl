@@ -85,6 +85,10 @@ error-reason-too-long =
 error-ban-duration-too-long =
     A temporary ban can last at most { $max_days } days. A longer ban is a
     permanent one and needs the permanent-ban permission.
+error-cannot-moderate-self =
+    You cannot take a moderation action against your own account.
+error-cannot-moderate-staff =
+    Only an administrator can warn or ban a moderator or another administrator.
 
 ## ─── Products & reviews ──────────────────────────────────────────────────────
 

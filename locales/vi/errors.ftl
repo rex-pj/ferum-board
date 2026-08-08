@@ -99,6 +99,11 @@ error-reason-too-long =
 error-ban-duration-too-long =
     Khoá tạm thời tối đa { $max_days } ngày. Lâu hơn thế là khoá vĩnh viễn và
     cần quyền khoá vĩnh viễn.
+error-cannot-moderate-self =
+    Bạn không thể tự áp dụng hành động kiểm duyệt lên tài khoản của chính mình.
+error-cannot-moderate-staff =
+    Chỉ quản trị viên mới có thể cảnh cáo hoặc khoá một điều hành viên hay một
+    quản trị viên khác.
 
 ## ─── Sản phẩm & đánh giá ─────────────────────────────────────────────────────
 

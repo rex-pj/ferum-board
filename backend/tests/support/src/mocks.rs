@@ -11,6 +11,7 @@ pub mod material_repository;
 pub mod notification_repository;
 pub mod password_hasher;
 pub mod permission_repository;
+pub mod permission_resolver;
 pub mod plugin_db_repository;
 pub mod plugin_repository;
 pub mod post_repository;

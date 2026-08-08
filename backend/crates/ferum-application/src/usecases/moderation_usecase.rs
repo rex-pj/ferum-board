@@ -9,7 +9,10 @@ use crate::constants::{MAX_BAN_REASON_LEN, MAX_TEMP_BAN_DAYS};
 use crate::dto::ReportWithContext;
 use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
-use crate::ports::{CacheService, HookContext, HookDecision, NullPluginRuntime, PluginHookRuntime};
+use crate::ports::{
+    CacheService, HookContext, HookDecision, NullPluginRuntime, PermissionResolver,
+    PluginHookRuntime,
+};
 use crate::shared::{AppError, OptionExt};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::audit_log::AuditLog;
@@ -21,6 +24,7 @@ use ferum_domain::repositories::post_repository::PostRepository;
 use ferum_domain::repositories::report_repository::{ReportRepository, ReportStatusCounts};
 use ferum_domain::repositories::thread_repository::ThreadRepository;
 use ferum_domain::repositories::user_repository::{UpdateUser, UserRepository};
+use ferum_domain::repositories::user_role_repository::UserRoleRepository;
 use ferum_domain::AuthUser;
 
 pub struct ModerationUseCase {
@@ -33,6 +37,17 @@ pub struct ModerationUseCase {
     pub event_bus: Arc<dyn EventPublisher>,
     pub cache: Arc<dyn CacheService>,
     pub plugin_runtime: Arc<dyn PluginHookRuntime>,
+    /// The target's role assignments, and the resolver that turns them into
+    /// permission keys. Together they answer the one question `warn_user` and
+    /// `temp_ban` could not previously ask: *is the person I am about to act on
+    /// also staff?*
+    ///
+    /// Optional so the existing test builders and any caller that only reads
+    /// reports keep compiling. When absent the staff check cannot run and is
+    /// skipped — `startup.rs` always supplies both, so that degradation is a
+    /// test-harness affordance, not a production path.
+    user_roles: Option<Arc<dyn UserRoleRepository>>,
+    permission_resolver: Option<Arc<dyn PermissionResolver>>,
 }
 
 impl ModerationUseCase {
@@ -60,12 +75,87 @@ impl ModerationUseCase {
             event_bus,
             cache,
             plugin_runtime: Arc::new(NullPluginRuntime),
+            user_roles: None,
+            permission_resolver: None,
         }
     }
 
     pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
         self.plugin_runtime = runtime;
         self
+    }
+
+    /// Both together, because the staff check needs both and having one without
+    /// the other can only silently skip it.
+    pub fn with_staff_lookup(
+        mut self,
+        user_roles: Arc<dyn UserRoleRepository>,
+        permission_resolver: Arc<dyn PermissionResolver>,
+    ) -> Self {
+        self.user_roles = Some(user_roles);
+        self.permission_resolver = Some(permission_resolver);
+        self
+    }
+
+    /// Whether `actor` may take a moderation action against `target_id`.
+    ///
+    /// Two rules, and the second is the one that was missing entirely:
+    ///
+    /// 1. **Nobody moderates themselves.** A self-ban locks the actor out of
+    ///    their own account, and for the last remaining admin that is
+    ///    unrecoverable through the UI.
+    /// 2. **Only an admin may act on staff.** A plain moderator cannot warn or
+    ///    ban another moderator or an admin. Previously nothing checked this, so
+    ///    any moderator could ban the site owner — and combined with the
+    ///    unbounded `until` that used to be accepted, permanently.
+    ///
+    /// "Staff" is decided by resolved *permissions*, not by role slug. A custom
+    /// role named anything at all still counts if it carries `admin.users` or
+    /// any `moderation.*`, which a slug comparison would miss — and missing it
+    /// is the whole failure this guards against. Category-scoped grants count
+    /// too: a moderator of one category is still staff when standing in
+    /// another.
+    async fn require_may_moderate(
+        &self,
+        actor: &AuthUser,
+        target_id: Uuid,
+    ) -> Result<(), AppError> {
+        use ferum_domain::models::role::perm;
+
+        if actor.id == target_id {
+            return Err(AppError::forbidden("cannot_moderate_self"));
+        }
+
+        // Admins may act on anyone but themselves.
+        if actor.has_perm(perm::ADMIN_USERS) {
+            return Ok(());
+        }
+
+        let (Some(user_roles), Some(resolver)) =
+            (self.user_roles.as_ref(), self.permission_resolver.as_ref())
+        else {
+            return Ok(());
+        };
+
+        const STAFF_PERMS: [&str; 5] = [
+            perm::ADMIN_USERS,
+            perm::MOD_VIEW_REPORTS,
+            perm::MOD_RESOLVE,
+            perm::MOD_WARN,
+            perm::MOD_BAN_TEMP,
+        ];
+
+        let assignments = user_roles.list_for_user(target_id).await?;
+        let global = resolver.resolve_global(&assignments).await;
+        let scoped = resolver.resolve_category(&assignments).await;
+
+        let target_is_staff = STAFF_PERMS.iter().any(|p| global.contains(*p))
+            || scoped.values().any(|s| STAFF_PERMS.iter().any(|p| s.contains(*p)));
+
+        if target_is_staff {
+            return Err(AppError::forbidden("cannot_moderate_staff"));
+        }
+        Ok(())
     }
 
     // ─── Report creation (any authenticated member) ───────────────────────────
@@ -325,10 +415,7 @@ impl ModerationUseCase {
             return Err(AppError::invalid_with("reason_too_long", [("limit", MAX_BAN_REASON_LEN.into())]));
         }
         PermissionChecker::can_warn(actor)?;
-
-        // Prevent warning users who also have warn permission (mods warning mods)
-        // unless actor has admin-level manage_users permission
-        // This is handled by the fact that admins have all permissions
+        self.require_may_moderate(actor, user_id).await?;
 
         self.users.find_by_id(user_id).await?.or_not_found()?;
 
@@ -390,6 +477,8 @@ impl ModerationUseCase {
                 [("max_days", MAX_TEMP_BAN_DAYS.into())],
             ));
         }
+
+        self.require_may_moderate(actor, user_id).await?;
 
         self.users.find_by_id(user_id).await?.or_not_found()?;
 
