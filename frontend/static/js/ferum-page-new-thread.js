@@ -23,13 +23,13 @@
         reader.readAsDataURL(f);
       },
       remove: function () { this.file = null; this.preview = null; this.thumbError = ''; },
-      uploadTo: async function (threadId) {
+      uploadTo: async function (threadSlug) {
         if (!this.file) return;
         var fd = new FormData();
-        // 'file': POST /api/threads/{id}/thumbnail reads that part name only.
+        // 'file': POST /api/threads/{slug}/thumbnail reads that part name only.
         // (The multipart POST /api/threads create path uses 'thumbnail' instead.)
         fd.append('file', this.file);
-        await FerumApi.threads.uploadThumbnail(threadId, fd);
+        await FerumApi.threads.uploadThumbnail(threadSlug, fd);
       },
     };
     _thumbState = state;

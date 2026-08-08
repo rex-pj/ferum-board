@@ -1,9 +1,9 @@
 (function () {
   'use strict';
 
-  window.thumbnailUpload = function (threadId, initialUrl) {
+  window.thumbnailUpload = function (threadSlug, initialUrl) {
     return {
-      threadId: threadId,
+      threadSlug: threadSlug,
       preview: initialUrl || null,
       uploadError: '',
       isDragging: false,
@@ -26,7 +26,7 @@
         var fd = new FormData();
         fd.append('file', file);
         try {
-          var res = await FerumApi.threads.uploadThumbnail(this.threadId, fd);
+          var res = await FerumApi.threads.uploadThumbnail(this.threadSlug, fd);
           if (!res.ok) {
             var body = await res.json().catch(function () { return {}; });
             this.uploadError = (body.error && body.error.message) || Ferum.t('js-upload-failed');
@@ -42,7 +42,7 @@
       removeThumbnail: async function () {
         this.preview = null;
         this.uploadError = '';
-        await FerumApi.threads.deleteThumbnail(this.threadId).catch(function () {});
+        await FerumApi.threads.deleteThumbnail(this.threadSlug).catch(function () {});
       },
     };
   };
@@ -60,7 +60,6 @@
     var errorEl = document.getElementById('form-error');
     // Thread slug is stored as a data attribute on the form element
     var threadSlug = e.currentTarget.dataset.threadSlug || '';
-    var id         = document.getElementById('thread-id').value;
 
     _editThreadSubmitting = true;
     btn.disabled = true;
@@ -79,7 +78,7 @@
     if (tags.length > 0) fd.append('tags', tags.join(','));
 
     try {
-      var res = await FerumApi.threads.update(id, fd);
+      var res = await FerumApi.threads.update(threadSlug, fd);
       if (res.ok) {
         window.location.href = '/forum/t/' + threadSlug;
       } else {

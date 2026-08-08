@@ -771,3 +771,65 @@ async fn create_skips_review_check_for_non_product_thread() {
     let result = b.build().create(&actor, review_cmd(None)).await;
     assert!(result.is_ok());
 }
+
+// ─── id_for_slug ──────────────────────────────────────────────────────────────
+//
+// `/api/threads/*` addresses threads by slug on every route. The use cases below
+// take ids and re-load the thread for their own permission checks, so this is
+// the bridge between the two. It used to be that half those routes took a UUID
+// and half took a slug — on the same paths, differing by HTTP method — and the
+// documented API described the slug form for all of them.
+
+#[tokio::test]
+async fn id_for_slug_resolves_a_live_thread() {
+    let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
+    let mut b = Uc::new();
+    b.threads
+        .expect_find_by_slug()
+        .withf(|slug| slug == "how-to-choose-a-sofa-a1b2c3d4")
+        .return_once(move |_| Ok(Some(thread)));
+
+    let id = b.build().id_for_slug("how-to-choose-a-sofa-a1b2c3d4").await.unwrap();
+    assert_eq!(id, ids::thread_a());
+}
+
+#[tokio::test]
+async fn id_for_slug_on_an_unknown_slug_is_not_found() {
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(|_| Ok(None));
+
+    let result = b.build().id_for_slug("no-such-thread").await;
+    assert!(matches!(result, Err(AppError::NotFound)), "got {result:?}");
+}
+
+/// A deleted thread must not resolve, or every write route behind this would
+/// answer for a thread the reader cannot see — reporting a permission error, or
+/// worse succeeding, instead of 404.
+#[tokio::test]
+async fn id_for_slug_on_a_deleted_thread_is_not_found() {
+    let mut thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
+    thread.status = ThreadStatus::Deleted;
+    thread.deleted_at = Some(chrono::Utc::now());
+
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+
+    let result = b.build().id_for_slug("deleted-thread-a1b2c3d4").await;
+    assert!(matches!(result, Err(AppError::NotFound)), "got {result:?}");
+}
+
+/// Deliberately *not* `get_by_slug`: that one enforces category visibility and
+/// records a page view. Behind a PATCH those are both wrong — a mod action would
+/// count as a view, and a moderator acting on a category they cannot browse
+/// would be refused by the read rule rather than by the action's own check.
+#[tokio::test]
+async fn id_for_slug_does_not_check_visibility_or_count_a_view() {
+    let thread = make_thread(ids::thread_a(), ids::category_a(), ids::user_a());
+    let mut b = Uc::new();
+    b.threads.expect_find_by_slug().return_once(move |_| Ok(Some(thread)));
+    // `get_by_slug` would need the category to apply `can_view_category`.
+    b.categories.expect_find_by_id().never();
+    b.threads.expect_try_record_view().never();
+
+    b.build().id_for_slug("any-thread-a1b2c3d4").await.unwrap();
+}

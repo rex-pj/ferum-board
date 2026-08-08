@@ -100,12 +100,12 @@
             <div class="d-flex gap-1">
               <button class="btn btn-sm {% if thread.is_pinned %}btn-primary{% else %}btn-outline-secondary{% endif %}"
                       title="{% if thread.is_pinned %}Unpin{% else %}Pin{% endif %}"
-                      data-mod-action="mod-thread" data-action="pin" data-thread-id="{{ thread.id }}" data-current-state="{% if thread.is_pinned %}true{% else %}false{% endif %}">
+                      data-mod-action="mod-thread" data-action="pin" data-thread-slug="{{ thread.slug }}" data-current-state="{% if thread.is_pinned %}true{% else %}false{% endif %}">
                 <i class="fa-solid fa-thumbtack"></i>
               </button>
               <button class="btn btn-sm {% if thread.status == 'locked' %}btn-warning{% else %}btn-outline-secondary{% endif %}"
                       title="{% if thread.status == 'locked' %}Unlock{% else %}Lock{% endif %}"
-                      data-mod-action="mod-thread" data-action="lock" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.status }}">
+                      data-mod-action="mod-thread" data-action="lock" data-thread-slug="{{ thread.slug }}" data-current-state="{{ thread.status }}">
                 <i class="fa-solid fa-lock"></i>
               </button>
             </div>

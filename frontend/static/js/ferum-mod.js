@@ -65,12 +65,12 @@
   // `currentState` arrives as the raw data-current-state string and is parsed
   // per action: "true"/"false" for pin, the thread status for lock. Coercing it
   // to a boolean at the call site cannot work — the string "false" is truthy.
-  async function modThread(action, threadId, currentState, triggerBtn) {
+  async function modThread(action, threadSlug, currentState, triggerBtn) {
     if (triggerBtn) triggerBtn.disabled = true;
     try {
       var res = action === 'pin'
-        ? await FerumApi.threads.pin(threadId, currentState !== 'true')
-        : await FerumApi.threads.lock(threadId, currentState !== 'locked');
+        ? await FerumApi.threads.pin(threadSlug, currentState !== 'true')
+        : await FerumApi.threads.lock(threadSlug, currentState !== 'locked');
       if (res.ok) location.reload();
       else {
         var b = await res.json().catch(function () { return {}; });
@@ -136,7 +136,7 @@
       case 'approve':        approvePost(btn.dataset.postId, btn); break;
       case 'reject':         rejectPost(btn.dataset.postId, btn); break;
       case 'resolve-report': resolveReport(btn.dataset.reportId, btn.dataset.status, btn); break;
-      case 'mod-thread':     modThread(btn.dataset.action, btn.dataset.threadId, btn.dataset.currentState, btn); break;
+      case 'mod-thread':     modThread(btn.dataset.action, btn.dataset.threadSlug, btn.dataset.currentState, btn); break;
       case 'warn-user':      warnUser(btn.dataset.userId, btn.dataset.username, btn); break;
       case 'ban-user':       banUser(btn.dataset.userId, btn.dataset.username, btn); break;
     }

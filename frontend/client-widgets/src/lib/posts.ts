@@ -21,11 +21,11 @@ export async function uploadAttachment(file: File): Promise<{ ok: boolean; url?:
 }
 
 export async function createPost(
-  threadId: string,
+  threadSlug: string,
   contentMd: string,
   parentId?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await api.post(`/api/threads/${threadId}/posts`, {
+  const res = await api.post(`/api/threads/${threadSlug}/posts`, {
     content_md: contentMd,
     parent_id: parentId ?? null,
   });

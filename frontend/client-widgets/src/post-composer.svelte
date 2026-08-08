@@ -5,13 +5,13 @@
   import { t } from './lib/i18n';
 
   let {
-    'thread-id': threadId = '',
+    'thread-slug': threadSlug = '',
     'parent-id': parentId = '',
     'initial-content': initialContent = '',
     mode = 'reply',
     'can-upload': canUploadAttr = '',
   } = $props<{
-    'thread-id'?: string;
+    'thread-slug'?: string;
     'parent-id'?: string;
     'initial-content'?: string;
     mode?: string;

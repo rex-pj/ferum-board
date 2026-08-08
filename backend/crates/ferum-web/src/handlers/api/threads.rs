@@ -353,10 +353,11 @@ pub async fn create_thread(
 pub async fn update_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
     mut multipart: Multipart,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let id = state.thread.id_for_slug(&slug).await?;
 
     let mut title: Option<String> = None;
     let mut content_md: Option<String> = None;
@@ -470,11 +471,12 @@ pub async fn delete_thread(
 pub async fn pin_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
     let pin = body.get("pinned").and_then(|v| v.as_bool()).unwrap_or(true);
+    let id = state.thread.id_for_slug(&slug).await?;
     let thread = state.thread.pin(actor, id, pin).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
@@ -482,11 +484,12 @@ pub async fn pin_thread(
 pub async fn lock_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
     let lock = body.get("locked").and_then(|v| v.as_bool()).unwrap_or(true);
+    let id = state.thread.id_for_slug(&slug).await?;
     let thread = state.thread.lock(actor, id, lock).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
@@ -494,10 +497,11 @@ pub async fn lock_thread(
 pub async fn move_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
     Json(body): Json<MoveThreadRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let id = state.thread.id_for_slug(&slug).await?;
     let thread = state.thread.move_to(actor, id, body.category_id).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
@@ -505,25 +509,27 @@ pub async fn move_thread(
 pub async fn solve_thread(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
     Json(body): Json<MarkSolvedRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let id = state.thread.id_for_slug(&slug).await?;
     let thread = state.thread.mark_solved(actor, id, body.best_answer_id).await?;
     Ok(Json(DataResponse::new(ThreadResponse::from(thread))))
 }
 
 // ─── Thumbnail ─────────────────────────────────────────────────────────────────
 
-/// POST /api/threads/:id/thumbnail — upload or replace a thread thumbnail.
+/// POST /api/threads/:slug/thumbnail — upload or replace a thread thumbnail.
 /// Accepts multipart/form-data with a single "file" field.
 pub async fn upload_thumbnail(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
     mut multipart: Multipart,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let id = state.thread.id_for_slug(&slug).await?;
 
     // No pre-check here: unlike create/update this endpoint's very next call is
     // `set_thumbnail`, so the use case rejects a bad file before anything is
@@ -538,13 +544,14 @@ pub async fn upload_thumbnail(
     ))
 }
 
-/// DELETE /api/threads/:id/thumbnail — remove the manually uploaded thumbnail.
+/// DELETE /api/threads/:slug/thumbnail — remove the manually uploaded thumbnail.
 pub async fn delete_thumbnail(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(id): Path<Uuid>,
+    Path(slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let id = state.thread.id_for_slug(&slug).await?;
     state.thread.remove_thumbnail(actor, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

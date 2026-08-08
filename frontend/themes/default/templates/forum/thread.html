@@ -28,7 +28,7 @@
 
 {# Page-level constants for ferum-page-thread.js #}
 <div id="ferum-page-data"
-     data-thread-id="{{ thread.id }}"
+     data-thread-slug="{{ thread.slug }}"
      data-page-offset="{{ (pagination.page - 1) * pagination.per_page }}"
      {% if current_user %}
      data-current-user-id="{{ current_user.id }}"
@@ -197,7 +197,7 @@
             {% if thread.can_pin %}
             <li>
               <button type="button" class="dropdown-item"
-                      data-action="mod-thread" data-mod-action="pin" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_pinned }}">
+                      data-action="mod-thread" data-mod-action="pin" data-thread-slug="{{ thread.slug }}" data-current-state="{{ thread.is_pinned }}">
                 {% if thread.is_pinned %}
                   <i class="fa-solid fa-thumbtack-slash me-2"></i>{{ t(k="ui-unpin") }}
                 {% else %}
@@ -209,7 +209,7 @@
             {% if thread.can_lock %}
             <li>
               <button type="button" class="dropdown-item"
-                      data-action="mod-thread" data-mod-action="lock" data-thread-id="{{ thread.id }}" data-current-state="{{ thread.is_locked }}">
+                      data-action="mod-thread" data-mod-action="lock" data-thread-slug="{{ thread.slug }}" data-current-state="{{ thread.is_locked }}">
                 {% if thread.is_locked %}
                   <i class="fa-solid fa-lock-open me-2"></i>{{ t(k="ui-unlock") }}
                 {% else %}
@@ -324,7 +324,7 @@
                   <li><hr class="dropdown-divider"></li>
                   <li>
                     <button type="button" class="dropdown-item text-success"
-                            data-action="best-answer" data-thread-id="{{ thread.id }}" data-post-id="{{ post.id }}">
+                            data-action="best-answer" data-thread-slug="{{ thread.slug }}" data-post-id="{{ post.id }}">
                       <i class="fa-solid fa-check-circle me-2"></i>{{ t(k="ui-mark-best-answer") }}
                     </button>
                   </li>
@@ -343,7 +343,7 @@
         <ferum-post-composer
           id="post-edit-composer-{{ post.id }}"
           mode="edit"
-          thread-id="{{ thread.id }}"
+          thread-slug="{{ thread.slug }}"
           initial-content="{{ post.content_md | escape }}"
           can-upload="{{ can_upload_attachment }}">
         </ferum-post-composer>
@@ -384,7 +384,7 @@
       {{ m::avatar(url=current_user.avatar_url, name=current_user.display_name, size=32) }}
       <span class="fw-semibold">{{ t(k="ui-leave-a-reply") }}</span>
     </div>
-    <ferum-post-composer id="reply-composer" thread-id="{{ thread.id }}" mode="reply"
+    <ferum-post-composer id="reply-composer" thread-slug="{{ thread.slug }}" mode="reply"
       can-upload="{{ can_upload_attachment }}"></ferum-post-composer>
     <div id="reply-feedback" class="d-none mt-2"></div>
     <div class="d-flex gap-2 mt-3">
@@ -487,7 +487,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
-        <button type="button" class="btn btn-primary" id="move-submit-btn" data-action="move-thread" data-thread-id="{{ thread.id }}">
+        <button type="button" class="btn btn-primary" id="move-submit-btn" data-action="move-thread" data-thread-slug="{{ thread.slug }}">
           <i id="move-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-move") }}
         </button>
       </div>
@@ -584,7 +584,7 @@
             <i class="fa-solid fa-reply me-1"></i>{{ t(k="ui-reply-to-thread") }}
           </a>
         {% endif %}
-        <ferum-bookmark-btn thread-id="{{ thread.id }}" user-id="{{ current_user.id }}" class="w-100">
+        <ferum-bookmark-btn thread-slug="{{ thread.slug }}" user-id="{{ current_user.id }}" class="w-100">
         </ferum-bookmark-btn>
         <a href="/new-thread?category_id={{ thread.category_id }}" class="btn btn-outline-secondary btn-sm">
           <i class="fa-solid fa-plus me-1"></i>{{ t(k="ui-new-thread-2") }}

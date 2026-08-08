@@ -5,7 +5,7 @@
   var pd = document.getElementById('ferum-page-data');
   if (!pd) return;
 
-  var THREAD_ID  = pd.dataset.threadId  || '';
+  var THREAD_SLUG = pd.dataset.threadSlug || '';
   var PAGE_OFFSET = parseInt(pd.dataset.pageOffset || '0', 10);
   var CURRENT_USER = pd.dataset.currentUserId ? {
     id:           pd.dataset.currentUserId,
@@ -239,7 +239,7 @@
     feedback.classList.add('d-none');
 
     try {
-      var res = await FerumApi.posts.create(THREAD_ID, content);
+      var res = await FerumApi.posts.create(THREAD_SLUG, content);
       if (res.ok) {
         var body = await res.json().catch(function () { return {}; });
         var post = body.data;
@@ -286,10 +286,10 @@
   }
 
   // ── Thread actions ───────────────────────────────────────────────
-  async function markBestAnswer(threadId, postId) {
+  async function markBestAnswer(threadSlug, postId) {
     var ok = await showConfirm(Ferum.t('js-mark-best-answer-title'), Ferum.t('js-mark-best-answer-body'), Ferum.t('js-mark-as-best'), 'success');
     if (!ok) return;
-    var res = await FerumApi.threads.solve(threadId, postId);
+    var res = await FerumApi.threads.solve(threadSlug, postId);
     if (res.ok) {
       window.location.reload();
     } else {
@@ -298,7 +298,7 @@
     }
   }
 
-  async function moveThread(threadId) {
+  async function moveThread(threadSlug) {
     var categoryId = document.getElementById('move-category-id').value;
     var fb         = document.getElementById('move-feedback');
     if (!categoryId) {
@@ -312,7 +312,7 @@
     btn.disabled = true;
     if (spinner) spinner.classList.remove('d-none');
     try {
-      var res = await FerumApi.threads.move(threadId, categoryId);
+      var res = await FerumApi.threads.move(threadSlug, categoryId);
       if (res.ok) {
         window.location.reload();
       } else {
@@ -344,11 +344,11 @@
     }
   }
 
-  async function modAction(action, threadId, currentState, triggerBtn) {
+  async function modAction(action, threadSlug, currentState, triggerBtn) {
     if (triggerBtn) triggerBtn.disabled = true;
     var res = action === 'pin'
-      ? await FerumApi.threads.pin(threadId, !currentState)
-      : await FerumApi.threads.lock(threadId, !currentState);
+      ? await FerumApi.threads.pin(threadSlug, !currentState)
+      : await FerumApi.threads.lock(threadSlug, !currentState);
     if (res.ok) {
       window.location.reload();
     } else {
@@ -364,10 +364,10 @@
     if (!btn) return;
     switch (btn.dataset.action) {
       case 'delete-thread':  deleteThread(btn.dataset.threadSlug, btn.dataset.categorySlug); break;
-      case 'mod-thread':     modAction(btn.dataset.modAction, btn.dataset.threadId, btn.dataset.currentState === 'true', btn); break;
+      case 'mod-thread':     modAction(btn.dataset.modAction, btn.dataset.threadSlug, btn.dataset.currentState === 'true', btn); break;
       case 'edit-post':      openEditPost(btn.dataset.postId); break;
       case 'delete-post':    deletePost(btn.dataset.postId); break;
-      case 'best-answer':    markBestAnswer(btn.dataset.threadId, btn.dataset.postId); break;
+      case 'best-answer':    markBestAnswer(btn.dataset.threadSlug, btn.dataset.postId); break;
       case 'save-edit':      saveEdit(btn.dataset.postId); break;
       case 'cancel-edit':    cancelEdit(btn.dataset.postId); break;
       case 'submit-reply':   submitReply(); break;
@@ -376,7 +376,7 @@
         document.getElementById('reply-feedback')?.classList.add('d-none');
         break;
       case 'submit-report':  submitReport(); break;
-      case 'move-thread':    moveThread(btn.dataset.threadId); break;
+      case 'move-thread':    moveThread(btn.dataset.threadSlug); break;
     }
   });
 }());

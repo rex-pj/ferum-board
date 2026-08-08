@@ -2,7 +2,6 @@ use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
@@ -29,9 +28,10 @@ pub async fn list_bookmarks(
 pub async fn get_bookmark_status(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(thread_id): Path<Uuid>,
+    Path(slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let thread_id = state.thread.id_for_slug(&slug).await?;
     let bookmarked = state.bookmark.is_bookmarked(actor.id, thread_id).await?;
     Ok(Json(DataResponse::new(BookmarkStatusResponse {
         bookmarked,
@@ -41,9 +41,10 @@ pub async fn get_bookmark_status(
 pub async fn add_bookmark(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(thread_id): Path<Uuid>,
+    Path(slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let thread_id = state.thread.id_for_slug(&slug).await?;
     let bookmarked = state.bookmark.add(actor, thread_id).await?;
     Ok((
         StatusCode::CREATED,
@@ -54,9 +55,10 @@ pub async fn add_bookmark(
 pub async fn remove_bookmark(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(thread_id): Path<Uuid>,
+    Path(slug): Path<String>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
+    let thread_id = state.thread.id_for_slug(&slug).await?;
     let bookmarked = state.bookmark.remove(actor, thread_id).await?;
     Ok(Json(DataResponse::new(BookmarkStatusResponse {
         bookmarked,

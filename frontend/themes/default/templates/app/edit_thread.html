@@ -10,7 +10,7 @@
     <div class="card">
       <div class="card-body p-4">
         <form id="edit-thread-form" method="post" data-thread-slug="{{ thread_slug }}">
-          <input type="hidden" id="thread-id" value="{{ thread_id }}">
+          
 
           <div class="mb-3">
             <label for="category" class="form-label">{{ t(k="ui-category") }} <span class="text-danger">*</span></label>
@@ -36,7 +36,7 @@
 
           {# Thumbnail upload — shown if the user can upload, or to let them remove an existing one #}
           {% if can_upload_thumbnail or thread_thumbnail_url %}
-          <div class="mb-3" x-data="thumbnailUpload('{{ thread_id }}', '{{ thread_thumbnail_url | default(value="") }}')">
+          <div class="mb-3" x-data="thumbnailUpload('{{ thread_slug }}', '{{ thread_thumbnail_url | default(value="") }}')">
             <label class="form-label">{{ t(k="ui-thumbnail") }}</label>
             <div class="position-relative rounded overflow-hidden border"
                  style="aspect-ratio:16/9;cursor:pointer;max-height:160px;"
@@ -113,7 +113,7 @@
 
           <div class="mb-3">
             <label class="form-label">{{ t(k="ui-content") }} <span class="text-danger">*</span></label>
-            <ferum-post-composer id="composer" thread-id="{{ thread_id }}" mode="edit"
+            <ferum-post-composer id="composer" thread-slug="{{ thread_slug }}" mode="edit"
               initial-content="{{ first_post_content | escape }}" can-upload="{{ can_upload_thumbnail }}"></ferum-post-composer>
             <noscript>
               <textarea class="form-control" id="content" name="content"

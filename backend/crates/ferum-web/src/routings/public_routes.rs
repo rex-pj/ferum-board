@@ -88,7 +88,7 @@ pub fn api_routes(state: AppState, write_rl: Arc<RateLimitConfig>) -> Router<App
                 .delete(api::bookmarks::remove_bookmark),
         )
         .route(
-            "/{id}/thumbnail",
+            "/{slug}/thumbnail",
             post(api::threads::upload_thumbnail).delete(api::threads::delete_thumbnail),
         )
         .route(

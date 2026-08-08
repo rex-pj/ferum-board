@@ -5,11 +5,11 @@
   import { t } from "./lib/i18n";
 
   let {
-    "thread-id": threadId = "",
+    "thread-slug": threadSlug = "",
     bookmarked = "false",
     "user-id": userId = "",
   } = $props<{
-    "thread-id"?: string;
+    "thread-slug"?: string;
     bookmarked?: string;
     "user-id"?: string;
   }>();
@@ -18,8 +18,8 @@
   let loading = $state(false);
 
   $effect(() => {
-    if (!threadId || !userId) return;
-    getBookmarkStatus(threadId).then((status) => {
+    if (!threadSlug || !userId) return;
+    getBookmarkStatus(threadSlug).then((status) => {
       if (status != null) isBookmarked = status;
     });
   });
@@ -30,7 +30,7 @@
       return;
     }
     loading = true;
-    const ok = await toggleBookmark(threadId, isBookmarked);
+    const ok = await toggleBookmark(threadSlug, isBookmarked);
     if (ok) {
       isBookmarked = !isBookmarked;
     }

@@ -72,39 +72,42 @@
       },
     },
 
+    // Threads are addressed by SLUG on every /api/threads/* route — the same
+    // identifier the reader sees in /forum/t/{slug}. It used to be slug on some
+    // verbs and UUID on others, on the same paths.
     threads: {
       create: function (formData) {
         return postForm('/api/threads', formData);
       },
-      update: function (id, formData) {
-        return request('/api/threads/' + id, { method: 'PATCH', body: formData });
+      update: function (slug, formData) {
+        return request('/api/threads/' + slug, { method: 'PATCH', body: formData });
       },
-      delete: function (id) {
-        return del('/api/threads/' + id);
+      delete: function (slug) {
+        return del('/api/threads/' + slug);
       },
-      pin: function (id, pinned) {
-        return patch('/api/threads/' + id + '/pin', { pinned: pinned });
+      pin: function (slug, pinned) {
+        return patch('/api/threads/' + slug + '/pin', { pinned: pinned });
       },
-      lock: function (id, locked) {
-        return patch('/api/threads/' + id + '/lock', { locked: locked });
+      lock: function (slug, locked) {
+        return patch('/api/threads/' + slug + '/lock', { locked: locked });
       },
-      move: function (id, categoryId) {
-        return patch('/api/threads/' + id + '/move', { category_id: categoryId });
+      move: function (slug, categoryId) {
+        return patch('/api/threads/' + slug + '/move', { category_id: categoryId });
       },
-      solve: function (id, bestAnswerId) {
-        return patch('/api/threads/' + id + '/solve', { best_answer_id: bestAnswerId });
+      solve: function (slug, bestAnswerId) {
+        return patch('/api/threads/' + slug + '/solve', { best_answer_id: bestAnswerId });
       },
-      uploadThumbnail: function (id, formData) {
-        return postForm('/api/threads/' + id + '/thumbnail', formData);
+      uploadThumbnail: function (slug, formData) {
+        return postForm('/api/threads/' + slug + '/thumbnail', formData);
       },
-      deleteThumbnail: function (id) {
-        return del('/api/threads/' + id + '/thumbnail');
+      deleteThumbnail: function (slug) {
+        return del('/api/threads/' + slug + '/thumbnail');
       },
     },
 
     posts: {
-      create: function (threadId, contentMd) {
-        return post('/api/threads/' + threadId + '/posts', { content_md: contentMd });
+      create: function (threadSlug, contentMd) {
+        return post('/api/threads/' + threadSlug + '/posts', { content_md: contentMd });
       },
       update: function (id, contentMd) {
         return patch('/api/posts/' + id, { content_md: contentMd });

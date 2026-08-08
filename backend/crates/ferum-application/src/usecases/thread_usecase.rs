@@ -620,6 +620,27 @@ impl ThreadUseCase {
         Ok(thread)
     }
 
+    /// A live thread's id, from its slug. No side effects and no authorization.
+    ///
+    /// `/api/threads/*` identifies threads by slug throughout, but the use cases
+    /// below take ids and re-load the thread to run their own permission checks.
+    /// This is the bridge, and it is deliberately *not* `get_by_slug`: that one
+    /// enforces category visibility and records a view, which is right for
+    /// reading a thread and wrong for pinning one — a mod action would count as
+    /// a page view, and a moderator acting on a category they cannot browse
+    /// would be refused by the read rule instead of the action's own.
+    ///
+    /// Costs one indexed lookup on write paths. The alternative — threading
+    /// slugs through every use case — would move the same query, not remove it.
+    #[tracing::instrument(skip(self), fields(slug = %slug))]
+    pub async fn id_for_slug(&self, slug: &str) -> Result<Uuid, AppError> {
+        let thread = self.threads.find_by_slug(slug).await?.or_not_found()?;
+        if thread.status == ThreadStatus::Deleted {
+            return Err(AppError::NotFound);
+        }
+        Ok(thread.id)
+    }
+
     #[tracing::instrument(skip(self), fields(thread_id = %id))]
     pub async fn get_by_id(&self, id: Uuid) -> Result<Thread, AppError> {
         let thread = self

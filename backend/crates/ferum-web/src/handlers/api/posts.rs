@@ -15,9 +15,10 @@ use ferum_application::usecases::post_usecase::CreatePostCmd;
 pub async fn list_posts(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(thread_id): Path<Uuid>,
+    Path(slug): Path<String>,
     Query(q): Query<PostListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
+    let thread_id = state.thread.id_for_slug(&slug).await?;
     let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, state.post.max_page_size().await)?;
 
     let (posts, total) = state
@@ -36,12 +37,13 @@ pub async fn list_posts(
 pub async fn create_post(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
-    Path(thread_id): Path<Uuid>,
+    Path(slug): Path<String>,
     Json(body): Json<CreatePostRequest>,
 ) -> HandlerResult<impl IntoResponse> {
     body.validate()
         .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
     let actor = auth_user.require_auth()?;
+    let thread_id = state.thread.id_for_slug(&slug).await?;
 
     let post = state
         .post

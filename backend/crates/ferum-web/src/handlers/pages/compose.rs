@@ -152,7 +152,9 @@ pub async fn edit_thread(
     ctx.insert("site", &site_ctx(&state).await);
     ctx.insert("current_user", &user_ctx(&state, Some(&auth_user)).await);
     ctx.insert("active_theme", &active);
-    ctx.insert("thread_id", &thread.id.to_string());
+    // No `thread_id`: /api/threads/* identifies threads by slug, so the edit
+    // page has no use for the UUID and exposing it would only invite a template
+    // to reach for the wrong one.
     ctx.insert("thread_slug", &thread.slug);
     ctx.insert("thread_title", &thread.title);
     ctx.insert("thread_category_id", &thread.category_id.to_string());
