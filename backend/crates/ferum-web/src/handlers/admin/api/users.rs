@@ -45,7 +45,7 @@ pub async fn list_users(
     Query(q): Query<UserListQuery>,
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
-    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, 100)?;
+    let (page, per_page) = crate::utils::paginate(q.page, q.per_page, 20, ferum_application::constants::MAX_LIST_PAGE_SIZE)?;
 
     let (users, total) = state
         .admin

@@ -352,7 +352,21 @@ impl AdminUseCase {
         sort_dir: Option<&str>,
     ) -> Result<(Vec<User>, u64), AppError> {
         PermissionChecker::can_manage_users(actor)?;
-        self.users.list_paginated(page, per_page, search, sort_by, sort_dir).await
+        // The only list endpoint that had no ceiling of its own — it relied
+        // entirely on the handler's. That happened to agree, but it left no
+        // backstop: lowering the handler's number without touching this one
+        // would silently reintroduce the pagination mismatch that
+        // MAX_LIST_PAGE_SIZE exists to prevent. Clamped here so the invariant
+        // holds at the layer that owns it.
+        self.users
+            .list_paginated(
+                page.max(1),
+                per_page.clamp(1, crate::constants::MAX_LIST_PAGE_SIZE),
+                search,
+                sort_by,
+                sort_dir,
+            )
+            .await
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
