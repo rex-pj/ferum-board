@@ -141,4 +141,17 @@
       case 'ban-user':       banUser(btn.dataset.userId, btn.dataset.username, btn); break;
     }
   });
+
+  // Selects that re-submit their own form on change — currently the approval
+  // queue's category filter.
+  //
+  // This was `onchange="this.form.submit()"` in the template. The CSP sets
+  // `script-src 'self' 'unsafe-eval'` with no 'unsafe-inline', so the browser
+  // refused to run it and the filter silently did nothing; the form has no
+  // submit button, so changing the category was simply inert. Same behaviour
+  // the markup always asked for, from a place the CSP allows.
+  document.addEventListener('change', function (e) {
+    var el = e.target.closest('[data-submit-on-change]');
+    if (el && el.form) el.form.submit();
+  });
 }());

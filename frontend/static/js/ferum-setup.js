@@ -181,4 +181,17 @@
     document.getElementById('seed-label').classList.toggle('checked', this.checked);
   });
 
+  // ── Suppress native form submission ─────────────────────────────────
+  // The wizard drives every step from JS and posts to /api/setup/run itself;
+  // nothing should ever navigate this form. Every button is type="button", so
+  // the only way to trigger a submit is Enter in a text field — which, being a
+  // GET to the same URL, reloads /setup and discards everything typed so far.
+  //
+  // This was `onsubmit="return false;"` on the <form>. The CSP allows no
+  // inline handlers, so the guard never ran and the Enter key really did wipe
+  // the wizard.
+  document.getElementById('setup-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+  });
+
 }());

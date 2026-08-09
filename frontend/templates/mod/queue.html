@@ -12,7 +12,7 @@
   <div class="card-header p-0">
     <form method="GET" action="/mod/queue" class="adm-filter-row px-3 py-2">
       <select name="category_id" class="form-select form-select-sm" style="width:auto"
-              onchange="this.form.submit()">
+              data-submit-on-change>
         <option value="">{{ t(k="adm-all-categories") }}</option>
         {% for cat in categories %}
           <option value="{{ cat.id }}"
