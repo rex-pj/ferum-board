@@ -20,7 +20,7 @@ pub async fn reports(
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
 
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     let per_page = 20u64;
     let filter = q.status.clone().unwrap_or_default();
     let search = q.q.clone().unwrap_or_default();
@@ -82,7 +82,7 @@ pub async fn audit_log(
     let auth_user = require_page_auth(auth_user)?;
     require_admin(&auth_user)?;
 
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     let per_page = 50u64;
     let action_query = q.q.clone().unwrap_or_default();
     let actor_id_filter = q.actor_id.clone().unwrap_or_default();

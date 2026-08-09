@@ -87,7 +87,7 @@ pub async fn catalog_index(
     Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
     Query(q): Query<CatalogQuery>,
 ) -> Result<impl IntoResponse, PageError> {
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
 
     let filter = ProductListFilter {
         product_type: q.product_type.as_deref().and_then(parse_product_type),

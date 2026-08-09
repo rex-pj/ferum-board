@@ -165,6 +165,25 @@ pub fn paginate(
     default_per_page: u64,
     max_per_page: u64,
 ) -> Result<(u64, u64), AppError> {
+    Ok((
+        page_number(page)?,
+        per_page.unwrap_or(default_per_page).clamp(1, max_per_page),
+    ))
+}
+
+/// The page half of [`paginate`], for the handlers that have no `per_page` to
+/// negotiate — a page whose page size is fixed in code.
+///
+/// Those handlers wrote `q.page.unwrap_or(1).max(1)` inline, which is this
+/// function's first line and none of its second: they accepted `?page=999999`
+/// and paid for the `OFFSET` that implies. Splitting the guard out is what lets
+/// them adopt it without inventing a `per_page` they do not have.
+///
+/// HTML page handlers map the error to `PageError::NotFound` rather than
+/// letting `From<AppError>` collapse it into `Internal`. A page past the
+/// ceiling does not exist, so 404 is both the honest answer and the one that
+/// stops a crawler; a 500 would say the server broke.
+pub fn page_number(page: Option<u64>) -> Result<u64, AppError> {
     let page = page.unwrap_or(1).max(1);
     if page > MAX_PAGE {
         return Err(AppError::invalid_with(
@@ -172,10 +191,7 @@ pub fn paginate(
             [("max_page", MAX_PAGE.into())],
         ));
     }
-    Ok((
-        page,
-        per_page.unwrap_or(default_per_page).clamp(1, max_per_page),
-    ))
+    Ok(page)
 }
 
 // ─── Content-addressed caching ────────────────────────────────────────────────

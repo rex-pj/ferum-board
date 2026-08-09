@@ -21,7 +21,7 @@ pub async fn log(
     let auth_user = require_page_auth(auth_user)?;
     require_moderator(&auth_user)?;
 
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     let per_page = 30u64;
 
     // `list_audit_log` pins a non-admin's view to their own entries, so an actor

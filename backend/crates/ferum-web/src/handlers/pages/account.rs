@@ -99,7 +99,7 @@ pub async fn notifications(
         None => return Ok(login_redirect("/notifications")),
     };
 
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     let per_page = 20u64;
 
     let (notifs, total) = state
@@ -144,7 +144,7 @@ pub async fn bookmarks(
         None => return Ok(login_redirect("/bookmarks")),
     };
 
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     let per_page = 20u64;
 
     let (bmarks, total) = state.bookmark.list(&auth_user, page, per_page).await?;

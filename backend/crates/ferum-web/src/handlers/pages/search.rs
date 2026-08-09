@@ -59,7 +59,7 @@ pub async fn search(
 ) -> Result<impl IntoResponse, PageError> {
     let active = active_theme(&state).await;
     let query = q.q.as_deref().unwrap_or_default().trim().to_string();
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     let scope = q.tab.as_deref().map(SearchScope::parse).unwrap_or_default();
 
     // Two taxonomies, deliberately not merged.

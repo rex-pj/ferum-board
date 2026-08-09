@@ -20,7 +20,7 @@ pub async fn users(
     let auth_user = require_page_auth(auth_user)?;
     require_moderator(&auth_user)?;
 
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     let per_page = 20u64;
     let search = q.q.clone();
 

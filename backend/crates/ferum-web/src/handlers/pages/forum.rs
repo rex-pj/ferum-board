@@ -494,7 +494,7 @@ pub async fn thread_detail(
     Path(slug): Path<String>,
     Query(q): Query<ListQuery>,
 ) -> Result<impl IntoResponse, PageError> {
-    let page = q.page.unwrap_or(1).max(1);
+    let page = crate::utils::page_number(q.page).map_err(|_| PageError::NotFound)?;
     // Asked for rather than hardcoded to 20: `list_by_thread` clamps to this
     // same configured value, and building the pager from a different number is
     // what makes posts past the last advertised page unreachable. Lowering
