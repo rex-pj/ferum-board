@@ -24,7 +24,7 @@ plugin_ui_slots table row
   props             = ['data-message="…"', 'data-kind="info"', …]
     │
     ▼ (on every page request)
-plugin_ctx_data() helper in page_handler.rs
+plugin_ctx_data() helper in handlers/pages/mod.rs
   → builds: <ferum-slot-com-ferum-announcement-banner-content-before data-message="…" data-kind="info" data-dismissible="true">
             </ferum-slot-com-ferum-announcement-banner-content-before>
   → injects into Tera context as plugin_slots.content_before

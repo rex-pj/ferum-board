@@ -5,8 +5,8 @@
 //! actually wants to know here is not "which locales exist" but "how much of the
 //! site is actually translated in each" — so coverage is the headline number.
 //!
-//! Tier 2 (language-pack upload) and Tier 3 (per-string overrides) attach to this
-//! page later; see docs/i18n-plan.md.
+//! Language-pack upload and a per-string override editor would attach to this page
+//! later; neither is built. See docs/i18n.md.
 
 use axum::extract::State;
 use axum::response::IntoResponse;

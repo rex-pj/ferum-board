@@ -1,6 +1,6 @@
 # Admin and moderator panel copy — English (source catalog).
 #
-# Per the "Admin / mod panels" decision in docs/i18n-plan.md these are extracted
+# Per the "Admin / mod panels" decision recorded in docs/i18n.md these are extracted
 # but ship English-only: Power Users are ~5% of the audience and generally
 # tolerate English tooling. Extracting them now means adding a language later is
 # a data-only change with no code to touch.

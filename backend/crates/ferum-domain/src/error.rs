@@ -18,8 +18,8 @@ pub enum AppError {
     /// Retained only for genuinely dynamic text that has no stable code — in
     /// practice `validator::ValidationErrors::to_string()`, whose content is
     /// assembled per-field at runtime. This variant is **not translatable**;
-    /// translating it requires mapping validator's per-field codes, which is
-    /// tracked separately in docs/i18n-plan.md.
+    /// translating it requires mapping validator's per-field codes, which is not
+    /// done. See docs/i18n.md.
     ///
     /// For anything with a fixed meaning, use [`AppError::Invalid`] instead so
     /// the message lives in the catalog and clients can branch on the code.

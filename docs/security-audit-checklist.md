@@ -88,7 +88,7 @@ An attacker uses `../` in a file path to escape the allowed directory and access
 
 ```
 GET /files/../../../etc/passwd
-GET /themes/../../backend/src/config.rs
+GET /themes/../../backend/crates/ferum-web/src/config.rs
 ```
 
 **Where it appears:** File serving, theme upload, plugin install path, avatar/cover serving.
@@ -98,8 +98,10 @@ GET /themes/../../backend/src/config.rs
 - [ ] Every path built from user input goes through `canonicalize()` and is verified to remain within the allowed prefix
 - [ ] Theme slug contains only `^[a-z0-9-]+$` — no `/`, `\`, or `..`
 - [ ] Plugin `install_path` is not taken directly from the request
-- [ ] `/files/:key` route: key must match CAS format (hex string), not a file path
+- [ ] `/files/{*key}` route: `is_safe_key` runs before anything else. `public_url` is string concatenation, so a key containing `..` normalises in the browser to a different path — and in the path-style URLs S3 and GCS both use, a different path is a different **bucket**
 - [ ] Upload handler rejects path traversal within archive entries
+- [ ] `/themes/**` reaches `ServeDir` only via `theme_asset_guard` (`routings/mod.rs`), which allows exactly `{slug}/assets/**`. A bare `ServeDir` over the themes directory also served `{slug}/templates/*.html` and `theme.json`, publishing raw Tera source to anonymous callers
+- [ ] `/plugins/{slug}/assets/{*path}` is a dedicated handler, not a `ServeDir` over the plugins directory — manifests, hook scripts and plugin configs must stay unreachable
 
 **PASS:** All paths strip or reject `..` and have their prefix verified after canonicalization.
 
@@ -482,10 +484,12 @@ POST /api/admin/plugins {"url": "file:///etc/passwd"}
 
 - [ ] Webhook URL validation: reject `localhost`, `127.x.x.x`, `10.x`, `172.16-31.x`, `192.168.x`, `169.254.x`, `::1`
 - [ ] Only `https://` scheme is accepted for webhook URLs — reject `file://`, `ftp://`, `gopher://`
-- [ ] `ferum-infrastructure/src/network_utils.rs::assert_no_private_ip()` is called before any outbound HTTP from plugin hooks — it resolves DNS and rejects private/reserved IPs (RFC-1918, loopback, link-local, CGNAT 100.64/10, IPv6 ULA/link-local)
-- [ ] Plugins cannot call arbitrary URLs from the sandbox without an explicit capability grant
+- [ ] Every outbound request to a user/admin/plugin-supplied URL goes through `ferum-infrastructure/src/network_utils.rs::build_pinned_client()` — it resolves DNS, rejects private/reserved IPs (RFC-1918, loopback, link-local, CGNAT 100.64/10, IPv6 ULA/link-local) via `ferum_domain::net::is_private_ip`, and then **pins the request to the addresses just validated**
+- [ ] No call site validates a URL and then builds its own `reqwest::Client` — that reopens the DNS-rebinding TOCTOU window `build_pinned_client` exists to close, which is why `resolve_and_validate` is deliberately not public
+- [ ] Redirect following stays disabled on that client. `resolve_to_addrs` pins only the original host, so a 302 to `http://169.254.169.254/` would be resolved with no validation at all
+- [ ] Plugins cannot call arbitrary URLs from the sandbox: `capabilities.http_allowlist` must be non-empty **and** admin-granted, and the runtime intersects the two
 
-**PASS:** Webhook URLs with private/loopback IPs are blocked. Only HTTPS is accepted. Plugin outbound HTTP resolves DNS first via `assert_no_private_ip()`.
+**PASS:** Webhook URLs with private/loopback IPs are blocked. Plugin outbound HTTP is allowlisted by host and pinned to a validated address.
 
 **FAIL:** A webhook can be sent to `localhost` or `169.254.169.254`.
 

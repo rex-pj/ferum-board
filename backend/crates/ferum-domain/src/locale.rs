@@ -12,7 +12,7 @@
 //! whether a locale is actually available is runtime configuration owned by the
 //! admin (`site_config.enabled_locales`), resolved above the domain layer. Keeping
 //! the roster out of the type is what allows a language pack to be uploaded at
-//! runtime (see docs/i18n-plan.md Step 7 Tier 2) without a recompile.
+//! runtime without a recompile, if that is ever built (see docs/i18n.md).
 
 use std::fmt;
 

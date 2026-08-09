@@ -207,7 +207,7 @@ pub fn build_router(
         .route("/health/live", get(crate::handlers::api::health::live))
         .route("/health/ready", get(crate::handlers::api::health::ready))
         .merge(files_routes(state.clone()))
-        // Static files (Bootstrap, HTMX, Alpine, theme CSS, widgets).
+        // Static files (Bootstrap, Alpine, FontAwesome, page scripts, widgets).
         // Cache 1 day; ServeDir sets ETag + Last-Modified automatically so
         // browsers send conditional GETs after TTL and get 304 when unchanged.
         .nest_service(

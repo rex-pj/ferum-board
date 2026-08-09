@@ -245,7 +245,8 @@ impl PluginUseCase {
             self.register_hooks_from_manifest(&plugin).await?;
         }
 
-        // Register UI slots (Tier 3 only — manifest declares ui_slots)
+        // Register UI slots from the manifest's [ui_slots.*] sections. Runs for every
+        // tier — in practice Script plugins are the ones that declare them.
         self.register_ui_slots_from_manifest(&plugin).await?;
 
         // Tier 1: register webhooks from manifest [[webhooks]] sections
