@@ -115,15 +115,20 @@ impl ModerationUseCase {
     /// is the whole failure this guards against. Category-scoped grants count
     /// too: a moderator of one category is still staff when standing in
     /// another.
+    ///
+    /// `attempted` names the action for the audit trail (`"user.warn"`,
+    /// `"user.ban_temp"`), matching the vocabulary of the entries the successful
+    /// path writes.
     async fn require_may_moderate(
         &self,
         actor: &AuthUser,
         target_id: Uuid,
+        attempted: &str,
     ) -> Result<(), AppError> {
         use ferum_domain::models::role::perm;
 
         if actor.id == target_id {
-            return Err(AppError::forbidden("cannot_moderate_self"));
+            return Err(self.record_refusal(actor, target_id, attempted, "cannot_moderate_self").await);
         }
 
         // Admins may act on anyone but themselves.
@@ -153,9 +158,50 @@ impl ModerationUseCase {
             || scoped.values().any(|s| STAFF_PERMS.iter().any(|p| s.contains(*p)));
 
         if target_is_staff {
-            return Err(AppError::forbidden("cannot_moderate_staff"));
+            return Err(self.record_refusal(actor, target_id, attempted, "cannot_moderate_staff").await);
         }
         Ok(())
+    }
+
+    /// Record a refused moderation attempt, and return the error to raise.
+    ///
+    /// Successful warns and bans are audited through their `ForumEvent`s. A
+    /// refusal produced no event and therefore no trace — yet a moderator
+    /// repeatedly trying to ban an administrator is precisely what an audit log
+    /// is for, whether that is a compromised account or someone testing where
+    /// the fence is.
+    ///
+    /// **Only the two rank refusals reach here, not every `permission_denied`.**
+    /// Neither can be arrived at by clicking: the UI never offers a moderator
+    /// the option of banning an admin or themselves, so reaching one means the
+    /// request was constructed by hand. Logging ordinary permission failures
+    /// too would bury that signal under stale-tab noise.
+    ///
+    /// Returning the `AppError` rather than just writing the row keeps the two
+    /// inseparable at the call site — a future branch cannot refuse without
+    /// recording, which is the failure mode this is fixing.
+    ///
+    /// The write is best-effort: an audit outage must not convert a correct
+    /// refusal into a 500, which would tell the caller their attempt failed for
+    /// the wrong reason.
+    async fn record_refusal(
+        &self,
+        actor: &AuthUser,
+        target_id: Uuid,
+        attempted: &str,
+        reason: &'static str,
+    ) -> AppError {
+        self.audit_log_repo
+            .append(AuditLog::user_action(
+                actor.id,
+                "moderation.refused",
+                "user",
+                target_id,
+                Some(serde_json::json!({ "attempted": attempted, "reason": reason })),
+            ))
+            .await
+            .ok();
+        AppError::forbidden(reason)
     }
 
     // ─── Report creation (any authenticated member) ───────────────────────────
@@ -415,7 +461,7 @@ impl ModerationUseCase {
             return Err(AppError::invalid_with("reason_too_long", [("limit", MAX_BAN_REASON_LEN.into())]));
         }
         PermissionChecker::can_warn(actor)?;
-        self.require_may_moderate(actor, user_id).await?;
+        self.require_may_moderate(actor, user_id, "user.warn").await?;
 
         self.users.find_by_id(user_id).await?.or_not_found()?;
 
@@ -478,7 +524,7 @@ impl ModerationUseCase {
             ));
         }
 
-        self.require_may_moderate(actor, user_id).await?;
+        self.require_may_moderate(actor, user_id, "user.ban_temp").await?;
 
         self.users.find_by_id(user_id).await?.or_not_found()?;
 

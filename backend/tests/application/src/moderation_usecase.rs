@@ -5,7 +5,7 @@ use ferum_application::usecases::moderation_usecase::{CreateReportCmd, Moderatio
 use ferum_domain::AppError;
 use ferum_test_support::fixtures::{ids, make_post, make_report, make_user, AuthUserBuilder};
 use ferum_test_support::mocks::{
-    audit_log_repository::NoopAuditLogRepository,
+    audit_log_repository::{NoopAuditLogRepository, SpyAuditLog},
     cache_service::MockCacheService,
     event_publisher::MockEventPublisher,
     notification_repository::MockNotificationRepository,
@@ -519,5 +519,133 @@ async fn nobody_can_ban_themselves() {
     assert!(
         matches!(&result, Err(AppError::Forbidden(c)) if c == "cannot_moderate_self"),
         "got {result:?}"
+    );
+}
+
+// ─── refused moderation attempts are recorded ─────────────────────────────────
+//
+// Successful warns and bans are audited through `UserWarned` / `UserBanned`.
+// A *refused* one left no trace at all — and a moderator repeatedly trying to
+// ban an administrator is exactly the signal an audit log exists to capture,
+// whether it is a compromised account or an insider testing the boundary.
+//
+// Only the two rank refusals are logged, not every `permission_denied`. These
+// two cannot be reached by clicking: the UI never offers a moderator the option
+// of banning an admin or themselves, so reaching them means the request was
+// constructed deliberately. Logging ordinary permission failures would bury that
+// signal under noise from stale tabs.
+
+/// Same as `build_uc_with_target_perms` but hands back the audit spy too.
+fn build_uc_with_audit(
+    resolver: FixedPermissionResolver,
+) -> (ModerationUseCase, Arc<SpyAuditLog>) {
+    let audit = Arc::new(SpyAuditLog::default());
+    let mut user_roles = MockUserRoleRepository::new();
+    user_roles.expect_list_for_user().returning(|_| Ok(vec![]));
+
+    let mut users = MockUserRepository::new();
+    users.expect_update().never();
+
+    let uc = ModerationUseCase::new(
+        Arc::new(MockReportRepository::new()),
+        Arc::new(MockPostRepository::new()),
+        Arc::new(MockThreadRepository::new()),
+        Arc::new(users),
+        Arc::new(MockNotificationRepository::new()),
+        audit.clone(),
+        Arc::new(MockEventPublisher::new()),
+        Arc::new(MockCacheService::new()),
+    )
+    .with_staff_lookup(Arc::new(user_roles), Arc::new(resolver));
+
+    (uc, audit)
+}
+
+#[tokio::test]
+async fn a_refused_ban_on_staff_is_recorded() {
+    let (uc, audit) = build_uc_with_audit(FixedPermissionResolver::global(&["admin.users"]));
+    let actor = a_moderator();
+
+    uc.temp_ban(&actor, ids::user_b(), "spam".into(), one_day_out())
+        .await
+        .unwrap_err();
+
+    let entry = audit.only();
+    assert_eq!(entry.actor_id, Some(actor.id));
+    assert_eq!(entry.action, "moderation.refused");
+    assert_eq!(entry.target_type, "user");
+    assert_eq!(entry.target_id, ids::user_b(), "the target must be the person acted on");
+
+    let meta = entry.metadata.expect("refusal must say what was attempted and why");
+    assert_eq!(meta["attempted"], "user.ban_temp");
+    assert_eq!(meta["reason"], "cannot_moderate_staff");
+}
+
+#[tokio::test]
+async fn a_refused_warn_records_the_action_it_was() {
+    let (uc, audit) = build_uc_with_audit(FixedPermissionResolver::global(&["moderation.warn"]));
+
+    uc.warn_user(&a_moderator(), ids::user_b(), "rude".into())
+        .await
+        .unwrap_err();
+
+    let meta = audit.only().metadata.unwrap();
+    assert_eq!(meta["attempted"], "user.warn", "warn and ban must be distinguishable");
+    assert_eq!(meta["reason"], "cannot_moderate_staff");
+}
+
+#[tokio::test]
+async fn a_self_ban_attempt_is_recorded_with_its_own_reason() {
+    let (uc, audit) = build_uc_with_audit(FixedPermissionResolver::none());
+    let actor = an_admin();
+
+    uc.temp_ban(&actor, actor.id, "oops".into(), one_day_out())
+        .await
+        .unwrap_err();
+
+    let meta = audit.only().metadata.unwrap();
+    assert_eq!(meta["reason"], "cannot_moderate_self");
+}
+
+/// An allowed action must not produce a refusal entry — the successful one is
+/// already written by the `UserBanned` event, and a second row would double-count
+/// every ban in the log.
+#[tokio::test]
+async fn an_allowed_ban_records_no_refusal() {
+    let target = ids::user_b();
+    let audit = Arc::new(SpyAuditLog::default());
+    let mut user_roles = MockUserRoleRepository::new();
+    user_roles.expect_list_for_user().returning(|_| Ok(vec![]));
+
+    let mut users = MockUserRepository::new();
+    users.expect_find_by_id().returning(move |_| Ok(Some(make_user(target))));
+    users.expect_update().returning(move |_, _| Ok(make_user(target)));
+
+    let mut cache = MockCacheService::new();
+    cache.expect_set().returning(|_, _, _| Ok(()));
+    cache.expect_del_prefix().returning(|_| Ok(()));
+    cache.expect_del().returning(|_| Ok(()));
+
+    let mut events = MockEventPublisher::new();
+    events.expect_publish().returning(|_| ());
+
+    let uc = ModerationUseCase::new(
+        Arc::new(MockReportRepository::new()),
+        Arc::new(MockPostRepository::new()),
+        Arc::new(MockThreadRepository::new()),
+        Arc::new(users),
+        Arc::new(MockNotificationRepository::new()),
+        audit.clone(),
+        Arc::new(events),
+        Arc::new(cache),
+    )
+    .with_staff_lookup(Arc::new(user_roles), Arc::new(FixedPermissionResolver::none()));
+
+    uc.temp_ban(&a_moderator(), target, "spam".into(), one_day_out()).await.unwrap();
+
+    assert!(
+        audit.entries().is_empty(),
+        "a permitted action must not be logged as a refusal: {:#?}",
+        audit.entries()
     );
 }
