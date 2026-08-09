@@ -39,6 +39,18 @@ bcrypt = "0.15"
 boa_engine = "0.19"
 bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
+# IANA timezone database, for turning an admin's "Aug 8" into the instant range
+# that day actually covers in the site's `reporting_timezone`. `chrono` alone
+# cannot: it offers UTC, a fixed offset, or the ambient system zone, and none of
+# those is "the zone this forum reports in".
+#
+# `default-features = false` drops `filter-by-regex` (a build-time trimmer that
+# pulls `regex` into the build graph) and `case-insensitive` (`uncased`). What
+# stays is the embedded tzdata and the `Tz` parser, which is all that is used.
+# The trade: zone *names* must match exactly, so a lowercased spelling such as
+# `"europe/lisbon"` will not parse — acceptable, since the value is validated on
+# save against both this parser and PostgreSQL.
+chrono-tz = { version = "0.10", default-features = false }
 colored = "2"
 # Only `config::Environment` is used (ferum-web/src/config.rs) — env vars, no
 # config FILES. The default feature set turns on six format parsers anyway:

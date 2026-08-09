@@ -87,6 +87,11 @@ pub struct UpdatePreferencesRequest {
     /// three-way distinction is why this is a nested `Option`.
     #[serde(default, deserialize_with = "deserialize_optional_locale")]
     pub locale: Option<Option<ferum_domain::Locale>>,
+    /// Display timezone, as an IANA name. Same three-way shape as `locale`:
+    /// absent leaves the current choice alone, an explicit `null` clears it and
+    /// returns the user to whatever zone their device reports.
+    #[serde(default, deserialize_with = "deserialize_optional_string")]
+    pub timezone: Option<Option<String>>,
 }
 
 /// Distinguishes "field absent" from "field explicitly null".
@@ -102,6 +107,15 @@ where
     D: serde::Deserializer<'de>,
 {
     Option::<ferum_domain::Locale>::deserialize(deserializer).map(Some)
+}
+
+/// Same absent-vs-explicit-null trick as `deserialize_optional_locale`, for a
+/// plain string field.
+fn deserialize_optional_string<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(Some)
 }
 
 pub async fn update_profile(
@@ -202,6 +216,29 @@ pub async fn update_preferences(
         }
     };
 
+    // Same shape as `locale` above: absent = leave alone, explicit null = clear
+    // back to "follow the device". The valid set is again not a fixed array —
+    // it is whatever the runtime's timezone database knows, so a zone added by
+    // a future tzdata update works with no code change.
+    let timezone = match body.timezone {
+        None => existing.timezone,
+        Some(None) => None,
+        Some(Some(requested)) => {
+            let trimmed = requested.trim();
+            if trimmed.is_empty() {
+                None
+            } else if trimmed.parse::<chrono_tz::Tz>().is_err() {
+                return Err(AppError::invalid_with(
+                    "invalid_timezone",
+                    [("tz", ferum_domain::i18n::TransArg::Str(trimmed.to_string()))],
+                )
+                .into());
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+    };
+
     let prefs = UserPreferences {
         user_id: actor.id,
         theme,
@@ -213,6 +250,7 @@ pub async fn update_preferences(
         muted_categories: body.muted_categories.unwrap_or(existing.muted_categories),
         watched_categories: body.watched_categories.unwrap_or(existing.watched_categories),
         locale: locale.clone(),
+        timezone,
     };
 
     state.user.update_preferences(actor, prefs).await?;

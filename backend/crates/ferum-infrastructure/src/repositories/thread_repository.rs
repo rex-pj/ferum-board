@@ -685,6 +685,18 @@ impl ThreadRepository for PgThreadRepository {
         viewer_type: &str,
     ) -> Result<bool, AppError> {
         let now = Utc::now().fixed_offset();
+        // The single writer of `last_viewed_date`, deliberately.
+        //
+        // The column has no database default, so this is the only definition of
+        // "today" it ever sees. A `DEFAULT CURRENT_DATE` would add a second one
+        // that resolves against the session's `TimeZone` and agrees with this
+        // only while that session is UTC — see the note in migration 000005.
+        //
+        // UTC rather than the reporting timezone: this is a dedup window, not a
+        // reported figure. Nothing displays it, and threading the site's zone
+        // through here would couple view counting to a setting an admin can
+        // change underneath it — which would let one viewer's window silently
+        // reopen or extend on the day of the change.
         let today = Utc::now().date_naive();
 
         // Step 1: fresh INSERT (first-time viewer).
@@ -839,7 +851,11 @@ impl ThreadRepository for PgThreadRepository {
             pos += 1;
         }
         if let Some(to) = filter.created_to {
-            where_parts.push(format!("t.created_at <= ${pos}"));
+            // `<`, not `<=`: `created_to` is the start of the day AFTER the one
+            // the admin picked, so the range is half-open. An inclusive compare
+            // here would pull in everything that happened at exactly midnight
+            // and double-count it against the next period.
+            where_parts.push(format!("t.created_at < ${pos}"));
             values.push(to.into());
             pos += 1;
         }

@@ -1,3 +1,4 @@
+mod datetime_wire_format;
 mod validators;
 
 use ferum_application::constants::MAX_PAGE;

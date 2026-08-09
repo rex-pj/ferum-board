@@ -79,6 +79,9 @@ fn ctx_with_schema(config_schema: serde_json::Value) -> Context {
             theme: "auto".into(),
             font_size: "medium".into(),
             layout: "comfortable".into(),
+            // None = follow the device's zone, which is what a user who never
+            // opened the setting has.
+            timezone: None,
         },
     );
     ctx.insert("flash_success", &json!(null));

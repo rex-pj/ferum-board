@@ -39,7 +39,10 @@ pub async fn roles(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("roles", &roles_ctx);
 
     render_admin(&state, &req_locale, "admin/roles/list.html", ctx).await
@@ -112,7 +115,10 @@ pub async fn role_detail(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("role", &role_ctx);
     ctx.insert("permissions", &perms_ctx);
     ctx.insert("role_permission_ids", &role_perm_ids);
@@ -164,7 +170,10 @@ pub async fn permissions(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("permission_groups", &permission_groups);
 
     render_admin(&state, &req_locale, "admin/permissions.html", ctx).await

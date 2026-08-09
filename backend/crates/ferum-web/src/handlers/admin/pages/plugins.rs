@@ -335,7 +335,10 @@ pub async fn plugins(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("plugins", &plugins_ctx);
     if let Some(msg) = flash.success {
         ctx.insert("flash_success", &msg);
@@ -461,7 +464,10 @@ pub async fn plugin_detail(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("plugin", &plugin_ctx);
     ctx.insert("flash_success", &flash_success);
     ctx.insert("flash_error", &flash_error);

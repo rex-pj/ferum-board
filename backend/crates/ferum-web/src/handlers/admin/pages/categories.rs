@@ -84,7 +84,10 @@ pub async fn categories(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("categories", &categories_ctx);
     ctx.insert("search_query", &search);
 
@@ -122,7 +125,10 @@ pub async fn category_moderators(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("category_id", &id.to_string());
     ctx.insert("category_name", &category_name);
     ctx.insert("moderators", &moderators);

@@ -43,7 +43,11 @@
             <a href="/forum/t/{{ post.thread_slug | default(value='') }}" class="text-decoration-none small fw-semibold text-truncate" style="max-width:260px" target="_blank">
               {{ post.thread_title | default(value="Thread") }}
             </a>
-            <span class="text-muted small ms-auto text-nowrap">{{ post.created_at | truncate(length=10, end="") }}</span>
+            {# Was a ten-character slice of the raw ISO string, which yields the
+               UTC calendar date — shown unlabelled to a moderator whose own date
+               is already the next day — and bypassed the catalog's date
+               formatting entirely. #}
+            <time class="text-muted small ms-auto text-nowrap" data-abs data-style="date" datetime="{{ post.created_at }}">{{ post.created_at | localdate }}</time>
           </div>
           <div class="text-muted small" style="white-space:pre-wrap;word-break:break-word;max-height:6rem;overflow:hidden">{{ post.content_md | truncate(length=400) }}</div>
         </div>

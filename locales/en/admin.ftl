@@ -228,6 +228,21 @@ adm-filter-by-hook-name = Filter by hook name…
 adm-filter-by-name-or-slug = Filter by name or slug…
 adm-forum = Forum
 adm-forum-index = Forum Index
+
+adm-localization = Localization
+adm-reporting-timezone = Reporting timezone
+adm-reporting-timezone-help =
+    The IANA timezone whose calendar day defines a "day" for the dashboard
+    counters, the statistics charts, and the date filters on the thread and
+    audit-log pages. It does not change how times are stored (always UTC) or how
+    they are shown to readers (their own zone). Leave as UTC unless your members
+    are concentrated in one region: a UTC day boundary falls in the middle of
+    their day, so activity either side of local midnight is split across two
+    dates and the "today" counters reset at the wrong hour.
+adm-reporting-timezone-warning =
+    Changing this re-buckets future data only. Statistics already recorded keep
+    the day boundary they were written under, so charts spanning the change will
+    mix the two.
 adm-forum-name = Forum name
 adm-fpkg = .fpkg
 adm-from = From

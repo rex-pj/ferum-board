@@ -82,7 +82,10 @@ pub async fn users(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("users", &users_ctx);
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("search_query", &search.unwrap_or_default());
@@ -160,7 +163,10 @@ pub async fn user_detail(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("profile", &profile);
     ctx.insert("all_roles", &all_roles_ctx);
 

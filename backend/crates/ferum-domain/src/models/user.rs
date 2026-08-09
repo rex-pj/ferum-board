@@ -77,6 +77,24 @@ pub struct UserPreferences {
     /// Storing an explicit `Some("en")` is a real choice and pins the user to
     /// English even if the admin later changes the site default.
     pub locale: Option<crate::Locale>,
+    /// IANA timezone for displaying timestamps to this user, e.g.
+    /// `"Europe/Lisbon"`.
+    ///
+    /// `None` — the default — means "use whatever zone the device reports",
+    /// which is right for almost everyone and is the only thing that can be
+    /// right for a guest. A value here overrides the device, for the user whose
+    /// machine is set wrong or who wants the community's zone while travelling.
+    ///
+    /// It is also the only zone a server-rendered email could use — but note
+    /// that **no email currently renders a date**: the catalog has four keys,
+    /// verify and reset, neither carrying a timestamp. Wire this up when one
+    /// does; do not assume it already is.
+    ///
+    /// Kept as a `String` rather than a parsed zone: the domain never converts
+    /// with it (the browser does), it is validated on write, and parsing it
+    /// here would pull a timezone database into a crate that has no I/O and no
+    /// framework dependencies.
+    pub timezone: Option<String>,
 }
 
 impl Default for UserPreferences {
@@ -90,6 +108,9 @@ impl Default for UserPreferences {
             muted_categories: vec![],
             watched_categories: vec![],
             locale: None,
+            // None = follow the device's zone. See the field's doc comment for
+            // why that is the default rather than UTC.
+            timezone: None,
         }
     }
 }

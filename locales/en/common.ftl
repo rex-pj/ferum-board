@@ -49,6 +49,13 @@ prefs-language-help =
     language they were written in.
 prefs-language-auto = Match my browser
 
+prefs-timezone = Time zone
+prefs-timezone-help =
+    Dates and times are shown in this zone. Leave it on your device's setting
+    unless that setting is wrong, or you want times in your community's zone
+    while you travel.
+prefs-timezone-auto = Match my device
+
 ## ─── Thread card ─────────────────────────────────────────────────────────────
 
 thread-product-review = Product review
@@ -63,9 +70,20 @@ thread-last-reply-label = Last reply
 #
 # $hour and $minute arrive already zero-padded.
 
+# These are the SERVER-RENDERED forms, and the server renders in UTC — it does
+# not know the reader's zone (see CLAUDE.md → Time and Timezones). Every use
+# sits inside a <time data-rel|data-abs> that ferum-utils.js rewrites into the
+# reader's own zone on load, so what these produce is the no-JavaScript
+# fallback.
+#
+# The two that show a clock carry an explicit "UTC" for that reason: an
+# unlabelled "23:30" is read as local and is wrong by the reader's offset,
+# which near midnight is wrong by a whole day. The date-only forms are left
+# unlabelled — "Aug 2026 UTC" for a join month is noise, and they are only ever
+# the fallback for a relative time that JS replaces outright.
 format-date = { $month } { $day }, { $year }
-format-datetime = { $month } { $day }, { $year } { $hour }:{ $minute }
-format-daymonth = { $month } { $day }, { $hour }:{ $minute }
+format-datetime = { $month } { $day }, { $year } { $hour }:{ $minute } UTC
+format-daymonth = { $month } { $day }, { $hour }:{ $minute } UTC
 format-monthyear = { $month } { $year }
 
 # Single character. Anything longer is ignored and a comma is used instead.
@@ -569,7 +587,10 @@ ui-page-x-of-y = page { $page } of { $total }
 ## ─── Account status ──────────────────────────────────────────────────────────
 
 ui-account-suspended = Your account is suspended.
-ui-account-suspended-until = Your account is suspended until { $date }.
+# Label only — the template appends ": " and the expiry as its own <time>
+# element, so the client can show it in the reader's timezone. It replaced a
+# `{ $date }` placeable, which produced plain text stuck in UTC.
+ui-account-suspended-until-label = Suspended until
 ui-change-cover = Change cover
 ui-upload-cover = Upload cover
 ui-change-photo = Change photo

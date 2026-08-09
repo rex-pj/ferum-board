@@ -20,6 +20,7 @@ pub enum UserPreferences {
     EmailNotifications,
     UpdatedAt,
     Locale,
+    Timezone,
 }
 
 #[async_trait::async_trait]
@@ -71,6 +72,19 @@ impl MigrationTrait for Migration {
                     // follow the site default when an admin changes it, or fall
                     // through to Accept-Language negotiation.
                     .col(ColumnDef::new(UserPreferences::Locale).string().null())
+                    // Display timezone, IANA name. Nullable for the same reason
+                    // as `locale`, and the distinction matters more here: NULL
+                    // means "follow whatever zone this device reports", which
+                    // keeps tracking the device if the user travels. Storing
+                    // their current zone instead would pin them to it.
+                    //
+                    // Timestamps are server-rendered in UTC and localised in the
+                    // browser (see CLAUDE.md → Time and Timezones), so this
+                    // column is for the case the browser cannot serve: a device
+                    // whose own zone is wrong, or a traveller who wants the
+                    // community's zone. It is also what a server-rendered email
+                    // would need, though no email renders a date today.
+                    .col(ColumnDef::new(UserPreferences::Timezone).text().null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_user_preferences_user_id")

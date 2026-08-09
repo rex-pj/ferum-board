@@ -104,7 +104,44 @@ impl TestDb {
     /// Clone the shared template into `ferum_test_<label>` and return a live
     /// connection. `label` must be unique per test so parallel tests don't
     /// collide.
+    ///
+    /// The session runs with `TimeZone=UTC` — not because anything here sets
+    /// it, but because `sqlx-postgres` puts `("TimeZone", "UTC")` in every
+    /// startup packet. See [`TestDb::new_in_timezone`].
     pub async fn new(label: &str) -> Self {
+        Self::connect(label, None).await
+    }
+
+    /// Same, but with the session `TimeZone` forced to `tz`.
+    ///
+    /// ## What this is for
+    ///
+    /// Analytics queries used bare `CURRENT_DATE`, which resolves against the
+    /// session timezone. Two claims follow, and only one of them is worth
+    /// resting on:
+    ///
+    /// * *"the session is UTC"* — true today, and true for a reason nothing in
+    ///   this codebase controls: `sqlx-postgres` hardcodes it. That is an
+    ///   implementation detail of a dependency, discovered by writing this
+    ///   helper and watching it fail to change the zone.
+    /// * *"the SQL names its own day boundary"* — true because the queries take
+    ///   a reporting timezone and apply `AT TIME ZONE` explicitly.
+    ///
+    /// Passing a hostile zone here asserts the second, which is the one that
+    /// survives a driver change, a connection pooler that resets settings, or a
+    /// future migration to a different client. A zone whose offset is not a whole
+    /// number of hours (`Asia/Kathmandu`, +05:45) is the most useful value: it
+    /// breaks code that truncates rather than converts, which a whole-hour zone
+    /// would let pass.
+    ///
+    /// **Constraint:** the returned `TestDb` holds a single-connection pool (see
+    /// the comment at the `SET`), so a test using it must issue its queries
+    /// sequentially.
+    pub async fn new_in_timezone(label: &str, tz: &str) -> Self {
+        Self::connect(label, Some(tz)).await
+    }
+
+    async fn connect(label: &str, force_tz: Option<&str>) -> Self {
         INIT_ENV.call_once(|| {
             let _ = dotenvy::from_filename("../../.env");
             let _ = dotenvy::dotenv();
@@ -142,9 +179,41 @@ impl TestDb {
         exec(&admin, &format!("CREATE DATABASE \"{db_name}\" TEMPLATE \"{TEMPLATE_NAME}\"")).await;
         admin.close().await.ok();
 
-        let conn = Database::connect(format!("{server_url}/{db_name}"))
-            .await
-            .expect("connect to per-test database");
+        let conn = match force_tz {
+            // Ordinary path: a normal pool, whatever size sea-orm defaults to.
+            None => Database::connect(format!("{server_url}/{db_name}"))
+                .await
+                .expect("connect to per-test database"),
+
+            // ── Why forcing a zone means a one-connection pool ───────────────
+            //
+            // The two obvious approaches both fail, for the same reason.
+            //
+            // `?options=-c TimeZone=…` in the URL does nothing: `sqlx-postgres`
+            // hardcodes `("TimeZone", "UTC")` into the startup packet
+            // (`connection/establish.rs`) and that beats the `options` parameter
+            // it appends afterwards. No connection string can move it.
+            //
+            // A plain `SET` against a normal pool is worse than useless: it
+            // lands on whichever connection served it, so the test would pass or
+            // fail depending on where the next query happened to go — the exact
+            // flakiness a timezone test must not have.
+            //
+            // One connection makes the `SET` cover everything this `TestDb` will
+            // ever run. The cost is real and is why `new()` does not take this
+            // path: a test using it must issue queries **sequentially**, since a
+            // concurrent second query would wait on the connection the first is
+            // holding.
+            Some(tz) => {
+                let mut opts = sea_orm::ConnectOptions::new(format!("{server_url}/{db_name}"));
+                opts.max_connections(1).min_connections(1).sqlx_logging(false);
+                let conn = Database::connect(opts)
+                    .await
+                    .expect("connect to per-test database");
+                exec(&conn, &format!("SET TimeZone TO '{tz}'")).await;
+                conn
+            }
+        };
 
         Self { conn, server_url, db_name }
     }

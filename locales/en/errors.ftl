@@ -222,3 +222,9 @@ error-cannot-disable-last-locale =
 error-cannot-disable-default-locale =
     You can't disable the site's default language. Make another language the
     default first.
+
+## ─── Site configuration ──────────────────────────────────────────────────────
+
+error-invalid-timezone =
+    "{ $tz }" isn't a timezone this server recognises. Use an IANA name such as
+    UTC or Asia/Ho_Chi_Minh.

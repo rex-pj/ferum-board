@@ -275,3 +275,102 @@ async fn both_shells_use_the_same_brand_mark() {
         );
     }
 }
+
+// ─── Timestamps must be client-correctable ────────────────────────────────────
+
+/// Every `| localdate` must sit inside a `<time>` carrying `data-rel` or
+/// `data-abs`.
+///
+/// The filter renders **UTC**, and deliberately so — it localises month names
+/// and field order through the Fluent catalog, which is all the server can do
+/// without knowing the reader's zone. Turning that into the reader's actual
+/// local time is `ferum-utils.js`'s job, and it only looks at `<time>` elements
+/// carrying one of those two markers.
+///
+/// So a bare `{{ ts | localdate }}` is not "unstyled" — it is a timestamp
+/// permanently stuck in UTC, which for a reader at +07 shows the previous day's
+/// date for anything posted before 07:00 local. There were six of them, and
+/// every one looked completely fine on a UTC developer machine.
+#[test]
+fn every_localdate_is_inside_a_client_corrected_time_element() {
+    let mut offenders = Vec::new();
+
+    for path in all_templates() {
+        let Ok(src) = std::fs::read_to_string(&path) else { continue };
+
+        for (idx, _) in src.match_indices("| localdate").chain(src.match_indices("|localdate")) {
+            let before = &src[..idx];
+
+            // Are we inside a <time> element? The nearest unclosed `<time` wins.
+            let open = before.rfind("<time");
+            let close = before.rfind("</time>");
+            let inside = match (open, close) {
+                (Some(o), Some(c)) => o > c,
+                (Some(_), None) => true,
+                _ => false,
+            };
+
+            let line = before.matches('\n').count() + 1;
+
+            if !inside {
+                offenders.push(format!(
+                    "{}:{line} — `localdate` outside any <time> element",
+                    path.display()
+                ));
+                continue;
+            }
+
+            // It is inside one; now check the opening tag carries a marker.
+            let tag_start = open.expect("inside implies an opening tag");
+            let tag = &src[tag_start..];
+            let tag_end = tag.find('>').map(|e| tag_start + e).unwrap_or(src.len());
+            let opening = &src[tag_start..tag_end];
+
+            if !opening.contains("data-rel") && !opening.contains("data-abs") {
+                offenders.push(format!(
+                    "{}:{line} — <time> has neither data-rel nor data-abs, so \
+                     ferum-utils.js will never rewrite it and the value stays UTC",
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "\n\n{} server-rendered timestamp(s) the client cannot correct:\n\n{}\n\n\
+         Wrap the value in <time data-abs data-style=\"date|datetime|daymonth|monthyear\" \
+         datetime=\"{{{{ ts }}}}\"> for an absolute date, or <time data-rel datetime=…> \
+         for a relative one.\n",
+        offenders.len(),
+        offenders.join("\n")
+    );
+}
+
+/// A timestamp must never be rendered by slicing its ISO string.
+///
+/// `{{ ts | truncate(length=10) }}` yields the first ten characters of
+/// "2026-08-08T23:30:00Z" — the UTC calendar date, with the zone information
+/// thrown away and the catalog's date formatting bypassed. Two templates did
+/// this, and the result is a moderator queue dated a day behind for anyone east
+/// of UTC.
+#[test]
+fn no_template_renders_a_date_by_truncating_an_iso_string() {
+    let mut offenders = Vec::new();
+
+    for path in all_templates() {
+        let Ok(src) = std::fs::read_to_string(&path) else { continue };
+        for (idx, _) in src.match_indices("truncate(length=10") {
+            let line = src[..idx].matches('\n').count() + 1;
+            offenders.push(format!("{}:{line}", path.display()));
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "\n\nISO-string slicing used as a date format in {} place(s):\n{}\n\n\
+         Use `| localdate` inside a <time data-abs> instead.\n",
+        offenders.len(),
+        offenders.join("\n")
+    );
+}

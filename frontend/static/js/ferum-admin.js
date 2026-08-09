@@ -6,6 +6,11 @@
     document.getElementById('adminSidebar')?.classList.toggle('show');
   });
 
+  // ── Reporting timezone picker ─────────────────────────────────────
+  // Same control and same filler as the one on /account — the value is the same
+  // kind of thing, so it should not be a different widget in two places.
+  Ferum.fillTimezoneSelect(document.getElementById('cfg-reporting_timezone'));
+
   // ── Primary color picker sync ─────────────────────────────────────
   (function () {
     var picker = document.getElementById('cfg-primary_color');
@@ -838,7 +843,11 @@
       );
       if (!ok) return;
       btn.disabled = true;
-      FerumApi.admin.banUser(userId, reason, until || null)
+      // The raw <input type="datetime-local"> value is zoneless and the API
+      // rejects it outright — this used to send `until` unconverted, so every
+      // temporary ban from this form failed with a 422 while permanent bans
+      // (which send null) worked.
+      FerumApi.admin.banUser(userId, reason, Ferum.localInputToIso(until))
         .then(function (r) {
           if (r.ok) location.reload();
           else r.json().then(function (b) { Ferum.showFeedback('ban-feedback', 'danger', (b.error && b.error.message) || 'Failed to ban user.'); btn.disabled = false; });

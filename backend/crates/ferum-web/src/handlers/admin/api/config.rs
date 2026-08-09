@@ -26,6 +26,58 @@ pub const SMTP_PASS_KEY: &str = "smtp_pass";
 /// port, matching `Config`'s own default.
 const DEFAULT_SMTP_PORT: u16 = 587;
 
+/// The IANA zone that defines the day boundary for every analytics query.
+pub const REPORTING_TIMEZONE_KEY: &str = "reporting_timezone";
+
+/// Rejects a `reporting_timezone` that either consumer cannot use.
+///
+/// **There are two consumers, and they do not accept the same set of names.**
+/// That is the whole reason this function is more than one line:
+///
+/// * **PostgreSQL** interpolates it into `AT TIME ZONE` on every stats query. An
+///   unknown zone there is a hard SQL error, so a typo takes out the entire
+///   dashboard with nothing on the settings page explaining why.
+/// * **`chrono-tz`** parses it in `handlers::admin::reporting_tz` to turn the
+///   admin date-range filters into instants. An unknown zone there does **not**
+///   error — it falls back to UTC.
+///
+/// The second failure mode is the dangerous one, and checking only Postgres
+/// permits it. Postgres accepts `+07` and `posix/America/New_York`; `chrono-tz`
+/// parses neither. Save `+07` and the dashboard chart buckets at UTC+7 while the
+/// thread-list date filter buckets at UTC — two parts of the same admin panel
+/// silently disagreeing about what a day is, which is precisely the class of bug
+/// the reporting timezone exists to remove.
+///
+/// So both are required, and the Postgres probe *is* the operation rather than a
+/// lookup in `pg_timezone_names` — it accepts exactly what the stats queries
+/// will accept.
+async fn validate_reporting_timezone(
+    db: &sea_orm::DatabaseConnection,
+    tz: &str,
+) -> Result<(), AppError> {
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
+
+    let reject = || {
+        AppError::invalid_with(
+            "invalid_timezone",
+            [("tz", ferum_domain::i18n::TransArg::Str(tz.to_string()))],
+        )
+    };
+
+    // Cheap and local, so first.
+    if tz.parse::<chrono_tz::Tz>().is_err() {
+        return Err(reject());
+    }
+
+    let probe = Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT now() AT TIME ZONE $1",
+        [tz.into()],
+    );
+    db.query_one_raw(probe).await.map_err(|_| reject())?;
+    Ok(())
+}
+
 /// Keys the config API will accept on write.
 ///
 /// Deliberately a superset of [`CONFIG_READABLE_KEYS`]: `smtp_pass` is writable
@@ -49,6 +101,7 @@ const CONFIG_WRITABLE_KEYS: &[&str] = &[
     "post_approval_min_trust",
     "post_edit_window_hours",
     "forum_index_threads_per_category",
+    "reporting_timezone",
     "max_posts_per_page",
     "max_threads_per_page",
     SMTP_HOST_KEY,
@@ -77,6 +130,7 @@ const CONFIG_READABLE_KEYS: &[&str] = &[
     "post_approval_min_trust",
     "post_edit_window_hours",
     "forum_index_threads_per_category",
+    "reporting_timezone",
     "max_posts_per_page",
     "max_threads_per_page",
     SMTP_HOST_KEY,
@@ -154,10 +208,24 @@ pub async fn update_config(
     let actor = auth_user.require_auth()?;
     PermissionChecker::can_manage_config(actor)?;
 
-    let filtered: HashMap<String, String> = body
+    let mut filtered: HashMap<String, String> = body
         .into_iter()
         .filter(|(k, _)| CONFIG_WRITABLE_KEYS.contains(&k.as_str()))
         .collect();
+
+    // Store the timezone exactly as validated. Validating a trimmed value and
+    // then persisting the untrimmed one means the two can differ, and the
+    // difference would only surface at the next read.
+    if let Some(tz) = filtered.get_mut(REPORTING_TIMEZONE_KEY) {
+        *tz = tz.trim().to_string();
+    }
+
+    // Same rule as SMTP below: validate before writing anything. A bad zone that
+    // reached the table would break every dashboard query until someone guessed
+    // why, and the settings page would show it saved successfully.
+    if let Some(tz) = filtered.get(REPORTING_TIMEZONE_KEY) {
+        validate_reporting_timezone(&state.db, tz).await?;
+    }
 
     // SMTP is applied to the live transport, so validate before writing anything:
     // an unparseable port must fail the request rather than persist and silently

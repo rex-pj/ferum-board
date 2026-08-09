@@ -77,7 +77,9 @@ impl AuditLogRepository for PgAuditLogRepository {
             query = query.filter(audit_logs::Column::CreatedAt.gte(from));
         }
         if let Some(to) = created_to {
-            query = query.filter(audit_logs::Column::CreatedAt.lte(to));
+            // Exclusive: `created_to` is the start of the day after the one
+            // selected, so `[from, to)` covers each day exactly once.
+            query = query.filter(audit_logs::Column::CreatedAt.lt(to));
         }
 
         let offset = (page.saturating_sub(1)) * per_page;

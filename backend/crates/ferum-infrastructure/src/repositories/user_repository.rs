@@ -471,7 +471,7 @@ impl UserRepository for PgUserRepository {
                 .all(&self.db),
         )?;
 
-        let (theme, font_size, layout, email_notifications, locale) = match prefs_row {
+        let (theme, font_size, layout, email_notifications, locale, timezone) = match prefs_row {
             Some(m) => (
                 m.theme,
                 m.font_size,
@@ -481,6 +481,11 @@ impl UserRepository for PgUserRepository {
                 // or a hand-edited row — reads as "never chosen" rather than
                 // failing the whole preferences load.
                 m.locale.as_deref().and_then(Locale::parse),
+                // Same tolerance for the zone: an empty string is not a value
+                // any consumer can use, and treating it as "never chosen" means
+                // the client falls back to the device zone rather than
+                // rendering nothing.
+                m.timezone.filter(|t| !t.trim().is_empty()),
             ),
             None => {
                 let d = UserPreferences::default();
@@ -490,6 +495,7 @@ impl UserRepository for PgUserRepository {
                     d.layout,
                     d.email_notifications,
                     d.locale,
+                    d.timezone,
                 )
             }
         };
@@ -503,6 +509,7 @@ impl UserRepository for PgUserRepository {
             muted_categories: muted_rows.into_iter().map(|m| m.category_id).collect(),
             watched_categories: watched_rows.into_iter().map(|m| m.category_id).collect(),
             locale,
+            timezone,
         })
     }
 
@@ -516,6 +523,7 @@ impl UserRepository for PgUserRepository {
             muted_categories,
             watched_categories,
             locale,
+            timezone,
         } = prefs;
 
         let txn = self.db.begin().await?;
@@ -527,6 +535,7 @@ impl UserRepository for PgUserRepository {
             layout: Set(layout),
             email_notifications: Set(email_notifications),
             locale: Set(locale.map(|l| l.to_string())),
+            timezone: Set(timezone),
             // `NotSet`, deliberately: the previous hand-maintained entity did not
             // model this column at all, so no write path has ever populated it.
             // Regeneration surfaced it; leaving it unwritten keeps behaviour
@@ -542,6 +551,7 @@ impl UserRepository for PgUserRepository {
                     user_preferences::Column::Layout,
                     user_preferences::Column::EmailNotifications,
                     user_preferences::Column::Locale,
+                    user_preferences::Column::Timezone,
                 ])
                 .to_owned(),
         )

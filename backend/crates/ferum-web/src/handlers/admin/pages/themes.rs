@@ -49,7 +49,10 @@ pub async fn themes(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("themes", &themes);
     if let Some(msg) = flash.success {
         ctx.insert("flash_success", &msg);

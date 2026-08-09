@@ -3,7 +3,7 @@ use axum::response::IntoResponse;
 use axum::Extension;
 use tera::Context;
 
-use super::super::{parse_date_from, parse_date_to, parse_opt_uuid, render_admin, require_admin, site_ctx, PageQuery};
+use super::super::{parse_date_from, parse_date_to, parse_opt_uuid, render_admin, reporting_tz_of, require_admin, site_ctx, PageQuery};
 use crate::app_state::AppState;
 use crate::handlers::pages::{PageError, require_page_auth};
 use crate::middleware::AuthUser;
@@ -57,7 +57,10 @@ pub async fn reports(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("reports", &reports);
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("filter", &filter);
@@ -88,6 +91,9 @@ pub async fn audit_log(
     let date_to = q.date_to.clone().unwrap_or_default();
 
     let actor_uuid = parse_opt_uuid(q.actor_id.as_deref());
+    // The picked dates mean days in the site's reporting zone, so this filter
+    // and the dashboard chart agree on where a day starts.
+    let tz = reporting_tz_of(&state).await;
 
     let (logs, total) = state
         .admin
@@ -96,8 +102,8 @@ pub async fn audit_log(
             actor_uuid,
             if target_type_filter.is_empty() { None } else { Some(target_type_filter.as_str()) },
             if action_query.is_empty() { None } else { Some(action_query.as_str()) },
-            parse_date_from(q.date_from.as_deref()),
-            parse_date_to(q.date_to.as_deref()),
+            parse_date_from(q.date_from.as_deref(), tz),
+            parse_date_to(q.date_to.as_deref(), tz),
             page,
             per_page,
         )
@@ -305,7 +311,10 @@ pub async fn audit_log(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("entries", &entries);
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("search_query", &action_query);

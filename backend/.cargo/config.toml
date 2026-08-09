@@ -5,6 +5,25 @@
 # [build]
 # rustc-wrapper = "sccache"
 
+# ─── Timezone ─────────────────────────────────────────────────────────────────
+# Pins the process timezone to UTC for everything cargo launches — `cargo run`,
+# `cargo test`, build scripts.
+#
+# This codebase deliberately never reads the ambient zone (there is no
+# `Local::now()` anywhere, and a CI grep enforces that), so this is a belt to the
+# existing braces rather than the thing correctness rests on. It matters for two
+# reasons: a dependency that *does* consult the ambient zone cannot make the
+# suite behave differently on a developer's machine than in CI, and a test that
+# accidentally starts depending on local time fails the same way everywhere
+# instead of only for whoever is not on UTC.
+#
+# NOT `force = true`, on purpose. Cargo's `[env]` only applies when the variable
+# is absent from the environment, so `TZ=Asia/Kathmandu cargo test` still
+# overrides it — which is exactly what the non-UTC CI job does. Forcing it here
+# would make that job silently test UTC and pass for the wrong reason.
+[env]
+TZ = "UTC"
+
 # ─── Fast linker ─────────────────────────────────────────────────────────────
 # rust-lld ships with every rustup toolchain (≥ 1.70) — no extra install needed.
 # It replaces the default MSVC link.exe for the link step, which is typically

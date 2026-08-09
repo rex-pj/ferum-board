@@ -58,9 +58,11 @@
         <div class="text-body-secondary" style="font-size:.82rem">
           <code>{{ plugin.slug }}</code>
           <span class="mx-1 opacity-50">·</span>v{{ plugin.version }}
-          <span class="mx-1 opacity-50">·</span>Installed {{ plugin.installed_at }}
+          <span class="mx-1 opacity-50">·</span>Installed
+          <time data-abs data-style="date" datetime="{{ plugin.installed_at }}">{{ plugin.installed_at | localdate }}</time>
           {% if plugin.activated_at %}
-            <span class="mx-1 opacity-50">·</span>Activated {{ plugin.activated_at }}
+            <span class="mx-1 opacity-50">·</span>Activated
+            <time data-abs data-style="date" datetime="{{ plugin.activated_at }}">{{ plugin.activated_at | localdate }}</time>
           {% endif %}
         </div>
         <div class="text-body-secondary mt-1" style="font-size:.77rem">
@@ -240,7 +242,11 @@
                   <span class="badge bg-secondary">{{ log.level }}</span>
                 {% endif %}
               </td>
-              <td class="align-middle text-body-secondary small text-nowrap">{{ log.created_at }}</td>
+              {# Was the raw serialised value — "2026-08-08T23:30:00.123456Z".
+                 A log timestamp is the one place a precise clock reading is the
+                 whole point, so this uses the datetime style and gets rewritten
+                 into the operator's own zone rather than staying UTC. #}
+              <td class="align-middle text-body-secondary small text-nowrap"><time data-abs data-style="datetime" datetime="{{ log.created_at }}">{{ log.created_at | localdate(style="datetime") }}</time></td>
               <td class="align-middle small">
                 {% if log.hook_name %}
                   <code>{{ log.hook_name }}</code>

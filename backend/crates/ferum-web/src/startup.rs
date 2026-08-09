@@ -111,26 +111,62 @@ const BLOB_READ_CONCURRENCY: usize = 6;
 const STATEMENT_TIMEOUT_MS: u32 = 30_000;
 const IDLE_IN_TRANSACTION_TIMEOUT_MS: u32 = 60_000;
 
-/// Appends the server-side timeouts to a connection URL.
+/// Session timezone requested for every application connection.
+///
+/// `CURRENT_DATE`, `NOW()` and every `timestamptz`-to-`date` cast resolve
+/// against the session's `TimeZone`. Left to the server that value is whatever
+/// `initdb` copied from the host, which would make a day boundary an accident
+/// of deployment.
+///
+/// **In practice this line changes nothing today, and the honest version of
+/// that is worth writing down.** `sqlx-postgres` puts `("TimeZone", "UTC")`
+/// directly into the startup packet of every connection it opens
+/// (`sqlx-postgres/src/connection/establish.rs`), and that beats the `options`
+/// parameter appended after it — verified by setting `options` to a different
+/// zone and watching `SHOW TimeZone` still answer `UTC`. So every connection
+/// this application has ever made was already UTC, and the host-dependency was
+/// latent rather than live.
+///
+/// It stays for two reasons. It states the requirement in our own code instead
+/// of resting on an undocumented detail of a dependency that could change in any
+/// release; and it is the setting a connection pooler in transaction mode, or a
+/// future non-sqlx client, would actually need.
+///
+/// What it is *not* is the thing that makes reporting correct. That is
+/// `reporting_timezone` plus an explicit `AT TIME ZONE` in the analytics
+/// queries, which is deliberately independent of the session — see
+/// `PgStatsRepository`.
+const SESSION_TIME_ZONE: &str = "UTC";
+
+/// Appends the server-side session settings to a connection URL.
 ///
 /// An operator who has set their own `options=` wins: the parameter can only
 /// appear once, and someone who spelled it out explicitly has a reason.
-pub fn with_server_timeouts(url: &str) -> String {
+///
+/// Logged at INFO rather than WARN: with sqlx pinning `TimeZone` itself and the
+/// analytics queries naming their own zone, what an operator gives up here is
+/// the two timeout backstops, not correctness.
+pub fn with_session_settings(url: &str) -> String {
     if url.contains("options=") {
-        tracing::info!("DATABASE_URL already carries `options=` — leaving server timeouts alone");
+        tracing::info!(
+            "DATABASE_URL already carries `options=` — leaving it untouched, so the \
+             statement_timeout and idle_in_transaction_session_timeout backstops are \
+             not applied. Include them in your own `options=` if you want them."
+        );
         return url.to_string();
     }
     let sep = if url.contains('?') { '&' } else { '?' };
     format!(
         "{url}{sep}options=-c%20statement_timeout%3D{STATEMENT_TIMEOUT_MS}%20\
-         -c%20idle_in_transaction_session_timeout%3D{IDLE_IN_TRANSACTION_TIMEOUT_MS}"
+         -c%20idle_in_transaction_session_timeout%3D{IDLE_IN_TRANSACTION_TIMEOUT_MS}%20\
+         -c%20TimeZone%3D{SESSION_TIME_ZONE}"
     )
 }
 
 /// Pool options shared by the write and read connections. Pool sizing comes
 /// from DB_MAX_CONNECTIONS / DB_MIN_CONNECTIONS; timeouts are fixed.
 fn build_connect_options(url: &str, config: &Config) -> ConnectOptions {
-    let mut opts = ConnectOptions::new(with_server_timeouts(url));
+    let mut opts = ConnectOptions::new(with_session_settings(url));
     opts.max_connections(config.db_max_connections)
         .min_connections(config.db_min_connections)
         .connect_timeout(std::time::Duration::from_secs(5))
@@ -761,7 +797,14 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     ));
 
     let stats_repo = Arc::new(PgStatsRepository::new(pg_write.clone()));
-    let admin_stats = Arc::new(AdminStatsUseCase::new(stats_repo).with_cache(cache.clone()));
+    // `with_site_config` is what makes `reporting_timezone` reachable; without
+    // it the use case silently falls back to UTC and an admin's setting would
+    // appear to save but change nothing.
+    let admin_stats = Arc::new(
+        AdminStatsUseCase::new(stats_repo)
+            .with_cache(cache.clone())
+            .with_site_config(site_config.clone()),
+    );
 
     let hasher2 = Arc::new(BcryptPasswordHasher);
     let user = Arc::new(

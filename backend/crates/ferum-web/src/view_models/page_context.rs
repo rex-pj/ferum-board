@@ -46,6 +46,14 @@ pub struct CurrentUserCtx {
     pub theme: String,
     pub font_size: String,
     pub layout: String,
+    /// IANA zone this user chose for displaying timestamps, or `None` to follow
+    /// whatever zone their device reports.
+    ///
+    /// Rendered into `<meta name="ferum-tz">` and read by `Ferum.tz()`. Carried
+    /// server-side rather than left to localStorage — like `theme` above and for
+    /// the same reason — so the choice follows the account to another device
+    /// instead of living in one browser.
+    pub timezone: Option<String>,
 }
 
 impl CurrentUserCtx {
@@ -68,10 +76,19 @@ impl CurrentUserCtx {
             theme: "auto".to_string(),
             font_size: "medium".to_string(),
             layout: "comfortable".to_string(),
+            timezone: None,
         }
     }
 }
 
+/// Builds the context from the JWT alone — no database read, so no
+/// `unread_count` and, importantly, **no `timezone`**.
+///
+/// The admin and moderator panels use this. To give those pages the viewer's
+/// stored zone, wrap the result with
+/// [`crate::handlers::pages::with_viewer_timezone`] rather than reaching for
+/// `user_ctx`, which would also pay for an unread-count query the panels do not
+/// render.
 impl From<&AuthUser> for CurrentUserCtx {
     fn from(u: &AuthUser) -> Self {
         Self::from_auth(u, 0)

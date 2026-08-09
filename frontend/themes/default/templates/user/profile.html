@@ -171,7 +171,7 @@
     {% endif %}
     <div class="fr-panel-stat-row">
       <span><i class="fa-solid fa-calendar-days fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-member-since") }}</span>
-      <time class="fr-panel-stat-val" datetime="{{ profile.created_at }}">{{ profile.created_at | localdate(style="monthyear") }}</time>
+      <time class="fr-panel-stat-val" data-abs data-style="monthyear" datetime="{{ profile.created_at }}">{{ profile.created_at | localdate(style="monthyear") }}</time>
     </div>
     {% if profile.primary_role_name %}
     <div class="fr-panel-stat-row">
@@ -234,5 +234,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/ferum-page-profile.js" defer></script>
+<script src="/static/js/ferum-page-profile.js?v={{ asset_version() }}" defer></script>
 {% endblock %}

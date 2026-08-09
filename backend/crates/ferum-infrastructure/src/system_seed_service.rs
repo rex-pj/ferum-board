@@ -29,7 +29,8 @@ use ferum_application::constants::{
     DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS, DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES,
     DEFAULT_AUTH_RATE_LIMIT_PER_MIN, DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY,
     DEFAULT_MAX_POSTS_PER_PAGE, DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS,
-    DEFAULT_PUBLIC_WRITE_RATE_LIMIT_PER_MIN, DEFAULT_SITE_NAME, DEFAULT_THEME_SLUG,
+    DEFAULT_PUBLIC_WRITE_RATE_LIMIT_PER_MIN, DEFAULT_REPORTING_TIMEZONE, DEFAULT_SITE_NAME,
+    DEFAULT_THEME_SLUG,
 };
 use ferum_application::shared::AppError;
 use ferum_domain::models::role::{PERMISSIONS, SYSTEM_ROLES};
@@ -91,6 +92,9 @@ fn config_defaults() -> Vec<(&'static str, String)> {
         ("max_threads_per_page", DEFAULT_MAX_THREADS_PER_PAGE.to_string()),
         ("max_posts_per_page", DEFAULT_MAX_POSTS_PER_PAGE.to_string()),
         ("forum_index_threads_per_category", DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY.to_string()),
+        // Seeded as UTC so an upgrade changes no existing figure. See the
+        // constant for what setting it actually does to the charts.
+        ("reporting_timezone", DEFAULT_REPORTING_TIMEZONE.to_string()),
     ]
 }
 

@@ -15,13 +15,126 @@
     return document.documentElement.getAttribute('lang') || 'en';
   }
 
+  // The viewer's timezone, as an IANA name, or null to mean "use this device's".
+  //
+  // Server-rendered timestamps are UTC — the server cannot know a guest's zone,
+  // and baking a per-user zone into the HTML would make every page uncacheable
+  // for the 70% of traffic that is not logged in. So conversion happens here.
+  //
+  // A signed-in user who has set a zone on their account overrides the device:
+  // the server publishes it in <meta name="ferum-tz"> (a meta tag rather than an
+  // inline script because the CSP forbids those). Without that tag — guests, and
+  // users who never chose one — every helper below passes `undefined` to Intl,
+  // which is exactly "use the device zone".
+  //
+  // Read once: it is server-rendered and cannot change without a reload.
+  var _tz = null;
+  var _tzRead = false;
+  function tz() {
+    if (!_tzRead) {
+      var meta = document.querySelector('meta[name="ferum-tz"]');
+      var v = meta && meta.getAttribute('content');
+      _tz = v || null;
+      _tzRead = true;
+    }
+    return _tz;
+  }
+
+  // Intl option sets, one per `localdate` style on the server. Keeping the names
+  // aligned with the Tera filter's `style=` argument is what lets a template
+  // declare its format once, in `data-style`, and have both renders agree.
+  var _dateStyles = {
+    date:      { year: 'numeric', month: 'short', day: 'numeric' },
+    datetime:  { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' },
+    daymonth:  { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' },
+    monthyear: { year: 'numeric', month: 'short' },
+  };
+
+  /// Absolute timestamp in the viewer's zone and the page's language.
+  ///
+  /// Unlike the server's `localdate` filter — which localises month names via
+  /// the Fluent catalog because chrono's `%b` is English-only — this leans on
+  /// `Intl`, which already knows every locale's month names and field order.
+  /// The two are not duplicates: they are the same intent on the two sides of a
+  /// boundary where only one of them knows the zone.
+  function formatAbs(dateStr, style) {
+    var d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    var opts = Object.assign({}, _dateStyles[style] || _dateStyles.date);
+    var zone = tz();
+    if (zone) opts.timeZone = zone;
+    try {
+      return d.toLocaleString(pageLocale(), opts);
+    } catch (_) {
+      // A bad IANA name from a stale profile must not blank out every date on
+      // the page. Fall back to the device zone rather than throwing.
+      delete opts.timeZone;
+      return d.toLocaleString(pageLocale(), opts);
+    }
+  }
+
   /// Day-precision date, e.g. the timestamp on a freshly posted reply.
   function formatDate(dateStr) {
-    return new Date(dateStr).toLocaleDateString(pageLocale(), {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+    return formatAbs(dateStr, 'date');
+  }
+
+  // ── Form input → wire format ───────────────────────────────────────
+  // `<input type="datetime-local">` yields a ZONELESS wall-clock string
+  // ("2026-08-15T09:00"). The API takes RFC 3339 with an offset and chrono
+  // rejects anything else, so sending the raw value is not "assumed UTC" — it
+  // is a 422 with the reason buried in a JSON body the form does not surface.
+  //
+  // That is exactly what the admin ban form did while the moderator ban form,
+  // three files away, converted correctly. Both now call this, so the two
+  // cannot drift apart again.
+  //
+  // `new Date(s)` on a zoneless string is interpreted in the BROWSER's zone,
+  // which is the right reading: the admin typed a wall-clock time meaning their
+  // own. `toISOString()` then converts that instant to UTC.
+  //
+  // Returns null for empty input — a ban with no end date is permanent, and the
+  // API distinguishes that from a malformed one.
+  function localInputToIso(value) {
+    if (!value) return null;
+    var d = new Date(value);
+    // An unparseable value must not become the string "Invalid Date" on the
+    // wire; let the caller treat it as absent and let validation speak.
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  // ── Timezone pickers ───────────────────────────────────────────────
+  // Fills a <select> with every IANA zone the browser knows.
+  //
+  // Server-side rendering of ~400 <option>s would add tens of kilobytes to
+  // every render of the page, for a list the browser already ships. So the
+  // server renders only the options that must survive without JavaScript — the
+  // current value, plus whatever neutral default the page wants — and this adds
+  // the rest.
+  //
+  // Shared by /account and /admin/settings because they pick the same kind of
+  // value; having two copies is how the two ban forms drifted apart.
+  function fillTimezoneSelect(select) {
+    if (!select || typeof Intl === 'undefined' || !Intl.supportedValuesOf) return;
+    var zones;
+    try {
+      zones = Intl.supportedValuesOf('timeZone');
+    } catch (_) {
+      return; // Older browser: the server-rendered options still work.
+    }
+    // Skip anything already rendered, or the list shows duplicates and only one
+    // of the pair carries the `selected` attribute.
+    var existing = {};
+    Array.prototype.forEach.call(select.options, function (o) { existing[o.value] = true; });
+
+    var frag = document.createDocumentFragment();
+    zones.forEach(function (z) {
+      if (existing[z]) return;
+      var opt = document.createElement('option');
+      opt.value = z;
+      opt.textContent = z;
+      frag.appendChild(opt);
     });
+    select.appendChild(frag);
   }
 
   // ── Relative timestamps ────────────────────────────────────────────
@@ -41,16 +154,45 @@
     return formatDate(dateStr);
   }
 
-  function initRelativeTimes() {
-    document.querySelectorAll('time[data-rel]').forEach(function (el) {
+  // Rewrites every server-rendered timestamp into the viewer's zone.
+  //
+  // The server emits UTC — it has to, see `tz()` — so until this runs, every
+  // date on the page is a UTC reading. That is the correct no-JavaScript
+  // fallback (and the catalog labels the time-bearing formats "UTC" so it is
+  // not silently wrong), but for everyone else it is off by the viewer's offset,
+  // which for a reader at +07 means a post made at 06:30 local shows the
+  // previous day's date.
+  //
+  // Two markers, because two kinds of timestamp want different treatment:
+  //
+  //   <time data-rel>              → "3d ago", with the exact local time in the
+  //                                  tooltip. For anything whose recency is the
+  //                                  point: post headers, list rows.
+  //   <time data-abs data-style=…> → an absolute local date in the given style.
+  //                                  For anything where "3 months ago" would be
+  //                                  a regression — "Member since", a ban expiry,
+  //                                  an audit trail.
+  //
+  // `data-abs` exists because the earlier code only handled `data-rel`, so a
+  // template that wanted an absolute date had no marker to use and simply left
+  // the UTC text in place.
+  function initTimestamps() {
+    document.querySelectorAll('time[data-rel], time[data-abs]').forEach(function (el) {
       var dt = el.getAttribute('datetime');
+      if (!dt) return;
+      var text = el.hasAttribute('data-abs')
+        ? formatAbs(dt, el.getAttribute('data-style') || 'date')
+        : timeAgo(dt);
+      // An unparseable `datetime` yields '' from formatAbs, and timeAgo falls
+      // through to it. Writing that would ERASE the server-rendered fallback and
+      // leave a blank cell — strictly worse than showing a UTC time. Only
+      // overwrite when we actually produced something.
+      if (!text) return;
       // The tooltip carries the exact time; `toLocaleString()` with no locale
       // uses the *browser's*, which can differ from the language the page is
       // rendered in. Pinned to the page locale so the two agree.
-      if (dt) {
-        el.title = new Date(dt).toLocaleString(pageLocale());
-        el.textContent = timeAgo(dt);
-      }
+      el.title = formatAbs(dt, 'datetime');
+      el.textContent = text;
     });
   }
 
@@ -455,7 +597,7 @@
       fn();
     }
   }
-  onReady(initRelativeTimes);
+  onReady(initTimestamps);
   onReady(initThemeToggle);
   onReady(initNavActive);
   onReady(initMobileSidebar);
@@ -473,7 +615,15 @@
     initPasswordStrength: initPasswordStrength,
     escapeHtml:           escapeHtml,
     formatDate:           formatDate,
+    formatAbs:            formatAbs,
+    timeAgo:              timeAgo,
+    localInputToIso:      localInputToIso,
+    fillTimezoneSelect:   fillTimezoneSelect,
     pageLocale:           pageLocale,
+    tz:                   tz,
+    // Exposed so content injected after load (Alpine lists, fetch-rendered
+    // rows) can localise its own <time> elements instead of leaving them UTC.
+    initTimestamps:       initTimestamps,
   };
 }(window));
 

@@ -22,7 +22,7 @@
             <div class="fw-semibold">{{ mod.display_name }}</div>
             <div class="text-muted small">@{{ mod.username }}</div>
           </td>
-          <td class="text-muted small align-middle text-nowrap">{{ mod.granted_at | localdate }}</td>
+          <td class="text-muted small align-middle text-nowrap"><time data-abs data-style="date" datetime="{{ mod.granted_at }}">{{ mod.granted_at | localdate }}</time></td>
           <td class="align-middle">
             <button class="btn btn-sm btn-outline-danger" type="button"
                     data-admin-action="revoke-moderator"

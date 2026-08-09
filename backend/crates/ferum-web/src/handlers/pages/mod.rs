@@ -95,8 +95,32 @@ pub(super) async fn user_ctx(
         ctx.theme = p.theme;
         ctx.font_size = p.font_size;
         ctx.layout = p.layout;
+        ctx.timezone = p.timezone;
     }
     Some(ctx)
+}
+
+/// Fills in `timezone` on a context built by `CurrentUserCtx::from(&AuthUser)`.
+///
+/// The admin and moderator panels build their user context from the JWT, which
+/// carries no preferences — so `timezone` was `None` on all ~22 of those pages
+/// and `<meta name="ferum-tz">` never rendered there. An operator who set a zone
+/// on their account got it on the forum and not in the panels, which is where
+/// exact timestamps matter most: the audit log and the plugin log.
+///
+/// One indexed lookup on `user_preferences`, and only on HTML page renders for
+/// an authenticated staff user — not on the API paths. It deliberately does not
+/// fetch the unread count the public `user_ctx` does, because no panel template
+/// shows it.
+pub async fn with_viewer_timezone(
+    state: &AppState,
+    auth_user: &AuthUser,
+    mut ctx: CurrentUserCtx,
+) -> CurrentUserCtx {
+    if let Ok(p) = state.user.get_preferences_by_id(auth_user.id).await {
+        ctx.timezone = p.timezone;
+    }
+    ctx
 }
 
 #[tracing::instrument(skip_all)]

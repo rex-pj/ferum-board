@@ -44,6 +44,12 @@ prefs-language-help =
     người viết đã dùng.
 prefs-language-auto = Theo trình duyệt
 
+prefs-timezone = Múi giờ
+prefs-timezone-help =
+    Ngày giờ sẽ hiển thị theo múi giờ này. Hãy để theo thiết bị của bạn, trừ khi
+    thiết bị đang đặt sai, hoặc bạn muốn xem giờ của cộng đồng khi đang đi xa.
+prefs-timezone-auto = Theo thiết bị
+
 ## ─── Thẻ chủ đề ──────────────────────────────────────────────────────────────
 
 thread-product-review = Đánh giá sản phẩm
@@ -53,9 +59,16 @@ thread-last-reply-label = Trả lời gần nhất
 ## ─── Định dạng ngày & số ─────────────────────────────────────────────────────
 # Tiếng Việt viết ngày trước tháng, và dùng dấu chấm để phân tách hàng nghìn.
 
+# Đây là các dạng do MÁY CHỦ kết xuất, luôn theo giờ UTC — máy chủ không biết
+# múi giờ của người đọc (xem CLAUDE.md → Time and Timezones). Mọi chỗ dùng đều
+# nằm trong <time data-rel|data-abs> và được ferum-utils.js đổi sang múi giờ
+# của người đọc khi tải trang, nên đây là bản dự phòng khi không có JavaScript.
+#
+# Hai dạng có giờ đều ghi rõ "UTC": "23:30" không kèm nhãn sẽ bị hiểu là giờ
+# địa phương, và gần nửa đêm thì sai lệch cả một ngày.
 format-date = { $day } { $month }, { $year }
-format-datetime = { $day } { $month }, { $year } { $hour }:{ $minute }
-format-daymonth = { $day } { $month }, { $hour }:{ $minute }
+format-datetime = { $day } { $month }, { $year } { $hour }:{ $minute } UTC
+format-daymonth = { $day } { $month }, { $hour }:{ $minute } UTC
 format-monthyear = { $month } { $year }
 
 format-thousands-separator = .
@@ -604,7 +617,9 @@ ui-page-x-of-y = trang { $page }/{ $total }
 ## Trạng thái tài khoản
 
 ui-account-suspended = Tài khoản của bạn đã bị đình chỉ.
-ui-account-suspended-until = Tài khoản của bạn bị đình chỉ đến { $date }.
+# Nhãn — mẫu sẽ thêm ": " và thời điểm hết hạn dưới dạng phần tử <time> riêng,
+# để trình duyệt hiển thị theo múi giờ của người đọc.
+ui-account-suspended-until-label = Bị đình chỉ đến
 ui-change-cover = Đổi ảnh bìa
 ui-upload-cover = Tải ảnh bìa lên
 ui-change-photo = Đổi ảnh đại diện

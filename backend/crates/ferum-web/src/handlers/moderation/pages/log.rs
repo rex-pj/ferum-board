@@ -5,7 +5,7 @@ use tera::Context;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::handlers::admin::{parse_date_from, parse_date_to, parse_opt_uuid, render_admin, site_ctx};
+use crate::handlers::admin::{parse_date_from, parse_date_to, parse_opt_uuid, render_admin, reporting_tz_of, site_ctx};
 use crate::handlers::pages::{PageError, require_page_auth};
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{AuditLogCtx, CurrentUserCtx, PaginationCtx};
@@ -40,6 +40,9 @@ pub async fn log(
     let target_param  = if target_filter.is_empty() { None } else { Some(target_filter.as_str()) };
     let action_param  = if action_query.is_empty()  { None } else { Some(action_query.as_str()) };
 
+    // Picked dates mean days in the site's reporting zone, not UTC.
+    let tz = reporting_tz_of(&state).await;
+
     let (logs, total) = state
         .moderation
         .list_audit_log(
@@ -47,8 +50,8 @@ pub async fn log(
             actor_uuid,
             target_param,
             action_param,
-            parse_date_from(q.date_from.as_deref()),
-            parse_date_to(q.date_to.as_deref()),
+            parse_date_from(q.date_from.as_deref(), tz),
+            parse_date_to(q.date_to.as_deref(), tz),
             page,
             per_page,
         )
@@ -167,7 +170,10 @@ pub async fn log(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("entries", &entries);
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("search_query", &action_query);

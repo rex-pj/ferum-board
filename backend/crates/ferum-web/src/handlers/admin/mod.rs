@@ -121,23 +121,75 @@ pub fn parse_opt_uuid(s: Option<&str>) -> Option<Uuid> {
     s.filter(|v| !v.is_empty()).and_then(|v| v.parse().ok())
 }
 
-/// Parse a `YYYY-MM-DD` date input into a UTC timestamp at the start of that day.
-pub fn parse_date_from(s: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
-    let d = chrono::NaiveDate::parse_from_str(s?.trim(), "%Y-%m-%d").ok()?;
-    Some(chrono::DateTime::from_naive_utc_and_offset(
-        d.and_hms_opt(0, 0, 0)?,
-        chrono::Utc,
-    ))
+/// Resolves the instant at which a calendar day starts in `tz`.
+///
+/// Both date-filter parsers go through this. Two things it gets right that the
+/// previous `from_naive_utc_and_offset(.., Utc)` did not:
+///
+/// * **The zone.** An admin filtering "Aug 8" means their own Aug 8. Treating
+///   the input as UTC shifted the window by the site's offset, so rows from one
+///   end of the chosen day were missing while rows from the adjacent day were
+///   included — silently, since the list still looked plausible. The zone used
+///   is the site's `reporting_timezone`, so a filtered list and the dashboard
+///   chart agree on what a day is.
+/// * **Days where local midnight does not exist.** A handful of zones shift
+///   their clock *at* midnight (America/Santiago, Asia/Beirut), so on one night
+///   a year 00:00 is skipped. `LocalResult::None` there would silently drop the
+///   filter; `.earliest()` on the following hour gives the first instant that
+///   day actually contains.
+fn day_start_in(date: chrono::NaiveDate, tz: chrono_tz::Tz) -> Option<chrono::DateTime<chrono::Utc>> {
+    use chrono::TimeZone;
+
+    let at = |h: u32| -> Option<chrono::DateTime<chrono::Utc>> {
+        let naive = date.and_hms_opt(h, 0, 0)?;
+        tz.from_local_datetime(&naive)
+            .earliest()
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+    };
+    at(0).or_else(|| at(1))
 }
 
-/// Parse a `YYYY-MM-DD` date input into a UTC timestamp at the end of that day
-/// (inclusive upper bound).
-pub fn parse_date_to(s: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
+/// Parses the site's reporting timezone, falling back to UTC.
+///
+/// A value that fails to parse here cannot normally exist — the config endpoint
+/// validates it against Postgres before storing — so this is the belt to that
+/// braces, and UTC is the right thing to fall back to rather than dropping the
+/// filter entirely.
+pub fn reporting_tz(raw: &str) -> chrono_tz::Tz {
+    raw.trim().parse().unwrap_or(chrono_tz::UTC)
+}
+
+/// The site's reporting timezone, read from the in-process config cache.
+///
+/// The cache rather than the database: this is on the render path of three
+/// filtered admin pages, and `update_config` refreshes the cache in the same
+/// request that writes the row, so it cannot go stale.
+pub async fn reporting_tz_of(state: &AppState) -> chrono_tz::Tz {
+    let configs = state.site_config_cache.read().await;
+    reporting_tz(configs.get("reporting_timezone").map_or("", |s| s.as_str()))
+}
+
+/// Parse a `YYYY-MM-DD` date input into the instant that day begins in `tz`.
+///
+/// Pairs with `>=`.
+pub fn parse_date_from(s: Option<&str>, tz: chrono_tz::Tz) -> Option<chrono::DateTime<chrono::Utc>> {
     let d = chrono::NaiveDate::parse_from_str(s?.trim(), "%Y-%m-%d").ok()?;
-    Some(chrono::DateTime::from_naive_utc_and_offset(
-        d.and_hms_opt(23, 59, 59)?,
-        chrono::Utc,
-    ))
+    day_start_in(d, tz)
+}
+
+/// Parse a `YYYY-MM-DD` date input into the instant the **next** day begins in
+/// `tz` — an *exclusive* upper bound.
+///
+/// This used to return 23:59:59 of the same day and be compared inclusively,
+/// which is wrong at both ends: a row at 23:59:59.500 fell into neither Aug 8
+/// nor Aug 9, and a row landing exactly on a shared boundary was counted in two
+/// adjacent periods. A half-open `[start, end)` has neither gap nor overlap by
+/// construction — see `CLAUDE.md` → Time and Timezones, rule 6.
+///
+/// **Callers must compare with `<`, not `<=`.**
+pub fn parse_date_to(s: Option<&str>, tz: chrono_tz::Tz) -> Option<chrono::DateTime<chrono::Utc>> {
+    let d = chrono::NaiveDate::parse_from_str(s?.trim(), "%Y-%m-%d").ok()?;
+    day_start_in(d.succ_opt()?, tz)
 }
 
 /// Minimal {id, name} option used to populate static `<select>` filters.

@@ -216,11 +216,28 @@ impl MigrationTrait for Migration {
                                     .is_in(["user", "guest"]),
                             ),
                     )
+                    // No `DEFAULT CURRENT_DATE`, deliberately.
+                    //
+                    // `PgThreadRepository::try_record_view` always supplies this
+                    // value, from `Utc::now().date_naive()`. A default would add
+                    // a *second* definition of "today" — `CURRENT_DATE` resolves
+                    // against the database session's `TimeZone`, which is not
+                    // something this application controls — and the two agree
+                    // only while that session happens to be UTC.
+                    //
+                    // Being unreachable is what made it dangerous: a
+                    // correct-looking fallback nothing exercises, so the first
+                    // INSERT to rely on it (a data fix, a bulk importer) would
+                    // silently take a date from the other clock, and the dedup
+                    // window `last_viewed_date < today` would either
+                    // double-count a view or drop one.
+                    //
+                    // Without it, an INSERT that omits the column fails loudly
+                    // on NOT NULL. That is the better of the two failures.
                     .col(
                         ColumnDef::new(ThreadViewDedup::LastViewedDate)
                             .date()
-                            .not_null()
-                            .extra("DEFAULT CURRENT_DATE"),
+                            .not_null(),
                     )
                     .col(
                         ColumnDef::new(ThreadViewDedup::TotalViews)

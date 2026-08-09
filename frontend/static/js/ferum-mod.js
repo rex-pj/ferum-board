@@ -111,7 +111,7 @@
     if (!until)  { Ferum.showFeedback('ban-feedback-' + userId, 'warning', 'Please set a ban expiry date.'); return; }
     if (triggerBtn) triggerBtn.disabled = true;
     try {
-      var res = await FerumApi.mod.banUser(userId, reason, new Date(until).toISOString());
+      var res = await FerumApi.mod.banUser(userId, reason, Ferum.localInputToIso(until));
       if (res.ok) {
         Ferum.showFeedback('ban-feedback-' + userId, 'success', username + ' has been banned.');
         if (reasonEl) reasonEl.value = '';

@@ -165,7 +165,7 @@
             </a>
             <div class="text-muted small">@{{ thread.author_username }}</div>
             <div class="text-muted small text-nowrap">
-              {{ thread.created_at | localdate }}
+              <time data-abs data-style="date" datetime="{{ thread.created_at }}">{{ thread.created_at | localdate }}</time>
             </div>
           </td>
           {# STATE cell: status badge + reply count #}

@@ -186,6 +186,39 @@
         </div>
       </div>
 
+      {# ── Localization ──────────────────────────────────────────── #}
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">{{ t(k="adm-localization") }}</div>
+          <div class="card-body">
+            <label class="form-label" for="cfg-reporting_timezone">
+              {{ t(k="adm-reporting-timezone") }}
+            </label>
+            {# A <select>, not a free-text box: the set of valid values is fixed
+               and an IANA name is not something to spell from memory — the exact
+               casing and underscores matter. The full list is added by
+               ferum-utils.js from
+               Intl.supportedValuesOf('timeZone') — rendering ~400 <option>s
+               server-side would bloat every load of this page for data the
+               browser already has. Only UTC and the current value are rendered
+               here, so the control is never empty. #}
+            <select id="cfg-reporting_timezone" class="form-select" style="max-width:320px">
+              <option value="UTC"{% if not config.reporting_timezone or config.reporting_timezone == "UTC" %} selected{% endif %}>UTC</option>
+              {% if config.reporting_timezone and config.reporting_timezone != "UTC" %}
+              <option value="{{ config.reporting_timezone }}" selected>{{ config.reporting_timezone }}</option>
+              {% endif %}
+            </select>
+            <div class="form-text">
+              {{ t(k="adm-reporting-timezone-help") }}
+            </div>
+            <div class="alert alert-warning py-2 small mt-2 mb-0">
+              <i class="fa-solid fa-triangle-exclamation me-1" aria-hidden="true"></i>
+              {{ t(k="adm-reporting-timezone-warning") }}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {# ── Registration + Post Approval ──────────────────────────── #}
       <div class="col-md-6">
         <div class="card h-100">

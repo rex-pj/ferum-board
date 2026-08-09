@@ -31,6 +31,27 @@ pub const DEFAULT_FILE_READ_RATE_LIMIT_PER_MIN: u32 = 300;
 
 pub const DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY: u64 = 5;
 
+/// IANA timezone that defines the **day boundary** for every daily aggregation
+/// and for the admin date-range filters.
+///
+/// Defaults to UTC so upgrading changes no existing number. It is worth setting
+/// for a community concentrated in one region, because a UTC day boundary then
+/// falls in the middle of the members' day and splits one local day across two
+/// dates. Which end moves depends on the sign of the offset:
+///
+/// * **East of UTC** the local small hours land on the *previous* UTC date, and
+///   the "today" counters reset partway through the local morning.
+/// * **West of UTC** the local evening lands on the *next* UTC date, so the
+///   busiest hours are attributed to a day that has not started locally.
+///
+/// **Changing it re-buckets future rows only.** Existing `daily_stats` rows keep
+/// whatever boundary they were written under, so a chart spanning the change
+/// mixes two conventions — the admin control says so.
+///
+/// An IANA name, never a fixed offset: an offset is only correct until the zone
+/// next changes its rules, and it cannot express DST at all.
+pub const DEFAULT_REPORTING_TIMEZONE: &str = "UTC";
+
 // ── Fixed constants — not admin-configurable ─────────────────────────────────
 
 pub const DEFAULT_THEME_SLUG: &str = "default";

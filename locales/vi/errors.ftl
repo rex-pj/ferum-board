@@ -201,3 +201,9 @@ error-cannot-disable-last-locale =
 error-cannot-disable-default-locale =
     Bạn không thể tắt ngôn ngữ mặc định của trang. Hãy đặt một ngôn ngữ khác làm
     mặc định trước.
+
+## ─── Cấu hình trang ──────────────────────────────────────────────────────────
+
+error-invalid-timezone =
+    "{ $tz }" không phải là múi giờ mà máy chủ nhận ra. Hãy dùng tên IANA, ví dụ
+    UTC hoặc Asia/Ho_Chi_Minh.

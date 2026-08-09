@@ -1,17 +1,17 @@
 (function () {
   'use strict';
 
-  function relativeTime(iso) {
-    var diff = Math.floor((Date.now() - new Date(iso)) / 1000);
-    if (diff < 60)     return 'just now';
-    if (diff < 3600)   return Math.floor(diff / 60) + 'm ago';
-    if (diff < 86400)  return Math.floor(diff / 3600) + 'h ago';
-    if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
+  // This page used to carry its own copy of `relativeTime`, with the strings
+  // hardcoded in English and `toLocaleDateString(undefined, …)` following the
+  // *browser's* locale rather than the page's. A Vietnamese reader got "3d ago"
+  // and "Aug 8, 2026" here while every other page spoke Vietnamese.
+  //
+  // `Ferum.timeAgo` is the same logic, translated through the `js-time-*` keys
+  // and rendered in the viewer's configured timezone.
   document.querySelectorAll('.fr-notif-time[data-ts]').forEach(function (el) {
-    el.textContent = relativeTime(el.dataset.ts);
+    var ts = el.dataset.ts;
+    el.textContent = Ferum.timeAgo(ts);
+    el.title = Ferum.formatAbs(ts, 'datetime');
   });
 
   document.querySelectorAll('.mark-read-btn').forEach(function (btn) {

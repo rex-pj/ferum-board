@@ -102,7 +102,10 @@ pub async fn queue(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("posts", &posts_ctx);
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("categories", &categories_ctx);

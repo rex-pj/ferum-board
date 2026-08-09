@@ -3,7 +3,7 @@ use axum::response::IntoResponse;
 use axum::Extension;
 use tera::Context;
 
-use super::super::{parse_date_from, parse_date_to, parse_opt_uuid, render_admin, require_admin, site_ctx, PageQuery, SelectOptionCtx};
+use super::super::{parse_date_from, parse_date_to, parse_opt_uuid, render_admin, reporting_tz_of, require_admin, site_ctx, PageQuery, SelectOptionCtx};
 use crate::app_state::AppState;
 use crate::handlers::pages::{PageError, require_page_auth};
 use crate::middleware::AuthUser;
@@ -29,13 +29,16 @@ pub async fn threads(
     let date_from = q.date_from.clone().unwrap_or_default();
     let date_to = q.date_to.clone().unwrap_or_default();
 
+    // Picked dates mean days in the site's reporting zone, not UTC.
+    let tz = reporting_tz_of(&state).await;
+
     let filter = ferum_domain::repositories::thread_repository::AdminThreadFilter {
         search: if search.is_empty() { None } else { Some(search.clone()) },
         status: if status_filter.is_empty() { None } else { Some(status_filter.clone()) },
         category_id,
         author_id,
-        created_from: parse_date_from(q.date_from.as_deref()),
-        created_to: parse_date_to(q.date_to.as_deref()),
+        created_from: parse_date_from(q.date_from.as_deref(), tz),
+        created_to: parse_date_to(q.date_to.as_deref(), tz),
         sort,
     };
 
@@ -104,7 +107,10 @@ pub async fn threads(
 
     let mut ctx = Context::new();
     ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert("current_user", &CurrentUserCtx::from(&auth_user));
+    ctx.insert(
+        "current_user",
+        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
+    );
     ctx.insert("threads", &threads_ctx);
     ctx.insert("pagination", &PaginationCtx::simple(page, per_page, total));
     ctx.insert("search_query", &search);

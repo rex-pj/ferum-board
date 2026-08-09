@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fail fast on warnings everywhere, not just the clippy job.
+  #
+  # The link-arg belongs here rather than in backend/.cargo/config.toml because
+  # setting RUSTFLAGS at all makes cargo IGNORE `target.<triple>.rustflags`
+  # outright — the sources are first-match, not merged. The config file's
+  # `-fuse-ld=mold` is therefore dead in CI, and the linker step below would be
+  # installing a linker nothing invokes. `linker = "clang"` is a separate config
+  # key and is unaffected, so it still comes from the file.
+  RUSTFLAGS: "-D warnings -C link-arg=-fuse-ld=mold"
+
+jobs:
+  # ─── Test suite, run twice under different timezones ────────────────────────
+  #
+  # The matrix is the point of this job, not incidental. The suite used to run
+  # only on developer machines, where everyone happened to share one zone, so a
+  # date bug that depended on the ambient TZ could not be observed. `backend/
+  # .cargo/config.toml` sets TZ=UTC as a non-forced default; the `tz` value here
+  # is exported into the environment, which takes precedence over it.
+  #
+  # Asia/Kathmandu is the second leg for a purely technical reason, not because
+  # of where anyone deploys: it is UTC+05:45, so its offset is not a whole number
+  # of hours. That breaks code which truncates instead of converting — a class of
+  # bug a whole-hour zone lets through. No DST, so the leg is also deterministic
+  # year-round.
+  test:
+    name: test (TZ=${{ matrix.tz }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Both legs must report. Cancelling the sibling on first failure hides
+      # whether a failure is timezone-dependent, which is the one thing this
+      # matrix exists to tell us.
+      fail-fast: false
+      matrix:
+        tz: [UTC, Asia/Kathmandu]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: forum
+          POSTGRES_PASSWORD: forum
+          POSTGRES_DB: forum_test
+        ports:
+          - 5432:5432
+        # The suite provisions throwaway databases from a template, so it needs
+        # a server that is actually accepting connections before the first test.
+        options: >-
+          --health-cmd "pg_isready -U forum"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TZ: ${{ matrix.tz }}
+      # tests/infrastructure/src/common.rs refuses to run against a non-local
+      # host, so this must stay localhost — the service port is mapped onto it.
+      TEST_DATABASE_URL: postgresql://forum:forum@localhost:5432/forum_test
+      DATABASE_URL: postgresql://forum:forum@localhost:5432/forum_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # backend/.cargo/config.toml pins the Linux linker to clang; the workflow
+      # RUSTFLAGS above supplies `-fuse-ld=mold`. Without these the link step
+      # fails outright, so they are a build requirement here rather than an
+      # optimisation.
+      - name: Install linker toolchain (clang + mold)
+        run: sudo apt-get update && sudo apt-get install -y clang mold
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          # Two matrix legs share a target dir otherwise; the TZ does not change
+          # the artifacts, but keying them apart avoids cross-leg cache races.
+          key: ${{ matrix.tz }}
+
+      - name: Confirm the timezone actually took effect
+        # Cheap, but it is the assumption the whole matrix rests on. If TZ were
+        # silently ignored, both legs would pass identically and prove nothing.
+        run: |
+          echo "TZ env var : $TZ"
+          echo "date says  : $(date)"
+          echo "UTC is     : $(date -u)"
+
+      - name: Test
+        working-directory: backend
+        # --workspace is MANDATORY. `default-members` is set to ferum-web, so a
+        # bare `cargo test` runs that crate's single unit test and reports "ok"
+        # while running none of the real suites. See CLAUDE.md.
+        run: cargo test --workspace
+
+  # ─── Lints ──────────────────────────────────────────────────────────────────
+  # Split from `test` so it runs once rather than per-timezone: clippy output
+  # does not depend on TZ, and linting twice only slows the pipeline.
+  lint:
+    name: clippy + machete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install linker toolchain (clang + mold)
+        run: sudo apt-get update && sudo apt-get install -y clang mold
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          key: lint
+
+      - name: Clippy
+        working-directory: backend
+        # Same --workspace trap as above: without it this lints one crate and
+        # exits 0. That is how ~60 warnings once accumulated unnoticed.
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Install cargo-machete
+        run: cargo install cargo-machete --locked
+        env:
+          # Drop the workflow RUSTFLAGS for this step only. `-D warnings` would
+          # otherwise apply to cargo-machete and its whole dependency tree, so a
+          # new lint in a floating `stable` toolchain could fail this job over
+          # warnings in third-party code this repo does not own.
+          RUSTFLAGS: ""
+
+      - name: Unused dependencies
+        working-directory: backend
+        run: cargo machete

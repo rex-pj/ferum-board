@@ -243,6 +243,11 @@
     if (btn) { btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-primary'); }
   }
 
+  // ── Timezone <select> ──────────────────────────────────────────────
+  // Server renders "match my device" plus whatever the user already chose; the
+  // shared filler adds the rest of the IANA list from the browser.
+  Ferum.fillTimezoneSelect(document.getElementById('timezone-val'));
+
   document.getElementById('prefs-form')?.addEventListener('submit', async function (e) {
     e.preventDefault();
     var theme    = document.getElementById('theme-val').value;
@@ -258,16 +263,28 @@
     var localeChanged =
       localeEl && (locale || '') !== (localeEl.getAttribute('data-initial') || '');
 
+    // Same empty-means-null contract as `locale`: clearing it returns the user
+    // to their device's zone rather than pinning them to whatever it is today.
+    var tzEl = document.getElementById('timezone-val');
+    var timezone = tzEl ? (tzEl.value || null) : undefined;
+    // Every server-rendered timestamp on the page was formatted with the old
+    // zone, so a change needs the same reload the language change does.
+    var tzChanged =
+      tzEl && (timezone || '') !== (tzEl.getAttribute('data-current') || '');
+
     setSpinner('prefs-submit-btn', 'prefs-spinner', true);
     try {
       var payload = { theme: theme, font_size: fontSize, layout: layout };
       if (locale !== undefined) payload.locale = locale;
+      if (timezone !== undefined) payload.timezone = timezone;
       var res = await FerumApi.users.updatePreferences(payload);
       if (res.ok) {
         showFeedback('prefs-feedback', 'success', Ferum.t('js-preferences-saved'));
-        // Theme/font/layout are applied live below, but language is baked into
-        // the server-rendered HTML — the only way to show it is to reload.
-        if (localeChanged) {
+        // Theme/font/layout are applied live below, but language and timezone
+        // are baked into the server-rendered HTML (the <meta name="ferum-tz">
+        // that every date helper reads) — the only way to show either is a
+        // reload.
+        if (localeChanged || tzChanged) {
           window.location.reload();
           return;
         }

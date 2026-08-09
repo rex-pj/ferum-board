@@ -16,7 +16,20 @@
   <div class="alert alert-danger d-flex gap-2 mb-4" role="alert">
     <i class="fa-solid fa-ban flex-shrink-0 mt-1"></i>
     <div>
-      <strong>{% if account_status.banned_until %}{{ t(k="ui-account-suspended-until", date=account_status.banned_until | localdate) }}{% else %}{{ t(k="ui-account-suspended") }}{% endif %}</strong>
+      <strong>{{ t(k="ui-account-suspended") }}</strong>
+      {# The expiry is split out of the sentence rather than interpolated into
+         it, because a date inside `t(...)` is plain text the client cannot
+         reach — and this one was therefore shown in UTC. A ban ending
+         2026-08-16T00:30Z read as "until Aug 16" to a reader at +07 for whom it
+         actually lifts at 07:30, and to a reader at UTC-5 for whom it lifted the
+         previous evening. As its own <time> it is corrected to the viewer's
+         zone like every other timestamp. Colon in the template matches the
+         reason line below. #}
+      {% if account_status.banned_until %}
+        <div class="mt-1">{{ t(k="ui-account-suspended-until-label") }}:
+          <time data-abs data-style="datetime" datetime="{{ account_status.banned_until }}">{{ account_status.banned_until | localdate(style="datetime") }}</time>
+        </div>
+      {% endif %}
       {% if account_status.ban_reason %}
         <div class="mt-1">{{ t(k="ui-reason") }}: {{ account_status.ban_reason }}</div>
       {% endif %}
@@ -308,6 +321,28 @@
           </div>
           {% endif %}
 
+          <div class="mb-4">
+            <label class="form-label fw-semibold d-block mb-1" for="timezone-val">{{ t(k="prefs-timezone") }}</label>
+            <p class="text-muted small mb-2">{{ t(k="prefs-timezone-help") }}</p>
+            {# Options are filled in by Ferum.fillTimezoneSelect from
+               Intl.supportedValuesOf('timeZone') — some 400 entries, which would
+               bloat every render of this page if the server emitted them, and
+               which the browser already has. The empty option is rendered here
+               so the control is still usable (and still clearable) without JS. #}
+            <select class="form-select" id="timezone-val" name="timezone"
+                    data-current="{% if preferences and preferences.timezone %}{{ preferences.timezone }}{% endif %}"
+                    style="max-width:320px;min-height:44px">
+              {# Empty = follow this device, which is not the same as picking the
+                 device's current zone: it keeps tracking the device if it moves. #}
+              <option value=""{% if not preferences or not preferences.timezone %} selected{% endif %}>
+                {{ t(k="prefs-timezone-auto") }}
+              </option>
+              {% if preferences and preferences.timezone %}
+              <option value="{{ preferences.timezone }}" selected>{{ preferences.timezone }}</option>
+              {% endif %}
+            </select>
+          </div>
+
           <div id="prefs-feedback" class="d-none mb-3"></div>
           <button type="submit" class="btn btn-primary" id="prefs-submit-btn" style="min-height:44px">
             <i id="prefs-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-save-preferences") }}
@@ -378,7 +413,11 @@
             <div class="list-group-item px-0">
               <div class="d-flex justify-content-between align-items-start gap-2">
                 <div class="min-w-0">
-                  <div class="small text-muted" x-text="new Date(r.created_at).toLocaleDateString()"></div>
+                  {# Ferum.formatDate, not toLocaleDateString(): the bare call
+                     follows the browser's locale and zone, so this row rendered
+                     in English next to Vietnamese ones, and ignored a timezone
+                     set on the account. #}
+                  <div class="small text-muted" x-text="Ferum.formatDate(r.created_at)"></div>
                   <div class="text-truncate" x-text="r.reason"></div>
                   <div class="small text-muted mt-1" x-show="r.moderator_notes">
                     <i class="fa-solid fa-comment-dots fa-xs me-1"></i><span x-text="r.moderator_notes"></span>
@@ -432,7 +471,7 @@
       {% endif %}
       <div class="fr-panel-stat-row">
         <span><i class="fa-solid fa-calendar-days fa-xs me-1" aria-hidden="true"></i>{{ t(k="ui-member-since") }}</span>
-        <time class="fr-panel-stat-val" datetime="{{ profile.created_at }}">{{ profile.created_at | localdate(style="monthyear") }}</time>
+        <time class="fr-panel-stat-val" data-abs data-style="monthyear" datetime="{{ profile.created_at }}">{{ profile.created_at | localdate(style="monthyear") }}</time>
       </div>
       {% if profile.primary_role_name %}
       <div class="fr-panel-stat-row">
@@ -470,5 +509,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/ferum-page-account.js" defer></script>
+<script src="/static/js/ferum-page-account.js?v={{ asset_version() }}" defer></script>
 {% endblock %}

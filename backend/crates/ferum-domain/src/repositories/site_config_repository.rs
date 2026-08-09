@@ -32,3 +32,21 @@ pub async fn get_config_i32(repo: &dyn SiteConfigRepository, key: &str, default:
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
 }
+
+/// Same contract for a string value: absent, empty, or unreadable all fall back
+/// to `default`.
+///
+/// The empty-string case matters more here than for the numeric readers. An
+/// admin who clears a text field in the settings form posts `""`, and for
+/// something like `reporting_timezone` an empty string is not a value Postgres
+/// can use — `AT TIME ZONE ''` errors, which would take out every dashboard
+/// query rather than the one field.
+pub async fn get_config_str(repo: &dyn SiteConfigRepository, key: &str, default: &str) -> String {
+    repo.get(key)
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| default.to_string())
+}

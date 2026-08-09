@@ -1,14 +1,34 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::constants::DEFAULT_REPORTING_TIMEZONE;
 use crate::dto::{DashboardStats, StatPoint};
 use crate::permission::PermissionChecker;
 use crate::ports::CacheService;
 use crate::shared::AppError;
+use ferum_domain::repositories::site_config_repository::{get_config_str, SiteConfigRepository};
 use ferum_domain::repositories::stats_repository::StatsRepository;
 use ferum_domain::AuthUser;
 
-const DASHBOARD_CACHE_KEY: &str = "stats:dashboard";
+/// Prefix for the cached dashboard payload. The reporting timezone is appended,
+/// because it is an *input* to every figure in that payload — see
+/// [`dashboard_cache_key`].
+const DASHBOARD_CACHE_PREFIX: &str = "stats:dashboard";
+
+/// Cache key for the dashboard, scoped to the timezone the numbers were computed
+/// under.
+///
+/// Without the zone in the key, changing `reporting_timezone` served figures
+/// from the old day boundary for up to the TTL — while the settings page said
+/// the change had saved. Worse than the staleness itself: the admin's obvious
+/// next move is to reload, see the same numbers, and conclude the setting does
+/// not work.
+///
+/// Including it also means switching back and forth reuses each zone's entry
+/// instead of repeatedly invalidating one.
+fn dashboard_cache_key(tz: &str) -> String {
+    format!("{DASHBOARD_CACHE_PREFIX}:{tz}")
+}
 const DASHBOARD_CACHE_TTL: Duration = Duration::from_secs(60);
 
 /// Admin analytics use case. Owns permissioning, caching and presentation
@@ -17,11 +37,12 @@ const DASHBOARD_CACHE_TTL: Duration = Duration::from_secs(60);
 pub struct AdminStatsUseCase {
     repo: Arc<dyn StatsRepository>,
     cache: Option<Arc<dyn CacheService>>,
+    site_config: Option<Arc<dyn SiteConfigRepository>>,
 }
 
 impl AdminStatsUseCase {
     pub fn new(repo: Arc<dyn StatsRepository>) -> Self {
-        Self { repo, cache: None }
+        Self { repo, cache: None, site_config: None }
     }
 
     pub fn with_cache(mut self, cache: Arc<dyn CacheService>) -> Self {
@@ -29,19 +50,45 @@ impl AdminStatsUseCase {
         self
     }
 
+    pub fn with_site_config(mut self, site_config: Arc<dyn SiteConfigRepository>) -> Self {
+        self.site_config = Some(site_config);
+        self
+    }
+
+    /// The IANA zone whose calendar day defines a "day" for every metric here.
+    ///
+    /// Resolved per call rather than cached on the struct so an admin changing
+    /// it takes effect on the next flush instead of the next restart. It is one
+    /// indexed lookup on a tiny table, against queries that scan `posts`.
+    ///
+    /// Falls back to UTC when unset or when the repository is unavailable —
+    /// a background flush must not stop because config could not be read.
+    async fn reporting_timezone(&self) -> String {
+        match &self.site_config {
+            Some(sc) => {
+                get_config_str(sc.as_ref(), "reporting_timezone", DEFAULT_REPORTING_TIMEZONE).await
+            }
+            None => DEFAULT_REPORTING_TIMEZONE.to_string(),
+        }
+    }
+
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id))]
     pub async fn dashboard(&self, actor: &AuthUser) -> Result<DashboardStats, AppError> {
         PermissionChecker::can_manage_users(actor)?;
 
+        // Resolved before the cache lookup, not after: it is part of the key.
+        let tz = self.reporting_timezone().await;
+        let cache_key = dashboard_cache_key(&tz);
+
         if let Some(cache) = &self.cache {
-            if let Some(cached) = cache.get(DASHBOARD_CACHE_KEY).await {
+            if let Some(cached) = cache.get(&cache_key).await {
                 if let Ok(stats) = serde_json::from_str::<DashboardStats>(&cached) {
                     return Ok(stats);
                 }
             }
         }
 
-        let c = self.repo.dashboard_counts().await?;
+        let c = self.repo.dashboard_counts(&tz).await?;
 
         let dau_mau_ratio = if c.mau > 0 {
             (c.dau as f64 / c.mau as f64 * 100.0 * 10.0).round() / 10.0
@@ -68,9 +115,7 @@ impl AdminStatsUseCase {
 
         if let Some(cache) = &self.cache {
             if let Ok(json) = serde_json::to_string(&stats) {
-                let _ = cache
-                    .set(DASHBOARD_CACHE_KEY, &json, DASHBOARD_CACHE_TTL)
-                    .await;
+                let _ = cache.set(&cache_key, &json, DASHBOARD_CACHE_TTL).await;
             }
         }
 
@@ -80,10 +125,14 @@ impl AdminStatsUseCase {
     /// Writes today's metric snapshot to `daily_stats`. Called from a background
     /// task every hour — no AuthUser required.
     pub async fn flush_daily_stats(&self) -> Result<(), AppError> {
-        self.repo.flush_daily_stats().await?;
+        self.repo.flush_daily_stats(&self.reporting_timezone().await).await?;
 
         if let Some(cache) = &self.cache {
-            let _ = cache.del(DASHBOARD_CACHE_KEY).await;
+            // `del_prefix`, not `del`: the payload is now keyed per timezone, so
+            // deleting only the current zone's entry would leave a stale one
+            // behind for any zone the site used earlier — and that entry becomes
+            // live again the moment an admin switches back to it.
+            let _ = cache.del_prefix(&format!("{DASHBOARD_CACHE_PREFIX}:")).await;
         }
 
         Ok(())
@@ -92,7 +141,7 @@ impl AdminStatsUseCase {
     /// Backfills historical `daily_stats` from source-table timestamps for all
     /// dates before today. Safe to call on every startup — fully idempotent.
     pub async fn backfill_history(&self) -> Result<(), AppError> {
-        self.repo.backfill_history().await
+        self.repo.backfill_history(&self.reporting_timezone().await).await
     }
 
     /// Returns the history of one metric for the last N days (capped at 90).
@@ -120,7 +169,10 @@ impl AdminStatsUseCase {
             )));
         }
 
-        let points = self.repo.stats_history(metric, days).await?;
+        let points = self
+            .repo
+            .stats_history(metric, days, &self.reporting_timezone().await)
+            .await?;
 
         Ok(points
             .into_iter()

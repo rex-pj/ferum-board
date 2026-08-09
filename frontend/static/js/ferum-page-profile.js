@@ -114,7 +114,7 @@
           link.textContent = p.thread_title || Ferum.t('js-view-thread');
           meta.appendChild(link);
         }
-        var dateEl = document.createElement('span'); dateEl.className = 'text-muted ms-auto flex-shrink-0'; dateEl.style.fontSize = '.75rem'; dateEl.textContent = new Date(p.created_at).toLocaleDateString();
+        var dateEl = document.createElement('span'); dateEl.className = 'text-muted ms-auto flex-shrink-0'; dateEl.style.fontSize = '.75rem'; dateEl.textContent = Ferum.formatDate(p.created_at);
         meta.appendChild(dateEl);
         var text = document.createElement('p'); text.className = 'mb-0 small text-secondary'; text.style.whiteSpace = 'pre-line'; text.textContent = snippet;
         content.appendChild(meta); content.appendChild(text); row.appendChild(content); body.appendChild(row); card.appendChild(body); col.appendChild(card);

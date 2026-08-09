@@ -23,6 +23,12 @@ ferum-infrastructure = { path = "../../crates/ferum-infrastructure" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
+# The datetime wire-format tests assert on concrete instants, which needs the
+# same chrono the request/response types are built from.
+chrono = { workspace = true }
+# The date-filter tests name zones (`Asia/Kathmandu`, `America/New_York`)
+# directly, which is the whole point of them.
+chrono-tz = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 serde_json = { workspace = true }
