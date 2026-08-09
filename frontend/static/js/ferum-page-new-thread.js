@@ -200,7 +200,7 @@
     function runSearch() {
       var term = searchInput.value.trim();
       var url = '/api/products?per_page=20' + (term ? '&q=' + encodeURIComponent(term) : '');
-      fetch(url, { headers: { Accept: 'application/json' } })
+      FerumApi.http.get(url)
         .then(function (r) { return r.ok ? r.json() : { data: [] }; })
         .then(function (body) { renderResults(body.data || []); })
         .catch(function () { showResults(false); });
@@ -302,17 +302,11 @@
     function loadRefs() {
       if (refsLoaded) return;
       refsLoaded = true;
-      fetch('/api/brands', { headers: { Accept: 'application/json' } })
+      FerumApi.http.get('/api/brands')
         .then(function (r) { return r.ok ? r.json() : { data: [] }; })
-        .then(function (body) {
-          (body.data || []).forEach(function (b) {
-            var o = document.createElement('option');
-            o.value = b.id; o.textContent = b.name;
-            brandSel.appendChild(o);
-          });
-        })
+        .then(function (body) { Ferum.fillSelect(brandSel, body.data || []); })
         .catch(function () {});
-      fetch('/api/materials', { headers: { Accept: 'application/json' } })
+      FerumApi.http.get('/api/materials')
         .then(function (r) { return r.ok ? r.json() : { data: [] }; })
         .then(function (body) { allMaterials = body.data || []; })
         .catch(function () { showError(Ferum.t('js-could-not-load-materials')); });
@@ -428,7 +422,7 @@
       var term = nameEl.value.trim();
       if (term.length < 3) { dupesBox.classList.add('d-none'); return; }
       _dupeTimer = setTimeout(function () {
-        fetch('/api/products?per_page=4&q=' + encodeURIComponent(term), { headers: { Accept: 'application/json' } })
+        FerumApi.http.get('/api/products?per_page=4&q=' + encodeURIComponent(term))
           .then(function (r) { return r.ok ? r.json() : { data: [] }; })
           .then(function (body) { renderDupes(body.data || []); })
           .catch(function () { dupesBox.classList.add('d-none'); });
@@ -481,10 +475,7 @@
         var fd = new FormData();
         fd.append('image', pendingImages[i].file);
         try {
-          var res = await fetch('/api/products/' + productId + '/media', {
-            method: 'POST',
-            body: fd,
-          });
+          var res = await FerumApi.http.postForm('/api/products/' + productId + '/media', fd);
           if (!res.ok) failed++;
         } catch (_) {
           failed++;
@@ -532,11 +523,7 @@
       };
       submitBtn.disabled = true;
       try {
-        var res = await fetch('/api/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        var res = await FerumApi.http.post('/api/products', payload);
         var body = await res.json().catch(function () { return {}; });
         if (!res.ok) {
           showError(Ferum.errorMessage(body) || Ferum.t('js-could-not-add-product'));

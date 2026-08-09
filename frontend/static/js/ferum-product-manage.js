@@ -32,14 +32,8 @@
   var refsLoaded = false;
 
   // ── Small shared helpers ──────────────────────────────────────────────────
-  function getJSON(url) { return fetch(url, { headers: { Accept: 'application/json' } }); }
-  function sendJSON(method, url, body) {
-    return fetch(url, {
-      method: method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body != null ? JSON.stringify(body) : undefined,
-    });
-  }
+  // Transport goes through FerumApi.http; the getJSON/sendJSON pair this
+  // replaces was byte-identical to the one in ferum-admin-products.js.
   async function readError(res) {
     try {
       var b = await res.json();
@@ -90,25 +84,19 @@
     if (refsLoaded) return;
     refsLoaded = true;
 
-    var brandRes = await getJSON('/api/brands').catch(function () { return null; });
+    var brandRes = await FerumApi.http.get('/api/brands').catch(function () { return null; });
     if (brandRes && brandRes.ok) {
-      var brands = (await brandRes.json()).data || [];
       var sel = $('pdp-brand');
-      brands.forEach(function (b) {
-        var o = document.createElement('option');
-        o.value = b.id;
-        o.textContent = b.name;
-        sel.appendChild(o);
-      });
+      Ferum.fillSelect(sel, (await brandRes.json()).data || []);
       sel.value = sel.getAttribute('data-current') || '';
     }
 
-    var matRes = await getJSON('/api/materials').catch(function () { return null; });
+    var matRes = await FerumApi.http.get('/api/materials').catch(function () { return null; });
     if (matRes && matRes.ok) allMaterials = (await matRes.json()).data || [];
 
     // Start from what the product actually has, otherwise an empty picker is
     // ambiguous — it cannot tell "keep them" from "remove them all".
-    var mineRes = await getJSON('/api/admin/products/' + PRODUCT_ID + '/materials')
+    var mineRes = await FerumApi.http.get('/api/admin/products/' + PRODUCT_ID + '/materials')
       .catch(function () { return null; });
     if (mineRes && mineRes.ok) {
       picked = (await mineRes.json()).data || [];
@@ -232,14 +220,14 @@
   }
 
   async function loadGallery() {
-    var res = await getJSON('/api/admin/products/' + PRODUCT_ID + '/media')
+    var res = await FerumApi.http.get('/api/admin/products/' + PRODUCT_ID + '/media')
       .catch(function () { return null; });
     savedMedia = res && res.ok ? ((await res.json()).data || []) : [];
     renderGallery();
   }
 
   async function deleteMedia(mediaId) {
-    var res = await fetch('/api/admin/products/' + PRODUCT_ID + '/media/' + mediaId, { method: 'DELETE' });
+    var res = await FerumApi.http.del('/api/admin/products/' + PRODUCT_ID + '/media/' + mediaId);
     if (!res.ok && res.status !== 204) { showError(await readError(res)); return; }
     savedMedia = savedMedia.filter(function (m) { return m.id !== mediaId; });
     renderGallery();
@@ -261,7 +249,7 @@
       var fd = new FormData();
       fd.append('image', pendingImages[i].file);
       try {
-        var res = await fetch('/api/admin/products/' + PRODUCT_ID + '/media', { method: 'POST', body: fd });
+        var res = await FerumApi.http.postForm('/api/admin/products/' + PRODUCT_ID + '/media', fd);
         if (!res.ok) failed++;
       } catch (_) {
         failed++;
@@ -315,12 +303,12 @@
       if (max != null) patch.price_max = max;
       var desc = $('pdp-description').value.trim();
       if (desc) patch.description_md = desc;
-      var res = await sendJSON('PATCH', '/api/admin/products/' + PRODUCT_ID, patch);
+      var res = await FerumApi.http.send('PATCH', '/api/admin/products/' + PRODUCT_ID, patch);
       if (!res.ok) { showError(await readError(res)); return; }
 
       // Always sent — the picker was pre-filled with the current set, so an
       // empty list is a deliberate "remove all", not "leave alone".
-      await sendJSON('POST', '/api/admin/products/' + PRODUCT_ID + '/materials', { material_ids: picked });
+      await FerumApi.http.send('POST', '/api/admin/products/' + PRODUCT_ID + '/materials', { material_ids: picked });
 
       if (pendingImages.length) await uploadPending();
 
@@ -363,7 +351,7 @@
     $('pdp-del-confirm').disabled = true;
     modal(delModalEl).show();
 
-    var res = await getJSON('/api/admin/products/' + PRODUCT_ID + '/dependents')
+    var res = await FerumApi.http.get('/api/admin/products/' + PRODUCT_ID + '/dependents')
       .catch(function () { return null; });
     if (!res || !res.ok) {
       $('pdp-del-blocked').textContent = res ? await readError(res) : Ferum.t('js-network-error');
@@ -391,7 +379,7 @@
   });
 
   $('pdp-del-confirm').addEventListener('click', async function () {
-    var res = await fetch('/api/admin/products/' + PRODUCT_ID, { method: 'DELETE' });
+    var res = await FerumApi.http.del('/api/admin/products/' + PRODUCT_ID);
     if (!res.ok && res.status !== 204) {
       $('pdp-del-blocked').textContent = await readError(res);
       $('pdp-del-blocked').classList.remove('d-none');
@@ -406,7 +394,7 @@
   var archiveBtn = $('pdp-del-archive');
   if (archiveBtn) {
     archiveBtn.addEventListener('click', async function () {
-      var res = await sendJSON('PATCH', '/api/admin/products/' + PRODUCT_ID, { status: 'archived' });
+      var res = await FerumApi.http.send('PATCH', '/api/admin/products/' + PRODUCT_ID, { status: 'archived' });
       if (!res.ok) {
         $('pdp-del-blocked').textContent = await readError(res);
         $('pdp-del-blocked').classList.remove('d-none');

@@ -47,9 +47,46 @@
     return request(url, { method: 'DELETE' });
   }
 
+  // Verb chosen at runtime, for call sites that decide create-vs-update from
+  // state ("PATCH if editing, else POST"). Without it each such caller writes
+  // its own switch, which is what the catalogue screens did.
+  function send(method, url, body) {
+    switch (String(method).toUpperCase()) {
+      case 'POST':   return post(url, body);
+      case 'PUT':    return put(url, body);
+      case 'PATCH':  return patch(url, body);
+      case 'DELETE': return del(url);
+      default:       return get(url);
+    }
+  }
+
   // ── Domain services ──────────────────────────────────────────────────────
 
   window.FerumApi = {
+
+    // The verbs themselves, for endpoint families that have no domain group
+    // below — currently the admin catalogue screens (products, brands,
+    // materials, product-categories), which are ~25 CRUD endpoints used by two
+    // files and nothing else.
+    //
+    // They are exposed because the alternative was worse, not because the
+    // domain groups are optional. ferum-admin-products.js and
+    // ferum-product-manage.js each carried a private getJSON/sendJSON pair --
+    // sendJSON byte-identical between them -- and 15 bare fetch() calls, which
+    // made the promise at the top of this file ("all fetch() calls go through
+    // request()") false. Routing them here restores it without inventing 25
+    // named methods that would each be called once.
+    //
+    // Prefer a domain group for anything a second surface starts using.
+    http: {
+      get: get,
+      post: post,
+      postForm: postForm,
+      put: put,
+      patch: patch,
+      del: del,
+      send: send,
+    },
 
     auth: {
       login: function (email, password) {

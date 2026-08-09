@@ -28,11 +28,7 @@
 
       btn.disabled = true;
 
-      fetch('/api/admin/languages/' + encodeURIComponent(tag), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      FerumApi.http.patch('/api/admin/languages/' + encodeURIComponent(tag), payload)
         .then(function (res) {
           if (res.ok) {
             window.location.reload();

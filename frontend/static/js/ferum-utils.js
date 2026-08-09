@@ -285,6 +285,27 @@
     return (body && body.error && body.error.message) || '';
   }
 
+  // ── Reference-list <select> ────────────────────────────────────────
+  // Appends one <option> per { id, name } to a select, leaving whatever is
+  // already there (a placeholder row, the server-rendered current value).
+  //
+  // Written out identically in the two forms that pick a brand — the product
+  // detail dialog and the new-thread composer. Built with createElement rather
+  // than an innerHTML string so a brand name never has to be escaped: setting
+  // textContent cannot introduce markup, which is the failure mode a string
+  // template invites.
+  function fillSelect(select, items) {
+    if (!select) return;
+    var frag = document.createDocumentFragment();
+    (items || []).forEach(function (it) {
+      var o = document.createElement('option');
+      o.value = it.id;
+      o.textContent = it.name;
+      frag.appendChild(o);
+    });
+    select.appendChild(frag);
+  }
+
   // ── Number grouping ────────────────────────────────────────────────
   // The client-side counterpart of the `thousands` Tera filter, and a
   // deliberate mirror of it: a price the browser draws sits next to prices the
@@ -668,6 +689,7 @@
     initPasswordStrength: initPasswordStrength,
     escapeHtml:           escapeHtml,
     errorMessage:         errorMessage,
+    fillSelect:           fillSelect,
     formatNumber:         formatNumber,
     formatDate:           formatDate,
     formatAbs:            formatAbs,

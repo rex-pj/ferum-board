@@ -47,14 +47,14 @@
     catch (e) { return 'Error (' + res.status + ')'; }
   }
 
-  function getJSON(url) { return fetch(url, { method: 'GET' }); }
-  function sendJSON(method, url, body) {
-    return fetch(url, {
-      method: method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body != null ? JSON.stringify(body) : undefined,
-    });
-  }
+  // Transport goes through FerumApi.http, which is where the headers and the
+  // verb dispatch live. This file and ferum-product-manage.js each used to
+  // carry a private getJSON/sendJSON pair — sendJSON byte-identical between
+  // them — plus bare fetch() calls that bypassed both.
+  //
+  // FerumApi.http is read at each call rather than captured in a local here:
+  // both files are pulled in by templates whose script order a theme can
+  // change, and a load-time capture would depend on that order.
   function strOrNull(id) { var v = $(id).value.trim(); return v === '' ? null : v; }
   function modal(id) { return bootstrap.Modal.getOrCreateInstance($(id)); }
 
@@ -247,7 +247,7 @@
     var c = $('filterCategory') ? $('filterCategory').value : '';
     if (q) params.set('q', q); if (t) params.set('type', t); if (s) params.set('status', s);
     if (c) params.set('category_id', c);
-    var res = await getJSON('/api/admin/products?' + params.toString());
+    var res = await FerumApi.http.get('/api/admin/products?' + params.toString());
     if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
     var body = await res.json();
     renderProducts(body.data || []);
@@ -258,7 +258,7 @@
   }
 
   async function setProductStatus(id, status, ok) {
-    var res = await sendJSON('PATCH', '/api/admin/products/' + id, { status: status });
+    var res = await FerumApi.http.send('PATCH', '/api/admin/products/' + id, { status: status });
     if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
     showStatus(ok, 'success'); loadProducts();
   }
@@ -430,11 +430,11 @@
           price_min: parsePrice('pPriceMin'), price_max: parsePrice('pPriceMax'),
           origin: strOrNull('pOrigin'), description_md: strOrNull('pDescription'),
         };
-        var res = await sendJSON('PATCH', '/api/admin/products/' + editing, patch);
+        var res = await FerumApi.http.send('PATCH', '/api/admin/products/' + editing, patch);
         if (!res.ok) { showFormError('productFormError', await readError(res)); return; }
         // Always sent — the picker was pre-filled with the current set, so an
         // empty list is a deliberate "remove all", not "leave alone".
-        await sendJSON('POST', '/api/admin/products/' + editing + '/materials', { material_ids: mats });
+        await FerumApi.http.send('POST', '/api/admin/products/' + editing + '/materials', { material_ids: mats });
       } else {
         var create = {
           name: $('pName').value.trim(), slug: $('pSlug').value.trim(), product_type: radioValue('pType'),
@@ -444,12 +444,12 @@
           price_min: parsePrice('pPriceMin'), price_max: parsePrice('pPriceMax'),
           origin: strOrNull('pOrigin'), description_md: strOrNull('pDescription'), material_ids: mats,
         };
-        var cres = await sendJSON('POST', '/api/admin/products', create);
+        var cres = await FerumApi.http.send('POST', '/api/admin/products', create);
         if (!cres.ok) { showFormError('productFormError', await readError(cres)); return; }
         var created = await cres.json().catch(function () { return {}; });
         var newId = created.data && created.data.id;
         var want = radioValue('pStatus');
-        if (newId && want && want !== 'draft') await sendJSON('PATCH', '/api/admin/products/' + newId, { status: want });
+        if (newId && want && want !== 'draft') await FerumApi.http.send('PATCH', '/api/admin/products/' + newId, { status: want });
         // The product exists now, so the staged images finally have somewhere to
         // go. A failure here leaves the product itself created — say so rather
         // than implying the whole save failed.
@@ -484,7 +484,7 @@
   // empty picker is ambiguous — it can't tell "keep them" from "remove them all".
   // With the current set loaded, an empty picker unambiguously means "none".
   async function loadProductMaterials(productId) {
-    var res = await getJSON('/api/admin/products/' + productId + '/materials');
+    var res = await FerumApi.http.get('/api/admin/products/' + productId + '/materials');
     if (!res.ok) return;
     var ids = (await res.json()).data || [];
     // Ignore a late response for a product the admin has already navigated away from.
@@ -500,7 +500,7 @@
     for (var i = 0; i < state.pendingFiles.length; i++) {
       var fd = new FormData();
       fd.append('image', state.pendingFiles[i].file);
-      var res = await fetch('/api/admin/products/' + productId + '/media', { method: 'POST', body: fd });
+      var res = await FerumApi.http.postForm('/api/admin/products/' + productId + '/media', fd);
       if (!res.ok) failed++;
     }
     clearPendingFiles();
@@ -523,7 +523,7 @@
     $('delConfirmBtn').disabled = true;
     modal('deleteProductModal').show();
 
-    var res = await getJSON('/api/admin/products/' + id + '/dependents');
+    var res = await FerumApi.http.get('/api/admin/products/' + id + '/dependents');
     if (!res.ok) {
       $('delDependents').innerHTML = '';
       $('delBlocked').textContent = await readError(res);
@@ -554,7 +554,7 @@
   async function confirmDeleteProduct() {
     var id = state.deleting;
     if (!id) return;
-    var res = await fetch('/api/admin/products/' + id, { method: 'DELETE' });
+    var res = await FerumApi.http.del('/api/admin/products/' + id);
     if (!res.ok && res.status !== 204) { showStatus(await readError(res), 'danger'); return; }
     modal('deleteProductModal').hide();
     showStatus('Product deleted.', 'success');
@@ -564,7 +564,7 @@
   async function archiveDeletingProduct() {
     var id = state.deleting;
     if (!id) return;
-    var res = await sendJSON('PATCH', '/api/admin/products/' + id, { status: 'archived' });
+    var res = await FerumApi.http.send('PATCH', '/api/admin/products/' + id, { status: 'archived' });
     if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
     modal('deleteProductModal').hide();
     showStatus('Product archived — its reviews were kept.', 'success');
@@ -575,7 +575,7 @@
   async function loadMedia(productId) {
     var g = $('pGallery');
     g.innerHTML = '<span class="text-muted small">Loading images…</span>';
-    var res = await getJSON('/api/admin/products/' + productId + '/media');
+    var res = await FerumApi.http.get('/api/admin/products/' + productId + '/media');
     if (!res.ok) { g.innerHTML = ''; return; }
     var items = (await res.json()).data || [];
     if (!items.length) { g.innerHTML = '<span class="text-muted small">No images yet.</span>'; return; }
@@ -593,7 +593,7 @@
     fileEl.value = '';
     for (var i = 0; i < files.length; i++) {
       var fd = new FormData(); fd.append('image', files[i]);
-      var res = await fetch('/api/admin/products/' + productId + '/media', { method: 'POST', body: fd });
+      var res = await FerumApi.http.postForm('/api/admin/products/' + productId + '/media', fd);
       if (!res.ok) { showStatus(await readError(res), 'danger'); break; }
     }
     loadMedia(productId); loadProducts();
@@ -634,7 +634,7 @@
     });
   }
   async function deleteMedia(productId, mediaId) {
-    var res = await fetch('/api/admin/products/' + productId + '/media/' + mediaId, { method: 'DELETE' });
+    var res = await FerumApi.http.del('/api/admin/products/' + productId + '/media/' + mediaId);
     if (!res.ok && res.status !== 204) { showStatus(await readError(res), 'danger'); return; }
     loadMedia(productId);
   }
@@ -663,7 +663,7 @@
     tbody.querySelectorAll('[data-mdel]').forEach(function (b) { b.addEventListener('click', function () { deleteMaterial(b.getAttribute('data-mdel'), b.getAttribute('data-name')); }); });
   }
   async function loadMaterials() {
-    var res = await getJSON('/api/materials');
+    var res = await FerumApi.http.get('/api/materials');
     if (!res.ok) return;
     state.materials = (await res.json()).data || [];
     applyMaterialFilter();
@@ -703,8 +703,8 @@
 
     var body = { name: $('mName').value.trim(), category: $('mCategory').value, description: strOrNull('mDescription') };
     var res = id
-      ? await sendJSON('PATCH', '/api/admin/materials/' + id, body)
-      : await sendJSON('POST', '/api/admin/materials', { name: body.name, slug: $('mSlug').value.trim(), category: body.category, description: body.description });
+      ? await FerumApi.http.send('PATCH', '/api/admin/materials/' + id, body)
+      : await FerumApi.http.send('POST', '/api/admin/materials', { name: body.name, slug: $('mSlug').value.trim(), category: body.category, description: body.description });
     if (!res.ok) { showFormError('materialFormError', await readError(res)); return; }
     modal('materialModal').hide();
     showStatus(id ? 'Material updated.' : 'Material created.', 'success');
@@ -712,7 +712,7 @@
   }
   async function deleteMaterial(id, name) {
     if (!confirm('Delete material "' + name + '"? Products will be unlinked from it.')) return;
-    var res = await fetch('/api/admin/materials/' + id, { method: 'DELETE' });
+    var res = await FerumApi.http.del('/api/admin/materials/' + id);
     if (!res.ok && res.status !== 204) { showStatus(await readError(res), 'danger'); return; }
     showStatus('Material deleted.', 'success'); loadMaterials();
   }
@@ -738,7 +738,7 @@
     tbody.querySelectorAll('[data-bdel]').forEach(function (x) { x.addEventListener('click', function () { deleteBrand(x.getAttribute('data-bdel'), x.getAttribute('data-name')); }); });
   }
   async function loadBrands() {
-    var res = await getJSON('/api/brands');
+    var res = await FerumApi.http.get('/api/brands');
     if (!res.ok) return;
     state.brands = (await res.json()).data || [];
     var sel = $('pBrand');
@@ -786,8 +786,8 @@
 
     var body = { name: $('bName').value.trim(), website: strOrNull('bWebsite'), country: strOrNull('bCountry'), description: strOrNull('bDescription'), is_verified: $('bVerified').checked };
     var res = id
-      ? await sendJSON('PATCH', '/api/admin/brands/' + id, body)
-      : await sendJSON('POST', '/api/admin/brands', { name: body.name, slug: $('bSlug').value.trim(), website: body.website, country: body.country, description: body.description, is_verified: body.is_verified });
+      ? await FerumApi.http.send('PATCH', '/api/admin/brands/' + id, body)
+      : await FerumApi.http.send('POST', '/api/admin/brands', { name: body.name, slug: $('bSlug').value.trim(), website: body.website, country: body.country, description: body.description, is_verified: body.is_verified });
     if (!res.ok) { showFormError('brandFormError', await readError(res)); return; }
     modal('brandModal').hide();
     showStatus(id ? 'Brand updated.' : 'Brand created.', 'success');
@@ -795,7 +795,7 @@
   }
   async function deleteBrand(id, name) {
     if (!confirm('Delete brand "' + name + '"? Products will be unlinked from it.')) return;
-    var res = await fetch('/api/admin/brands/' + id, { method: 'DELETE' });
+    var res = await FerumApi.http.del('/api/admin/brands/' + id);
     if (!res.ok && res.status !== 204) { showStatus(await readError(res), 'danger'); return; }
     showStatus('Brand deleted.', 'success'); loadBrands();
   }
@@ -904,7 +904,7 @@
   async function openDeepLinkedProduct() {
     var id = new URLSearchParams(window.location.search).get('edit');
     if (!id) return;
-    var res = await getJSON('/api/admin/products/' + encodeURIComponent(id));
+    var res = await FerumApi.http.get('/api/admin/products/' + encodeURIComponent(id));
     if (res.ok) {
       openProduct((await res.json()).data);
     } else {
@@ -920,7 +920,7 @@
   // on the page without a reload.
 
   async function loadPcats() {
-    var res = await getJSON('/api/admin/product-categories');
+    var res = await FerumApi.http.get('/api/admin/product-categories');
     if (!res.ok) return;
     var body = await res.json();
     state.pcats = body.data || [];
@@ -1023,14 +1023,14 @@
     try {
       var res;
       if (id) {
-        res = await sendJSON('PATCH', '/api/admin/product-categories/' + id, {
+        res = await FerumApi.http.send('PATCH', '/api/admin/product-categories/' + id, {
           name: $('cName').value.trim(),
           icon: $('cIcon').value.trim() || null,
           position: parseInt($('cPosition').value, 10) || 0,
           match_keywords: keywordList(),
         });
       } else {
-        res = await sendJSON('POST', '/api/admin/product-categories', {
+        res = await FerumApi.http.send('POST', '/api/admin/product-categories', {
           name: $('cName').value.trim(),
           slug: $('cSlug').value.trim(),
           icon: $('cIcon').value.trim() || null,
@@ -1054,7 +1054,7 @@
     // Products are not deleted with the category — they fall back to unfiled —
     // so the confirmation says so rather than implying data loss.
     if (!confirm('Delete "' + name + '"? Products filed here become uncategorised.')) return;
-    var res = await fetch('/api/admin/product-categories/' + id, { method: 'DELETE', credentials: 'same-origin' });
+    var res = await FerumApi.http.del('/api/admin/product-categories/' + id);
     if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
     showStatus('Category deleted.', 'success');
     await loadPcats();
@@ -1065,7 +1065,7 @@
   // something to trigger from a single click with no idea of the blast radius.
   async function autoAssign(apply) {
     var url = '/api/admin/product-categories/auto-assign' + (apply ? '?apply=1' : '');
-    var res = await fetch(url, { method: 'POST', credentials: 'same-origin' });
+    var res = await FerumApi.http.post(url);
     if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
     var report = (await res.json()).data || {};
 
