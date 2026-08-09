@@ -88,6 +88,11 @@ format-monthyear = { $month } { $year }
 
 # Single character. Anything longer is ignored and a comma is used instead.
 format-thousands-separator = ,
+# Alias so the separator reaches client-side JS, which can only see the `js-`
+# namespace. A reference rather than a copy: the value is defined once above,
+# and Ferum.formatNumber must group digits the same way the `thousands` Tera
+# filter does or a price drawn by JS disagrees with the one beside it.
+js-thousands-separator = { format-thousands-separator }
 
 month-short-1 = Jan
 month-short-2 = Feb
@@ -793,19 +798,19 @@ js-publish = Publish
 js-publish-review = Publish review
 
 # Product type & material category labels, mirroring the Tera macros
-js-product-type-furniture = Furniture
-js-product-type-material = Material
-js-product-type-room = Room
-js-material-wood-natural = Solid wood
-js-material-wood-engineered = Engineered wood
-js-material-rattan-bamboo = Rattan & bamboo
-js-material-metal = Metal
-js-material-fabric = Fabric
-js-material-leather = Leather
-js-material-stone = Stone
-js-material-glass = Glass
-js-material-plastic = Plastic
-js-material-other = Other
+js-product-type-furniture = { ui-product-type-furniture }
+js-product-type-material = { ui-product-type-material }
+js-product-type-room = { ui-product-type-room }
+js-material-wood-natural = { ui-material-wood-natural }
+js-material-wood-engineered = { ui-material-wood-engineered }
+js-material-rattan-bamboo = { ui-material-rattan-bamboo }
+js-material-metal = { ui-material-metal }
+js-material-fabric = { ui-material-fabric }
+js-material-leather = { ui-material-leather }
+js-material-stone = { ui-material-stone }
+js-material-glass = { ui-material-glass }
+js-material-plastic = { ui-material-plastic }
+js-material-other = { ui-material-other }
 
 # Profile page
 js-nobody-here-yet = Nobody here yet.

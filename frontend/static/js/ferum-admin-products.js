@@ -18,7 +18,6 @@
     // Product currently shown in the delete dialog.
     deleting: null,
   };
-  var vnd = new Intl.NumberFormat('vi-VN');
 
   function $(id) { return document.getElementById(id); }
 
@@ -78,7 +77,7 @@
   }
   function formatPriceField(el) {
     var digits = el.value.replace(/\D/g, '');
-    el.value = digits === '' ? '' : vnd.format(parseInt(digits, 10));
+    el.value = digits === '' ? '' : Ferum.formatNumber(parseInt(digits, 10));
   }
 
   // ── Modal-scoped feedback ────────────────────────────────────────────────
@@ -154,8 +153,8 @@
   function priceRange(p) {
     if (p.price_min == null && p.price_max == null) return '<span class="text-muted">—</span>';
     if (p.price_min != null && p.price_max != null && p.price_min !== p.price_max)
-      return vnd.format(p.price_min) + ' – ' + vnd.format(p.price_max);
-    return vnd.format(p.price_min != null ? p.price_min : p.price_max);
+      return Ferum.formatNumber(p.price_min) + ' – ' + Ferum.formatNumber(p.price_max);
+    return Ferum.formatNumber(p.price_min != null ? p.price_min : p.price_max);
   }
   function brandName(id) {
     if (!id) return '<span class="text-muted">—</span>';
@@ -375,8 +374,8 @@
     $('pBrand').value = p.brand_id || '';
     if ($('pCategory')) $('pCategory').value = p.category_id || '';
     $('pStyle').value = p.style || '';
-    $('pPriceMin').value = p.price_min != null ? vnd.format(p.price_min) : '';
-    $('pPriceMax').value = p.price_max != null ? vnd.format(p.price_max) : '';
+    $('pPriceMin').value = p.price_min != null ? Ferum.formatNumber(p.price_min) : '';
+    $('pPriceMax').value = p.price_max != null ? Ferum.formatNumber(p.price_max) : '';
     $('pOrigin').value = p.origin || '';
     $('pDescription').value = p.description_md || '';
     loadProductMaterials(p.id);

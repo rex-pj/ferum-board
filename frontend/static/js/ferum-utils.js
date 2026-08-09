@@ -285,6 +285,33 @@
     return (body && body.error && body.error.message) || '';
   }
 
+  // ── Number grouping ────────────────────────────────────────────────
+  // The client-side counterpart of the `thousands` Tera filter, and a
+  // deliberate mirror of it: a price the browser draws sits next to prices the
+  // server rendered, so the two must group digits identically.
+  //
+  // Three files each built their own `new Intl.NumberFormat('vi-VN')`, which
+  // pinned every JS-rendered price to Vietnamese grouping no matter what
+  // language the page was in — while the server followed the reader's catalog.
+  // The separator comes from the same catalog key both sides read; Intl is not
+  // used because its locale is the browser's, not the page's.
+  //
+  // Same fallback rule as the filter: a catalog that omits the key resolves to
+  // the key name, so anything but a single character falls back to a comma.
+  function formatNumber(n) {
+    var num = typeof n === 'number' ? n : parseInt(String(n).replace(/[^\d-]/g, ''), 10);
+    if (!isFinite(num)) return '';
+    var sep = Ferum.t('js-thousands-separator');
+    if (!sep || sep.length !== 1) sep = ',';
+    var digits = String(Math.abs(num));
+    var out = '';
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 === 0) out += sep;
+      out += digits[i];
+    }
+    return num < 0 ? '-' + out : out;
+  }
+
   function ensureConfirmModal() {
     if (_confirmEl) return;
     var wrapper = document.createElement('div');
@@ -641,6 +668,7 @@
     initPasswordStrength: initPasswordStrength,
     escapeHtml:           escapeHtml,
     errorMessage:         errorMessage,
+    formatNumber:         formatNumber,
     formatDate:           formatDate,
     formatAbs:            formatAbs,
     timeAgo:              timeAgo,

@@ -42,12 +42,15 @@
   // ── Product review: searchable typeahead + rating block orchestration ──
   var _ratingDims = ['overall', 'durability', 'materials', 'comfort', 'aesthetics', 'value_for_money'];
   var _productSearchTimer = null;
+  // These render the same enum labels as the product_type_label and
+  // material_category_label macros in macros.html, and no longer merely mirror
+  // them: each js- key is a Fluent reference to the ui- key the macro reads, so
+  // there is one string per label and a translator cannot change one side only.
   var _typeLabels = {
     furniture: Ferum.t('js-product-type-furniture'),
     material: Ferum.t('js-product-type-material'),
     room: Ferum.t('js-product-type-room'),
   };
-  // Mirrors the material_category_label macro in macros.html.
   var _matCatLabels = {
     wood_natural: Ferum.t('js-material-wood-natural'),
     wood_engineered: Ferum.t('js-material-wood-engineered'),
@@ -290,7 +293,7 @@
       var el = document.getElementById(id);
       el.addEventListener('blur', function () {
         var digits = el.value.replace(/\D/g, '');
-        el.value = digits === '' ? '' : new Intl.NumberFormat('vi-VN').format(parseInt(digits, 10));
+        el.value = digits === '' ? '' : Ferum.formatNumber(parseInt(digits, 10));
       });
     });
 

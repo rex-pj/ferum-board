@@ -23,7 +23,6 @@
   var delModalEl = document.getElementById('pdpDeleteModal');
   if (!editModalEl || !delModalEl) return;
 
-  var vnd = new Intl.NumberFormat('vi-VN');
   var $ = function (id) { return document.getElementById(id); };
   function modal(el) { return bootstrap.Modal.getOrCreateInstance(el); }
 
@@ -78,7 +77,7 @@
   }
   function formatPriceField(id) {
     var digits = ($(id).value || '').replace(/\D/g, '');
-    $(id).value = digits === '' ? '' : vnd.format(parseInt(digits, 10));
+    $(id).value = digits === '' ? '' : Ferum.formatNumber(parseInt(digits, 10));
   }
   ['pdp-price-min', 'pdp-price-max'].forEach(function (id) {
     $(id).addEventListener('blur', function () { formatPriceField(id); });

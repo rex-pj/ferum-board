@@ -230,6 +230,44 @@ async fn js_strings_contains_only_the_js_namespace() {
 }
 
 #[tokio::test]
+async fn js_strings_follows_a_message_reference_to_another_namespace() {
+    // Several `js-` keys are aliases rather than copies: the enum labels
+    // (js-product-type-*, js-material-*) and js-thousands-separator are defined
+    // once under `ui-`/`format-` and referenced from the `js-` namespace, so the
+    // browser and the server cannot disagree about a value they both render.
+    //
+    // Only `js-` keys are shipped to the browser, which is why the alias exists
+    // at all — and the alias is worth pinning because a reference Fluent cannot
+    // resolve is not an error, it renders the reference itself. That would put a
+    // literal "{ ui-product-type-furniture }" in a badge.
+    let f = Fixture::new("js-alias");
+    f.write(
+        "en",
+        "c.ftl",
+        "ui-furniture = Furniture\njs-furniture = { ui-furniture }\n",
+    );
+    f.write(
+        "vi",
+        "c.ftl",
+        "ui-furniture = Nội thất\njs-furniture = { ui-furniture }\n",
+    );
+
+    let t = translator_over(vec![f.0.clone()]).await;
+    let vi = Locale::parse("vi").expect("vi is a valid tag");
+
+    assert_eq!(
+        t.js_strings(&Locale::default_locale()).get("js-furniture").map(String::as_str),
+        Some("Furniture"),
+        "the alias must resolve to the referenced value, not to the reference"
+    );
+    assert_eq!(
+        t.js_strings(&vi).get("js-furniture").map(String::as_str),
+        Some("Nội thất"),
+        "and it must resolve within each locale's own bundle"
+    );
+}
+
+#[tokio::test]
 async fn js_strings_resolves_each_locale_in_its_own_language() {
     let f = Fixture::new("js-locales");
     f.write("en", "c.ftl", "js-reply = Reply\n");

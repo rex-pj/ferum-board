@@ -72,6 +72,7 @@ format-daymonth = { $day } { $month }, { $hour }:{ $minute } UTC
 format-monthyear = { $month } { $year }
 
 format-thousands-separator = .
+js-thousands-separator = { format-thousands-separator }
 
 month-short-1 = thg 1
 month-short-2 = thg 2
@@ -781,19 +782,19 @@ js-publish = Đăng bài
 js-publish-review = Đăng đánh giá
 
 # Nhãn loại sản phẩm & nhóm chất liệu
-js-product-type-furniture = Nội thất
-js-product-type-material = Chất liệu
-js-product-type-room = Không gian
-js-material-wood-natural = Gỗ tự nhiên
-js-material-wood-engineered = Gỗ công nghiệp
-js-material-rattan-bamboo = Mây & tre
-js-material-metal = Kim loại
-js-material-fabric = Vải
-js-material-leather = Da
-js-material-stone = Đá
-js-material-glass = Kính
-js-material-plastic = Nhựa
-js-material-other = Khác
+js-product-type-furniture = { ui-product-type-furniture }
+js-product-type-material = { ui-product-type-material }
+js-product-type-room = { ui-product-type-room }
+js-material-wood-natural = { ui-material-wood-natural }
+js-material-wood-engineered = { ui-material-wood-engineered }
+js-material-rattan-bamboo = { ui-material-rattan-bamboo }
+js-material-metal = { ui-material-metal }
+js-material-fabric = { ui-material-fabric }
+js-material-leather = { ui-material-leather }
+js-material-stone = { ui-material-stone }
+js-material-glass = { ui-material-glass }
+js-material-plastic = { ui-material-plastic }
+js-material-other = { ui-material-other }
 
 # Trang cá nhân
 js-nobody-here-yet = Chưa có ai ở đây.

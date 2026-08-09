@@ -45,41 +45,36 @@
     Ferum.toast(message, type !== 'success');
   }
 
-  // ── HTML escape helper ───────────────────────────────────────────
-  function escHtml(s) {
-    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
   // ── Build a reply card in JS ─────────────────────────────────────
   function buildReplyCard(post, postNum) {
     var u = CURRENT_USER || {};
     var avatarHtml = u.avatar_url
-      ? '<img src="' + escHtml(u.avatar_url) + '" class="fr-avatar fr-avatar--38" alt="' + escHtml(u.display_name) + '" loading="lazy">'
-      : '<div class="fr-avatar--placeholder fr-avatar--38" aria-label="' + escHtml(u.display_name) + '">' + (u.display_name || '?')[0].toUpperCase() + '</div>';
+      ? '<img src="' + Ferum.escapeHtml(u.avatar_url) + '" class="fr-avatar fr-avatar--38" alt="' + Ferum.escapeHtml(u.display_name) + '" loading="lazy">'
+      : '<div class="fr-avatar--placeholder fr-avatar--38" aria-label="' + Ferum.escapeHtml(u.display_name) + '">' + (u.display_name || '?')[0].toUpperCase() + '</div>';
     // Through Ferum.formatDate so this card matches the server-rendered ones
     // around it. It used to name 'en-US' inline, which put an English date on a
     // Vietnamese page next to dates in Vietnamese.
     var dateStr = Ferum.formatDate(new Date());
-    return '<div class="card mb-3" id="post-' + escHtml(post.id) + '">' +
+    return '<div class="card mb-3" id="post-' + Ferum.escapeHtml(post.id) + '">' +
       '<div class="card-body">' +
         '<div class="d-flex justify-content-between align-items-start mb-3">' +
           '<div class="d-flex align-items-center gap-2">' +
             avatarHtml +
             '<div>' +
               '<div class="d-flex align-items-center gap-1">' +
-                '<a href="/u/' + escHtml(u.username) + '" class="fw-semibold text-body text-decoration-none">' + escHtml(u.display_name) + '</a>' +
+                '<a href="/u/' + Ferum.escapeHtml(u.username) + '" class="fw-semibold text-body text-decoration-none">' + Ferum.escapeHtml(u.display_name) + '</a>' +
               '</div>' +
               '<div class="d-flex align-items-center gap-2 mt-1">' +
                 '<time class="small text-muted">' + dateStr + '</time>' +
               '</div>' +
             '</div>' +
           '</div>' +
-          '<a href="#post-' + escHtml(post.id) + '" class="small text-muted text-decoration-none fr-post-num">#' + postNum + '</a>' +
+          '<a href="#post-' + Ferum.escapeHtml(post.id) + '" class="small text-muted text-decoration-none fr-post-num">#' + postNum + '</a>' +
         '</div>' +
-        '<div id="post-content-' + escHtml(post.id) + '" class="post-content">' + (post.content_html || '') + '</div>' +
-        '<div id="post-edit-' + escHtml(post.id) + '" class="d-none mt-2"></div>' +
+        '<div id="post-content-' + Ferum.escapeHtml(post.id) + '" class="post-content">' + (post.content_html || '') + '</div>' +
+        '<div id="post-edit-' + Ferum.escapeHtml(post.id) + '" class="d-none mt-2"></div>' +
         '<div class="mt-3 pt-2 border-top">' +
-          '<ferum-reaction-bar post-id="' + escHtml(post.id) + '" reactions=\'[]\' user-id="' + escHtml(u.id || '') + '"></ferum-reaction-bar>' +
+          '<ferum-reaction-bar post-id="' + Ferum.escapeHtml(post.id) + '" reactions=\'[]\' user-id="' + Ferum.escapeHtml(u.id || '') + '"></ferum-reaction-bar>' +
         '</div>' +
       '</div>' +
     '</div>';
