@@ -343,7 +343,11 @@
   // Works on any page without a pre-existing toast element.
   // Lazily creates #fr-toast-container on first call.
   // isError: true → danger (6 s), false/omit → success (3.5 s).
-  var _toastIconMap = { success: 'fa-check', danger: 'fa-circle-exclamation', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
+  // Bootstrap variant → FontAwesome icon. Shared by toast() and showFeedback()
+  // below: the same severity must look the same whether it surfaces as a toast
+  // or as an inline alert, and two copies of this table is how that stops being
+  // true without anyone noticing.
+  var _variantIconMap = { success: 'fa-check', danger: 'fa-circle-exclamation', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
 
   function toast(msg, isError) {
     var variant   = isError ? 'danger' : 'success';
@@ -364,7 +368,7 @@
     var wrap = document.createElement('div'); wrap.className = 'd-flex';
     var body = document.createElement('div'); body.className = 'toast-body d-flex align-items-center gap-2';
     var icon = document.createElement('i');
-    icon.className = 'fa-solid ' + (_toastIconMap[variant] || 'fa-circle-info') + ' flex-shrink-0';
+    icon.className = 'fa-solid ' + (_variantIconMap[variant] || 'fa-circle-info') + ' flex-shrink-0';
     icon.setAttribute('aria-hidden', 'true');
     body.appendChild(icon);
     body.appendChild(document.createTextNode(msg));
@@ -396,14 +400,12 @@
   // Renders a Bootstrap alert in-place with a type-appropriate icon.
   // Errors (danger) stay visible until the next call; all other types
   // auto-dismiss after 3.5 s so they don't clutter the page.
-  var _feedbackIconMap = { success: 'fa-check', danger: 'fa-circle-exclamation', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
-
   function showFeedback(elementId, type, msg) {
     var el = document.getElementById(elementId);
     if (!el) return;
     el.className = 'alert alert-' + type + ' py-1 small d-flex align-items-center gap-1';
     el.innerHTML = '';
-    var iconKey = _feedbackIconMap[type];
+    var iconKey = _variantIconMap[type];
     if (iconKey) {
       var i = document.createElement('i');
       i.className = 'fa-solid ' + iconKey + ' flex-shrink-0';
