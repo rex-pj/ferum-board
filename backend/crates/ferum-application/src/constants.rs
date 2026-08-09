@@ -108,6 +108,16 @@ pub const MAX_UPLOAD_BYTES_PER_WINDOW: i64 = 100 * 1024 * 1024; // 100 MB
 pub const MAX_POST_CONTENT_BYTES: usize = 100 * 1024; // 100 KB
 pub const MAX_BAN_REASON_LEN: usize = 1_000;
 
+/// Longest reason a reporter may submit with `POST /api/reports`.
+///
+/// The number lives here because it is written twice: the `validate` attribute
+/// on `CreateReportRequest`, and the `maxlength` on the report textarea. Those
+/// two had drifted — the server accepted 2000 while the form stopped at 500 —
+/// so the form was the real limit and the validator was describing a rule no
+/// reporter could reach. 500 is the one users have actually been held to, and
+/// the template now renders this constant rather than repeating a literal.
+pub const MAX_REPORT_REASON_LEN: usize = 500;
+
 /// Longest ban `moderation.ban_temp` can express.
 ///
 /// This is what makes `moderation.ban_temp` and `admin.ban_permanent` two

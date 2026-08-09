@@ -249,6 +249,10 @@ pub async fn render_with_theme_in(
     ctx.insert("locale", locale.as_str());
     ctx.insert("current_path", &req_locale.canonical_path);
     ctx.insert("js_strings", &js_strings_for(state, locale));
+    // Field limits the server enforces, so a `maxlength` attribute cannot drift
+    // away from the validator behind it. Injected here rather than per-page
+    // because a limit is the same on every request and any theme may need it.
+    ctx.insert("limits", &crate::view_models::page_context::FieldLimitsCtx::new());
     ctx.insert(
         "available_locales",
         &state

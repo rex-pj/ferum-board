@@ -26,7 +26,7 @@ pub struct AuditLogQuery {
 pub struct CreateReportRequest {
     pub post_id: Option<Uuid>,
     pub thread_id: Option<Uuid>,
-    #[validate(length(min = 1, max = 2000))]
+    #[validate(length(min = 1, max = 500))] // ferum_application::constants::MAX_REPORT_REASON_LEN
     pub reason: String,
 }
 

@@ -448,9 +448,9 @@
         <input type="hidden" id="report-post-id">
         <div class="mb-3">
           <label for="report-reason" class="form-label">{{ t(k="ui-reason") }} <span class="text-danger">*</span></label>
-          <textarea class="form-control" id="report-reason" rows="3" maxlength="500"
+          <textarea class="form-control" id="report-reason" rows="3" maxlength="{{ limits.report_reason }}"
                     placeholder="{{ t(k='ui-describe-why-this-post-violates-the') }}" required></textarea>
-          <div class="form-text">{{ t(k="ui-max-500-characters") }}</div>
+          <div class="form-text">{{ t(k="ui-max-n-characters", n=limits.report_reason) }}</div>
         </div>
         <div id="report-feedback" class="d-none"></div>
       </div>

@@ -12,6 +12,35 @@ pub struct PluginSlotCtx {
     pub html: String,
 }
 
+/// Server-enforced field limits, injected into every public page as `limits`.
+///
+/// A `maxlength` attribute and the validator behind it are the same rule
+/// written twice, and they had already drifted: the report textarea stopped at
+/// 500 while `CreateReportRequest` accepted 2000. Templates render
+/// `{{ limits.report_reason }}` so there is one number, and a change to the
+/// constant reaches the form without anyone remembering to follow it.
+///
+/// Only limits a template actually needs belong here — this is not a mirror of
+/// `constants.rs`.
+#[derive(Serialize, Clone)]
+pub struct FieldLimitsCtx {
+    pub report_reason: usize,
+}
+
+impl FieldLimitsCtx {
+    pub fn new() -> Self {
+        Self {
+            report_reason: ferum_application::constants::MAX_REPORT_REASON_LEN,
+        }
+    }
+}
+
+impl Default for FieldLimitsCtx {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Minimal site info injected into every page.
 #[derive(Serialize, Clone)]
 pub struct SiteCtx {
@@ -404,6 +433,14 @@ pub struct ThreadDetailCtx {
     pub category_id: String,
     pub category_slug: String,
     pub category_name: String,
+    /// Theme-facing only — no bundled template renders it.
+    ///
+    /// Page context is the API a user-installed theme is written against, and
+    /// themes live outside this repository, so "no template reads it" cannot
+    /// be established by searching. Tera renders a missing variable as an
+    /// empty string rather than failing, so removing a field breaks such a
+    /// theme silently, with nothing in the logs. Fields like this one are
+    /// therefore kept deliberately, not by oversight.
     pub category_description: Option<String>,
     pub reply_count: i32,
     pub view_count: i32,
@@ -500,6 +537,11 @@ pub struct SearchProductCtx {
     pub primary_image_key: Option<String>,
     pub price_min: Option<i32>,
     pub price_max: Option<i32>,
+    /// Theme-facing only — no bundled template renders it (the search page
+    /// formats prices through the `thousands` filter without a currency).
+    /// Kept because page context is the contract a user-installed theme is
+    /// written against, and a cleanup pass has already flagged it once as
+    /// unused; see the note on `ThreadDetailCtx::category_description`.
     pub currency: String,
     pub review_count: i32,
     pub avg_overall: Option<f64>,
@@ -612,6 +654,10 @@ pub struct UserProfileCtx {
     pub website: Option<String>,
     pub trust_level: String,
     pub trust_score: Option<i32>,
+    /// Theme-facing only — the bundled profile page styles the role badge from
+    /// `primary_role_name`/`primary_role_color`, but a theme wanting to key CSS
+    /// off the role needs the slug. See the note on
+    /// `ThreadDetailCtx::category_description`.
     pub primary_role_slug: Option<String>,
     pub primary_role_name: Option<String>,
     pub primary_role_color: Option<String>,
