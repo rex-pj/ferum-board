@@ -44,7 +44,7 @@
   async function readError(res) {
     try {
       var b = await res.json();
-      return (b && b.error && b.error.message) || Ferum.t('js-failed-save-changes');
+      return Ferum.errorMessage(b) || Ferum.t('js-failed-save-changes');
     } catch (_) {
       return Ferum.t('js-failed-save-changes');
     }

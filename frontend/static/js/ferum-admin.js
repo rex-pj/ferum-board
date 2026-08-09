@@ -44,7 +44,7 @@
   function settingsApiError(r) {
     r.clone().json()
       .then(function (d) {
-        showSettingsAlert((d.error && d.error.message) ? d.error.message : 'An error occurred.', 'danger');
+        showSettingsAlert(Ferum.errorMessage(d) || 'An error occurred.', 'danger');
       })
       .catch(function () {
         showSettingsAlert('An error occurred (HTTP ' + r.status + ').', 'danger');
@@ -102,7 +102,7 @@
     FerumApi.admin.uploadBranding(type, fd).then(function (r) {
       if (!r.ok) {
         return r.json().then(function (d) {
-          if (statusEl) statusEl.innerHTML = '<span class="text-danger">' + Ferum.escapeHtml((d.error && d.error.message) || 'Upload failed.') + '</span>';
+          if (statusEl) statusEl.innerHTML = '<span class="text-danger">' + Ferum.escapeHtml(Ferum.errorMessage(d) || 'Upload failed.') + '</span>';
         });
       }
       return r.json().then(function (d) {
@@ -226,7 +226,7 @@
         if (self.form.secret) body.secret = self.form.secret;
         FerumApi.admin.createWebhook(body).then(function (r) {
           if (r.ok) { self.form = { url: '', secret: '', events: [] }; self.load(); }
-          else return r.json().then(function (d) { self.webhookError = (d.error && d.error.message) || 'Failed to add webhook.'; });
+          else return r.json().then(function (d) { self.webhookError = Ferum.errorMessage(d) || 'Failed to add webhook.'; });
         }).catch(function () { self.webhookError = Ferum.t('js-network-error'); })
           .finally(function () { self.saving = false; });
       },
@@ -266,7 +266,7 @@
         if (self.editForm.secret) body.secret = self.editForm.secret;
         FerumApi.admin.updateWebhook(self.editingId, body).then(function (r) {
           if (r.ok) { self.editingId = null; self.load(); }
-          else return r.json().then(function (d) { self.editError = (d.error && d.error.message) || 'Failed to save changes.'; });
+          else return r.json().then(function (d) { self.editError = Ferum.errorMessage(d) || 'Failed to save changes.'; });
         }).catch(function () { self.editError = Ferum.t('js-network-error'); })
           .finally(function () { self.saving = false; });
       },
@@ -438,7 +438,7 @@
     if (!ok) return;
     FerumApi.threads.delete(slug).then(function (res) {
       if (res.ok) location.reload();
-      else res.json().then(function (b) { Ferum.toast((b.error && b.error.message) || 'Failed to delete thread.', true); }).catch(function () { Ferum.toast('Failed to delete thread.', true); });
+      else res.json().then(function (b) { Ferum.toast(Ferum.errorMessage(b) || 'Failed to delete thread.', true); }).catch(function () { Ferum.toast('Failed to delete thread.', true); });
     });
   };
 
@@ -446,7 +446,7 @@
   window.resolveReport = function (id, status) {
     FerumApi.mod.resolveReport(id, status).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed.', true); }).catch(function () { Ferum.toast('Failed.', true); });
+      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed.', true); }).catch(function () { Ferum.toast('Failed.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -456,7 +456,7 @@
     if (!ok) return;
     FerumApi.admin.unbanUser(userId).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to unban.', true); }).catch(function () { Ferum.toast('Failed to unban.', true); });
+      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed to unban.', true); }).catch(function () { Ferum.toast('Failed to unban.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -465,7 +465,7 @@
     if (!ok) return;
     FerumApi.admin.revokeRole(userId, roleId).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to remove role.', true); }).catch(function () { Ferum.toast('Failed to remove role.', true); });
+      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed to remove role.', true); }).catch(function () { Ferum.toast('Failed to remove role.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -486,7 +486,7 @@
     }
     FerumApi.admin.assignRole(userId, roleId).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to assign role.', true); }).catch(function () { Ferum.toast('Failed to assign role.', true); });
+      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed to assign role.', true); }).catch(function () { Ferum.toast('Failed to assign role.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -502,7 +502,7 @@
       if (r.ok) {
         Ferum.showFeedback('edit-profile-feedback', 'success', 'Profile updated.');
       } else {
-        r.json().then(function (d) { Ferum.showFeedback('edit-profile-feedback', 'danger', (d.error && d.error.message) || 'Failed to save.'); }).catch(function () { Ferum.showFeedback('edit-profile-feedback', 'danger', 'Failed to save.'); });
+        r.json().then(function (d) { Ferum.showFeedback('edit-profile-feedback', 'danger', Ferum.errorMessage(d) || 'Failed to save.'); }).catch(function () { Ferum.showFeedback('edit-profile-feedback', 'danger', 'Failed to save.'); });
       }
     }).catch(function () { Ferum.showFeedback('edit-profile-feedback', 'danger', Ferum.t('js-network-error')); });
   };
@@ -517,7 +517,7 @@
       if (r.ok) {
         Ferum.showFeedback('trust-level-feedback', 'success', 'Trust level updated.');
       } else {
-        r.json().then(function (d) { Ferum.showFeedback('trust-level-feedback', 'danger', (d.error && d.error.message) || 'Failed.'); }).catch(function () { Ferum.showFeedback('trust-level-feedback', 'danger', 'Failed.'); });
+        r.json().then(function (d) { Ferum.showFeedback('trust-level-feedback', 'danger', Ferum.errorMessage(d) || 'Failed.'); }).catch(function () { Ferum.showFeedback('trust-level-feedback', 'danger', 'Failed.'); });
       }
     }).catch(function () { Ferum.showFeedback('trust-level-feedback', 'danger', Ferum.t('js-network-error')); });
   };
@@ -527,7 +527,7 @@
     if (!ok) return;
     FerumApi.admin.unlockUser(userId).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to unlock.', true); }).catch(function () { Ferum.toast('Failed to unlock.', true); });
+      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed to unlock.', true); }).catch(function () { Ferum.toast('Failed to unlock.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -536,7 +536,7 @@
     if (!ok) return;
     FerumApi.admin.verifyUserEmail(userId).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to verify.', true); }).catch(function () { Ferum.toast('Failed to verify.', true); });
+      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed to verify.', true); }).catch(function () { Ferum.toast('Failed to verify.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -546,7 +546,7 @@
     if (!ok) return;
     FerumApi.admin.revokeModerator(categoryId, userId).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'Failed to remove moderator.', true); }).catch(function () { Ferum.toast('Failed to remove moderator.', true); });
+      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed to remove moderator.', true); }).catch(function () { Ferum.toast('Failed to remove moderator.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -569,7 +569,7 @@
       }
       return FerumApi.admin.assignModerator(categoryId, user.value).then(function (r2) {
         if (r2.ok) location.reload();
-        else r2.json().then(function (d2) { Ferum.toast((d2.error && d2.error.message) || 'Failed to assign moderator.', true); btn.disabled = false; }).catch(function () { Ferum.toast('Failed to assign moderator.', true); btn.disabled = false; });
+        else r2.json().then(function (d2) { Ferum.toast(Ferum.errorMessage(d2) || 'Failed to assign moderator.', true); btn.disabled = false; }).catch(function () { Ferum.toast('Failed to assign moderator.', true); btn.disabled = false; });
       });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); btn.disabled = false; });
   };
@@ -583,7 +583,7 @@
     if (!ok) return;
     FerumApi.admin.deleteRole(id).then(function (r) {
       if (r.ok) location.reload();
-      else r.json().then(function (b) { Ferum.toast((b.error && b.error.message) || 'Failed to delete role.', true); }).catch(function () { Ferum.toast('Failed to delete role.', true); });
+      else r.json().then(function (b) { Ferum.toast(Ferum.errorMessage(b) || 'Failed to delete role.', true); }).catch(function () { Ferum.toast('Failed to delete role.', true); });
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
@@ -608,7 +608,7 @@
     FerumApi.admin.createRole(body).then(function (r) {
       if (r.ok) location.reload();
       else {
-        r.json().then(function (d) { Ferum.showFeedback('new-role-feedback', 'danger', (d.error && d.error.message) || 'An error occurred.'); }).catch(function () { Ferum.showFeedback('new-role-feedback', 'danger', 'An error occurred.'); });
+        r.json().then(function (d) { Ferum.showFeedback('new-role-feedback', 'danger', Ferum.errorMessage(d) || 'An error occurred.'); }).catch(function () { Ferum.showFeedback('new-role-feedback', 'danger', 'An error occurred.'); });
         btn.disabled = false;
         if (spinner) spinner.classList.add('d-none');
       }
@@ -681,7 +681,7 @@
     FerumApi.admin.updateRole(id, body).then(function (r) {
       if (r.ok) location.reload();
       else {
-        r.json().then(function (d) { Ferum.toast((d.error && d.error.message) || 'An error occurred.', true); }).catch(function () { Ferum.toast('An error occurred.', true); });
+        r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'An error occurred.', true); }).catch(function () { Ferum.toast('An error occurred.', true); });
         btn.disabled = false;
         if (spinner) spinner.classList.add('d-none');
       }
@@ -712,7 +712,7 @@
 
   function catMsgFromError(d) {
     var code    = (d && d.error && d.error.code)    || '';
-    var message = (d && d.error && d.error.message) || '';
+    var message = Ferum.errorMessage(d) || '';
     if (code === 'slug_taken')                 return 'A category with this slug already exists. Choose a different slug.';
     if (code === 'category_has_subcategories') return 'Cannot delete: this category has subcategories. Delete or move them first.';
     if (code === 'category_has_threads')       return 'Cannot delete: this category still has threads. Move or delete the threads first.';
@@ -850,7 +850,7 @@
       FerumApi.admin.banUser(userId, reason, Ferum.localInputToIso(until))
         .then(function (r) {
           if (r.ok) location.reload();
-          else r.json().then(function (b) { Ferum.showFeedback('ban-feedback', 'danger', (b.error && b.error.message) || 'Failed to ban user.'); btn.disabled = false; });
+          else r.json().then(function (b) { Ferum.showFeedback('ban-feedback', 'danger', Ferum.errorMessage(b) || 'Failed to ban user.'); btn.disabled = false; });
         })
         .catch(function () { Ferum.showFeedback('ban-feedback', 'danger', Ferum.t('js-network-error')); btn.disabled = false; });
     });

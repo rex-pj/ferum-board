@@ -60,7 +60,7 @@
       if (res.ok) showFeedback('profile-feedback', 'success', Ferum.t('js-profile-saved'));
       else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-failed-to-save'));
+        showFeedback('profile-feedback', 'danger', Ferum.errorMessage(b) || Ferum.t('js-failed-to-save'));
       }
     } catch (_) { showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error')); }
     setSpinner('profile-submit-btn', 'profile-spinner', false);
@@ -98,7 +98,7 @@
         setTimeout(function () { location.reload(); }, 1200);
       } else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-upload-failed'));
+        showFeedback('profile-feedback', 'danger', Ferum.errorMessage(b) || Ferum.t('js-upload-failed'));
         setUploadStatus('avatar-upload-status', '');
       }
     } catch (_) {
@@ -141,7 +141,7 @@
         setTimeout(function () { location.reload(); }, 1200);
       } else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-upload-failed'));
+        showFeedback('profile-feedback', 'danger', Ferum.errorMessage(b) || Ferum.t('js-upload-failed'));
         setUploadStatus('cover-upload-status', '');
       }
     } catch (_) {
@@ -209,7 +209,7 @@
         document.getElementById('confirm_password')?.classList.remove('is-valid');
       } else {
         var b = await res.json().catch(function () { return {}; });
-        showFeedback('password-feedback', 'danger', (b.error && b.error.message) || Ferum.t('js-failed-change-password'));
+        showFeedback('password-feedback', 'danger', Ferum.errorMessage(b) || Ferum.t('js-failed-change-password'));
       }
     } catch (_) { showFeedback('password-feedback', 'danger', Ferum.t('js-network-error')); }
     setSpinner('pw-submit-btn', 'pw-spinner', false);

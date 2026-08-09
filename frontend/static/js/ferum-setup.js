@@ -117,7 +117,7 @@
         setTimeout(function () { window.location.href = '/admin/dashboard'; }, 800);
       } else {
         var body = await res.json().catch(function () { return {}; });
-        errEl.textContent = (body && body.error && body.error.message) || 'Setup failed. Please try again.';
+        errEl.textContent = Ferum.errorMessage(body) || 'Setup failed. Please try again.';
         errEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');

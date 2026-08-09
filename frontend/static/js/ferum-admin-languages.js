@@ -42,7 +42,7 @@
           // default; surface its message rather than a generic failure.
           return res.json().then(function (data) {
             throw new Error(
-              (data && data.error && data.error.message) || 'Request failed.'
+              Ferum.errorMessage(data) || 'Request failed.'
             );
           });
         })

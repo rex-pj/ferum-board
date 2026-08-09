@@ -261,6 +261,30 @@
     });
   }
 
+  // ── API error text ─────────────────────────────────────────────────
+  // Every JSON endpoint answers a failure with the envelope documented in
+  // CLAUDE.md: { error: { code, message } }, where `message` has already been
+  // translated into the reader's locale by the translate_errors middleware.
+  //
+  // Pulling that out was written by hand at 49 call sites across 11 files as
+  // `(body.error && body.error.message) || fallback`.
+  //
+  // The `|| fallback` deliberately stays at the call site rather than becoming
+  // a second argument: the wording belongs next to the code that chose it, and
+  // several callers pass a `Ferum.t(...)` lookup that reads better inline.
+  //
+  // Returning '' rather than undefined for a missing message is what keeps
+  // `|| fallback` firing on an envelope whose message is an empty string —
+  // matching what the hand-written expression did.
+  //
+  // Takes a parsed body, not a Response: callers reach this point having
+  // already read the body, usually as
+  // `await res.json().catch(function () { return {}; })`.
+
+  function errorMessage(body) {
+    return (body && body.error && body.error.message) || '';
+  }
+
   function ensureConfirmModal() {
     if (_confirmEl) return;
     var wrapper = document.createElement('div');
@@ -616,6 +640,7 @@
     initPasswordToggle:   initPasswordToggle,
     initPasswordStrength: initPasswordStrength,
     escapeHtml:           escapeHtml,
+    errorMessage:         errorMessage,
     formatDate:           formatDate,
     formatAbs:            formatAbs,
     timeAgo:              timeAgo,

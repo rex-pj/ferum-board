@@ -29,7 +29,7 @@
           var res = await FerumApi.threads.uploadThumbnail(this.threadSlug, fd);
           if (!res.ok) {
             var body = await res.json().catch(function () { return {}; });
-            this.uploadError = (body.error && body.error.message) || Ferum.t('js-upload-failed');
+            this.uploadError = Ferum.errorMessage(body) || Ferum.t('js-upload-failed');
             this.preview = null;
           }
         } catch (_) {
@@ -83,7 +83,7 @@
         window.location.href = '/forum/t/' + threadSlug;
       } else {
         var body = await res.json().catch(function () { return {}; });
-        errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-failed-save-changes');
+        errorEl.textContent = Ferum.errorMessage(body) || Ferum.t('js-failed-save-changes');
         errorEl.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');

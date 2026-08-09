@@ -113,7 +113,7 @@
       if (el) el.innerHTML = '<div class="card-body text-muted small py-2"><i class="fa-solid fa-trash me-1"></i>Post deleted.</div>';
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || Ferum.t('js-failed-delete-post'));
+      showToast(Ferum.errorMessage(body) || Ferum.t('js-failed-delete-post'));
     }
   }
 
@@ -166,7 +166,7 @@
         }
       } else {
         var body = await res.json().catch(function () { return {}; });
-        showToast((body.error && body.error.message) || Ferum.t('js-failed-save-changes'));
+        showToast(Ferum.errorMessage(body) || Ferum.t('js-failed-save-changes'));
       }
     } catch (_) {
       showToast(Ferum.t('js-network-error'));
@@ -202,7 +202,7 @@
       } else {
         var body = await res.json().catch(function () { return {}; });
         fb.className   = 'alert alert-danger';
-        fb.textContent = (body.error && body.error.message) || Ferum.t('js-failed-submit-report');
+        fb.textContent = Ferum.errorMessage(body) || Ferum.t('js-failed-submit-report');
         fb.classList.remove('d-none');
         btn.disabled   = false;
         if (spinner) spinner.classList.add('d-none');
@@ -269,7 +269,7 @@
       } else {
         var body = await res.json().catch(function () { return {}; });
         feedback.className   = 'alert alert-danger mt-2';
-        feedback.textContent = (body.error && body.error.message) || Ferum.t('js-failed-post-reply');
+        feedback.textContent = Ferum.errorMessage(body) || Ferum.t('js-failed-post-reply');
         feedback.classList.remove('d-none');
         btn.disabled = false;
         spinner.classList.add('d-none');
@@ -294,7 +294,7 @@
       window.location.reload();
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || Ferum.t('js-failed-mark-best-answer'));
+      showToast(Ferum.errorMessage(body) || Ferum.t('js-failed-mark-best-answer'));
     }
   }
 
@@ -318,7 +318,7 @@
       } else {
         var body = await res.json().catch(function () { return {}; });
         fb.className   = 'alert alert-danger mt-2';
-        fb.textContent = (body.error && body.error.message) || Ferum.t('js-failed-move-thread');
+        fb.textContent = Ferum.errorMessage(body) || Ferum.t('js-failed-move-thread');
         fb.classList.remove('d-none');
         btn.disabled   = false;
         if (spinner) spinner.classList.add('d-none');
@@ -340,7 +340,7 @@
       window.location.href = categorySlug ? '/forum/' + categorySlug : '/forum';
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || Ferum.t('js-failed-delete-thread'));
+      showToast(Ferum.errorMessage(body) || Ferum.t('js-failed-delete-thread'));
     }
   }
 
@@ -353,7 +353,7 @@
       window.location.reload();
     } else {
       var body = await res.json().catch(function () { return {}; });
-      showToast((body.error && body.error.message) || Ferum.t('js-failed-thread-action'));
+      showToast(Ferum.errorMessage(body) || Ferum.t('js-failed-thread-action'));
       if (triggerBtn) triggerBtn.disabled = false;
     }
   }

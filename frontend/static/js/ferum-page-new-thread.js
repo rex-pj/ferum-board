@@ -536,7 +536,7 @@
         });
         var body = await res.json().catch(function () { return {}; });
         if (!res.ok) {
-          showError((body.error && body.error.message) || Ferum.t('js-could-not-add-product'));
+          showError(Ferum.errorMessage(body) || Ferum.t('js-could-not-add-product'));
           submitBtn.disabled = false;
           return;
         }
@@ -693,7 +693,7 @@
       var res = await FerumApi.threads.create(fd);
       if (!res.ok) {
         var body = await res.json().catch(function () { return {}; });
-        fail((body.error && body.error.message) || Ferum.t('js-could-not-publish'));
+        fail(Ferum.errorMessage(body) || Ferum.t('js-could-not-publish'));
         return;
       }
       var data = await res.json();

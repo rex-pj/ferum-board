@@ -44,7 +44,7 @@
   }
 
   async function readError(res) {
-    try { var b = await res.json(); return (b && b.error && b.error.message) || ('Error (' + res.status + ')'); }
+    try { var b = await res.json(); return Ferum.errorMessage(b) || ('Error (' + res.status + ')'); }
     catch (e) { return 'Error (' + res.status + ')'; }
   }
 

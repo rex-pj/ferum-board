@@ -62,7 +62,7 @@
           window.location.href = next;
         } else {
           var body = await res.json().catch(function () { return {}; });
-          errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-invalid-credentials');
+          errorEl.textContent = Ferum.errorMessage(body) || Ferum.t('js-invalid-credentials');
           errorEl.classList.remove('d-none');
           if (resendBtn && body.error && body.error.code === 'email_not_verified') {
             resendBtn.classList.remove('d-none');
@@ -124,7 +124,7 @@
           setTimeout(function () { window.location.href = '/login'; }, 1500);
         } else {
           var body = await res.json().catch(function () { return {}; });
-          errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-registration-failed');
+          errorEl.textContent = Ferum.errorMessage(body) || Ferum.t('js-registration-failed');
           errorEl.classList.remove('d-none');
           btn.disabled = false;
           spinner.classList.add('d-none');
@@ -240,7 +240,7 @@
           setTimeout(function () { window.location.href = '/login'; }, 1500);
         } else {
           var body = await res.json().catch(function () { return {}; });
-          errorEl.textContent = (body.error && body.error.message) || Ferum.t('js-reset-failed');
+          errorEl.textContent = Ferum.errorMessage(body) || Ferum.t('js-reset-failed');
           errorEl.classList.remove('d-none');
           btn.disabled = false;
           spinner.classList.add('d-none');

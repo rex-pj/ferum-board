@@ -12,7 +12,7 @@
         if (el) el.remove();
       } else {
         var b = await res.json().catch(function () { return {}; });
-        Ferum.showToast('queue-toast', (b.error && b.error.message) || 'Failed to approve.', true);
+        Ferum.showToast('queue-toast', Ferum.errorMessage(b) || 'Failed to approve.', true);
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
@@ -33,7 +33,7 @@
         if (el) el.remove();
       } else {
         var b = await res.json().catch(function () { return {}; });
-        Ferum.showToast('queue-toast', (b.error && b.error.message) || 'Failed to reject.', true);
+        Ferum.showToast('queue-toast', Ferum.errorMessage(b) || 'Failed to reject.', true);
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
@@ -52,7 +52,7 @@
         setTimeout(function () { location.reload(); }, 1000);
       } else {
         var b = await res.json().catch(function () { return {}; });
-        Ferum.showToast('report-toast', (b.error && b.error.message) || 'Action failed.', true);
+        Ferum.showToast('report-toast', Ferum.errorMessage(b) || 'Action failed.', true);
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
@@ -74,7 +74,7 @@
       if (res.ok) location.reload();
       else {
         var b = await res.json().catch(function () { return {}; });
-        Ferum.toast((b.error && b.error.message) || 'Action failed.', true);
+        Ferum.toast(Ferum.errorMessage(b) || 'Action failed.', true);
         if (triggerBtn) triggerBtn.disabled = false;
       }
     } catch (_) {
@@ -96,7 +96,7 @@
         if (reasonEl) reasonEl.value = '';
       } else {
         var b = await res.json().catch(function () { return {}; });
-        Ferum.showFeedback('warn-feedback-' + userId, 'danger', (b.error && b.error.message) || 'Failed to warn user.');
+        Ferum.showFeedback('warn-feedback-' + userId, 'danger', Ferum.errorMessage(b) || 'Failed to warn user.');
       }
     } catch (_) { Ferum.showFeedback('warn-feedback-' + userId, 'danger', Ferum.t('js-network-error')); }
     if (triggerBtn) triggerBtn.disabled = false;
@@ -118,7 +118,7 @@
         if (untilEl)  untilEl.value  = '';
       } else {
         var b = await res.json().catch(function () { return {}; });
-        Ferum.showFeedback('ban-feedback-' + userId, 'danger', (b.error && b.error.message) || 'Failed to ban user.');
+        Ferum.showFeedback('ban-feedback-' + userId, 'danger', Ferum.errorMessage(b) || 'Failed to ban user.');
       }
     } catch (_) { Ferum.showFeedback('ban-feedback-' + userId, 'danger', Ferum.t('js-network-error')); }
     if (triggerBtn) triggerBtn.disabled = false;
