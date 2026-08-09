@@ -204,10 +204,6 @@ impl ProductUseCase {
         self.brands.list().await
     }
 
-    pub async fn get_brand_by_slug(&self, slug: &str) -> Result<Brand, AppError> {
-        self.brands.find_by_slug(slug).await?.ok_or(AppError::NotFound)
-    }
-
     pub async fn find_brand(&self, id: Uuid) -> Result<Option<Brand>, AppError> {
         self.brands.find_by_id(id).await
     }

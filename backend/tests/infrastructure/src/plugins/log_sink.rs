@@ -54,7 +54,6 @@ impl PluginRepository for CountingRepo {
     async fn update_circuit_open(&self, _: Uuid, _: bool) -> Result<(), AppError> { unimplemented!() }
     async fn delete(&self, _: Uuid) -> Result<(), AppError> { unimplemented!() }
     async fn hooks_for_plugin(&self, _: Uuid) -> Result<Vec<PluginHook>, AppError> { Ok(vec![]) }
-    async fn active_hooks_for(&self, _: &str) -> Result<Vec<PluginHook>, AppError> { Ok(vec![]) }
     async fn create_hook(&self, _: NewPluginHook) -> Result<PluginHook, AppError> { unimplemented!() }
     async fn delete_hooks_for_plugin(&self, _: Uuid) -> Result<(), AppError> { unimplemented!() }
     async fn update_hook_avg_ms(&self, _: Uuid, _: i32) -> Result<(), AppError> { unimplemented!() }

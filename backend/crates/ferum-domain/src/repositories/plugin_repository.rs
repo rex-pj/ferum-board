@@ -26,8 +26,6 @@ pub trait PluginRepository: Send + Sync {
 
     // ── Hook management ───────────────────────────────────────────────────────
     async fn hooks_for_plugin(&self, plugin_id: Uuid) -> Result<Vec<PluginHook>, AppError>;
-    /// Returns active hooks for a given hook name, sorted by priority ASC.
-    async fn active_hooks_for(&self, hook_name: &str) -> Result<Vec<PluginHook>, AppError>;
     async fn create_hook(&self, data: NewPluginHook) -> Result<PluginHook, AppError>;
     async fn delete_hooks_for_plugin(&self, plugin_id: Uuid) -> Result<(), AppError>;
     async fn update_hook_avg_ms(&self, hook_id: Uuid, avg_ms: i32) -> Result<(), AppError>;

@@ -145,22 +145,6 @@ async fn create_hook_and_list_for_plugin() {
 }
 
 #[tokio::test]
-async fn active_hooks_for_returns_hooks_by_name() {
-    let db = TestDb::new("plg_active_hooks").await;
-    let repo = PgPluginRepository::new(db.conn.clone());
-    let plugin = repo.create(new_plugin("multi-hook")).await.expect("create");
-    repo.update_status(plugin.id, PluginStatus::Active, None).await.expect("activate");
-
-    repo.create_hook(NewPluginHook { plugin_id: plugin.id, hook_name: "before_post_create".to_string(), priority: 50 }).await.expect("hook 1");
-    repo.create_hook(NewPluginHook { plugin_id: plugin.id, hook_name: "after_thread_created".to_string(), priority: 100 }).await.expect("hook 2");
-
-    let hooks = repo.active_hooks_for("before_post_create").await.expect("active_hooks_for");
-    assert_eq!(hooks.len(), 1);
-    assert_eq!(hooks[0].hook_name, "before_post_create");
-    db.teardown().await;
-}
-
-#[tokio::test]
 async fn delete_hooks_for_plugin_removes_all() {
     let db = TestDb::new("plg_delete_hooks").await;
     let repo = PgPluginRepository::new(db.conn.clone());

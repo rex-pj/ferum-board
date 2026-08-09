@@ -212,7 +212,7 @@ async fn delete_category_empty_succeeds() {
     assert!(result.is_ok());
 }
 
-// ─── permanent_ban ─────────────────────────────────────────────────────────
+// ─── ban (permanent: banned_until = None) ──────────────────────────────────
 
 #[tokio::test]
 async fn permanent_ban_without_perm_returns_403() {
@@ -221,7 +221,7 @@ async fn permanent_ban_without_perm_returns_403() {
         MockCategoryRepository::new(), MockRoleRepository::new(), MockUserRoleRepository::new(),
         MockUserRepository::new(), MockCacheService::new(),
     );
-    let result = uc.permanent_ban(&actor, Uuid::new_v4(), "spam".to_string()).await;
+    let result = uc.ban(&actor, Uuid::new_v4(), "spam".to_string(), None).await;
     assert!(matches!(result, Err(AppError::Forbidden(_))));
 }
 
@@ -235,7 +235,7 @@ async fn permanent_ban_user_not_found_returns_404() {
         MockCategoryRepository::new(), MockRoleRepository::new(), MockUserRoleRepository::new(),
         users, MockCacheService::new(),
     );
-    let result = uc.permanent_ban(&actor, Uuid::new_v4(), "spam".to_string()).await;
+    let result = uc.ban(&actor, Uuid::new_v4(), "spam".to_string(), None).await;
     assert!(matches!(result, Err(AppError::NotFound)));
 }
 
@@ -258,7 +258,7 @@ async fn permanent_ban_success() {
         MockCategoryRepository::new(), MockRoleRepository::new(), MockUserRoleRepository::new(),
         users, cache,
     );
-    let result = uc.permanent_ban(&actor, target_id, "spam".to_string()).await;
+    let result = uc.ban(&actor, target_id, "spam".to_string(), None).await;
     assert!(result.is_ok());
 }
 

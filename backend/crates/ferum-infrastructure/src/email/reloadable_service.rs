@@ -44,10 +44,6 @@ impl ReloadableEmailService {
         Arc::clone(&self.auto_verify)
     }
 
-    pub async fn is_configured(&self) -> bool {
-        self.transport.read().await.is_some()
-    }
-
     /// Swaps in a transport built from `host`/`port`/credentials. A `None` or
     /// blank host clears it (email disabled).
     ///

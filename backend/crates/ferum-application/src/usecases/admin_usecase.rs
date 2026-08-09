@@ -375,16 +375,6 @@ impl AdminUseCase {
         self.users.find_by_id(id).await?.or_not_found()
     }
 
-    #[tracing::instrument(skip(self, actor, reason), fields(user_id = %actor.id, target_user_id = %id))]
-    pub async fn permanent_ban(
-        &self,
-        actor: &AuthUser,
-        id: Uuid,
-        reason: String,
-    ) -> Result<(), AppError> {
-        self.ban(actor, id, reason, None).await
-    }
-
     /// Admin ban with an optional expiry. `banned_until: None` means permanent.
     #[tracing::instrument(skip(self, actor, reason), fields(user_id = %actor.id, target_user_id = %id))]
     pub async fn ban(

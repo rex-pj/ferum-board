@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 pub mod audit_log;
 pub mod bookmark;
 pub mod brand;

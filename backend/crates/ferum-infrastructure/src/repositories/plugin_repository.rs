@@ -248,18 +248,6 @@ impl PluginRepository for PgPluginRepository {
             .collect())
     }
 
-    async fn active_hooks_for(&self, hook_name: &str) -> Result<Vec<PluginHook>, AppError> {
-        Ok(plugin_hooks::Entity::find()
-            .filter(plugin_hooks::Column::HookName.eq(hook_name))
-            .filter(plugin_hooks::Column::IsActive.eq(true))
-            .order_by_asc(plugin_hooks::Column::Priority)
-            .all(&self.db)
-            .await?
-            .into_iter()
-            .map(hook_from_entity)
-            .collect())
-    }
-
     async fn create_hook(&self, data: NewPluginHook) -> Result<PluginHook, AppError> {
         let model = plugin_hooks::ActiveModel {
             id: Set(Uuid::new_v4()),
