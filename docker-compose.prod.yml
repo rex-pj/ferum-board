@@ -1,0 +1,219 @@
+# Ferum Board — production stack.
+#
+#   cp backend/.env.example .env.prod   # then edit; see README "Deployment"
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+# `--env-file` is REQUIRED, not decoration. `env_file:` on a service only supplies
+# variables *inside* the container; the `${...}` substitutions below are resolved by
+# Compose itself, which reads only `--env-file` (or a `.env` beside this file).
+# Omit it and DB_PASSWORD, S3_ACCESS_KEY and S3_SECRET_KEY expand to empty strings —
+# Postgres then refuses to initialise and MinIO refuses to start.
+#
+# .env.prod carries secrets and public configuration (JWT_SECRET, APP_URL,
+# FROM_EMAIL, SMTP_*, credentials). The addresses of the services below are set in
+# `environment:` instead, because they are facts about this file rather than choices
+# an operator makes — and `environment:` wins over `env_file:`.
+#
+# Variables this file interpolates, which must therefore be present in .env.prod:
+#   DB_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY, and optionally S3_BUCKET.
+
+services:
+  app:
+    # Built and pushed by .github/workflows/deploy.yml — NOT built here. The
+    # e2-medium this runs on cannot complete a `lto = "fat"` + `codegen-units = 1`
+    # build: rustc peaks at 4-8 GB for the final unit against 4 GB of RAM.
+    #
+    # IMAGE_TAG is the commit SHA, exported by the deploy workflow before it calls
+    # `docker compose pull`. It defaults to `latest` so a manual `up -d` on the box
+    # still works; pin it to a SHA to roll back.
+    image: us-central1-docker.pkg.dev/project-b046f30f-3ee9-4a82-a84/ferum/ferum-board:${IMAGE_TAG:-latest}
+    env_file: .env.prod
+    environment:
+      DATABASE_URL: postgresql://forum:${DB_PASSWORD}@postgres:5432/forum
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-forum-uploads}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      RATE_LIMIT_ENABLED: "true"
+      # One proxy (nginx) sits in front. Leave this at 0 and per-IP rate limiting
+      # keys on nginx's address, so every client shares one bucket.
+      TRUSTED_PROXY_COUNT: "1"
+    volumes:
+      # Both directories are written at runtime by admin upload. A fresh named
+      # volume is seeded from the image, so the built-in theme survives.
+      - plugins:/app/plugins
+      - themes:/app/frontend/themes
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      # Waiting on minio-init rather than minio: the app never creates a bucket,
+      # so starting once MinIO is merely *healthy* races the bucket's creation.
+      minio-init: { condition: service_completed_successfully }
+    healthcheck:
+      # /health/ready, not /health: this decides whether the container is usable,
+      # and /health answers 200 as long as the process is alive.
+      test: ["CMD", "curl", "-fsS", "http://localhost:5173/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    # ─── Memory limits ──────────────────────────────────────────────────────
+    # Every service carries one. Without them a leak in any single container
+    # takes the whole 4 GB host down, and the OOM killer picks its victim by
+    # score rather than by what matters — in practice Postgres, the one process
+    # here holding data that cannot be rebuilt.
+    #
+    # The five limits total 2.4 GB, leaving ~1 GB for the OS, the Docker daemon
+    # and the kernel page cache. That last part is not slack: it is what keeps
+    # Postgres reads off the disk.
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: forum
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: forum
+    # The image's defaults target a machine that is not this one. Sized against
+    # the 1 GB limit below, not against the host's 4 GB.
+    #
+    # max_connections is 30, comfortably above the app's DB_MAX_CONNECTIONS=16,
+    # with room for the read pool, psql and pg_dump. Raising it is not free:
+    # every backend costs memory whether or not it is in use.
+    #
+    # random_page_cost is the one to notice. The default of 4.0 encodes a
+    # spinning disk, which makes the planner avoid index scans in favour of
+    # sequential ones — exactly backwards on pd-balanced, and it degrades
+    # silently as nothing errors, queries just get slower as tables grow.
+    command: >
+      postgres
+      -c max_connections=30
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c checkpoint_completion_target=0.9
+      -c wal_compression=on
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forum -d forum"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    image: redis:7-alpine
+    # maxmemory bounds what is otherwise unbounded growth. Everything Redis
+    # holds here is reconstructible — site config, resolved user roles, rate
+    # limit counters — so evicting the coldest key under pressure is the right
+    # failure mode. Without the policy, Redis answers writes with an error once
+    # it hits the cap instead, which surfaces as failed requests.
+    #
+    # Keep it below the container limit: the cap counts stored data, not the
+    # allocator overhead and fragmentation on top of it.
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 192m
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+
+  # One-shot: create the bucket and make it anonymously readable.
+  #
+  # Public read is required, not a shortcut. Upload URLs are written into
+  # users.avatar_url, site_config and stored post HTML, and the browser fetches
+  # them directly — no request reaches the app, and stored HTML cannot be
+  # re-signed at render time. Only the uploads bucket should be public.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-forum-uploads}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
+      mc mb --ignore-existing local/$${S3_BUCKET} &&
+      mc anonymous set download local/$${S3_BUCKET}
+      "
+    restart: "no"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Cloudflare Origin Certificate, placed by hand once — it is valid for 15
+      # years, so there is no renewal process to automate. certbot-* are kept
+      # mounted for the grey-cloud (DNS-only) case, where ACME works again.
+      - ./certs:/etc/nginx/certs:ro
+      - certbot-conf:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot
+    # The guest micro-cache lives in RAM, not on disk. Entries are valid for 30s
+    # (pages) and 7d (CAS blobs, whose keys are immutable), so nothing here is
+    # worth surviving a restart — and pd-balanced IOPS are better spent on
+    # Postgres. Sized to sit inside the container limit alongside nginx itself.
+    tmpfs:
+      - /var/cache/nginx:size=192m
+    depends_on:
+      - app
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  plugins:
+  themes:
+  certbot-conf:
+  certbot-www:

@@ -1,0 +1,25 @@
+# Build artifacts — several GB, and rebuilt inside the image anyway.
+backend/target/
+**/node_modules/
+
+# Secrets. The image must never bake these in; Compose supplies them at run time.
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Runtime state that belongs in a volume, not an image layer.
+logs/
+plugins/*/
+backend/tmp/
+
+# Not needed at build or run time.
+.git/
+.github/
+.claude/
+docs/
+examples/
+scripts/
+*.md
