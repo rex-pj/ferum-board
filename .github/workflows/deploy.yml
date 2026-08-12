@@ -1,11 +1,11 @@
 name: Deploy
 
-# Only after CI passes on main. `workflow_run` rather than `needs:` because CI
+# Only after CI passes on develop. `workflow_run` rather than `needs:` because CI
 # also runs on pull_request, where deploying would be wrong.
 on:
   workflow_run:
     workflows: [CI]
-    branches: [main]
+    branches: [develop]
     types: [completed]
   # Manual re-deploy without a new commit (rollback, config change on the VM).
   workflow_dispatch:
@@ -25,7 +25,6 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       # Required by Workload Identity Federation: the job mints a short-lived
