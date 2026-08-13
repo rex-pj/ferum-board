@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# Roll the `app` container onto a new image tag and wait for it to answer.
+#
+# Installed at /usr/local/sbin/ferum-deploy, owned by root, and named in
+# /etc/sudoers.d/ferum-deploy as the ONLY thing the CI service account may run
+# through sudo. That is the whole point of the file existing: the deploy job used
+# to run `sudo docker compose …` directly, which is indistinguishable from
+# granting it root — `docker compose` will happily bring up a container that
+# bind-mounts / and runs as root, so any allowlist naming `docker` is decoration.
+#
+# Everything the CI account could otherwise choose is fixed here instead: the
+# compose file, the env file, the working directory, and which service is
+# touched. The only thing it supplies is the image tag, and that is validated
+# below rather than trusted.
+#
+# Consequently this script and /opt/ferum must be root-owned and not writable by
+# the deploy account. If the account can edit docker-compose.prod.yml it can
+# declare its own mounts, and the restriction is worth nothing again.
+#
+# The readiness wait lives here rather than in the workflow because it needs the
+# log dump on failure, the log dump needs root, and a second sudo-able entry
+# point is a second thing to get wrong. Keeping it in one script also means the
+# deploy job opens ONE ssh session instead of two.
+set -euo pipefail
+
+TAG="${1:?usage: ferum-deploy <40-hex-commit-sha>}"
+
+# A git SHA, not "whatever CI passed". sudoers matches the command name and its
+# literal arguments, so a wildcard argument is unavoidable there; this is where
+# the argument actually gets constrained. Refusing anything else keeps the tag
+# from being turned into a different registry path, a `latest`, or an option.
+if [[ ! "$TAG" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ferum-deploy: refusing image tag '$TAG' — expected a 40-character commit SHA" >&2
+    exit 2
+fi
+
+cd /opt/ferum
+
+# --env-file is not optional: env_file: supplies variables INSIDE a container,
+# while the ${...} substitutions in the compose file are resolved by Compose
+# itself, which reads only this. Omit it and DB_PASSWORD expands to empty.
+compose() {
+    docker compose --env-file .env.prod -f docker-compose.prod.yml "$@"
+}
+
+export IMAGE_TAG="$TAG"
+compose pull app
+compose up -d app
+
+# 30 × 5s. The first boot of a new image runs migrations before it will answer,
+# and an index build on a mature table is legitimately slow, so this is a
+# generous ceiling rather than a latency expectation.
+for _ in $(seq 1 30); do
+    if curl -fsS http://localhost:5173/health/ready >/dev/null 2>&1; then
+        echo "ferum-deploy: $TAG is ready"
+        # Only prune once the new container is known good. Pruning earlier would
+        # discard the previous image while it is still the thing to roll back to.
+        docker image prune -f
+        exit 0
+    fi
+    sleep 5
+done
+
+echo "ferum-deploy: $TAG did not become ready within 150s" >&2
+compose logs --tail=50 app >&2
+exit 1

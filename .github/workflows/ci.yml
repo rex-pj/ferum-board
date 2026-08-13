@@ -218,35 +218,46 @@ jobs:
           tags: |
             ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
-          # Helps the apt and runtime layers only. The cargo build layer is
-          # invalidated by any change under backend/, so expect a full compile
-          # every deploy until the Dockerfile uses cargo-chef.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # This is what makes the Dockerfile's cargo-chef split pay off: hosted
+          # runners start with an empty layer store, so without an imported cache
+          # the cooked dependency layer is rebuilt every run and the split buys
+          # nothing. mode=max because that layer is an intermediate stage, which
+          # the default `min` does not export.
+          #
+          # Registry rather than type=gha: the GitHub cache is capped at 10 GB per
+          # repository with LRU eviction, and a cooked Rust dependency tree is
+          # large enough that a couple of other workflows can quietly evict it —
+          # producing a pipeline that is fast or slow depending on what else ran.
+          # Artifact Registry is already in this deployment and has no such cap.
+          cache-from: type=registry,ref=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
+      # One pinned script, one ssh session. This account holds
+      # `roles/compute.osLogin` (no sudo of its own) plus a single sudoers entry
+      # naming /usr/local/sbin/ferum-deploy and nothing else, so the commit SHA
+      # below is the only thing it gets to decide — and the script validates even
+      # that. Source and rationale: deploy/ferum-deploy in this repository.
+      #
+      # Two shapes that look equivalent and are not:
+      #   * `roles/compute.osAdminLogin` + `sudo docker compose` — osAdminLogin
+      #     grants passwordless sudo outright, so the `sudo` in the command is
+      #     cosmetic; CI is root either way.
+      #   * dropping sudo and putting the account in the `docker` group — the
+      #     group is root-equivalent by design (`docker run -v /:/host
+      #     --privileged`), so this trades the same privilege for less audit.
+      #
+      # The readiness wait used to be a second step here, with the retry loop
+      # written as escaped bash inside YAML and a second sudo-able script behind
+      # it just to print logs. It lives in ferum-deploy now: same behaviour, one
+      # ssh handshake, and a loop that can be read and run on the box.
+      #
+      # --quiet suppresses the "create /home/runner/.ssh?" prompt. gcloud picked
+      # the default itself on a non-tty last time, but that is not contractual.
       - name: Deploy to VM
         run: |
           gcloud compute ssh ${{ env.VM_NAME }} \
             --zone=${{ env.GCP_ZONE }} \
             --project=${{ env.GCP_PROJECT }} \
             --tunnel-through-iap \
-            --command="set -euo pipefail
-              cd /opt/ferum
-              export IMAGE_TAG=${{ github.sha }}
-              docker compose --env-file .env.prod -f docker-compose.prod.yml pull app
-              docker compose --env-file .env.prod -f docker-compose.prod.yml up -d app
-              docker image prune -f"
-
-      - name: Wait for the app to report ready
-        run: |
-          gcloud compute ssh ${{ env.VM_NAME }} \
-            --zone=${{ env.GCP_ZONE }} \
-            --project=${{ env.GCP_PROJECT }} \
-            --tunnel-through-iap \
-            --command="for i in \$(seq 1 30); do
-                if curl -fsS http://localhost:5173/health/ready >/dev/null 2>&1; then
-                  echo 'ready'; exit 0
-                fi
-                sleep 5
-              done
-              echo 'did not become ready'; docker compose -f /opt/ferum/docker-compose.prod.yml logs --tail=50 app; exit 1"
+            --quiet \
+            --command="sudo /usr/local/sbin/ferum-deploy ${{ github.sha }}"

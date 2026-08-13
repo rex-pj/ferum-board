@@ -365,7 +365,7 @@ The application terminates no TLS and runs plain HTTP. Put a reverse proxy in fr
 cp backend/.env.example .env.prod
 # Edit .env.prod. Set at minimum: JWT_SECRET, APP_URL, FROM_EMAIL,
 # DB_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY, and the SMTP_* block.
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f deploy/docker-compose.prod.yml up -d --build
 ```
 
 `--env-file` is required. A service's `env_file:` only supplies variables *inside* the
@@ -380,8 +380,8 @@ overridden anyway.
 
 The stack is the app plus PostgreSQL 16, Redis 7, MinIO and Nginx. `Dockerfile` builds
 with `--features s3` so the MinIO service is actually used; change the `FEATURES`
-build arg to `gcs`, or to an empty string for database storage. `nginx.conf` holds the
-TLS server block — replace `forum.example.com` and point `ssl_certificate` at real
+build arg to `gcs`, or to an empty string for database storage. `deploy/nginx.conf`
+holds the TLS server block — replace `forum.example.com` and point `ssl_certificate` at real
 files before starting.
 
 Two settings must agree with the proxy, and both are already set in the Compose file:

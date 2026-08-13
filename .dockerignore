@@ -15,10 +15,13 @@ logs/
 plugins/*/
 backend/tmp/
 
-# Not needed at build or run time.
+# Not needed at build or run time. deploy/ describes how the image is RUN — the
+# compose file, nginx config and the VM-side deploy script — so it is never
+# consulted while building one.
 .git/
 .github/
 .claude/
+deploy/
 docs/
 examples/
 scripts/
