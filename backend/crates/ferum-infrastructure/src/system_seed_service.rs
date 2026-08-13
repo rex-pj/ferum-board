@@ -21,7 +21,8 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    TransactionTrait,
 };
 use uuid::{uuid, Uuid};
 
@@ -35,7 +36,12 @@ use ferum_application::constants::{
 use ferum_application::shared::AppError;
 use ferum_domain::models::role::{PERMISSIONS, SYSTEM_ROLES};
 
-use crate::entities::{permissions, product_categories, role_permissions, roles, site_config, themes};
+use crate::crypto::{
+    site_config_aad, SecretCipher, ENCRYPTED_CONFIG_KEYS, SEALED_PREFIX, WEBHOOK_SECRET_AAD,
+};
+use crate::entities::{
+    permissions, product_categories, role_permissions, roles, site_config, themes, webhooks,
+};
 use crate::repositories::user_repository::domain_trust_to_entity;
 
 /// Fixed so the built-in theme keeps one identity across reinstalls — a theme
@@ -134,6 +140,131 @@ impl PgSystemSeedService {
             "system seed complete"
         );
         Ok(())
+    }
+
+    /// Encrypts any secret still stored in plaintext, and re-seals anything that
+    /// only opened under the previous key. Returns how many rows it rewrote.
+    ///
+    /// **Why an eager sweep as well as lazy-on-read.** The repositories already
+    /// read plaintext unchanged and seal on the next write, which is enough for
+    /// correctness. It is not enough for the purpose: "the next time an admin
+    /// edits the SMTP settings" may be never, and until then the plaintext sits
+    /// in every database backup — the exact exposure this feature exists to
+    /// close. So the values are converted on the first boot after the key is
+    /// configured instead of whenever someone happens to open a settings page.
+    ///
+    /// **Why here and not in a migration.** `migration/` is DDL only by
+    /// convention, and it could not do this anyway: the key lives in the process
+    /// environment, and a migration that ran without it would have to either skip
+    /// silently or fail the deploy.
+    ///
+    /// Idempotent — a second run finds nothing to do and returns 0 — so it is
+    /// safe on every startup. This is also the rotation mechanism: it is the step
+    /// that acts on `needs_reseal`.
+    ///
+    /// One transaction, so a failure partway leaves no mixture of sealed and
+    /// unsealed rows to reason about.
+    #[tracing::instrument(skip_all)]
+    pub async fn seal_existing_secrets(&self, cipher: &SecretCipher) -> Result<usize, AppError> {
+        let txn = self.db.begin().await?;
+        let mut rewritten = 0usize;
+
+        for key in ENCRYPTED_CONFIG_KEYS {
+            let Some(row) = site_config::Entity::find_by_id(*key).one(&txn).await? else {
+                continue;
+            };
+            // A blank value is "not set"; sealing it would make it look set.
+            if row.value.is_empty() {
+                continue;
+            }
+            let aad = site_config_aad(key);
+            let opened = cipher.open(&aad, &row.value)?;
+            if !opened.needs_reseal {
+                continue;
+            }
+            let sealed = cipher.seal(&aad, &opened.value)?;
+            let mut active: site_config::ActiveModel = row.into();
+            active.value = Set(sealed);
+            active.updated_at = Set(Utc::now().fixed_offset());
+            active.update(&txn).await?;
+            rewritten += 1;
+        }
+
+        for row in webhooks::Entity::find().all(&txn).await? {
+            let Some(stored) = row.secret.clone() else {
+                continue;
+            };
+            if stored.is_empty() {
+                continue;
+            }
+            let opened = cipher.open(WEBHOOK_SECRET_AAD, &stored)?;
+            if !opened.needs_reseal {
+                continue;
+            }
+            let sealed = cipher.seal(WEBHOOK_SECRET_AAD, &opened.value)?;
+            let mut active: webhooks::ActiveModel = row.into();
+            active.secret = Set(Some(sealed));
+            active.update(&txn).await?;
+            rewritten += 1;
+        }
+
+        txn.commit().await?;
+        // A count, never a value.
+        if rewritten > 0 {
+            tracing::info!(count = rewritten, "sealed secrets at rest");
+        }
+        Ok(rewritten)
+    }
+
+    /// Proves the configured key matches the data already in this database.
+    ///
+    /// Returns `Err` when a sealed value will not open. That has to abort startup
+    /// rather than warn: running on would leave the site unable to read its own
+    /// secrets, and the first save of any of them would re-seal under the new key
+    /// and make the originals permanently unrecoverable.
+    ///
+    /// **Must run before [`Self::seal_existing_secrets`]** — sweeping first with a
+    /// wrong key is precisely the unrecoverable event above.
+    pub async fn verify_secret_key(&self, cipher: &SecretCipher) -> Result<(), AppError> {
+        for key in ENCRYPTED_CONFIG_KEYS {
+            if let Some(row) = site_config::Entity::find_by_id(*key).one(&self.db).await? {
+                if SecretCipher::is_sealed(&row.value) {
+                    cipher.open(&site_config_aad(key), &row.value)?;
+                }
+            }
+        }
+        if let Some(row) = webhooks::Entity::find()
+            .filter(webhooks::Column::Secret.is_not_null())
+            .one(&self.db)
+            .await?
+        {
+            if let Some(stored) = row.secret.as_deref() {
+                if SecretCipher::is_sealed(stored) {
+                    cipher.open(WEBHOOK_SECRET_AAD, stored)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// True when any secret in this database is already encrypted.
+    ///
+    /// Used to refuse startup when the key has been *removed* from a deployment
+    /// that has sealed data: without it those values are unreadable, and carrying
+    /// on would look like a working boot.
+    pub async fn has_sealed_secrets(&self) -> Result<bool, AppError> {
+        for key in ENCRYPTED_CONFIG_KEYS {
+            if let Some(row) = site_config::Entity::find_by_id(*key).one(&self.db).await? {
+                if SecretCipher::is_sealed(&row.value) {
+                    return Ok(true);
+                }
+            }
+        }
+        let sealed_webhook = webhooks::Entity::find()
+            .filter(webhooks::Column::Secret.starts_with(SEALED_PREFIX))
+            .one(&self.db)
+            .await?;
+        Ok(sealed_webhook.is_some())
     }
 
     /// Insert missing system roles. An existing row is never touched: admins

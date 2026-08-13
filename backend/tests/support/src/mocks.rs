@@ -4,6 +4,7 @@ pub mod brand_repository;
 pub mod bulk_seed_service;
 pub mod cache_service;
 pub mod category_repository;
+pub mod email_service;
 pub mod event_publisher;
 pub mod follow_repository;
 pub mod job_queue;

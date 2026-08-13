@@ -52,6 +52,22 @@ pub const DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY: u64 = 5;
 /// next changes its rules, and it cannot express DST at all.
 pub const DEFAULT_REPORTING_TIMEZONE: &str = "UTC";
 
+// ── site_config keys shared across layers ────────────────────────────────────
+//
+// Most `site_config` key strings live in `handlers/admin/api/config.rs`, next to
+// the readable/writable allowlists that govern them. These four are here instead
+// because they are needed **below** the web layer as well: the repository that
+// encrypts secrets at rest has to know which key holds a secret, and
+// `ferum-infrastructure` cannot import `ferum-web` — dependencies flow inward.
+//
+// `handlers/admin/api/config.rs` re-exports them, so every existing call site
+// still spells them the same way.
+
+pub const SMTP_HOST_KEY: &str = "smtp_host";
+pub const SMTP_PORT_KEY: &str = "smtp_port";
+pub const SMTP_USER_KEY: &str = "smtp_user";
+pub const SMTP_PASS_KEY: &str = "smtp_pass";
+
 // ── Fixed constants — not admin-configurable ─────────────────────────────────
 
 pub const DEFAULT_THEME_SLUG: &str = "default";

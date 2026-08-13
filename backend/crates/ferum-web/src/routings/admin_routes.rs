@@ -119,6 +119,9 @@ pub fn admin_api_routes() -> Router<AppState> {
             "/config/favicon",
             post(admin::api::config::upload_favicon).delete(admin::api::config::delete_favicon),
         )
+        // Sends to the acting admin's own address, never one from the body.
+        // Carries its own 30s per-admin cooldown, since each call costs money.
+        .route("/email/test", post(admin::api::email::test_email))
         .route(
             "/webhooks",
             get(admin::api::webhooks::list_webhooks).post(admin::api::webhooks::create_webhook),

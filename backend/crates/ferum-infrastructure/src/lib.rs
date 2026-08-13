@@ -5,6 +5,7 @@ pub mod role_permission_cache;
 #[cfg(feature = "bulk_seed")]
 pub mod bulk_seed_service;
 pub mod cache;
+pub mod crypto;
 pub mod email;
 // `sea_orm_active_enums::PluginStatus` has a variant named `Error` (the
 // `plugin_status` DB value 'error'). sea-orm 2.0's `DeriveActiveEnum` expands to

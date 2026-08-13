@@ -23,3 +23,15 @@ email-reset-body =
     <p><a href="{ $url }">{ $url }</a></p>
     <p>Nếu bạn không yêu cầu điều này, bạn có thể bỏ qua email — mật khẩu của bạn
     sẽ không thay đổi.</p>
+
+## ─── Email thử của quản trị viên ─────────────────────────────────────────────
+#
+# Chỉ được gửi bởi nút "Send test email" trong /admin/settings, và luôn chỉ gửi
+# tới địa chỉ của chính quản trị viên đang thao tác. Khác với các email trên,
+# email này không có liên kết nào — nội dung của nó chính là việc nó đã đến.
+
+email-test-subject = Email thử từ { $site_name }
+email-test-body =
+    <p>Việc gửi email từ { $site_name } đang hoạt động.</p>
+    <p>Email này được gửi qua nhà cung cấp <strong>{ $provider }</strong> bằng nút
+    "Send test email" trong phần cài đặt quản trị.</p>

@@ -870,7 +870,11 @@ time {
 
 /* ── Sort tabs — editorial underline instead of pills ────────────────────── */
 .fr-sort-tabs {
-  padding: 0 1.5rem;
+  /* 0.9rem, NOT the 1.5rem gutter: each tab carries its own 0.6rem of padding
+     and the two stack, so 1.5rem here put the first tab's TEXT at 2.1rem while
+     the header title and the ::after accent rule both sit at 1.5rem. What has
+     to land on the gutter is the text, not the scroll container's edge. */
+  padding: 0 0.9rem;
   border-bottom: 1px solid var(--bs-border-color);
   gap: 0.35rem;
 }
@@ -918,7 +922,12 @@ time {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0 1.5rem 0.6rem 0.5rem;
+  /* Vertical padding must stay SYMMETRIC. .fr-feed-controls centres each group
+     as a box, so an asymmetric 0/0.6rem made the 53.6px chip box centre its
+     44px of content 4.8px above the tab text beside it — the row read as
+     crooked even though both groups were "centred". Height now comes from the
+     chips' own min-height and the tabs' own padding. */
+  padding: 0 1.5rem 0 0.5rem;
   flex-wrap: wrap;
 }
 .fr-filter-chips__label {
@@ -939,7 +948,13 @@ time {
   color: var(--bs-tertiary-color);
   text-decoration: none;
   white-space: nowrap;
-  border: 1px solid var(--bs-border-color);
+  /* NOT --bs-border-color. That token is a hairline separator (#dcd5c9 on the
+     white card, #1f2b40 on #101827) and lands at ~1.46:1 against the surface
+     the chip sits on — so the outline that is this control's ONLY distinction
+     from the tabs above was very nearly invisible. WCAG 1.4.11 asks 3:1 for a
+     control boundary; 65% of --bs-secondary-color gives 3.2:1 light and 4.2:1
+     dark in this palette, and still reads as an outline rather than a button. */
+  border: 1px solid color-mix(in srgb, var(--bs-secondary-color) 65%, transparent);
   border-radius: 2px;
   background: transparent;
   transition: color 0.15s var(--fr-ease), border-color 0.15s var(--fr-ease),
@@ -957,13 +972,49 @@ time {
   font-weight: 700;
 }
 
+/* ── Mobile: the fixed tab bar this theme's editorial inset would otherwise
+   undo ────────────────────────────────────────────────────────────────────
+   The default theme turns the sort strip into equal-width thirds here so all
+   three orderings stay visible with nothing scrolling or clipped. This theme
+   inherits that (it never sets `flex` on a tab), but its own 1.5rem editorial
+   gutter and 0.6rem tab padding eat ~67px of a 360px screen — enough that
+   every English label wrapped to two lines. Full-bleed on this breakpoint
+   only: a tab bar running edge to edge under the card header is the idiom
+   anyway, and it buys back the width the labels need.
+
+   The two rows also need their own hairline between them. The rule above
+   strips the tab strip's border when it sits inside .fr-feed-controls, which
+   is right while the two groups share one line and wrong once they stack —
+   the active tab's 2px indicator would float with nothing beneath it. */
 @media (max-width: 575.98px) {
   .fr-feed-controls {
     justify-content: flex-start;
   }
+  /* On the gutter, unlike desktop. The tabs are equal thirds with CENTRED
+     labels here, so a label's position is a function of its third, not of any
+     padding — what reads as aligned is the strip's own left and right edge
+     meeting the accent rule, the title and the chip row below. Going full-bleed
+     (an earlier attempt at buying label width) left this the only element in
+     the card ignoring the 1.5rem grid, and it showed. */
+  .fr-feed-controls .fr-sort-tabs {
+    padding: 0 1.5rem;
+    gap: 0;
+    border-bottom: 1px solid var(--bs-border-color);
+  }
+  /* 0.75rem buys back the width the gutter just took: three thirds of
+     (360 - 48) leave ~84px of label space, and this theme's desktop 0.8125rem
+     would wrap every English label to two lines inside that. Anything that
+     still does not fit wraps rather than truncates — the 44px target has room
+     for two centred lines. */
+  .fr-sort-tab {
+    padding: 0.6rem 0.35rem;
+    font-size: 0.75rem;
+  }
+  /* Symmetric, and on this theme's own 1.5rem gutter rather than the default
+     theme's 0.875rem — the shorthand there sets all four sides. */
   .fr-filter-chips {
     width: 100%;
-    padding-left: 1.5rem;
+    padding: 0.5rem 1.5rem;
   }
   .fr-filter-chips__label {
     display: none;

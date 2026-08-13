@@ -117,6 +117,14 @@ pub struct AppState {
     pub broadcaster: Arc<dyn NotificationSubscriber>,
     /// True when APP_URL starts with https:// — adds the Secure flag to auth cookies.
     pub cookies_secure: bool,
+    /// True when `SECRET_ENCRYPTION_KEY` is configured, so the SMTP password and
+    /// webhook secrets are encrypted at rest.
+    ///
+    /// A plain `bool` rather than the cipher itself: nothing in the web layer
+    /// encrypts anything — the repositories own that — and this exists only so the
+    /// admin settings page can report the posture. Holding the cipher here would
+    /// invite a handler to use it and put a second sealing path outside the seam.
+    pub secrets_encrypted: bool,
     /// Resolved once at startup because the CSP now depends on which storage
     /// backend was selected: `img-src` must name the origin `public_url` mints,
     /// or the browser blocks every uploaded image.

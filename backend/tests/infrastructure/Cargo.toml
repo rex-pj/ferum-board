@@ -19,6 +19,9 @@ s3 = ["ferum-infrastructure/s3"]
 ferum-domain = { path = "../../crates/ferum-domain" }
 ferum-application = { path = "../../crates/ferum-application" }
 ferum-infrastructure = { path = "../../crates/ferum-infrastructure" }
+# `RecordingEmailService`, for the mail-provider precedence tests. Shared with the
+# application suite rather than duplicated here.
+ferum-test-support = { path = "../support" }
 migration = { path = "../../migration" }
 
 async-trait = { workspace = true }
@@ -27,6 +30,9 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 dotenvy = { workspace = true }
 zip = { workspace = true }
+# For `StatusCode` only — the Resend adapter's error mapping takes one, and no
+# request is ever made.
+reqwest = { workspace = true }
 sea-orm = { workspace = true }
 # `net` + `io-util`: the public-read probe test answers a real HTTP request from
 # a raw TcpListener rather than mocking a status code.

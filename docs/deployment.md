@@ -497,6 +497,8 @@ S3_ACCESS_KEY=$(openssl rand -hex 16)
 S3_SECRET_KEY=$(openssl rand -hex 32)
 S3_BUCKET=forum-uploads
 
+SECRET_ENCRYPTION_KEY=$(openssl rand -hex 32)
+
 SMTP_HOST=smtp.sendgrid.net
 SMTP_PORT=587
 SMTP_USER=apikey
@@ -509,6 +511,27 @@ sudo chmod 600 /opt/ferum/.env.prod
 data fetch concurrently, so one request holds 4–6 connections; 16 covers the
 ~12 req/s this box sustains, and each idle Postgres backend still costs memory
 against a 1 GB container limit.
+
+**Mail is either SMTP or Resend, and Resend wins.** The four `SMTP_*` variables
+above seed `site_config` on first start, after which `/admin/settings` → Email is
+the authority and applies changes to the live transport with no restart. To use
+Resend's API instead, drop the `SMTP_*` block and set `RESEND_API_KEY=re_…`; it is
+env-only by design, so rotating it needs a restart. Setting both logs a warning
+naming SMTP as the ignored one.
+
+TLS is inferred from the address, with nothing to configure: loopback connects in
+the clear, port 465 uses implicit TLS, every other host requires STARTTLS. A relay
+that does not offer STARTTLS is now refused rather than sent credentials in the
+clear — if you are migrating from an older build that appeared to work against
+such a relay, check delivery with the **Send test email** button on that settings
+tab before announcing anything.
+
+**With no mail provider at all, every new registration is auto-verified** —
+otherwise nobody could ever complete signup. That is the right trade on a laptop
+and a real problem in public: anyone can register with an address they do not own,
+and password reset cannot work. Startup logs a warning when `APP_URL` is https and
+no provider is configured, and `/health/ready` reports
+`"mail": "resend" | "smtp" | "disabled"`.
 
 `--env-file` is not optional when running compose by hand. `env_file:` supplies
 variables *inside* a container; the `${...}` substitutions in the compose file
@@ -824,6 +847,61 @@ rm /tmp/f.dump.gz
 
 `-Fc` allows selective restore of individual tables. That backup bucket must
 **not** be public, unlike the uploads bucket.
+
+### Secrets at rest
+
+`SECRET_ENCRYPTION_KEY` encrypts the only two secrets this application stores in
+PostgreSQL: the SMTP password in `site_config`, and each webhook's HMAC key. It is
+XChaCha20-Poly1305 with a random nonce per value, and each ciphertext is bound to
+the row it belongs to, so one moved between columns fails authentication rather
+than decrypting.
+
+It exists for the case the section above creates: **a `pg_dump` sitting in a
+bucket.** It does not protect against an attacker on the box, where the key is in
+the process environment — nobody should deploy it expecting otherwise.
+
+**Enabling it on a running forum needs no migration.** Plaintext values are read
+unchanged, and the first start with the key set converts them in one transaction
+and logs the count. Absent the key, everything behaves exactly as before, and a
+warning says so at startup. The admin Email tab reports which state you are in.
+
+**Startup refuses to boot** if the key does not match the data, or if it is missing
+while sealed values exist. That is deliberate: continuing would leave the site
+unable to read its own secrets, and re-saving any of them would seal them under the
+wrong key and destroy the originals. A refused boot is recoverable.
+
+**Rotation** — four steps, no downtime beyond two restarts:
+
+```bash
+# 1. Retire the old key, install the new one.
+sudo sed -i 's/^SECRET_ENCRYPTION_KEY=/SECRET_ENCRYPTION_KEY_PREVIOUS=/' /opt/ferum/.env.prod
+echo "SECRET_ENCRYPTION_KEY=$(openssl rand -hex 32)" | sudo tee -a /opt/ferum/.env.prod
+
+# 2. Restart. Every value opens under the previous key and is re-sealed under the
+#    new one.
+sudo ferum-deploy restart
+
+# 3. Confirm — look for `sealed secrets at rest` with a non-zero count.
+sudo docker compose --env-file /opt/ferum/.env.prod \
+  -f /opt/ferum/docker-compose.prod.yml logs app | grep 'sealed secrets'
+
+# 4. Drop the retired key and restart again.
+sudo sed -i '/^SECRET_ENCRYPTION_KEY_PREVIOUS=/d' /opt/ferum/.env.prod
+sudo ferum-deploy restart
+```
+
+**If the key is lost**, those two values are unrecoverable — that is what
+encryption at rest means. **Nothing else in the database is encrypted**, so posts,
+users, threads and uploads are untouched. Clear the sealed values and re-enter
+them:
+
+```sql
+UPDATE site_config SET value = ''   WHERE key = 'smtp_pass' AND value LIKE 'enc:v1:%';
+UPDATE webhooks    SET secret = NULL WHERE secret LIKE 'enc:v1:%';
+```
+
+Then set a fresh `SECRET_ENCRYPTION_KEY` (or unset it), restart, and re-enter the
+SMTP password in `/admin/settings` and each webhook secret in its own form.
 
 ### Cost
 

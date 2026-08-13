@@ -1117,26 +1117,16 @@ a.fr-panel-row:hover {
   display: flex;
   gap: 0;
   border-bottom: 1px solid var(--bs-border-color);
+  /* Kept only as a safety net for a locale long enough to overflow a narrow
+     desktop column. On mobile the tabs are equal-width and cannot overflow, so
+     nothing scrolls there — which is why there is no scroll-shadow trick here
+     any more. The one that used to live here painted a stray vertical smudge in
+     the empty space after the last tab: this element is a shrink-to-fit flex
+     item, so its right edge sits mid-row, and the "cover" gradient was too soft
+     to hide the shadow it was supposed to hide. */
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  scroll-snap-type: x proximity;
-  /* Edge shadow that appears ONLY while the strip actually overflows. The two
-     `local` layers scroll with the content and paint over the two `scroll`
-     layers, so each shadow is masked out exactly when that end is reached — no
-     JS, and no always-on fade dimming a tab that is fully visible. The
-     scrollbar is hidden above, so without this a clipped tab reads as the last
-     one: at 360px the Vietnamese labels overflow by ~55px and "Nhiều thảo luận
-     nhất" was simply undiscoverable. */
-  background:
-    linear-gradient(to right, var(--bs-body-bg), transparent) 0 0 / 24px 100% no-repeat local,
-    linear-gradient(to left, var(--bs-body-bg), transparent) 100% 0 / 24px 100% no-repeat local,
-    radial-gradient(farthest-side at 0 50%,
-      color-mix(in srgb, var(--bs-body-color) 22%, transparent), transparent)
-      0 0 / 14px 100% no-repeat scroll,
-    radial-gradient(farthest-side at 100% 50%,
-      color-mix(in srgb, var(--bs-body-color) 22%, transparent), transparent)
-      100% 0 / 14px 100% no-repeat scroll;
 }
 
 .fr-sort-tabs::-webkit-scrollbar { display: none; }
@@ -1145,7 +1135,11 @@ a.fr-panel-row:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.5rem 0.875rem;
+  /* 1rem, matching .fr-cat-header and .fr-thread-row: this is what puts the
+     first tab's LABEL on the card's gutter. The tab strip has no padding of its
+     own, so the tab's padding is the whole inset — at 0.875rem the label sat
+     2px inside every other row in the card. */
+  padding: 0.5rem 1rem;
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--bs-secondary-color);
@@ -1159,7 +1153,6 @@ a.fr-panel-row:hover {
   border-left: none;
   border-right: none;
   cursor: pointer;
-  scroll-snap-align: start;
 }
 
 .fr-sort-tab:hover { color: var(--bs-body-color); text-decoration: none; }
@@ -1193,7 +1186,13 @@ a.fr-panel-row:hover {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.25rem 0 0.5rem;
+  /* Symmetric vertically, and on the gutter horizontally. Both halves were
+     wrong: an asymmetric 0.25rem/0.5rem made .fr-feed-controls centre this
+     group's content a couple of pixels above the tab labels beside it, and a
+     right padding of 0 left the last chip flush against the card border while
+     every thread row below it stopped at 1rem. On desktop this group is
+     right-aligned, so the right value is the one that shows. */
+  padding: 0 1rem 0 0;
   flex-wrap: wrap;
 }
 
@@ -1203,6 +1202,16 @@ a.fr-panel-row:hover {
   color: var(--bs-secondary-color);
   text-transform: uppercase;
   letter-spacing: 0.02em;
+}
+
+/* The mobile stand-in for the label above. Purely visual — the group already
+   carries aria-label="Filter", so nothing is lost to a screen reader. */
+
+.fr-filter-chips__icon {
+  display: none;
+  align-items: center;
+  color: var(--bs-tertiary-color);
+  font-size: 0.75rem;
 }
 
 .fr-filter-chip {
@@ -1253,31 +1262,70 @@ a.fr-panel-row:hover {
   filter: brightness(0.94);
 }
 
+/* ── Mobile: fixed tab bar + detached chips ──────────────────────────────
+   Five controls will not fit on one line of a 360px phone — that is
+   arithmetic, not a layout to be cleverer about. So they stay on two rows,
+   and the work goes into making each row look deliberate and hide nothing.
+
+   Row 1 is a FIXED (equal-width, gutter-to-gutter) tab bar, the standard mobile
+   idiom for a small set of mutually exclusive orderings. It replaced a
+   shrink-to-fit horizontal scroller, which is what made this area feel
+   unfinished: the strip ended in the middle of the row, the third tab was
+   clipped behind a hidden scrollbar at narrow widths, and it needed an edge
+   shadow to hint at the overflow. Equal-width thirds cannot overflow, so all
+   three sorts are always visible and none of that machinery is needed.
+
+   Row 2 stays detached pills. A connected, full-width bar against separate
+   floating pills is a stronger read of "pick one" vs "toggle each" than the
+   underline-plus-pills pairing was, which is what lets the uppercase FILTER
+   label become a funnel glyph here — the word was carrying that distinction
+   on its own before and the shape now carries it. */
+
 @media (max-width: 575.98px) {
-  /* Stacked, and the chips lead: on a phone the reader is far likelier to be
-     hunting for something specific than to be re-ordering everything. */
   .fr-feed-controls { justify-content: flex-start; }
-  /* Inset to the tab strip's own text edge (0.875rem), so the two rows share a
-     left margin instead of the chips sitting flush against the card border. */
-  .fr-filter-chips { width: 100%; padding: 0 0.875rem 0.375rem; }
 
-  /* NF-UX-02. The chips already carried min-height:44px and the tabs did not,
-     so the two axes stacked at 37px and 44px: a tap-target failure on the row
-     people actually use, and the reason the two rows looked mismatched. */
-  .fr-sort-tab { min-height: var(--fr-tap-target); }
+  .fr-sort-tabs {
+    width: 100%;
+    /* On the gutter. The labels are centred in equal thirds here, so what reads
+       as aligned is this strip's own left and right edge meeting the card
+       header and the chip row — not any label position. */
+    padding: 0 1rem;
+    /* No scroller on this breakpoint, so no clipped tab to hint at. */
+    overflow-x: visible;
+    /* The tab bar owns its own baseline here: with the rows stacked, the
+       active tab's 2px indicator would otherwise float above the chip row
+       with no rule to sit on. */
+    border-bottom: 1px solid var(--bs-border-color);
+  }
 
-  /* The tab icons are decorative (aria-hidden) and cost ~20px each. Dropping
-     them takes the English strip from ~390px to ~330px — the difference
-     between all three sorts fitting on a 360px phone and the third being
-     clipped. They stay on desktop, where the width is free. */
+  .fr-sort-tab {
+    /* Equal thirds. `0` basis, not `auto`, so a long label cannot win extra
+       width and push its neighbours out of the row. */
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
+    /* Wrapping instead of ellipsis: Vietnamese runs ~25% longer than English
+       ("Nhiều thảo luận nhất"), and two centred lines at this line-height fit
+       inside the 44px target with room to spare. Truncating a control's own
+       name is worse than letting it use the second line. */
+    white-space: normal;
+    line-height: 1.15;
+    font-size: 0.75rem;
+    padding: 0.375rem 0.25rem;
+    /* NF-UX-02 — the chips already carried this and the tabs did not, so the
+       two axes stacked at 37px and 44px. */
+    min-height: var(--fr-tap-target);
+  }
+
+  /* Decorative (aria-hidden) and ~20px each, which is width these equal-width
+     segments would rather spend on the label. Kept on desktop. */
   .fr-sort-tab > i { display: none; }
 
-  /* The label STAYS on mobile. It used to be display:none, which is exactly
-     backwards: it is the only text saying these two rows are different axes
-     (reorder vs. narrow), and dropping it turned five controls into one
-     undifferentiated block on the screen where that confusion costs most. It
-     needs ~40px of a row with ~80px spare. */
-  .fr-filter-chips__label { font-size: 0.6875rem; }
+  /* Same 1rem gutter as the strip above and the thread rows below, so all
+     three left edges agree. */
+  .fr-filter-chips { width: 100%; padding: 0.5rem 1rem; }
+  .fr-filter-chips__label { display: none; }
+  .fr-filter-chips__icon { display: inline-flex; }
 }
 
 /* ── Thread hero banner (thumbnail as cover, thread detail page) ── */

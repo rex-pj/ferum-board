@@ -23,3 +23,15 @@ email-reset-body =
     <p><a href="{ $url }">{ $url }</a></p>
     <p>If you didn't request this, you can safely ignore this email — your
     password will not change.</p>
+
+## ─── Admin test send ─────────────────────────────────────────────────────────
+#
+# Sent only by the "Send test email" button in /admin/settings, and only ever to
+# the acting admin's own address. Unlike the messages above this one has no link,
+# because its whole content is the fact that it arrived.
+
+email-test-subject = Test email from { $site_name }
+email-test-body =
+    <p>Mail delivery from { $site_name } is working.</p>
+    <p>This message was sent through the <strong>{ $provider }</strong> provider
+    by the "Send test email" button in the admin settings.</p>

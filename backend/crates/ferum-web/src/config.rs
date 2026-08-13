@@ -32,6 +32,33 @@ pub struct Config {
     pub smtp_user: Option<String>,
     pub smtp_pass: Option<String>,
 
+    // ─── Resend (transactional email over HTTPS) ─────────────────────────────
+    /// Presence of this is the toggle, matching every other capability here, and
+    /// it **wins over the SMTP block** in `site_config` when both are set — see
+    /// the mail-provider selection in `startup.rs`.
+    ///
+    /// Env-only, never written to `site_config`: a key that can send mail as this
+    /// domain does not belong in a table the settings page reads and renders.
+    /// The consequence, accepted deliberately: rotating it needs a restart.
+    pub resend_api_key: Option<String>,
+
+    // ─── Secrets at rest ─────────────────────────────────────────────────────
+    /// 64 hex characters (32 bytes), e.g. from `openssl rand -hex 32`.
+    ///
+    /// Encrypts the two secrets this application stores in PostgreSQL: the SMTP
+    /// password in `site_config` and each webhook's HMAC key. Absent means they
+    /// are stored in plaintext, which is what every earlier release did — so this
+    /// is opt-in and enabling it needs no migration.
+    ///
+    /// **Losing it is unrecoverable for those two values.** Nothing else in the
+    /// database is encrypted, so posts, users and threads are never at risk. See
+    /// `docs/deployment.md` for the recovery and rotation runbooks.
+    pub secret_encryption_key: Option<String>,
+    /// The key being rotated *out*. Values are opened with the current key first,
+    /// then this one, and anything that needed it is re-sealed by the startup
+    /// sweep. Unset it once the sweep reports everything re-sealed.
+    pub secret_encryption_key_previous: Option<String>,
+
     pub redis_url: Option<String>,
     pub s3_endpoint: Option<String>,
     pub s3_bucket: Option<String>,
@@ -171,6 +198,21 @@ impl std::fmt::Debug for Config {
             .field("smtp_port", &self.smtp_port)
             .field("smtp_user", &self.smtp_user)
             .field("smtp_pass", &self.smtp_pass.as_ref().map(|_| "[redacted]"))
+            .field(
+                "resend_api_key",
+                &self.resend_api_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field(
+                "secret_encryption_key",
+                &self.secret_encryption_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field(
+                "secret_encryption_key_previous",
+                &self
+                    .secret_encryption_key_previous
+                    .as_ref()
+                    .map(|_| "[redacted]"),
+            )
             .field("redis_url", &self.redis_url.as_ref().map(|_| "[redacted]"))
             .field("s3_endpoint", &self.s3_endpoint)
             .field("s3_bucket", &self.s3_bucket)

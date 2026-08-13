@@ -87,6 +87,19 @@ pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
         .map(|probe| probe.label())
         .unwrap_or("checking");
 
+    // Which provider mail would go through. An in-process read of two Options —
+    // no probe, and deliberately so. The reasoning above about outbound requests
+    // is stronger here than for uploads: a test send costs money and consumes the
+    // sending domain's reputation, so a readiness endpoint that performed one
+    // would be a billing amplifier as well as a traffic one. `POST
+    // /api/admin/email/test` exists for the case where someone actually wants to
+    // know whether delivery works, behind an admin permission and a cooldown.
+    //
+    // Like `uploads`, reported but NOT part of `db_ok`: a forum that cannot send
+    // mail still serves every page, and `disabled` is a configuration state that
+    // an operator may have chosen.
+    let mail = state.email.provider().await.label();
+
     let status = if db_ok {
         StatusCode::OK
     } else {
@@ -103,6 +116,9 @@ pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
             // `forbidden` means every uploaded image on the site is a broken
             // link — worth alerting on, but see above for why it is not a 503.
             "uploads": uploads,
+            // "resend" | "smtp" | "disabled". `disabled` also means new
+            // registrations are being auto-verified.
+            "mail": mail,
         })),
     )
 }

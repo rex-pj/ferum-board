@@ -256,10 +256,12 @@ impl InlineJobRunner {
     /// in the infrastructure tests enumerates the variants to make the omission
     /// fail a build instead.
     ///
-    /// Email is deliberately *not* here despite talking to an SMTP server: mail
-    /// is enqueued one job at a time by a user action, never fanned out, so it
-    /// cannot produce the burst this bounds — and putting it in the network
-    /// budget would let a webhook storm delay it again.
+    /// Email is deliberately *not* here despite talking to an SMTP server or an
+    /// HTTPS mail API: mail is enqueued one job at a time by a user action, never
+    /// fanned out, so it cannot produce the burst this bounds — and putting it in
+    /// the network budget would let a webhook storm delay it again. The
+    /// classification is about **fan-out**, not about whether a socket is opened,
+    /// which is why adding an HTTP-based mail provider did not change it.
     pub fn is_network_bound(job: &ForumJob) -> bool {
         matches!(job, ForumJob::SendWebhook { .. })
     }

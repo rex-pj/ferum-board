@@ -56,6 +56,12 @@
     // added to any tab are included automatically.
     var body = {};
     document.querySelectorAll('[id^="cfg-"]').forEach(function (el) {
+      // A disabled field is not submitted, matching plain HTML form semantics.
+      // The Email tab disables the SMTP block when RESEND_API_KEY wins, and
+      // without this those values would still be POSTed on every save — which
+      // marks SMTP as "touched" and makes the server rebuild a transport nothing
+      // is using, logging the provider-precedence warning each time.
+      if (el.disabled) return;
       var key = el.id.replace(/^cfg-/, '');
       if (el.type === 'checkbox') {
         body[key] = el.checked ? 'true' : 'false';
@@ -89,6 +95,48 @@
     }).finally(function () {
       btn.disabled = false;
       spinner?.classList.add('d-none');
+    });
+  };
+
+  // Sends a real message through whichever provider is active, to the acting
+  // admin's own address. Modelled on testWebhook: a failed delivery comes back as
+  // HTTP 200 with success:false, so the provider's own explanation is readable
+  // instead of being collapsed into a generic error.
+  window.testEmail = function (btn) {
+    var out = document.getElementById('test-email-result');
+    btn.disabled = true;
+    if (out) {
+      out.classList.remove('d-none', 'text-success', 'text-danger');
+      out.classList.add('text-muted');
+      out.textContent = 'Sending…';
+    }
+    FerumApi.admin.testEmail().then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, body: d }; });
+    }).then(function (res) {
+      if (!out) return;
+      out.classList.remove('text-muted');
+      // A non-2xx here is the cooldown or a permission failure — a real error
+      // response, not a delivery report.
+      if (!res.ok) {
+        out.classList.add('text-danger');
+        out.textContent = Ferum.errorMessage(res.body) || 'Could not send the test email.';
+        return;
+      }
+      var result = (res.body && res.body.data) || {};
+      if (result.success) {
+        out.classList.add('text-success');
+        out.textContent = 'Sent to ' + result.sent_to + ' via ' + result.provider + '.';
+      } else {
+        out.classList.add('text-danger');
+        out.textContent = 'Send failed (' + result.provider + '): ' + (result.error || 'unknown error');
+      }
+    }).catch(function () {
+      if (!out) return;
+      out.classList.remove('text-muted');
+      out.classList.add('text-danger');
+      out.textContent = Ferum.t('js-network-error');
+    }).finally(function () {
+      btn.disabled = false;
     });
   };
 
@@ -883,6 +931,7 @@
     if (!btn) return;
     switch (btn.dataset.adminAction) {
       case 'save-settings':    window.saveSettings(btn);                break;
+      case 'test-email':       window.testEmail(btn);                   break;
       case 'remove-branding':  window.removeBranding(btn.dataset.brandingType); break;
       case 'create-category':  window.createCategory(btn);              break;
       case 'save-category':    window.saveCategory(btn);                break;

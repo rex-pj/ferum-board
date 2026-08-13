@@ -9,6 +9,8 @@ pub mod common;
 
 // ─── Submodules mirroring source layout ───────────────────────────────────────
 mod cache;
+mod crypto;
+mod email;
 mod i18n;
 mod job_queue;
 mod notification;

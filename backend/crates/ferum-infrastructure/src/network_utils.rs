@@ -69,6 +69,33 @@ pub(crate) async fn resolve_and_validate(url: &str) -> Result<Vec<std::net::Sock
 /// a private address. Kept public: exercised directly by the infra test suite.
 pub use ferum_domain::net::is_private_ip;
 
+/// Shortens a third-party error body for a log line or an error message.
+///
+/// Every adapter that talks to an external HTTP API needs this: the body is the
+/// only thing that says *why* the call was rejected, but Google's are XML and
+/// Resend's are JSON, and neither belongs in a log line in full. The status plus
+/// the opening of the body is what identifies the fault.
+///
+/// Lives here rather than beside its first caller because that caller —
+/// `storage/gcs.rs` — is behind `--features gcs`, while the mail adapters are
+/// compiled unconditionally. A `pub(crate)` helper in a feature-gated module
+/// cannot be shared with one that is always present.
+///
+/// Cuts on a `char` boundary, so a multi-byte body cannot panic the slice.
+pub(crate) fn truncate_for_log(body: &str) -> String {
+    const MAX: usize = 512;
+    if body.len() <= MAX {
+        return body.to_string();
+    }
+    let cut = body
+        .char_indices()
+        .take_while(|(i, _)| *i <= MAX)
+        .last()
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    format!("{}…", &body[..cut])
+}
+
 /// Concrete [`HostResolver`] backed by the tokio resolver. Used only for the
 /// advisory admin-facing webhook check; connect-time safety lives in
 /// [`build_pinned_client`].

@@ -44,7 +44,8 @@ use ferum_infrastructure::storage::S3StorageService;
 use ferum_infrastructure::{
     bcrypt_password_hasher::BcryptPasswordHasher,
     cache::{InMemoryCacheService, RedisCacheService},
-    email::ReloadableEmailService,
+    crypto::SecretCipher,
+    email::{MailProvider, ReloadableEmailService, ResendEmailService},
     job_queue::{InlineJobRunner, JobExecutor},
     jwt_token_service::JwtTokenService,
     notification::{SseBroadcaster, SseNotificationBus},
@@ -210,9 +211,64 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // this is what guarantees the roles and permissions exist — including any
     // added since this database was created. Must precede
     // RolePermissionCache::load below, which reads exactly these rows.
-    PgSystemSeedService::new(pg_write.clone())
-        .seed_system()
-        .await?;
+    let seed_service = PgSystemSeedService::new(pg_write.clone());
+    seed_service.seed_system().await?;
+
+    // ─── Secrets at rest ────────────────────────────────────────────────────
+    // Resolved here, before any repository is constructed, because two of them
+    // take the cipher and every path that reads a secret goes through one.
+    //
+    // Every failure below aborts startup rather than degrading. That is the
+    // opposite of how the optional capabilities above behave, and deliberately
+    // so: a missing object store means slower images, while a key that does not
+    // match the data means the site cannot read its own secrets — and the first
+    // save of any of them would re-seal under the wrong key and destroy the
+    // originals for good. A refused boot is recoverable; that is not.
+    let secret_cipher: Option<Arc<SecretCipher>> = match config.secret_encryption_key.as_deref() {
+        Some(key) => {
+            let cipher = Arc::new(SecretCipher::from_hex(
+                key,
+                config.secret_encryption_key_previous.as_deref(),
+            )?);
+
+            // Self-check BEFORE the sweep. Sweeping first with a wrong key is the
+            // unrecoverable event described above; opening one existing value
+            // proves the key matches, because AEAD authentication either succeeds
+            // or fails unambiguously.
+            seed_service.verify_secret_key(&cipher).await.map_err(|e| {
+                anyhow::anyhow!(
+                    "SECRET_ENCRYPTION_KEY does not match the secrets already in this database \
+                     ({e}). If you are rotating, set SECRET_ENCRYPTION_KEY_PREVIOUS to the old \
+                     key. Starting anyway would leave the site unable to read its own secrets, \
+                     and re-saving any of them would seal them under the new key and make the \
+                     old values permanently unrecoverable. \
+                     See docs/deployment.md § Secrets at rest."
+                )
+            })?;
+
+            tracing::info!("Secrets at rest: encrypted (SECRET_ENCRYPTION_KEY is set)");
+            // Converts anything still in plaintext, and re-seals anything that
+            // only opened under the previous key — the rotation step.
+            seed_service.seal_existing_secrets(&cipher).await?;
+            Some(cipher)
+        }
+        None => {
+            // Refuse rather than run half-blind: without the key these rows are
+            // unreadable, and a "successful" boot that cannot send mail or sign a
+            // webhook is a worse outcome than a clear failure at start.
+            if seed_service.has_sealed_secrets().await? {
+                anyhow::bail!(
+                    "This database holds encrypted secrets but SECRET_ENCRYPTION_KEY is not set. \
+                     Restore the key, or clear the sealed values and re-enter them: \
+                     `UPDATE site_config SET value = '' WHERE key = 'smtp_pass' AND value LIKE \
+                     'enc:v1:%';` and `UPDATE webhooks SET secret = NULL WHERE secret LIKE \
+                     'enc:v1:%';`. Nothing else in the database is encrypted. \
+                     See docs/deployment.md § Secrets at rest."
+                );
+            }
+            None
+        }
+    };
 
     let pg_read: DatabaseConnection = match &config.database_read_url {
         Some(url) => {
@@ -231,7 +287,22 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // env (env seeds them on first run — see the seeding block below). The
     // reloadable wrapper also owns the "auto-verify registrations" flag, so
     // turning SMTP on or off at runtime takes effect without a restart.
-    let email = Arc::new(ReloadableEmailService::new(&config.from_email));
+    //
+    // A provider whose credential lives in the environment is installed here and
+    // wins over SMTP, because it cannot change while the process runs and so has
+    // nothing to reload. `RESEND_API_KEY` is the only such provider today; unset
+    // it and restart to fall back to whatever SMTP is stored.
+    let email = {
+        let base = ReloadableEmailService::new(&config.from_email);
+        match config.resend_api_key.as_deref() {
+            Some(key) => {
+                let resend = Arc::new(ResendEmailService::new(key, &config.from_email)?);
+                tracing::info!("Mail provider: {}", resend.describe());
+                Arc::new(base.with_fixed_provider(resend))
+            }
+            None => Arc::new(base),
+        }
+    };
 
     // ─── SSE broadcaster ─────────────────────────────────────────────────────
     let broadcaster_concrete = Arc::new(SseBroadcaster::new());
@@ -351,7 +422,14 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let report_repo = Arc::new(PgReportRepository::new(pg_write.clone()));
     let audit_log_repo = Arc::new(PgAuditLogRepository::new(pg_write.clone()));
     let bookmark_repo = Arc::new(PgBookmarkRepository::new(pg_write.clone()));
-    let webhook_repo = Arc::new(PgWebhookRepository::new(pg_write.clone()));
+    // Takes the cipher: `webhooks.secret` is an HMAC key stored in the database.
+    let webhook_repo = Arc::new({
+        let repo = PgWebhookRepository::new(pg_write.clone());
+        match &secret_cipher {
+            Some(cipher) => repo.with_cipher(cipher.clone()),
+            None => repo,
+        }
+    });
     let stored_file_repo: Arc<dyn ferum_domain::repositories::StoredFileRepository> =
         Arc::new(PgStoredFileRepository::new(pg_write.clone()));
     let tag_repo: Arc<dyn ferum_domain::repositories::TagRepository> =
@@ -590,8 +668,18 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     );
 
     // ─── Site config (before use cases — they read from it) ──────────────────
-    let site_config: Arc<dyn SiteConfigRepository> =
-        Arc::new(PgSiteConfigRepository::new(pg_write.clone()));
+    // Takes the cipher so `smtp_pass` is sealed on write and opened on read. The
+    // seam is here rather than higher up because `site_config_cache` is filled
+    // straight from `get_all()`, and everything that reads the cache — the
+    // settings page, `site_ctx`, the rate-limit middleware — would otherwise be
+    // holding ciphertext.
+    let site_config: Arc<dyn SiteConfigRepository> = Arc::new({
+        let repo = PgSiteConfigRepository::new(pg_write.clone());
+        match &secret_cipher {
+            Some(cipher) => repo.with_cipher(cipher.clone()),
+            None => repo,
+        }
+    });
 
     // Seed SMTP credentials from env into site_config on first run so admins can
     // later update them via the settings UI without touching env vars.
@@ -640,6 +728,18 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 None
             }
         };
+        // Name the loser rather than ignoring it silently, the same way the
+        // storage selection reports GCS beating S3. The stored settings are kept
+        // and the transport is still built, so unsetting the env var and
+        // restarting falls back to exactly what is on this page.
+        if settings.is_some() && config.resend_api_key.is_some() {
+            tracing::warn!(
+                "Both RESEND_API_KEY and an SMTP host in site_config are set. Resend wins; \
+                 the stored SMTP settings are kept but unused — unset RESEND_API_KEY and \
+                 restart to fall back to SMTP."
+            );
+        }
+
         let (host, port, user, pass) = match &settings {
             Some(s) => (
                 Some(s.host.as_str()),
@@ -652,6 +752,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         if let Err(e) = email.reload(host, port, user, pass).await {
             tracing::error!("Failed to build SMTP transport ({e}) — email disabled");
         }
+        tracing::info!("Mail provider: {}", email.describe().await);
     }
 
     // ─── Use cases ───────────────────────────────────────────────────────────
@@ -1034,7 +1135,9 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let upload_read_status = Arc::new(tokio::sync::RwLock::new(None));
     spawn_public_read_probe(storage.clone(), upload_read_status.clone());
 
-    warn_degraded_capabilities(config);
+    // After the mail transport has loaded, so this sees the provider that will
+    // actually be used rather than the env vars it was derived from.
+    warn_degraded_capabilities(config, email.provider().await);
 
     Ok(AppState {
         db: pg_write.clone(),
@@ -1085,6 +1188,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         static_dir: config.static_dir.clone(),
         translator,
         cookies_secure,
+        secrets_encrypted: secret_cipher.is_some(),
         security_headers,
         upload_read_status,
         app_url: config.app_url.trim_end_matches('/').to_string(),
@@ -1204,7 +1308,7 @@ fn report_public_read(outcome: &PublicReadProbe) {
     }
 }
 
-fn warn_degraded_capabilities(config: &Config) {
+fn warn_degraded_capabilities(config: &Config, mail_provider: MailProvider) {
     if config.redis_url.is_none() {
         // Only the first clause was ever true. Jobs run through
         // `InlineJobRunner` (tokio::spawn) in both branches, and SSE is served
@@ -1263,6 +1367,30 @@ fn warn_degraded_capabilities(config: &Config) {
              every client is seen as that proxy's IP and they all share one rate-limit \
              bucket. Set TRUSTED_PROXY_COUNT to the number of proxies in front of this \
              process (1 for a single nginx)."
+        );
+    }
+    // No mail provider is not merely a missing feature: `ReloadableEmailService`
+    // reports it to `AuthUseCase`, which then marks every new registration
+    // verified, because holding accounts at an unverifiable gate would lock
+    // everyone out instead. That is the right trade on a laptop and a real
+    // problem on a public deployment, and nothing else says so out loud — the
+    // registration succeeds and the account looks ordinary.
+    if mail_provider == MailProvider::Disabled && config.app_url.starts_with("https://") {
+        tracing::warn!(
+            "No mail provider is configured on an https deployment. Every new registration \
+             is verified automatically, so anyone can sign up with an address they do not \
+             control, and password reset cannot work at all. Set SMTP settings (env \
+             SMTP_HOST on first run, or /admin/settings afterwards) or RESEND_API_KEY."
+        );
+    }
+    // Not gated on https: a plaintext secret is in every `pg_dump` regardless of
+    // how the site is served, and a dev database is often the one copied around.
+    if config.secret_encryption_key.is_none() {
+        tracing::warn!(
+            "SECRET_ENCRYPTION_KEY is not set — the SMTP password and every webhook secret \
+             are stored in plaintext in PostgreSQL, including in every backup. Set it to a \
+             64-character hex key (`openssl rand -hex 32`) to encrypt them at rest; existing \
+             values are converted on the next start."
         );
     }
 }

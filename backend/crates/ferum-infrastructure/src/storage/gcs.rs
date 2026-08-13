@@ -70,6 +70,7 @@ use ferum_application::shared::AppError;
 use super::url_shapes::{
     strip_base, strip_files_prefix, under_base, without_query_or_fragment, UnderBase,
 };
+use crate::network_utils::truncate_for_log;
 
 /// Path-style XML API root. Also the default `public_url` origin.
 const XML_API_ROOT: &str = "https://storage.googleapis.com";
@@ -592,22 +593,6 @@ fn well_known_adc_path() -> Option<std::path::PathBuf> {
     path.push("gcloud");
     path.push("application_default_credentials.json");
     Some(path)
-}
-
-/// Google's error bodies are XML and can be long; a log line is not the place
-/// for all of it, and the status plus opening tag is what identifies the fault.
-fn truncate_for_log(body: &str) -> String {
-    const MAX: usize = 512;
-    if body.len() <= MAX {
-        return body.to_string();
-    }
-    let cut = body
-        .char_indices()
-        .take_while(|(i, _)| *i <= MAX)
-        .last()
-        .map(|(i, _)| i)
-        .unwrap_or(0);
-    format!("{}…", &body[..cut])
 }
 
 #[async_trait]

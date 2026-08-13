@@ -243,6 +243,11 @@
       removeBranding: function (type) {
         return del('/api/admin/config/' + type);
       },
+      // No body: the recipient is always the acting admin's own address, decided
+      // server-side so this cannot be turned into an open relay.
+      testEmail: function () {
+        return post('/api/admin/email/test', {});
+      },
       getWebhooks: function () {
         return get('/api/admin/webhooks');
       },

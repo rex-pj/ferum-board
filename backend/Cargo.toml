@@ -38,6 +38,36 @@ axum = "0.8"
 bcrypt = "0.15"
 boa_engine = "0.19"
 bytes = "1"
+# Encryption at rest for the two secrets that live in the database — the SMTP
+# password in `site_config` and a webhook's HMAC key. XChaCha20-Poly1305, chosen
+# over `aes-gcm` for two reasons beyond the smaller dependency footprint (~6 new
+# crates against ~9, and `chacha20` 0.10 is ALREADY in the lock via
+# sqlx-postgres → rand, so it is one copy, not a second):
+#
+#  * ChaCha20-Poly1305 is constant-time in pure software on every target.
+#    `aes-gcm`'s portable backend — what runs on an ARM VPS or older x86 with no
+#    AES-NI, i.e. the machines a self-hosted forum actually lands on — is
+#    table-based, and RustCrypto documents it as potentially vulnerable to
+#    cache-timing attacks.
+#  * XChaCha20's 192-bit nonce makes random nonces safe *by construction*: no
+#    counter to persist across restarts, and no birthday-bound argument for a
+#    future maintainer to get subtly wrong. AES-GCM's 96-bit nonce requires that
+#    reasoning. Costs 8 extra bytes per ciphertext.
+#
+# NOT `ring`, even though it is already in the graph twice (jsonwebtoken, rustls)
+# and would therefore add zero crates: promoting a transitive dependency to a
+# direct one pins us to whatever version those two happen to resolve, so when
+# either moves to a new major we either bump on their schedule or ship two copies
+# of a large asm+C crate — the exact duplication this table exists to prevent.
+#
+# `alloc` + `getrandom` are the current defaults, named explicitly per the rule
+# above. `zeroize` is optional, adds no crate (zeroize is already in the tree),
+# and wipes key material from memory on drop.
+chacha20poly1305 = { version = "0.11", default-features = false, features = [
+    "alloc",
+    "getrandom",
+    "zeroize",
+] }
 chrono = { version = "0.4", features = ["serde"] }
 # IANA timezone database, for turning an admin's "Aug 8" into the instant range
 # that day actually covers in the site's `reporting_timezone`. `chrono` alone

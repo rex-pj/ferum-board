@@ -17,10 +17,13 @@ use ferum_application::validators::validate_favicon_magic;
 /// SMTP keys, editable from `/admin/settings` and applied without a restart via
 /// `AppState::email`. Named once so the writable list, the reload path and the
 /// startup wiring cannot drift.
-pub const SMTP_HOST_KEY: &str = "smtp_host";
-pub const SMTP_PORT_KEY: &str = "smtp_port";
-pub const SMTP_USER_KEY: &str = "smtp_user";
-pub const SMTP_PASS_KEY: &str = "smtp_pass";
+///
+/// Defined in `ferum-application` rather than here because the repository that
+/// encrypts `smtp_pass` at rest also needs the key name, and infrastructure
+/// cannot import this crate. Re-exported so every call site keeps its spelling.
+pub use ferum_application::constants::{
+    SMTP_HOST_KEY, SMTP_PASS_KEY, SMTP_PORT_KEY, SMTP_USER_KEY,
+};
 
 /// Port used when `smtp_port` is absent from site_config — the SMTP submission
 /// port, matching `Config`'s own default.
@@ -84,7 +87,11 @@ async fn validate_reporting_timezone(
 /// but must never be echoed back. Anything absent here is silently dropped by
 /// `update_config`, so a field rendered on the settings page and missing from
 /// this list is a save that appears to succeed and does nothing.
-const CONFIG_WRITABLE_KEYS: &[&str] = &[
+/// `pub` so `settings_template_contract.rs` can assert that every `cfg-*` field
+/// rendered on the settings page appears here. The warning above is otherwise
+/// unenforceable, and its failure mode — a save that reports success and changes
+/// nothing — leaves no trace to debug from.
+pub const CONFIG_WRITABLE_KEYS: &[&str] = &[
     "site_name",
     "site_tagline",
     "site_slogan",
@@ -137,6 +144,43 @@ const CONFIG_READABLE_KEYS: &[&str] = &[
     SMTP_PORT_KEY,
     SMTP_USER_KEY,
 ];
+
+/// Keys whose **value** must never reach a template context or an API response.
+///
+/// [`CONFIG_READABLE_KEYS`] already keeps them out of `GET /api/admin/config`.
+/// This list closes the other door: the settings *page* renders from
+/// `site_config_cache` directly, which is the whole table — so the allowlist that
+/// guards the JSON endpoint does not apply there at all.
+pub const CONFIG_SECRET_KEYS: &[&str] = &[SMTP_PASS_KEY];
+
+/// Splits a site_config map into the part safe to render and a per-secret
+/// "is it set" flag.
+///
+/// Same shape as `WebhookResponse::has_secret` (`view_models/webhook.rs`): the UI
+/// needs to know *whether* a secret exists so it can say "(set — enter a new
+/// value to change)", and that is all it needs. Handing it the value and trusting
+/// every present and future template not to print it is not a guarantee, it is a
+/// convention — and this codebase already has one page whose author got it right
+/// by luck rather than by construction.
+///
+/// "Set" means **non-blank**, not merely present: `PgSystemSeedService` seeds the
+/// SMTP keys as `""`, so a presence test alone would report a password that was
+/// never entered.
+pub fn split_secrets(
+    all: HashMap<String, String>,
+) -> (HashMap<String, String>, HashMap<&'static str, bool>) {
+    let mut safe = all;
+    let flags = CONFIG_SECRET_KEYS
+        .iter()
+        .map(|key| {
+            let present = safe
+                .remove(*key)
+                .is_some_and(|v| !v.trim().is_empty());
+            (*key, present)
+        })
+        .collect();
+    (safe, flags)
+}
 
 /// Pulls the SMTP block out of a site_config map for [`ReloadableEmailService`].
 ///

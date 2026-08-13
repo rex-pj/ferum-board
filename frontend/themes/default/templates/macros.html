@@ -610,6 +610,7 @@
 
   <div class="fr-filter-chips" role="group" aria-label="{{ t(k='ui-filter-label') }}">
     <span class="fr-filter-chips__label">{{ t(k="ui-filter-label") }}</span>
+    <i class="fa-solid fa-filter fr-filter-chips__icon" aria-hidden="true"></i>
     {% for chip in controls.filters %}
       <a href="{{ chip.href }}#feed"
          data-feed-key="{{ chip.key }}"

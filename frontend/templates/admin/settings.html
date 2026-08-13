@@ -320,52 +320,104 @@
   ════════════════════════════════════════════════════════════════ #}
   <div class="tab-pane fade" id="tab-email" role="tabpanel">
 
-    <div class="alert alert-info d-flex gap-2 mb-4" role="alert">
-      <i class="fa-solid fa-circle-info flex-shrink-0 mt-1"></i>
-      <div>
-        {{ t(k="adm-smtp-changes-are-applied-immediately-for") }}
-        <br>
-        {{ t(k="adm-if") }} <strong>{{ t(k="adm-smtp-host") }}</strong> {{ t(k="adm-is-blank-email-sending-is-disabled") }}
+    {# Which provider is live. `mail_provider` comes from the running
+       ReloadableEmailService, not from the stored settings, so it reports what
+       mail actually goes through — including the case where RESEND_API_KEY makes
+       the SMTP card below inert. #}
+    {% if mail_provider == "resend" %}
+      <div class="alert alert-success d-flex gap-2 mb-4" role="alert">
+        <i class="fa-solid fa-circle-check flex-shrink-0 mt-1"></i>
+        <div>
+          <strong>{{ t(k="adm-mail-provider") }}: {{ t(k="adm-mail-provider-resend") }}</strong>
+          <br>
+          {{ t(k="adm-mail-resend-active-smtp-ignored") }}
+        </div>
       </div>
-    </div>
+    {% elif mail_provider == "smtp" %}
+      <div class="alert alert-info d-flex gap-2 mb-4" role="alert">
+        <i class="fa-solid fa-circle-info flex-shrink-0 mt-1"></i>
+        <div>
+          <strong>{{ t(k="adm-mail-provider") }}: {{ t(k="adm-mail-provider-smtp") }}</strong>
+          <br>
+          {{ t(k="adm-smtp-changes-are-applied-immediately-for") }}
+          <br>
+          {{ t(k="adm-smtp-tls-note") }}
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-warning d-flex gap-2 mb-4" role="alert">
+        <i class="fa-solid fa-triangle-exclamation flex-shrink-0 mt-1"></i>
+        <div>
+          <strong>{{ t(k="adm-mail-provider") }}: {{ t(k="adm-mail-provider-none") }}</strong>
+          <br>
+          {{ t(k="adm-mail-not-configured") }}
+        </div>
+      </div>
+    {% endif %}
 
     <div class="card">
-      <div class="card-header fw-semibold">{{ t(k="adm-smtp-configuration") }}</div>
+      <div class="card-header fw-semibold d-flex align-items-center gap-2">
+        <span>{{ t(k="adm-smtp-configuration") }}</span>
+        {% if mail_provider == "resend" %}
+          <span class="badge text-bg-secondary">{{ t(k="adm-smtp-inactive-badge") }}</span>
+        {% endif %}
+      </div>
       <div class="card-body">
+        {# Disabled rather than hidden when another provider wins: an operator
+           still needs to read what is stored, because unsetting RESEND_API_KEY
+           and restarting falls back to exactly these values. `saveSettings`
+           skips disabled inputs, so nothing here is submitted while it is
+           inert — which is also what keeps a save from needlessly rebuilding
+           the SMTP transport. #}
         <div class="row g-3">
           <div class="col-md-8">
             <label class="form-label" for="cfg-smtp_host">{{ t(k="adm-smtp-host") }}</label>
             <input type="text" id="cfg-smtp_host" class="form-control"
                    value="{{ config.smtp_host | default(value='') }}"
-                   placeholder="smtp.sendgrid.net" maxlength="255">
+                   placeholder="smtp.sendgrid.net" maxlength="255"
+                   {% if mail_provider == "resend" %}disabled{% endif %}>
             <div class="form-text">{{ t(k="adm-leave-blank-to-disable-email-sending") }}</div>
           </div>
           <div class="col-md-4">
             <label class="form-label" for="cfg-smtp_port">{{ t(k="adm-port") }}</label>
             <input type="number" id="cfg-smtp_port" class="form-control"
                    value="{{ config.smtp_port | default(value='587') }}"
-                   min="1" max="65535" placeholder="587">
+                   min="1" max="65535" placeholder="587"
+                   {% if mail_provider == "resend" %}disabled{% endif %}>
           </div>
           <div class="col-md-6">
             <label class="form-label" for="cfg-smtp_user">{{ t(k="adm-username") }}</label>
             <input type="text" id="cfg-smtp_user" class="form-control"
                    value="{{ config.smtp_user | default(value='') }}"
-                   placeholder="{{ t(k='adm-apikey-or-noreply-example-com') }}" maxlength="255">
+                   placeholder="{{ t(k='adm-apikey-or-noreply-example-com') }}" maxlength="255"
+                   {% if mail_provider == "resend" %}disabled{% endif %}>
           </div>
           <div class="col-md-6">
             <label class="form-label" for="cfg-smtp_pass">{{ t(k="adm-password") }}</label>
+            {# `smtp_pass_set` is a boolean, never the password itself. The page
+               renders the whole site_config table, so the handler strips secrets
+               out of the context and passes presence flags instead — same idea
+               as WebhookResponse.has_secret. #}
             <input type="text" id="cfg-smtp_pass" class="form-control font-monospace"
                    value=""
                    autocomplete="off"
                    maxlength="500"
-                   placeholder="{% if config.smtp_pass %}(set — enter new value to change){% else %}(not set){% endif %}">
+                   placeholder="{% if smtp_pass_set %}(set — enter new value to change){% else %}(not set){% endif %}"
+                   {% if mail_provider == "resend" %}disabled{% endif %}>
             <div class="form-text">{{ t(k="adm-leave-blank-to-keep-the-existing") }}</div>
           </div>
         </div>
       </div>
+      <div class="card-footer small text-muted">
+        {% if secrets_encrypted %}
+          <i class="fa-solid fa-lock me-1"></i>{{ t(k="adm-secrets-at-rest-encrypted") }}
+        {% else %}
+          <i class="fa-solid fa-lock-open me-1"></i>{{ t(k="adm-secrets-at-rest-plaintext") }}
+        {% endif %}
+      </div>
     </div>
 
-    <div class="mt-3 d-flex align-items-center gap-3">
+    <div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
       <button class="btn btn-primary" type="button" data-admin-action="save-settings"
               data-settings-tab="email">
         <i class="fa-solid fa-floppy-disk me-1"></i>{{ t(k="adm-save-email-settings") }}
@@ -373,7 +425,13 @@
       <span id="save-spinner-email" class="text-muted small d-none">
         <i class="fa-solid fa-spinner fa-spin me-1"></i>{{ t(k="adm-saving") }}
       </span>
+      <button class="btn btn-outline-secondary" type="button" data-admin-action="test-email"
+              {% if mail_provider == "disabled" %}disabled{% endif %}>
+        <i class="fa-solid fa-paper-plane me-1"></i>{{ t(k="adm-send-test-email") }}
+      </button>
+      <span id="test-email-result" class="small d-none"></span>
     </div>
+    <div class="form-text mt-2">{{ t(k="adm-test-email-help") }}</div>
 
   </div>{# /tab-email #}
 
