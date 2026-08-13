@@ -46,7 +46,21 @@ compose() {
 
 export IMAGE_TAG="$TAG"
 compose pull app
-compose up -d app
+
+# `up -d` with NO service name — every service, not just `app`.
+#
+# Naming `app` looks tighter and silently leaves nginx down forever on a fresh
+# box: Compose starts the named service plus what it DEPENDS ON, and the arrow
+# points the other way (nginx depends_on app, not the reverse). Postgres, Redis
+# and MinIO came up only because `app` depends on them; nothing pulled nginx in,
+# so port 443 had no listener and every request to the site timed out while the
+# deploy reported success.
+#
+# The full form is still safe on every subsequent deploy: Compose recreates only
+# containers whose configuration or image actually changed, so a routine app
+# rollout does not restart Postgres. It also means an edited compose file takes
+# effect on the next deploy instead of waiting for someone to remember.
+compose up -d
 
 # 30 × 5s. The first boot of a new image runs migrations before it will answer,
 # and an index build on a mature table is legitimately slow, so this is a
