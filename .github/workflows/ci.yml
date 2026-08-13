@@ -1,5 +1,16 @@
 name: CI
 
+# Deploy lives in this file, as a job gated on the test matrix, rather than in a
+# separate workflow keyed on `workflow_run`. It was the latter, and it never once
+# fired: GitHub only triggers `workflow_run` (and only offers `workflow_dispatch`)
+# for a workflow file that exists on the DEFAULT branch, which here is `main` —
+# and `main` carries no workflows at all. A `push` event, by contrast, runs the
+# file from the branch that was pushed, so keeping deploy here means it works from
+# `develop` without anything having to land on `main` first.
+#
+# The reason deploy was split out originally still holds and is handled by the
+# `if:` on that job: CI also runs on `pull_request`, where deploying would be
+# wrong. A PR does not raise a `push` event on `develop`, so the guard is exact.
 on:
   push:
     branches: [develop]
@@ -143,3 +154,99 @@ jobs:
       - name: Unused dependencies
         working-directory: backend
         run: cargo machete
+
+  # ─── Deploy to the GCE VM ───────────────────────────────────────────────────
+  # Runs only for a push to `develop` that passed BOTH jobs above. `needs` waits
+  # for every leg of the test matrix, and `fail-fast: false` does not weaken that
+  # — a failed leg leaves the dependency unsatisfied and this job is skipped.
+  #
+  # There is no `workflow_dispatch` for a manual re-deploy: it would require this
+  # file on the default branch, which is the exact dependency this arrangement
+  # removes. Rollback is documented in docs/deployment.md and is a better path
+  # anyway — images are tagged by commit SHA, so redeploying an old one is one
+  # `docker compose up` on the box.
+  deploy:
+    name: deploy (develop → GCE)
+    needs: [test, lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      # Required by Workload Identity Federation: the job mints a short-lived
+      # OIDC token instead of holding a service-account key in secrets.
+      id-token: write
+
+    env:
+      GCP_PROJECT: project-b046f30f-3ee9-4a82-a84
+      GCP_REGION: us-central1
+      GCP_ZONE: us-central1-a
+      VM_NAME: instance-20260810-133643
+      REPOSITORY: ferum
+      IMAGE_NAME: ferum-board
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          # The repository ROOT, not backend/: the runtime stage copies frontend/
+          # and locales/ as well as the binary.
+          context: .
+          file: ./Dockerfile
+          push: true
+          build-args: |
+            FEATURES=s3
+          # Two tags: the SHA is what the VM actually pulls (immutable, so a
+          # rollback is just re-deploying an older tag), and `latest` is a
+          # convenience pointer for manual work on the box.
+          tags: |
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+          # Helps the apt and runtime layers only. The cargo build layer is
+          # invalidated by any change under backend/, so expect a full compile
+          # every deploy until the Dockerfile uses cargo-chef.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to VM
+        run: |
+          gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --project=${{ env.GCP_PROJECT }} \
+            --tunnel-through-iap \
+            --command="set -euo pipefail
+              cd /opt/ferum
+              export IMAGE_TAG=${{ github.sha }}
+              docker compose --env-file .env.prod -f docker-compose.prod.yml pull app
+              docker compose --env-file .env.prod -f docker-compose.prod.yml up -d app
+              docker image prune -f"
+
+      - name: Wait for the app to report ready
+        run: |
+          gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --project=${{ env.GCP_PROJECT }} \
+            --tunnel-through-iap \
+            --command="for i in \$(seq 1 30); do
+                if curl -fsS http://localhost:5173/health/ready >/dev/null 2>&1; then
+                  echo 'ready'; exit 0
+                fi
+                sleep 5
+              done
+              echo 'did not become ready'; docker compose -f /opt/ferum/docker-compose.prod.yml logs --tail=50 app; exit 1"
