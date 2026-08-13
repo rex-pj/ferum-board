@@ -65,8 +65,18 @@ compose up -d
 # 30 × 5s. The first boot of a new image runs migrations before it will answer,
 # and an index build on a mature table is legitimately slow, so this is a
 # generous ceiling rather than a latency expectation.
+#
+# The probe runs INSIDE the container. `app` publishes no ports — only nginx
+# does — so 5173 exists on the compose network and nowhere else, and curling it
+# from the host connects to nothing whatever the application is doing. That was
+# the original shape of this check, and it failed every deploy for 150s while
+# the container beside it answered its own healthcheck 200 on the same URL.
+#
+# Probing through nginx instead would test TLS and the proxy as well, which
+# sounds better and is worse here: this loop exists to decide whether the new
+# image is serving, and a certificate problem is not that question.
 for _ in $(seq 1 30); do
-    if curl -fsS http://localhost:5173/health/ready >/dev/null 2>&1; then
+    if compose exec -T app curl -fsS http://localhost:5173/health/ready >/dev/null 2>&1; then
         echo "ferum-deploy: $TAG is ready"
         # Only prune once the new container is known good. Pruning earlier would
         # discard the previous image while it is still the thing to roll back to.
