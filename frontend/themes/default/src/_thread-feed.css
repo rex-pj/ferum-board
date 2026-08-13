@@ -4,6 +4,19 @@
   border-radius: var(--bs-border-radius);
   overflow: hidden;
   background: var(--bs-body-bg);
+  transition: opacity 0.15s ease;
+}
+
+/* In-place swap (ferum-feed.js) is pending. The 0.15s DELAY is the whole point:
+   a swap that lands quickly — which is most of them — finishes before the dim
+   is ever painted, so the common case shows no loading state at all and only a
+   genuinely slow one gets feedback. Removing the class fades back through the
+   undelayed rule above. `pointer-events` applies immediately either way, which
+   is what stops a second tap racing the first. */
+.fr-feed--loading {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.15s ease 0.15s;
 }
 
 .fr-thread-row {
@@ -174,6 +187,23 @@
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  scroll-snap-type: x proximity;
+  /* Edge shadow that appears ONLY while the strip actually overflows. The two
+     `local` layers scroll with the content and paint over the two `scroll`
+     layers, so each shadow is masked out exactly when that end is reached — no
+     JS, and no always-on fade dimming a tab that is fully visible. The
+     scrollbar is hidden above, so without this a clipped tab reads as the last
+     one: at 360px the Vietnamese labels overflow by ~55px and "Nhiều thảo luận
+     nhất" was simply undiscoverable. */
+  background:
+    linear-gradient(to right, var(--bs-body-bg), transparent) 0 0 / 24px 100% no-repeat local,
+    linear-gradient(to left, var(--bs-body-bg), transparent) 100% 0 / 24px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%,
+      color-mix(in srgb, var(--bs-body-color) 22%, transparent), transparent)
+      0 0 / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%,
+      color-mix(in srgb, var(--bs-body-color) 22%, transparent), transparent)
+      100% 0 / 14px 100% no-repeat scroll;
 }
 .fr-sort-tabs::-webkit-scrollbar { display: none; }
 .fr-sort-tab {
@@ -194,6 +224,7 @@
   border-left: none;
   border-right: none;
   cursor: pointer;
+  scroll-snap-align: start;
 }
 .fr-sort-tab:hover { color: var(--bs-body-color); text-decoration: none; }
 .fr-sort-tab--active {
@@ -249,11 +280,21 @@
   color: var(--bs-secondary-color);
   text-decoration: none;
   white-space: nowrap;
-  border: 1px solid var(--bs-border-color);
+  /* NOT --bs-border-color. That token is a hairline SEPARATOR (#e5e7eb on
+     white, #1f2330 on #0f1117) and measures ~1.2:1 against the feed background
+     in both themes — so the pill outline, which is the entire visual signal
+     that these are a different axis from the tabs above, was invisible. WCAG
+     1.4.11 wants 3:1 for a control boundary; 65% of --bs-secondary-color gives
+     3.2:1 light / 3.4:1 dark and still reads as an outline, not a button. */
+  border: 1px solid color-mix(in srgb, var(--bs-secondary-color) 65%, transparent);
   border-radius: 999px;
   background: none;
   transition: color 0.15s, border-color 0.15s, background-color 0.15s;
 }
+
+/* Touch has no hover and no title tooltip, so an active chip needs to say
+   "tap again to remove" in the mark itself. */
+.fr-filter-chip__clear { opacity: 0.75; margin-left: 0.1rem; }
 
 .fr-filter-chip:hover {
   color: var(--bs-body-color);
@@ -277,8 +318,27 @@
   /* Stacked, and the chips lead: on a phone the reader is far likelier to be
      hunting for something specific than to be re-ordering everything. */
   .fr-feed-controls { justify-content: flex-start; }
-  .fr-filter-chips { width: 100%; padding-top: 0; }
-  .fr-filter-chips__label { display: none; }
+  /* Inset to the tab strip's own text edge (0.875rem), so the two rows share a
+     left margin instead of the chips sitting flush against the card border. */
+  .fr-filter-chips { width: 100%; padding: 0 0.875rem 0.375rem; }
+
+  /* NF-UX-02. The chips already carried min-height:44px and the tabs did not,
+     so the two axes stacked at 37px and 44px: a tap-target failure on the row
+     people actually use, and the reason the two rows looked mismatched. */
+  .fr-sort-tab { min-height: var(--fr-tap-target); }
+
+  /* The tab icons are decorative (aria-hidden) and cost ~20px each. Dropping
+     them takes the English strip from ~390px to ~330px — the difference
+     between all three sorts fitting on a 360px phone and the third being
+     clipped. They stay on desktop, where the width is free. */
+  .fr-sort-tab > i { display: none; }
+
+  /* The label STAYS on mobile. It used to be display:none, which is exactly
+     backwards: it is the only text saying these two rows are different axes
+     (reorder vs. narrow), and dropping it turned five controls into one
+     undifferentiated block on the screen where that confusion costs most. It
+     needs ~40px of a row with ~80px spare. */
+  .fr-filter-chips__label { font-size: 0.6875rem; }
 }
 
 

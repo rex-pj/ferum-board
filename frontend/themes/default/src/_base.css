@@ -15,6 +15,13 @@ html {
   scroll-behavior: smooth;
 }
 
+/* The feed's sort/filter links navigate to #feed, so fragment scrolling is no
+   longer a rare event on this site — which makes an unconditional smooth
+   scroll a motion-sensitivity problem rather than a nicety (WCAG 2.3.3). */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.9375rem;

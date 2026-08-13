@@ -169,6 +169,11 @@
   <script src="/static/js/bootstrap.bundle.min.js"></script>
   <script src="/static/js/ferum-utils.js?v={{ asset_version() }}"></script>
   <script src="/static/js/ferum-progress.js?v={{ asset_version() }}"></script>
+  {# Outside {% block scripts %} on purpose: the feed controls come from a
+     shared macro that every theme inherits, so the behaviour has to be
+     inherited too. A child theme overriding that block without super() would
+     otherwise drop it silently on exactly the page it matters on. #}
+  <script src="/static/js/ferum-feed.js?v={{ asset_version() }}" defer></script>
   {% block scripts %}{% endblock %}
   <script src="/static/js/alpine.min.js" defer></script>
   <script src="/static/js/ferum-widgets.iife.js?v={{ asset_version() }}" defer></script>

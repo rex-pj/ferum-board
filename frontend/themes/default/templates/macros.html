@@ -579,11 +579,27 @@
      {{ m::feed_controls(controls=feed_controls) }}
 #}
 {% macro feed_controls(controls) %}
-<div class="fr-feed-controls">
+{#- `id="feed"` + the `#feed` on every href below is what stops the page
+    snapping back to the very top on each click. These are real navigations
+    (that is the point — no JS, correct back button), and a navigation without
+    a fragment always lands at scroll 0, so the reader was thrown back above
+    the hero and the category list every time they changed the sort.
+
+    The anchor is HERE, on the controls themselves, rather than on the feed
+    card: the card wrapper is written per theme (sumi and arcade ship their own
+    home.html), so an id there would have to be repeated in every theme and
+    would silently stop working in the one that forgot. This element is
+    rendered by the shared macro, so every theme gets it for free.
+
+    The offset is already handled globally — `_base.css` gives `:target` a
+    scroll-margin-top of the sticky topbar height, so the row lands just under
+    the navbar rather than behind it. -#}
+<div class="fr-feed-controls" id="feed">
 
   <div class="fr-sort-tabs" role="group" aria-label="{{ t(k='ui-sort-by') }}">
     {% for tab in controls.sorts %}
-      <a href="{{ tab.href }}"
+      <a href="{{ tab.href }}#feed"
+         data-feed-key="{{ tab.key }}"
          class="fr-sort-tab{% if tab.active %} fr-sort-tab--active{% endif %}"
          {% if tab.active %}aria-current="page"{% endif %}
          title="{{ t(k=tab.hint_key) }}">
@@ -595,11 +611,13 @@
   <div class="fr-filter-chips" role="group" aria-label="{{ t(k='ui-filter-label') }}">
     <span class="fr-filter-chips__label">{{ t(k="ui-filter-label") }}</span>
     {% for chip in controls.filters %}
-      <a href="{{ chip.href }}"
+      <a href="{{ chip.href }}#feed"
+         data-feed-key="{{ chip.key }}"
          class="fr-filter-chip{% if chip.active %} fr-filter-chip--on{% endif %}"
          {% if chip.active %}aria-pressed="true"{% else %}aria-pressed="false"{% endif %}
-         title="{{ t(k=chip.hint_key) }}">
+         title="{% if chip.active %}{{ t(k='ui-clear-filter') }}{% else %}{{ t(k=chip.hint_key) }}{% endif %}">
         <i class="fa-solid {{ chip.icon }} fa-xs" aria-hidden="true"></i>{{ t(k=chip.label_key) }}
+        {%- if chip.active %}<i class="fa-solid fa-xmark fa-xs fr-filter-chip__clear" aria-hidden="true"></i>{% endif %}
       </a>
     {% endfor %}
   </div>
