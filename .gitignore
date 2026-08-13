@@ -53,3 +53,14 @@ desktop.ini
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log
 logs/
+
+# ─── Per-installation deployment notes ────────────────────────────────────────
+# docs/deployment.md is the general runbook and IS tracked. Your own project ID,
+# VM name, domain and OS Login user belong in a sibling that is not — such as
+# docs/deployment.mysite.md — so the procedure stays reusable by anyone.
+docs/deployment.*.md
+!docs/deployment.md
+
+# Per-installation copies of the deploy configs. deploy/nginx.conf is the
+# tracked, generic one; a `.<site>.conf` sibling carries the real server_name.
+deploy/*.*.conf

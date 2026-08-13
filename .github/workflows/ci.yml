@@ -1,31 +1,48 @@
 name: CI
 
-# Deploy lives in this file, as a job gated on the test matrix, rather than in a
-# separate workflow keyed on `workflow_run`. It was the latter, and it never once
-# fired: GitHub only triggers `workflow_run` (and only offers `workflow_dispatch`)
-# for a workflow file that exists on the DEFAULT branch, which here is `main` —
-# and `main` carries no workflows at all. A `push` event, by contrast, runs the
-# file from the branch that was pushed, so keeping deploy here means it works from
-# `develop` without anything having to land on `main` first.
+# Four jobs: test (×2 timezones) and lint gate `image`, which gates `release`.
 #
-# The reason deploy was split out originally still holds and is handled by the
-# `if:` on that job: CI also runs on `pull_request`, where deploying would be
-# wrong. A PR does not raise a `push` event on `develop`, so the guard is exact.
+# Deploying lives in this file rather than in a separate workflow keyed on
+# `workflow_run`. It was the latter, and it never once fired: GitHub only triggers
+# `workflow_run` (and only offers `workflow_dispatch`) for a workflow file that
+# exists on the DEFAULT branch, which here is `main` — and `main` carries no
+# workflows at all. A `push` event, by contrast, runs the file from the branch
+# that was pushed, so keeping it here means it works from `develop` without
+# anything having to land on `main` first.
+#
+# The reason it was split out originally still holds and is handled by the `if:`
+# on `image`: CI also runs on `pull_request`, where deploying would be wrong. A PR
+# does not raise a `push` event on `develop`, so the guard is exact — and
+# `release` needs no `if:` of its own, since a skipped `image` skips it too.
+#
+# The operational runbook, and every failure mode this pipeline has actually hit,
+# is docs/deployment.md.
 on:
   push:
     branches: [develop]
   pull_request:
 
 env:
-  # Shared by the `image` and `release` jobs. Workflow level rather than job
-  # level so the two cannot drift — they name the same registry path, and a
-  # mismatch would push one image and deploy a different one.
-  GCP_PROJECT: project-b046f30f-3ee9-4a82-a84
-  GCP_REGION: us-central1
-  GCP_ZONE: us-central1-a
-  VM_NAME: instance-20260810-133643
-  REPOSITORY: ferum
-  IMAGE_NAME: ferum-board
+  # Deployment configuration is split across three places, and the split is by
+  # what each value IS, not by convenience:
+  #
+  #   secrets  — GCP_PROJECT, VM_NAME. Identify the deployment. Masked in logs.
+  #   vars     — region, zone, registry names. Generic; a wrong one should be
+  #              readable in the log rather than shown as ***.
+  #   defaults — the `|| '…'` below, so a fork sets two secrets and nothing else.
+  #
+  # The identifying pair CANNOT live here: GitHub allows the `secrets` context in
+  # job-level `env:` only, never at workflow level. They are declared in each of
+  # the two jobs that needs them, which is why that repetition is not an
+  # oversight to tidy away.
+  #
+  # Masking has a real cost, accepted deliberately: a wrong project ID appears in
+  # the log as *** — including inside the registry path — so a misconfiguration
+  # is diagnosed from the guard step's message rather than by reading the value.
+  GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  GCP_ZONE: ${{ vars.GCP_ZONE || 'us-central1-a' }}
+  REPOSITORY: ${{ vars.AR_REPOSITORY || 'ferum' }}
+  IMAGE_NAME: ${{ vars.IMAGE_NAME || 'ferum-board' }}
 
   CARGO_TERM_COLOR: always
   # Fail fast on warnings everywhere, not just the clippy job.
@@ -187,7 +204,25 @@ jobs:
       # OIDC token instead of holding a service-account key in secrets.
       id-token: write
 
+    # See the workflow-level `env:` for why this is here and not there.
+    env:
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+
     steps:
+      # An unset secret interpolates to the empty string, so without this the
+      # image is pushed to `-docker.pkg.dev//ferum/…` and the failure arrives
+      # from the registry as a malformed-reference error saying nothing about
+      # configuration. Worse with secrets than with variables: the bad value is
+      # masked, so the log cannot be read to work out what happened. A fork that
+      # has not read the runbook should be told what to set, here, in one line.
+      - name: Check deployment secrets are configured
+        run: |
+          [ -n "$GCP_PROJECT" ] && exit 0
+          echo "::error::Repository secret GCP_PROJECT is not set."
+          echo "Settings → Secrets and variables → Actions → Secrets."
+          echo "See docs/deployment.md, Phase B."
+          exit 1
+
       - uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
@@ -248,7 +283,19 @@ jobs:
       contents: read
       id-token: write
 
+    # As in `image` — the `secrets` context is job-level only.
+    env:
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+      VM_NAME: ${{ secrets.VM_NAME }}
+
     steps:
+      - name: Check deployment secrets are configured
+        run: |
+          [ -n "$VM_NAME" ] && exit 0
+          echo "::error::Repository secret VM_NAME is not set."
+          echo "Settings → Secrets and variables → Actions → Secrets."
+          exit 1
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:

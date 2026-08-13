@@ -15,7 +15,11 @@
 # an operator makes — and `environment:` wins over `env_file:`.
 #
 # Variables this file interpolates, which must therefore be present in .env.prod:
-#   DB_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY, and optionally S3_BUCKET.
+#   APP_IMAGE, DB_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY, and optionally S3_BUCKET.
+#
+# Nothing here names a particular domain, project or registry. Those live in
+# .env.prod (APP_IMAGE) and in nginx's own config, so this file is the same for
+# every installation and can be pulled straight from git.
 
 services:
   app:
@@ -23,10 +27,14 @@ services:
     # e2-medium this runs on cannot complete a `lto = "fat"` + `codegen-units = 1`
     # build: rustc peaks at 4-8 GB for the final unit against 4 GB of RAM.
     #
-    # IMAGE_TAG is the commit SHA, exported by the deploy workflow before it calls
+    # APP_IMAGE is the registry path without a tag, and it lives in .env.prod
+    # rather than here so this file carries nothing specific to one installation:
+    #   APP_IMAGE=us-central1-docker.pkg.dev/my-project/ferum/ferum-board
+    #
+    # IMAGE_TAG is the commit SHA, exported by ferum-deploy before it calls
     # `docker compose pull`. It defaults to `latest` so a manual `up -d` on the box
     # still works; pin it to a SHA to roll back.
-    image: us-central1-docker.pkg.dev/project-b046f30f-3ee9-4a82-a84/ferum/ferum-board:${IMAGE_TAG:-latest}
+    image: ${APP_IMAGE:?set APP_IMAGE in .env.prod}:${IMAGE_TAG:-latest}
     env_file: .env.prod
     environment:
       DATABASE_URL: postgresql://forum:${DB_PASSWORD}@postgres:5432/forum
