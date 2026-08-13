@@ -17,6 +17,16 @@ on:
   pull_request:
 
 env:
+  # Shared by the `image` and `release` jobs. Workflow level rather than job
+  # level so the two cannot drift — they name the same registry path, and a
+  # mismatch would push one image and deploy a different one.
+  GCP_PROJECT: project-b046f30f-3ee9-4a82-a84
+  GCP_REGION: us-central1
+  GCP_ZONE: us-central1-a
+  VM_NAME: instance-20260810-133643
+  REPOSITORY: ferum
+  IMAGE_NAME: ferum-board
+
   CARGO_TERM_COLOR: always
   # Fail fast on warnings everywhere, not just the clippy job.
   #
@@ -155,18 +165,18 @@ jobs:
         working-directory: backend
         run: cargo machete
 
-  # ─── Deploy to the GCE VM ───────────────────────────────────────────────────
+  # ─── Build and publish the image ────────────────────────────────────────────
   # Runs only for a push to `develop` that passed BOTH jobs above. `needs` waits
   # for every leg of the test matrix, and `fail-fast: false` does not weaken that
   # — a failed leg leaves the dependency unsatisfied and this job is skipped.
   #
-  # There is no `workflow_dispatch` for a manual re-deploy: it would require this
-  # file on the default branch, which is the exact dependency this arrangement
-  # removes. Rollback is documented in docs/deployment.md and is a better path
-  # anyway — images are tagged by commit SHA, so redeploying an old one is one
-  # `docker compose up` on the box.
-  deploy:
-    name: deploy (develop → GCE)
+  # SPLIT FROM `release` DELIBERATELY. They were one job, and every VM-side
+  # misconfiguration — a missing sudoers entry, an unset OS Login flag — cost a
+  # full image rebuild to retry, because "Re-run failed jobs" restarts the whole
+  # job. Separated, a failed `release` re-runs in about a minute against the image
+  # this job already published; `image` is skipped because it succeeded.
+  image:
+    name: build + push image
     needs: [test, lint]
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
@@ -176,14 +186,6 @@ jobs:
       # Required by Workload Identity Federation: the job mints a short-lived
       # OIDC token instead of holding a service-account key in secrets.
       id-token: write
-
-    env:
-      GCP_PROJECT: project-b046f30f-3ee9-4a82-a84
-      GCP_REGION: us-central1
-      GCP_ZONE: us-central1-a
-      VM_NAME: instance-20260810-133643
-      REPOSITORY: ferum
-      IMAGE_NAME: ferum-board
 
     steps:
       - uses: actions/checkout@v4
@@ -231,6 +233,30 @@ jobs:
           # Artifact Registry is already in this deployment and has no such cap.
           cache-from: type=registry,ref=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT }}/${{ env.REPOSITORY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  # ─── Roll the VM onto the new image ─────────────────────────────────────────
+  # No image build here, so a retry is one ssh round trip. There is no
+  # `workflow_dispatch` for a manual re-deploy: it would require this file on the
+  # default branch, which is the exact dependency this arrangement removes.
+  # Rollback is `sudo ferum-deploy <older-sha>` on the box — see docs/deployment.md.
+  release:
+    name: release (develop → GCE)
+    needs: [image]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
       # One pinned script, one ssh session. This account holds
       # `roles/compute.osLogin` (no sudo of its own) plus a single sudoers entry
