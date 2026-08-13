@@ -10,12 +10,18 @@ use validator::Validate;
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::plugin::{
-    ActiveSlotsResponse, CapabilityReviewResponse, ConfigurePluginRequest, DebugHookRequest,
-    DebugHookResponse, PluginDetailResponse, PluginListItem, PluginLogQueryParams,
-    PluginLogResponse, SlotEntry, TogglePluginStatusRequest, UiSlotAdminItem,
-    UninstallPluginRequest, UpdateUiSlotRequest,
+    ActiveSlotsResponse, CapabilityReviewResponse, ConfigurePluginRequest, PluginDetailResponse,
+    PluginListItem, PluginLogQueryParams, PluginLogResponse, SlotEntry, TogglePluginStatusRequest,
+    UiSlotAdminItem, UninstallPluginRequest, UpdateUiSlotRequest,
 };
 use crate::view_models::{DataResponse, HandlerResult};
+// `debug_hook` below is `#[cfg(debug_assertions)]`, so these four are used only
+// in a debug build. Left ungated they are four `unused_imports` warnings in every
+// release build — invisible to CI, which lints in debug, and visible in the
+// deploy image build where nothing acts on them.
+#[cfg(debug_assertions)]
+use crate::view_models::plugin::{DebugHookRequest, DebugHookResponse};
+#[cfg(debug_assertions)]
 use ferum_application::ports::{HookContext, HookDecision};
 use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
 use ferum_application::shared::AppError;
