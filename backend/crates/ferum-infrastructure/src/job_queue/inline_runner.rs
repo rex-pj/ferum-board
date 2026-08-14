@@ -4,8 +4,10 @@ use async_trait::async_trait;
 use tokio::sync::Semaphore;
 
 use crate::network_utils::build_pinned_client;
+use ferum_application::constants::UNSUBSCRIBE_TOKEN_TTL_SECS;
 use ferum_application::ports::{
-    EmailService, ForumJob, JobQueue, StorageService, TransArg, Translator,
+    EmailService, ForumJob, JobQueue, StorageService, TokenService, TransArg, Translator,
+    UNSUBSCRIBE_PURPOSE,
 };
 use ferum_application::shared::AppError;
 use ferum_domain::Locale;
@@ -24,6 +26,16 @@ pub struct JobExecutor {
     pub translator: Option<Arc<dyn Translator>>,
     /// Site name interpolated into email copy.
     pub site_name: String,
+    /// Mints the unsubscribe token carried by every notification email.
+    ///
+    /// Minted here rather than at enqueue time on purpose: a token created when
+    /// the event fired would start ageing while the job sat in the queue, and the
+    /// job payload would then be carrying a credential around. Optional for the
+    /// same reason as `translator` — the executor is constructible without one,
+    /// and a notification email simply is not sent when it is absent, because a
+    /// notification email with no working unsubscribe link is the thing that
+    /// earns a spam complaint.
+    pub tokens: Option<Arc<dyn TokenService>>,
 }
 
 impl JobExecutor {
@@ -42,12 +54,19 @@ impl JobExecutor {
             webhooks,
             translator: None,
             site_name: "Ferum Board".to_string(),
+            tokens: None,
         }
     }
 
     pub fn with_translator(mut self, translator: Arc<dyn Translator>, site_name: String) -> Self {
         self.translator = Some(translator);
         self.site_name = site_name;
+        self
+    }
+
+    /// Supplies the token service used to build unsubscribe links.
+    pub fn with_tokens(mut self, tokens: Arc<dyn TokenService>) -> Self {
+        self.tokens = Some(tokens);
         self
     }
 
@@ -92,16 +111,43 @@ impl JobExecutor {
                 self.email.send(&email, &subject, &body).await
             }
             ForumJob::SendNotificationEmail {
-                user_id: _,
-                subject,
-                body: _,
-                locale: _,
+                user_id,
+                email,
+                kind,
+                thread_slug,
+                thread_title,
+                actor_username,
+                locale,
             } => {
-                tracing::debug!(
-                    "notification email job skipped in inline runner: {}",
-                    subject
-                );
-                Ok(())
+                // No token service means no unsubscribe link, and a notification
+                // email without one is exactly the message people report rather
+                // than mute. Dropping it is the safer failure.
+                let Some(tokens) = &self.tokens else {
+                    tracing::warn!(
+                        %user_id,
+                        "notification email skipped: no token service, so no unsubscribe link"
+                    );
+                    return Ok(());
+                };
+                let token =
+                    tokens.mint_email_token(user_id, UNSUBSCRIBE_PURPOSE, UNSUBSCRIBE_TOKEN_TTL_SECS)?;
+
+                let thread_url = format!("{}/forum/t/{}", self.app_url, thread_slug);
+                let unsubscribe_url = format!("{}/unsubscribe/{}", self.app_url, token);
+                let settings_url = format!("{}/account", self.app_url);
+
+                let stem = kind.key_stem();
+                let args: &[(&str, TransArg)] = &[
+                    ("site_name", TransArg::Str(self.site_name.clone())),
+                    ("actor", TransArg::Str(actor_username)),
+                    ("thread_title", TransArg::Str(thread_title)),
+                    ("url", TransArg::Str(thread_url)),
+                    ("unsubscribe_url", TransArg::Str(unsubscribe_url)),
+                    ("settings_url", TransArg::Str(settings_url)),
+                ];
+                let subject = self.t(&locale, &format!("{stem}-subject"), args);
+                let body = self.t(&locale, &format!("{stem}-body"), args);
+                self.email.send(&email, &subject, &body).await
             }
             ForumJob::GcStorageKey { key } => self.run_gc_storage_key(&key).await,
             ForumJob::SendWebhook {

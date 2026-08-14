@@ -272,11 +272,23 @@
     var tzChanged =
       tzEl && (timezone || '') !== (tzEl.getAttribute('data-current') || '');
 
+    // Sent as one object rather than two flags: the server stores the whole
+    // `email_notifications` JSON, so a partial payload would drop the key it left
+    // out. Both switches are always read, whatever their state.
+    var replyEl   = document.getElementById('email-notify-reply');
+    var mentionEl = document.getElementById('email-notify-mention');
+
     setSpinner('prefs-submit-btn', 'prefs-spinner', true);
     try {
       var payload = { theme: theme, font_size: fontSize, layout: layout };
       if (locale !== undefined) payload.locale = locale;
       if (timezone !== undefined) payload.timezone = timezone;
+      if (replyEl && mentionEl) {
+        payload.email_notifications = {
+          reply: replyEl.checked,
+          mention: mentionEl.checked,
+        };
+      }
       var res = await FerumApi.users.updatePreferences(payload);
       if (res.ok) {
         showFeedback('prefs-feedback', 'success', Ferum.t('js-preferences-saved'));

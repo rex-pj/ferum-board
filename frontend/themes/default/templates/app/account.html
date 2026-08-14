@@ -343,6 +343,32 @@
             </select>
           </div>
 
+          <div class="mb-4">
+            <label class="form-label fw-semibold d-block mb-1">{{ t(k="prefs-email-notifications") }}</label>
+            <p class="text-muted small mb-2">{{ t(k="prefs-email-notifications-help") }}</p>
+            {# Only the two kinds that are ever emailed. Reactions and follows stay
+               in-app deliberately — they are the highest-volume and lowest-value of
+               the five, and offering a switch for something the server never sends
+               would be a control that does nothing. #}
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" role="switch" id="email-notify-reply"
+                     style="min-width:44px;min-height:24px"
+                     {% if preferences and preferences.email_notifications and preferences.email_notifications.reply %}checked{% endif %}>
+              <label class="form-check-label" for="email-notify-reply">{{ t(k="prefs-email-on-reply") }}</label>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="email-notify-mention"
+                     style="min-width:44px;min-height:24px"
+                     {% if preferences and preferences.email_notifications and preferences.email_notifications.mention %}checked{% endif %}>
+              <label class="form-check-label" for="email-notify-mention">{{ t(k="prefs-email-on-mention") }}</label>
+            </div>
+            {% if account_status and not account_status.is_email_verified %}
+            <div class="form-text text-warning-emphasis mt-2">
+              <i class="fa-solid fa-triangle-exclamation me-1" aria-hidden="true"></i>{{ t(k="prefs-email-needs-verification") }}
+            </div>
+            {% endif %}
+          </div>
+
           <div id="prefs-feedback" class="d-none mb-3"></div>
           <button type="submit" class="btn btn-primary" id="prefs-submit-btn" style="min-height:44px">
             <i id="prefs-spinner" class="fa-solid fa-spinner fa-spin me-1 d-none" aria-hidden="true"></i>{{ t(k="ui-save-preferences") }}

@@ -127,6 +127,9 @@ error-product-media-limit =
 ## ─── Tải tệp lên ─────────────────────────────────────────────────────────────
 
 error-file-field-missing = Không có tệp nào trong yêu cầu tải lên.
+error-from-email-required = Cần có địa chỉ người gửi trước khi có thể gửi email.
+error-from-email-invalid = Địa chỉ người gửi đó không phải là email hợp lệ.
+error-mail-not-configured = Chức năng gửi email chưa được cấu hình, nên không gửi được thư này.
 error-image-field-missing = Không có ảnh nào trong yêu cầu tải lên.
 error-image-too-large = Ảnh này quá lớn. Giới hạn là { $limit_mb } MB.
 error-image-content-mismatch = Tệp này không thuộc định dạng ảnh được hỗ trợ.

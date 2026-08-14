@@ -6,11 +6,14 @@ use std::time::Duration;
 
 use crate::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
 use crate::permission::PermissionChecker;
-use crate::ports::{CacheService, ForumJob, JobQueue, PasswordHasher, StorageService};
+use crate::ports::{
+    CacheService, ForumJob, JobQueue, PasswordHasher, StorageService, TokenService,
+    UNSUBSCRIBE_PURPOSE,
+};
 use crate::shared::{AppError, OptionExt};
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use crate::validators::validate_image_magic;
-use ferum_domain::models::user::{User, UserPreferences};
+use ferum_domain::models::user::{EmailNotificationPrefs, User, UserPreferences};
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::user_repository::{UpdateUser, UserRepository};
 use ferum_domain::AuthUser;
@@ -39,6 +42,10 @@ pub struct UserUseCase {
     /// Exists so every page render (via user_ctx()) can cheaply read the
     /// viewer's theme/font/layout preferences without a 3-way JOIN per request.
     pub cache: Option<Arc<dyn CacheService>>,
+    /// Verifies the signed token behind a one-click unsubscribe link. That link is
+    /// followed without a session, so this token is the only authorisation the
+    /// request carries.
+    pub tokens: Arc<dyn TokenService>,
 }
 
 impl UserUseCase {
@@ -48,6 +55,7 @@ impl UserUseCase {
         stored_files: Arc<dyn StoredFileRepository>,
         storage: Arc<dyn StorageService>,
         jobs: Arc<dyn JobQueue>,
+        tokens: Arc<dyn TokenService>,
     ) -> Self {
         Self {
             users,
@@ -56,6 +64,7 @@ impl UserUseCase {
             storage,
             jobs,
             cache: None,
+            tokens,
         }
     }
 
@@ -191,6 +200,37 @@ impl UserUseCase {
         self.users.upsert_preferences(p).await?;
         if let Some(cache) = &self.cache {
             let _ = cache.del(&preferences_cache_key(actor.id)).await;
+        }
+        Ok(())
+    }
+
+    /// Turns every notification email off for the holder of `token`.
+    ///
+    /// Backs the one-click link in each notification email. Three properties are
+    /// deliberate:
+    ///
+    /// * **No session required.** Someone clicking unsubscribe from their mail
+    ///   client is very often not logged in, and a link that bounces to a login
+    ///   form is a link that does not work — at which point the "report spam"
+    ///   button is the easier option. The signed token *is* the authorisation.
+    /// * **It only ever turns things off.** The token grants nothing else, so
+    ///   leaking one costs the holder a preference they can restore in
+    ///   `/account`, and never account access.
+    /// * **Idempotent.** Mail clients prefetch links, and a user may click twice;
+    ///   both must succeed rather than showing an error the second time.
+    pub async fn unsubscribe_from_emails(&self, token: &str) -> Result<(), AppError> {
+        let user_id = self.tokens.verify_email_token(token, UNSUBSCRIBE_PURPOSE)?;
+
+        let mut prefs = self.users.get_preferences(user_id).await?;
+        prefs.user_id = user_id;
+        prefs.email_notifications = EmailNotificationPrefs::OPTED_OUT.to_json();
+        self.users.upsert_preferences(prefs).await?;
+
+        // Or `/account` would keep showing the old toggles for the cache's TTL.
+        // `EventBus` reads the repository directly and is unaffected, so the send
+        // decision is correct from the next event either way.
+        if let Some(cache) = &self.cache {
+            let _ = cache.del(&preferences_cache_key(user_id)).await;
         }
         Ok(())
     }

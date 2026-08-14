@@ -10,7 +10,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::Bytes;
 
-use ferum_application::ports::{EmailService, ForumJob, StorageService};
+use ferum_application::ports::{
+    EmailService, ForumJob, NotificationEmailKind, StorageService,
+};
 use ferum_application::shared::AppError;
 use ferum_domain::models::webhook::Webhook;
 use ferum_domain::Locale;
@@ -319,8 +321,11 @@ fn all_job_variants() -> Vec<(&'static str, ForumJob, bool)> {
             "SendNotificationEmail",
             ForumJob::SendNotificationEmail {
                 user_id: uuid,
-                subject: "s".into(),
-                body: "b".into(),
+                email: "member@example.com".into(),
+                kind: NotificationEmailKind::Reply,
+                thread_slug: "a-thread".into(),
+                thread_title: "A thread".into(),
+                actor_username: "someone".into(),
                 locale: Locale::default(),
             },
             false,

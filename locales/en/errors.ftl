@@ -112,6 +112,9 @@ error-product-media-limit =
 
 error-upload-quota-exceeded = You've reached your daily upload limit. Try again tomorrow.
 error-file-field-missing = No file was included in the upload.
+error-from-email-required = A sender address is required before mail can be sent.
+error-from-email-invalid = That sender address isn't a valid email address.
+error-mail-not-configured = Email sending isn't configured, so this message couldn't be sent.
 error-image-field-missing = No image was included in the upload.
 error-image-too-large = That image is too large. The limit is { $limit_mb } MB.
 error-avatar-too-large = Your avatar must be { $limit_mb } MB or smaller.

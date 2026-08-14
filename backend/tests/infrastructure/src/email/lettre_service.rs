@@ -4,7 +4,9 @@
 //! which is why `security_for` exists as a named function rather than inline at
 //! the call site: it is the only way the decision can be observed at all.
 
-use ferum_infrastructure::email::{security_for, LettreEmailService, SmtpSecurity};
+use ferum_infrastructure::email::{
+    security_for, validate_from_address, LettreEmailService, SmtpSecurity,
+};
 
 #[test]
 fn loopback_hosts_connect_in_the_clear() {
@@ -130,6 +132,88 @@ fn a_malformed_hostname_still_builds_because_tls_validates_at_connect_time() {
          the error path in ReloadableEmailService::reload has become reachable and \
          the auto_verify tests should force it"
     );
+}
+
+// ─── FROM_EMAIL ──────────────────────────────────────────────────────────────
+
+#[test]
+fn a_bare_address_is_a_valid_sender() {
+    for from in [
+        "noreply@example.com",
+        "no-reply@sub.example.co.uk",
+        "forum+notifications@example.com",
+    ] {
+        assert!(
+            validate_from_address(from).is_ok(),
+            "{from:?} should be accepted"
+        );
+    }
+}
+
+#[test]
+fn a_display_name_sender_is_valid() {
+    // The reason there is no separate `EMAIL_FROM_NAME`: the name goes inside
+    // FROM_EMAIL in the RFC 5322 form, and both adapters take it — lettre parses it
+    // into a Mailbox, and Resend's API documents the same shape for its `from`
+    // field. This test is what makes that a checked claim rather than a reading of
+    // lettre's source.
+    for from in [
+        "Ferum Board <noreply@example.com>",
+        "Qhortus <no-reply@qhortus.com>",
+        "<noreply@example.com>",
+    ] {
+        assert!(
+            validate_from_address(from).is_ok(),
+            "{from:?} should be accepted"
+        );
+    }
+}
+
+#[test]
+fn a_malformed_sender_is_rejected() {
+    // Every one of these used to start the process cleanly and then fail every
+    // message with a generic `internal_error`.
+    for from in [
+        "",
+        "   ",
+        "noreply",              // no domain
+        "noreply@",             // no domain part
+        "@example.com",         // no local part
+        "noreply at example.com",
+        "Ferum Board <noreply@example.com",  // unclosed bracket
+        "Ferum Board noreply@example.com",   // name without brackets
+    ] {
+        assert!(
+            validate_from_address(from).is_err(),
+            "{from:?} should be rejected"
+        );
+    }
+}
+
+#[test]
+fn the_rejection_message_says_what_a_valid_value_looks_like() {
+    // It goes into a startup abort, so it has to be actionable on its own — the
+    // operator is looking at a container that will not come up.
+    let Err(err) = validate_from_address("noreply") else {
+        panic!("expected rejection");
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("FROM_EMAIL"));
+    assert!(msg.contains("Display Name"));
+}
+
+#[test]
+fn a_display_name_sender_also_builds_a_transport() {
+    // Guards the whole path, not just the validator: `send` parses `from` through
+    // the same function, so a form accepted at boot must not be refused later.
+    let svc = LettreEmailService::new(
+        "localhost",
+        1025,
+        None,
+        None,
+        "Ferum Board <noreply@example.com>",
+    );
+    assert!(svc.is_ok());
 }
 
 #[test]

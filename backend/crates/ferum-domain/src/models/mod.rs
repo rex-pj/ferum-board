@@ -39,7 +39,7 @@ pub use report::{Report, ReportStatus};
 pub use role::{Permission, Role, UserRoleAssignment};
 pub use tag::{NewTag, Tag};
 pub use thread::{Thread, ThreadStatus};
-pub use user::{TrustLevel, User, UserPreferences};
+pub use user::{EmailNotificationPrefs, TrustLevel, User, UserPreferences};
 pub use plugin::{
     ui_slot_element_tag, NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin,
     PluginHook, PluginLog, PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,

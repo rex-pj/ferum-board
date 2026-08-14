@@ -56,6 +56,28 @@ prefs-timezone-help =
     while you travel.
 prefs-timezone-auto = Match my device
 
+prefs-email-notifications = Email notifications
+prefs-email-notifications-help =
+    Choose what you also want by email. Everything else — reactions, follows —
+    stays in your notification inbox only.
+prefs-email-on-reply = Someone replies to a thread I started
+prefs-email-on-mention = Someone mentions me
+prefs-email-needs-verification =
+    Your email address is not verified yet, so nothing will be sent until it is.
+
+## ─── Unsubscribe ─────────────────────────────────────────────────────────────
+
+ui-unsubscribe-title = Unsubscribe
+ui-unsubscribe-done-title = You're unsubscribed
+ui-unsubscribe-done-body =
+    We won't email you about replies or mentions any more. You'll still see them
+    in your notifications on the site.
+ui-unsubscribe-failed-title = That link has expired
+ui-unsubscribe-failed-body =
+    Unsubscribe links stop working after a while. You can turn these emails off
+    from your account settings instead — it takes a moment.
+ui-unsubscribe-manage = Notification settings
+
 ## ─── Thread card ─────────────────────────────────────────────────────────────
 
 thread-product-review = Product review

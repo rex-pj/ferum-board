@@ -22,8 +22,13 @@ use ferum_application::validators::validate_favicon_magic;
 /// encrypts `smtp_pass` at rest also needs the key name, and infrastructure
 /// cannot import this crate. Re-exported so every call site keeps its spelling.
 pub use ferum_application::constants::{
-    SMTP_HOST_KEY, SMTP_PASS_KEY, SMTP_PORT_KEY, SMTP_USER_KEY,
+    FROM_EMAIL_KEY, MAIL_PROVIDER_KEY, SMTP_HOST_KEY, SMTP_PASS_KEY, SMTP_PORT_KEY, SMTP_USER_KEY,
 };
+use ferum_application::ports::EmailService;
+use ferum_infrastructure::email::{
+    validate_from_address, MailReload, ResendEmailService, SelectedProvider, SmtpEndpoint,
+};
+use std::sync::Arc;
 
 /// Port used when `smtp_port` is absent from site_config — the SMTP submission
 /// port, matching `Config`'s own default.
@@ -111,6 +116,8 @@ pub const CONFIG_WRITABLE_KEYS: &[&str] = &[
     "reporting_timezone",
     "max_posts_per_page",
     "max_threads_per_page",
+    MAIL_PROVIDER_KEY,
+    FROM_EMAIL_KEY,
     SMTP_HOST_KEY,
     SMTP_PORT_KEY,
     SMTP_USER_KEY,
@@ -140,6 +147,8 @@ const CONFIG_READABLE_KEYS: &[&str] = &[
     "reporting_timezone",
     "max_posts_per_page",
     "max_threads_per_page",
+    MAIL_PROVIDER_KEY,
+    FROM_EMAIL_KEY,
     SMTP_HOST_KEY,
     SMTP_PORT_KEY,
     SMTP_USER_KEY,
@@ -188,7 +197,7 @@ pub fn split_secrets(
 /// unusable, and the caller must not swap the live transport.
 pub fn smtp_settings_from_config(
     cfg: &HashMap<String, String>,
-) -> Result<Option<SmtpSettings>, AppError> {
+) -> Result<Option<SmtpEndpoint>, AppError> {
     let host = cfg
         .get(SMTP_HOST_KEY)
         .map(|s| s.trim())
@@ -211,7 +220,7 @@ pub fn smtp_settings_from_config(
             .map(str::to_string)
     };
 
-    Ok(Some(SmtpSettings {
+    Ok(Some(SmtpEndpoint {
         host: host.to_string(),
         port,
         username: non_blank(SMTP_USER_KEY),
@@ -219,11 +228,42 @@ pub fn smtp_settings_from_config(
     }))
 }
 
-pub struct SmtpSettings {
-    pub host: String,
-    pub port: u16,
-    pub username: Option<String>,
-    pub password: Option<String>,
+/// Builds a whole [`MailReload`] from stored settings plus the env-only Resend key.
+///
+/// The Resend provider is constructed **here** rather than inside
+/// `ReloadableEmailService` because its two inputs come from different places: the
+/// API key is env-only and immutable for the process lifetime, while `from` is a
+/// site_config value an admin can edit. Only this layer holds both — and the
+/// consequence worth stating is that editing `from_email` rebuilds the Resend
+/// client too, because `from` is captured at construction.
+///
+/// `resend_api_key` being `None` does not fail a Resend selection: it resolves to
+/// `MailProvider::Disabled`, which is a state the settings page can render and the
+/// operator can fix. Failing here would reject the save that was fixing it.
+pub fn mail_reload_from_config(
+    cfg: &HashMap<String, String>,
+    resend_api_key: Option<&str>,
+) -> Result<MailReload, AppError> {
+    let from = cfg
+        .get(FROM_EMAIL_KEY)
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| AppError::invalid("from_email_required"))?;
+    validate_from_address(from).map_err(|_| AppError::invalid("from_email_invalid"))?;
+
+    let resend = match resend_api_key.map(str::trim).filter(|k| !k.is_empty()) {
+        Some(key) => Some(Arc::new(ResendEmailService::new(key, from)?) as Arc<dyn EmailService>),
+        None => None,
+    };
+
+    Ok(MailReload {
+        selected: SelectedProvider::from_label(
+            cfg.get(MAIL_PROVIDER_KEY).map(String::as_str).unwrap_or(""),
+        ),
+        from: from.to_string(),
+        smtp: smtp_settings_from_config(cfg)?,
+        resend,
+    })
 }
 
 pub async fn get_config(
@@ -275,16 +315,30 @@ pub async fn update_config(
     // an unparseable port must fail the request rather than persist and silently
     // leave mail broken. Merged over the current cache because the settings page
     // sends a partial block (a blank password means "keep the current one").
-    let smtp_touched = filtered.keys().any(|k| {
+    // `from_email` and `mail_provider` belong in this set, not only the SMTP
+    // fields: `from` is captured by each provider at construction, so editing it
+    // without a reload leaves the live transport sending as the old address while
+    // the page shows the new one.
+    let mail_touched = filtered.keys().any(|k| {
         matches!(
             k.as_str(),
-            SMTP_HOST_KEY | SMTP_PORT_KEY | SMTP_USER_KEY | SMTP_PASS_KEY
+            MAIL_PROVIDER_KEY
+                | FROM_EMAIL_KEY
+                | SMTP_HOST_KEY
+                | SMTP_PORT_KEY
+                | SMTP_USER_KEY
+                | SMTP_PASS_KEY
         )
     });
-    let smtp_settings = if smtp_touched {
+    // Validated against the MERGED map before anything is persisted, so a bad
+    // value is rejected rather than stored and then failed on reload.
+    let mail_reload = if mail_touched {
         let mut merged = state.site_config_cache.read().await.clone();
         merged.extend(filtered.iter().map(|(k, v)| (k.clone(), v.clone())));
-        Some(smtp_settings_from_config(&merged)?)
+        Some(mail_reload_from_config(
+            &merged,
+            state.resend_api_key.as_deref(),
+        )?)
     } else {
         None
     };
@@ -297,19 +351,10 @@ pub async fn update_config(
         }
     }
 
-    // Swap the transport only after the new values are durable, so a restart and
-    // the running process always agree on which SMTP server is in use.
-    if let Some(settings) = smtp_settings {
-        let (host, port, user, pass) = match &settings {
-            Some(s) => (
-                Some(s.host.as_str()),
-                s.port,
-                s.username.as_deref(),
-                s.password.as_deref(),
-            ),
-            None => (None, DEFAULT_SMTP_PORT, None, None),
-        };
-        state.email.reload(host, port, user, pass).await?;
+    // Swap the provider only after the new values are durable, so a restart and
+    // the running process always agree on how mail is being sent.
+    if let Some(reload) = mail_reload {
+        state.email.reload(reload).await?;
     }
 
     let config = state.site_config.get_all().await?;

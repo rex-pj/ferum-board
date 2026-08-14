@@ -679,6 +679,14 @@ pub struct AccountStatusCtx {
     /// None with is_banned=true means a permanent ban.
     pub banned_until: Option<String>,
     pub warn_count: i32,
+    /// Drives the warning beside the email-notification toggles.
+    ///
+    /// `EventBus` refuses to mail an unverified address, so without this the page
+    /// would show two switches turned on that silently deliver nothing — the exact
+    /// "setting that appears to work and does not" failure the settings code warns
+    /// about elsewhere. Lives here rather than on `CurrentUserCtx` because only
+    /// this page needs it, and that struct is built for every page render.
+    pub is_email_verified: bool,
 }
 
 /// Admin reports list row — enriched with reporter username and thread context.

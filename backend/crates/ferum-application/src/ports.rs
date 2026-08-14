@@ -26,13 +26,37 @@ pub trait PasswordHasher: Send + Sync {
 
 // ─── TokenService ─────────────────────────────────────────────────────────────
 
+/// The `purpose` claim on an unsubscribe token.
+///
+/// A constant because the string is written in two places that must agree — the
+/// job runner mints it, the unsubscribe handler verifies it — and
+/// `verify_email_token` rejects a mismatch by returning "invalid or expired". A
+/// typo would therefore present as every unsubscribe link in every email being
+/// broken, with the error message pointing at expiry rather than at the typo.
+pub const UNSUBSCRIBE_PURPOSE: &str = "unsubscribe";
+
 #[async_trait]
 pub trait TokenService: Send + Sync {
     fn mint_access_token(&self, claims: &AccessTokenClaims) -> Result<String, AppError>;
     fn verify_access_token(&self, token: &str) -> Result<AccessTokenClaims, AppError>;
     fn mint_refresh_token(&self, user_id: Uuid) -> Result<String, AppError>;
     fn verify_refresh_token(&self, token: &str) -> Result<Uuid, AppError>;
-    fn mint_email_token(&self, user_id: Uuid, purpose: &str) -> Result<String, AppError>;
+    /// Mints a single-purpose token for a link sent by email.
+    ///
+    /// **`ttl_secs` is a parameter rather than a constant inside the
+    /// implementation, and that is load-bearing.** It used to be hardcoded to the
+    /// password-reset lifetime for every purpose, which is right for a reset and
+    /// wrong for an unsubscribe link: an email sits in an inbox for months, and an
+    /// unsubscribe that has expired is indistinguishable from one that does not
+    /// work — which is what gets a sending domain reported rather than merely
+    /// muted. Making the caller name the lifetime forces the question to be
+    /// answered per purpose instead of inherited by accident.
+    fn mint_email_token(
+        &self,
+        user_id: Uuid,
+        purpose: &str,
+        ttl_secs: u64,
+    ) -> Result<String, AppError>;
     fn verify_email_token<'a>(&self, token: &'a str, expected_purpose: &'a str) -> Result<Uuid, AppError>;
 
     /// Lifetime of minted access tokens. Every consumer (claims `exp`, cookie
@@ -116,6 +140,27 @@ pub trait JobQueue: Send + Sync {
     async fn enqueue(&self, job: ForumJob) -> Result<(), AppError>;
 }
 
+/// Which in-app notification an email copy is for.
+///
+/// Deliberately narrower than `NotificationKind`: only the two kinds that are ever
+/// emailed appear, so the runner's match is total and adding a third kind to the
+/// notification system cannot silently start mailing people.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NotificationEmailKind {
+    Reply,
+    Mention,
+}
+
+impl NotificationEmailKind {
+    /// Fluent key stem. The catalog defines `{stem}-subject` and `{stem}-body`.
+    pub fn key_stem(&self) -> &'static str {
+        match self {
+            NotificationEmailKind::Reply => "email-notify-reply",
+            NotificationEmailKind::Mention => "email-notify-mention",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ForumJob {
     SendEmailVerification {
@@ -136,10 +181,27 @@ pub enum ForumJob {
         token: String,
         locale: Locale,
     },
+    /// An email copy of an in-app notification.
+    ///
+    /// Carries the *facts*, not a rendered subject and body. The two are not
+    /// interchangeable: rendering needs `app_url` and the translator, which live
+    /// with the job runner, and the unsubscribe link needs a freshly minted token,
+    /// which must not be built at enqueue time and then sit in a queue.
+    ///
+    /// Enqueued only after `EventBus` has checked the recipient's
+    /// `EmailNotificationPrefs`, so reaching the runner already means "this person
+    /// asked for this". The runner does not re-check.
     SendNotificationEmail {
+        /// The recipient, resolved at enqueue time along with the decision to
+        /// send — the runner must not have to look a user up to know where to
+        /// deliver.
         user_id: Uuid,
-        subject: String,
-        body: String,
+        email: String,
+        kind: NotificationEmailKind,
+        thread_slug: String,
+        thread_title: String,
+        /// Who replied or did the mentioning.
+        actor_username: String,
         locale: Locale,
     },
     /// Delete a CAS key's row and blob, but only if it is still unreferenced.

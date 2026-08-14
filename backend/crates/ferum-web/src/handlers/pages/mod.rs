@@ -8,6 +8,7 @@ pub mod search;
 pub mod setup;
 pub mod sitemap;
 pub mod thread_permissions;
+pub mod unsubscribe;
 
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};

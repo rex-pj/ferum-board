@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::config::Config;
-use crate::handlers::admin::api::config::smtp_settings_from_config;
+use crate::handlers::admin::api::config::{
+    mail_reload_from_config, FROM_EMAIL_KEY, MAIL_PROVIDER_KEY,
+};
 use crate::middleware::security_headers::{csp_origin_of, SecurityHeadersConfig};
 use crate::tera_engine::TeraEngine;
 use ferum_application::event_bus::{EventBus, EventPublisher};
@@ -45,7 +47,7 @@ use ferum_infrastructure::{
     bcrypt_password_hasher::BcryptPasswordHasher,
     cache::{InMemoryCacheService, RedisCacheService},
     crypto::SecretCipher,
-    email::{MailProvider, ReloadableEmailService, ResendEmailService},
+    email::{validate_from_address, MailProvider, ReloadableEmailService, SelectedProvider},
     job_queue::{InlineJobRunner, JobExecutor},
     jwt_token_service::JwtTokenService,
     notification::{SseBroadcaster, SseNotificationBus},
@@ -286,23 +288,24 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // SMTP settings are editable from /admin/settings and stored values win over
     // env (env seeds them on first run — see the seeding block below). The
     // reloadable wrapper also owns the "auto-verify registrations" flag, so
-    // turning SMTP on or off at runtime takes effect without a restart.
+    // turning mail on or off at runtime takes effect without a restart.
     //
-    // A provider whose credential lives in the environment is installed here and
-    // wins over SMTP, because it cannot change while the process runs and so has
-    // nothing to reload. `RESEND_API_KEY` is the only such provider today; unset
-    // it and restart to fall back to whatever SMTP is stored.
-    let email = {
-        let base = ReloadableEmailService::new(&config.from_email);
-        match config.resend_api_key.as_deref() {
-            Some(key) => {
-                let resend = Arc::new(ResendEmailService::new(key, &config.from_email)?);
-                tracing::info!("Mail provider: {}", resend.describe());
-                Arc::new(base.with_fixed_provider(resend))
-            }
-            None => Arc::new(base),
-        }
-    };
+    // Which provider is live is a stored setting (`mail_provider`), not a
+    // consequence of which environment variable happens to be present. Resend's
+    // *credential* is still env-only — `RESEND_API_KEY` authenticates, the setting
+    // selects — which is what keeps a live provider API key out of the database.
+    // Refuse to boot on a malformed sender address, alongside the other config
+    // faults that abort rather than degrade. Validated even when no provider is
+    // configured: it is required configuration either way, and the alternative is
+    // discovering the typo when the first user cannot register.
+    validate_from_address(&config.from_email)
+        .map_err(|e| anyhow::anyhow!("{e} Current value: {:?}", config.from_email))?;
+
+    // Starts disabled and is configured by the `reload` further down, once
+    // site_config has been read. There is no boot-time provider any more: which
+    // provider is live is now the `mail_provider` setting, so resolving it here
+    // from the environment would mean two places deciding the same thing.
+    let email = Arc::new(ReloadableEmailService::new(&config.from_email));
 
     // ─── SSE broadcaster ─────────────────────────────────────────────────────
     let broadcaster_concrete = Arc::new(SseBroadcaster::new());
@@ -554,6 +557,17 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         "translation catalogs ready"
     );
 
+    // Built here rather than beside the other use-case dependencies further down,
+    // because the job executor needs it to mint the unsubscribe token carried by
+    // every notification email. It depends only on config, so moving it up costs
+    // nothing.
+    let token_service: Arc<dyn ferum_application::ports::TokenService> =
+        Arc::new(JwtTokenService::new(
+            &config.jwt_secret,
+            config.jwt_expiry_seconds,
+            config.refresh_token_expiry_days * 86_400,
+        ));
+
     // ─── Redis or in-memory fallbacks ────────────────────────────────────────
     // Named because both arms of the match below must spell it out, and the
     // bare tuple tripped clippy::type_complexity.
@@ -574,7 +588,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 stored_file_repo.clone(),
                 webhook_repo.clone(),
             )
-            .with_translator(Arc::clone(&translator), site_name.clone()));
+            .with_translator(Arc::clone(&translator), site_name.clone())
+            .with_tokens(token_service.clone()));
             let cache = RedisCacheService::new(url)
                 .await
                 .map(|s| -> Arc<dyn CacheService> { Arc::new(s) })
@@ -600,7 +615,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 stored_file_repo.clone(),
                 webhook_repo.clone(),
             )
-            .with_translator(Arc::clone(&translator), site_name.clone()));
+            .with_translator(Arc::clone(&translator), site_name.clone())
+            .with_tokens(token_service.clone()));
             (
                 Arc::new(InMemoryCacheService::new()),
                 Arc::new(InMemoryRateLimiter::new()),
@@ -626,12 +642,6 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         );
     }
     let hasher = Arc::new(BcryptPasswordHasher);
-    let token_service: Arc<dyn ferum_application::ports::TokenService> =
-        Arc::new(JwtTokenService::new(
-            &config.jwt_secret,
-            config.jwt_expiry_seconds,
-            config.refresh_token_expiry_days * 86_400,
-        ));
 
     // ─── Plugin system (before event_bus so plugin_runtime can be injected) ──
     let plugin_repo = Arc::new(PgPluginRepository::new(pg_write.clone()));
@@ -663,6 +673,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             notification_bus.clone(),
             webhook_repo.clone(),
             job_queue.clone(),
+            user_repo.clone(),
         )
         .with_plugin_runtime(plugin_hooks.clone()),
     );
@@ -707,6 +718,38 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         }
     }
 
+    // `from_email` and `mail_provider` are seeded the same way and for the same
+    // reason: absent-only, so an admin's stored choice survives every restart.
+    //
+    // `mail_provider` is derived from the environment on first run rather than
+    // defaulted blindly — an operator who set RESEND_API_KEY before this setting
+    // existed meant to use Resend, and defaulting to SMTP would silently stop
+    // their mail on upgrade.
+    {
+        let mut seed = std::collections::HashMap::new();
+        if site_config.get(FROM_EMAIL_KEY).await.unwrap_or(None).is_none() {
+            seed.insert(FROM_EMAIL_KEY.to_string(), config.from_email.clone());
+        }
+        if site_config
+            .get(MAIL_PROVIDER_KEY)
+            .await
+            .unwrap_or(None)
+            .is_none()
+        {
+            let inferred = if config.resend_api_key.is_some() {
+                SelectedProvider::Resend
+            } else {
+                SelectedProvider::Smtp
+            };
+            seed.insert(MAIL_PROVIDER_KEY.to_string(), inferred.label().to_string());
+        }
+        if !seed.is_empty() {
+            if let Err(e) = site_config.set_many(&seed).await {
+                tracing::warn!("Failed to seed mail config from env: {e}");
+            }
+        }
+    }
+
     let site_config_cache = Arc::new(tokio::sync::RwLock::new(
         site_config.get_all().await.unwrap_or_else(|e| {
             tracing::warn!("Failed to load site config at startup: {e}, using defaults");
@@ -721,36 +764,19 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // which also flips the auto-verify flag so registration still works.
     {
         let stored = site_config_cache.read().await.clone();
-        let settings = match smtp_settings_from_config(&stored) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("Stored SMTP settings are invalid ({e}) — email disabled");
-                None
+        // No provider-precedence warning here any more: with `mail_provider` a
+        // stored setting, having both a Resend key and an SMTP host is no longer a
+        // conflict to arbitrate — it is two configured providers, one of which is
+        // selected. `reload` logs which one won.
+        match mail_reload_from_config(&stored, config.resend_api_key.as_deref()) {
+            Ok(reload) => {
+                if let Err(e) = email.reload(reload).await {
+                    tracing::error!("Failed to build the mail provider ({e}) — email disabled");
+                }
             }
-        };
-        // Name the loser rather than ignoring it silently, the same way the
-        // storage selection reports GCS beating S3. The stored settings are kept
-        // and the transport is still built, so unsetting the env var and
-        // restarting falls back to exactly what is on this page.
-        if settings.is_some() && config.resend_api_key.is_some() {
-            tracing::warn!(
-                "Both RESEND_API_KEY and an SMTP host in site_config are set. Resend wins; \
-                 the stored SMTP settings are kept but unused — unset RESEND_API_KEY and \
-                 restart to fall back to SMTP."
-            );
-        }
-
-        let (host, port, user, pass) = match &settings {
-            Some(s) => (
-                Some(s.host.as_str()),
-                s.port,
-                s.username.as_deref(),
-                s.password.as_deref(),
-            ),
-            None => (None, config.smtp_port, None, None),
-        };
-        if let Err(e) = email.reload(host, port, user, pass).await {
-            tracing::error!("Failed to build SMTP transport ({e}) — email disabled");
+            Err(e) => {
+                tracing::error!("Stored mail settings are invalid ({e}) — email disabled");
+            }
         }
         tracing::info!("Mail provider: {}", email.describe().await);
     }
@@ -915,6 +941,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             stored_file_repo.clone(),
             storage.clone(),
             job_queue.clone(),
+            token_service.clone(),
         )
         .with_cache(cache.clone()),
     );
@@ -1189,6 +1216,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         translator,
         cookies_secure,
         secrets_encrypted: secret_cipher.is_some(),
+        resend_api_key: config.resend_api_key.clone(),
         security_headers,
         upload_read_status,
         app_url: config.app_url.trim_end_matches('/').to_string(),

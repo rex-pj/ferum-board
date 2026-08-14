@@ -355,7 +355,148 @@
       </div>
     {% endif %}
 
-    <div class="card">
+    {# ── Provider selector ─────────────────────────────────────────────
+       These pills both switch the visible panel and SET the provider — they
+       write `cfg-mail_provider` above. Clicking one only stages the change;
+       nothing moves until Save, which is what makes it safe to click through
+       and read the other provider's settings.
+
+       The `Active` badge is therefore a different fact from which pill is
+       selected: it names the provider mail is going through *right now*, read
+       from the running service. The two differ between a click and a save, and
+       whenever a selection cannot be honoured — "Resend selected, no
+       RESEND_API_KEY" reports Disabled rather than lying about Resend.
+
+       This replaced a single SMTP card greyed out whole whenever Resend won: a
+       form showing SMTP fields while claiming they were unused, which is two
+       providers' worth of UI in one panel and told the truth about neither. #}
+    {# The real stored selection. A hidden field because the value has three
+       states (`smtp` / `resend` / `off`) written by two controls — the switch
+       below and the pills — and one field they both write is what keeps them
+       from disagreeing about what will be saved. `saveSettings` picks it up
+       through the `cfg-` prefix like any other setting. #}
+    <input type="hidden" id="cfg-mail_provider"
+           value="{{ config.mail_provider | default(value='smtp') }}">
+
+    {# ── Global on/off ─────────────────────────────────────────────────
+       Above the pills, and outside either provider's card, because it is a
+       global decision. It used to sit inside the SMTP card and was a view over
+       a blank `smtp_host` — so it could not mean anything at all while Resend
+       was the provider, and turning mail off erased a relay you then had to
+       retype. `mail_provider = off` is now an explicit stored value, so the
+       relay survives being switched off. #}
+    <div class="form-check form-switch mb-3">
+      {# Rendered checked server-side as well as synced by JS: without it the
+         switch paints unchecked and then flips once the script runs, which reads
+         as the page changing a setting by itself. #}
+      <input class="form-check-input" type="checkbox" role="switch" id="mail-enabled"
+             {% if config.mail_provider | default(value="smtp") != "off" %}checked{% endif %}>
+      <label class="form-check-label" for="mail-enabled">
+        <span class="fw-semibold">{{ t(k="adm-mail-enable") }}</span>
+        <span class="form-text d-block mt-0">{{ t(k="adm-mail-enable-hint") }}</span>
+      </label>
+    </div>
+
+    {# ── Sender address ────────────────────────────────────────────────
+       Outside both panels, because it applies to whichever provider is
+       selected — putting it in one panel would have meant either duplicating
+       the input (two elements with the same id, so `saveSettings` would read
+       whichever the DOM happened to hand it first) or hiding a global setting
+       behind a provider tab.
+
+       It is also the single largest deliverability factor: SPF and DKIM align
+       against this domain, not against the relay, so moving providers without
+       being able to change it is how mail starts landing in spam. #}
+    <div class="mb-3" style="max-width:28rem">
+      <label class="form-label" for="cfg-from_email">{{ t(k="adm-from-email") }}</label>
+      <input type="email" id="cfg-from_email" class="form-control"
+             value="{{ config.from_email | default(value='') }}"
+             placeholder="{{ t(k='adm-from-email-placeholder') }}" maxlength="255">
+      <div class="form-text">{{ t(k="adm-from-email-hint") }}</div>
+    </div>
+
+    <ul class="nav nav-pills mb-3" id="mail-provider-pills" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link{% if mail_provider != "resend" %} active{% endif %}"
+                data-bs-toggle="pill" data-bs-target="#mail-pane-smtp"
+                type="button" role="tab" aria-controls="mail-pane-smtp">
+          {{ t(k="adm-mail-provider-smtp") }}
+          {% if mail_provider == "smtp" %}
+            <span class="badge bg-success-subtle text-success-emphasis fw-normal ms-1">{{ t(k="adm-mail-active-badge") }}</span>
+          {% endif %}
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link{% if mail_provider == "resend" %} active{% endif %}"
+                data-bs-toggle="pill" data-bs-target="#mail-pane-resend"
+                type="button" role="tab" aria-controls="mail-pane-resend">
+          {{ t(k="adm-mail-provider-resend") }}
+          {% if mail_provider == "resend" %}
+            <span class="badge bg-success-subtle text-success-emphasis fw-normal ms-1">{{ t(k="adm-mail-active-badge") }}</span>
+          {% endif %}
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+
+    {# ── Resend panel — read-only by nature, not by state ──────────────
+       Nothing here is an input because nothing here is stored in site_config:
+       `ResendEmailService::new` takes RESEND_API_KEY and FROM_EMAIL straight
+       from the environment. A form would imply a save that cannot exist, so
+       this panel's job is to say where the real switches are. #}
+    <div class="tab-pane fade{% if mail_provider == "resend" %} show active{% endif %}"
+         id="mail-pane-resend" role="tabpanel">
+      <div class="card">
+        <div class="card-header fw-semibold d-flex align-items-center gap-2">
+          <span>{{ t(k="adm-resend-configuration") }}</span>
+          {% if mail_provider != "resend" %}
+            <span class="badge text-bg-secondary">{{ t(k="adm-smtp-inactive-badge") }}</span>
+          {% endif %}
+        </div>
+        {# Label above value, matching the SMTP panel's grammar. A `dl` with
+           col-sm-4/8 put every value at 33% and left a gap wide enough to read
+           as a broken row — and it made the two panels look like different
+           products. The env var name is help text under the value, not code
+           trailing a badge: "Not set RESEND_API_KEY" on one line is not a
+           sentence. #}
+        <div class="card-body">
+          <div class="fr-field-group-label">{{ t(k="adm-smtp-credentials") }}</div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-label d-flex align-items-center gap-2">
+                <span>{{ t(k="adm-resend-api-key") }}</span>
+                {% if resend_key_present %}
+                  <span class="badge bg-success-subtle text-success-emphasis fw-normal">
+                    <i class="fa-solid fa-check fa-xs me-1" aria-hidden="true"></i>{{ t(k="adm-secret-saved") }}
+                  </span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary-emphasis fw-normal">{{ t(k="adm-secret-not-set") }}</span>
+                {% endif %}
+              </div>
+              <div class="form-text mt-0">{{ t(k="adm-resend-api-key-hint") }}</div>
+            </div>
+          </div>
+        </div>
+        {# One statement of the state, not two. The header badge already says
+           Inactive; this said "Not in use" as well, in different words. What is
+           left here is the part the badge cannot carry: where the credential
+           comes from, and that selecting Resend without it sends nothing. #}
+        <div class="card-footer small text-muted">
+          <i class="fa-solid fa-circle-info me-1"></i>
+          {% if resend_key_present %}
+            {{ t(k="adm-resend-env-only") }}
+          {% else %}
+            {{ t(k="adm-resend-no-key") }}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# ── SMTP panel ────────────────────────────────────────────────── #}
+    <div class="tab-pane fade{% if mail_provider != "resend" %} show active{% endif %}"
+         id="mail-pane-smtp" role="tabpanel">
+      <div class="card">
       <div class="card-header fw-semibold d-flex align-items-center gap-2">
         <span>{{ t(k="adm-smtp-configuration") }}</span>
         {% if mail_provider == "resend" %}
@@ -363,59 +504,120 @@
         {% endif %}
       </div>
       <div class="card-body">
-        {# Disabled rather than hidden when another provider wins: an operator
-           still needs to read what is stored, because unsetting RESEND_API_KEY
-           and restarting falls back to exactly these values. `saveSettings`
-           skips disabled inputs, so nothing here is submitted while it is
-           inert — which is also what keeps a save from needlessly rebuilding
-           the SMTP transport. #}
+        {# Still rendered, and still `disabled`, when Resend wins. Two separate
+           reasons, both load-bearing: an operator needs to read what is stored
+           because unsetting RESEND_API_KEY falls back to exactly these values,
+           and `saveSettings` collects every `cfg-*` on the page regardless of
+           which pane is visible — a hidden pane is not an unsubmitted one, so
+           `disabled` is what keeps a save from rebuilding a transport nothing
+           is using. #}
+        {# ── Where to connect ───────────────────────────────────────────
+           Host and port are ONE endpoint, not two settings, so they share one
+           label and one hint. They used to sit in an 8/4 grid above a 6/6
+           credentials grid, which put a column boundary at 66.7% that the row
+           below met at 50% — nothing lined up, and the block read as four
+           unrelated fields shuffled together. As a single input group there is
+           now exactly one internal boundary left on the whole form. #}
+        {# The "Email sending" switch used to sit here. It is now above the
+           provider pills, outside both panels, because it is a global decision:
+           in here it could not mean anything while Resend was the provider. #}
+        <div class="fr-field-group-label">{{ t(k="adm-smtp-relay") }}</div>
+        <label class="form-label" for="cfg-smtp_host">{{ t(k="adm-smtp-server") }}</label>
+        <div class="input-group">
+          <input type="text" id="cfg-smtp_host" class="form-control"
+                 value="{{ config.smtp_host | default(value='') }}"
+                 placeholder="{{ t(k='adm-smtp-host-placeholder') }}" maxlength="255"
+                 aria-label="{{ t(k='adm-smtp-host') }}"
+                 >
+          <span class="input-group-text"
+                aria-hidden="true">:</span>
+          {# Fixed width: a port is at most five digits, and letting it flex to a
+             grid column is what made it as wide as a hostname. #}
+          <input type="number" id="cfg-smtp_port" class="form-control flex-grow-0"
+                 style="width:8rem"
+                 value="{{ config.smtp_port | default(value='587') }}"
+                 min="1" max="65535" placeholder="587"
+                 aria-label="{{ t(k='adm-port') }}"
+                 >
+        </div>
+        <div class="form-text">{{ t(k="adm-smtp-server-hint") }}</div>
+
+        <hr class="my-4">
+
+        {# ── Who to connect as ──────────────────────────────────────── #}
+        <div class="fr-field-group-label">{{ t(k="adm-smtp-credentials") }}</div>
         <div class="row g-3">
-          <div class="col-md-8">
-            <label class="form-label" for="cfg-smtp_host">{{ t(k="adm-smtp-host") }}</label>
-            <input type="text" id="cfg-smtp_host" class="form-control"
-                   value="{{ config.smtp_host | default(value='') }}"
-                   placeholder="smtp.sendgrid.net" maxlength="255"
-                   {% if mail_provider == "resend" %}disabled{% endif %}>
-            <div class="form-text">{{ t(k="adm-leave-blank-to-disable-email-sending") }}</div>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label" for="cfg-smtp_port">{{ t(k="adm-port") }}</label>
-            <input type="number" id="cfg-smtp_port" class="form-control"
-                   value="{{ config.smtp_port | default(value='587') }}"
-                   min="1" max="65535" placeholder="587"
-                   {% if mail_provider == "resend" %}disabled{% endif %}>
-          </div>
           <div class="col-md-6">
             <label class="form-label" for="cfg-smtp_user">{{ t(k="adm-username") }}</label>
             <input type="text" id="cfg-smtp_user" class="form-control"
                    value="{{ config.smtp_user | default(value='') }}"
-                   placeholder="{{ t(k='adm-apikey-or-noreply-example-com') }}" maxlength="255"
-                   {% if mail_provider == "resend" %}disabled{% endif %}>
+                   placeholder="{{ t(k='adm-smtp-user-placeholder') }}" maxlength="255"
+                   autocomplete="off">
+            {# "apikey" was in the placeholder as if it were an example address.
+               It is not — it is a literal token SendGrid requires, so it read as
+               a category name rather than a value. Moved into help text, where a
+               provider-specific quirk belongs. This also gives Username a help
+               line, which evens its row height against Password's. #}
+            <div class="form-text">{{ t(k="adm-smtp-user-hint") }}</div>
           </div>
           <div class="col-md-6">
-            <label class="form-label" for="cfg-smtp_pass">{{ t(k="adm-password") }}</label>
             {# `smtp_pass_set` is a boolean, never the password itself. The page
                renders the whole site_config table, so the handler strips secrets
                out of the context and passes presence flags instead — same idea
-               as WebhookResponse.has_secret. #}
-            <input type="text" id="cfg-smtp_pass" class="form-control font-monospace"
-                   value=""
-                   autocomplete="off"
-                   maxlength="500"
-                   placeholder="{% if smtp_pass_set %}(set — enter new value to change){% else %}(not set){% endif %}"
-                   {% if mail_provider == "resend" %}disabled{% endif %}>
+               as WebhookResponse.has_secret.
+
+               The flag drives a BADGE beside the label, not the placeholder. A
+               placeholder reading "(not set)" was carrying state, and a
+               placeholder is the wrong carrier for it: it disappears the moment
+               the field is focused — exactly when the operator is deciding
+               whether typing here replaces something — and it is styled as the
+               faintest text on the form. #}
+            <label class="form-label d-flex align-items-center gap-2" for="cfg-smtp_pass">
+              <span>{{ t(k="adm-password") }}</span>
+              {% if smtp_pass_set %}
+                <span class="badge bg-success-subtle text-success-emphasis fw-normal">
+                  <i class="fa-solid fa-check fa-xs me-1" aria-hidden="true"></i>{{ t(k="adm-secret-saved") }}
+                </span>
+              {% else %}
+                <span class="badge bg-secondary-subtle text-secondary-emphasis fw-normal">{{ t(k="adm-secret-not-set") }}</span>
+              {% endif %}
+            </label>
+            {# type=password, not text. This holds an SMTP password or a
+               provider API key and was rendering in the clear on an admin
+               screen. `autocomplete="new-password"` rather than "off" because
+               Chrome ignores "off" and will offer the operator's OWN login
+               password here. #}
+            <div class="fr-password-wrapper">
+              <input type="password" id="cfg-smtp_pass" class="form-control font-monospace"
+                     value=""
+                     autocomplete="new-password"
+                     maxlength="500"
+                     placeholder="{{ t(k='adm-smtp-pass-placeholder') }}"
+                     >
+              <button type="button" class="fr-password-toggle"
+                      aria-label="{{ t(k='adm-show-password') }}">
+                <i class="fa-regular fa-eye" aria-hidden="true"></i>
+              </button>
+            </div>
             <div class="form-text">{{ t(k="adm-leave-blank-to-keep-the-existing") }}</div>
           </div>
         </div>
       </div>
-      <div class="card-footer small text-muted">
+      {# The plaintext case is a security posture, not a footnote. It used to
+         render in the same muted grey as the encrypted case, which is the one
+         styling choice guaranteed to keep it unread — the two states say
+         opposite things and should not look identical. #}
+      <div class="card-footer small {% if secrets_encrypted %}text-muted{% else %}text-warning-emphasis bg-warning-subtle{% endif %}">
         {% if secrets_encrypted %}
           <i class="fa-solid fa-lock me-1"></i>{{ t(k="adm-secrets-at-rest-encrypted") }}
         {% else %}
-          <i class="fa-solid fa-lock-open me-1"></i>{{ t(k="adm-secrets-at-rest-plaintext") }}
+          <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ t(k="adm-secrets-at-rest-plaintext") }}
         {% endif %}
       </div>
-    </div>
+      </div>{# /card #}
+    </div>{# /#mail-pane-smtp #}
+
+    </div>{# /tab-content #}
 
     <div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
       <button class="btn btn-primary" type="button" data-admin-action="save-settings"

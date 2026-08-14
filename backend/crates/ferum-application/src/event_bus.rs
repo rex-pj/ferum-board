@@ -2,13 +2,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::ports::{ForumJob, JobQueue, NotificationBus, NullPluginRuntime, PluginHookRuntime};
+use crate::ports::{
+    ForumJob, JobQueue, NotificationBus, NotificationEmailKind, NullPluginRuntime,
+    PluginHookRuntime,
+};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::audit_log::AuditLog;
 use ferum_domain::models::notification::NotificationKind;
+use ferum_domain::models::EmailNotificationPrefs;
 use ferum_domain::repositories::audit_log_repository::AuditLogRepository;
 use ferum_domain::repositories::notification_repository::NotificationRepository;
+use ferum_domain::repositories::user_repository::UserRepository;
 use ferum_domain::repositories::webhook_repository::WebhookRepository;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait EventPublisher: Send + Sync {
@@ -22,6 +28,14 @@ pub struct EventBus {
     webhooks: Arc<dyn WebhookRepository>,
     jobs: Arc<dyn JobQueue>,
     plugin_runtime: Arc<dyn PluginHookRuntime>,
+    /// Needed to answer "does this recipient want this by email, and at what
+    /// address" — the two facts the decision to enqueue rests on.
+    ///
+    /// The decision lives here, in the application layer, rather than in the job
+    /// runner: whether to mail someone is policy, and enqueuing unconditionally so
+    /// the runner could drop it would put that policy in infrastructure and pay for
+    /// a spawned task per event to reach the same answer.
+    users: Arc<dyn UserRepository>,
 }
 
 impl EventBus {
@@ -31,6 +45,7 @@ impl EventBus {
         notification_bus: Arc<dyn NotificationBus>,
         webhooks: Arc<dyn WebhookRepository>,
         jobs: Arc<dyn JobQueue>,
+        users: Arc<dyn UserRepository>,
     ) -> Self {
         Self {
             audit_log,
@@ -39,12 +54,77 @@ impl EventBus {
             webhooks,
             jobs,
             plugin_runtime: Arc::new(NullPluginRuntime),
+            users,
         }
     }
 
     pub fn with_plugin_runtime(mut self, runtime: Arc<dyn PluginHookRuntime>) -> Self {
         self.plugin_runtime = runtime;
         self
+    }
+
+    /// Enqueues an email copy of a notification, if the recipient asked for one.
+    ///
+    /// Everything here is best-effort and silent on failure, matching the in-app
+    /// `.ok()` calls beside it: a member's mail preference must never be able to
+    /// fail the post that triggered it.
+    ///
+    /// At most two lookups per emailed notification, and the ordering is chosen to
+    /// keep the common case at one: preferences first, so a forum where nobody has
+    /// opted in pays a single read per reply and never touches the user row.
+    async fn enqueue_notification_email(
+        &self,
+        recipient_id: Uuid,
+        kind: NotificationEmailKind,
+        thread_slug: &str,
+        thread_title: &str,
+        actor_username: &str,
+    ) {
+        let prefs = match self.users.get_preferences(recipient_id).await {
+            Ok(p) => p,
+            // Fail closed. Not sending is a missing convenience; sending to someone
+            // whose stated preference could not be read is the failure that gets a
+            // domain reported.
+            Err(e) => {
+                tracing::warn!(error = %e, user_id = %recipient_id, "could not read email preferences");
+                return;
+            }
+        };
+
+        let wanted = EmailNotificationPrefs::from_json(&prefs.email_notifications);
+        let wanted = match kind {
+            NotificationEmailKind::Reply => wanted.reply,
+            NotificationEmailKind::Mention => wanted.mention,
+        };
+        if !wanted {
+            return;
+        }
+
+        let Ok(Some(user)) = self.users.find_by_id(recipient_id).await else {
+            return;
+        };
+        // Never mail an address nobody has proved they control: it would make this
+        // forum the delivery mechanism for someone else's inbox, and unverified
+        // addresses are where complaints come from.
+        if !user.is_email_verified {
+            return;
+        }
+
+        self.jobs
+            .enqueue(ForumJob::SendNotificationEmail {
+                user_id: recipient_id,
+                email: user.email,
+                kind,
+                thread_slug: thread_slug.to_string(),
+                thread_title: thread_title.to_string(),
+                actor_username: actor_username.to_string(),
+                // The RECIPIENT's language, never the actor's — and read from the
+                // preferences already in hand, because the job runs detached from
+                // this request and cannot resolve it later.
+                locale: prefs.locale.unwrap_or_default(),
+            })
+            .await
+            .ok();
     }
 
     async fn publish_inner(&self, event: ForumEvent) {
@@ -203,6 +283,14 @@ impl EventBus {
                         .publish(*thread_author_id, payload)
                         .await
                         .ok();
+                    self.enqueue_notification_email(
+                        *thread_author_id,
+                        NotificationEmailKind::Reply,
+                        thread_slug,
+                        thread_title,
+                        author_username,
+                    )
+                    .await;
                 }
                 self.dispatch_webhooks(
                     "post.created",
@@ -317,6 +405,14 @@ impl EventBus {
                     .publish(*mentioned_user_id, payload)
                     .await
                     .ok();
+                self.enqueue_notification_email(
+                    *mentioned_user_id,
+                    NotificationEmailKind::Mention,
+                    thread_slug,
+                    thread_title,
+                    author_username,
+                )
+                .await;
             }
             ForumEvent::UserFollowed {
                 follower_id,

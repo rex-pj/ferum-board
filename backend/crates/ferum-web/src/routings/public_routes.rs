@@ -29,6 +29,9 @@ pub fn public_page_routes() -> Router<AppState> {
         .route("/forgot-password", get(pages::auth::forgot_password).post(pages::auth::forgot_password_post))
         .route("/reset-password", get(pages::auth::reset_password).post(pages::auth::reset_password_post))
         .route("/verify-email/{token}", get(pages::auth::verify_email))
+        // No auth: the signed token in the path is the authorisation. See the
+        // module doc for why a login wall here would cost more than it protects.
+        .route("/unsubscribe/{token}", get(pages::unsubscribe::unsubscribe))
         .route("/account", get(pages::account::account))
         .route("/notifications", get(pages::account::notifications))
         .route("/bookmarks", get(pages::account::bookmarks))

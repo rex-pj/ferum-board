@@ -69,6 +69,7 @@ pub async fn account(
         ban_reason: u.ban_reason.clone(),
         banned_until: u.banned_until.map(|t| t.to_rfc3339()),
         warn_count: u.warn_count,
+        is_email_verified: u.is_email_verified,
     });
 
     let current_user = user_ctx(&state, Some(&auth_user)).await;

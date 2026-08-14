@@ -129,7 +129,7 @@ reads and is the reference; the table below summarises it.
 | `DATABASE_URL` | — | PostgreSQL connection string. |
 | `APP_URL` | — | Public base URL. Used for links in email and as an allowed CSRF origin. |
 | `JWT_SECRET` | — | Signing key for access and refresh tokens. Minimum 32 characters. |
-| `FROM_EMAIL` | — | Sender address on outgoing mail. |
+| `FROM_EMAIL` | — | Sender address on outgoing mail, for whichever provider is active. Accepts a bare address or `Display Name <addr>` — there is no separate "from name" variable. Validated at startup; a malformed value aborts the boot. |
 
 `JWT_EXPIRY_SECONDS` (3600) and `REFRESH_TOKEN_EXPIRY_DAYS` (7) have defaults but are
 written out in `.env.example` because they are worth a deliberate choice.

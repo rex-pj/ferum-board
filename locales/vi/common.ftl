@@ -50,6 +50,28 @@ prefs-timezone-help =
     thiết bị đang đặt sai, hoặc bạn muốn xem giờ của cộng đồng khi đang đi xa.
 prefs-timezone-auto = Theo thiết bị
 
+prefs-email-notifications = Thông báo qua email
+prefs-email-notifications-help =
+    Chọn những gì bạn muốn nhận thêm qua email. Những thứ còn lại — reaction,
+    theo dõi — chỉ hiện trong hộp thông báo trên trang.
+prefs-email-on-reply = Có người trả lời chủ đề tôi tạo
+prefs-email-on-mention = Có người nhắc tới tôi
+prefs-email-needs-verification =
+    Địa chỉ email của bạn chưa được xác minh, nên sẽ chưa có email nào được gửi.
+
+## ─── Ngừng nhận email ────────────────────────────────────────────────────────
+
+ui-unsubscribe-title = Ngừng nhận email
+ui-unsubscribe-done-title = Đã ngừng nhận email
+ui-unsubscribe-done-body =
+    Chúng tôi sẽ không gửi email về câu trả lời hay lượt nhắc tới bạn nữa. Bạn
+    vẫn thấy chúng trong phần thông báo trên trang.
+ui-unsubscribe-failed-title = Liên kết đã hết hạn
+ui-unsubscribe-failed-body =
+    Liên kết ngừng nhận email sẽ hết hiệu lực sau một thời gian. Bạn có thể tắt
+    các email này trong phần cài đặt tài khoản, chỉ mất một chút.
+ui-unsubscribe-manage = Cài đặt thông báo
+
 ## ─── Thẻ chủ đề ──────────────────────────────────────────────────────────────
 
 thread-product-review = Đánh giá sản phẩm

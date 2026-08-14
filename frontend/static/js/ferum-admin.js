@@ -11,6 +11,62 @@
   // kind of thing, so it should not be a different widget in two places.
   Ferum.fillTimezoneSelect(document.getElementById('cfg-reporting_timezone'));
 
+  // ── SMTP password reveal ──────────────────────────────────────────
+  // Same eye-toggle helper the auth pages use. The field is type=password so an
+  // API key is not left legible on an admin screen, and reveal exists because
+  // the operator needs to check what they pasted before saving something they
+  // can never read back.
+  Ferum.initPasswordToggle('cfg-smtp_pass');
+
+  // ── Mail provider selection ───────────────────────────────────────
+  // Two visible controls write ONE hidden field, `cfg-mail_provider`, whose value
+  // is `smtp` | `resend` | `off`:
+  //
+  //   * the switch decides off vs. not-off
+  //   * the pills decide which provider, while not-off
+  //
+  // One field rather than one per control, because they are describing a single
+  // stored value: with a control each they could disagree about what a save would
+  // write, and the operator would have no way to tell which one won.
+  //
+  // The previous version of this block was a view over "smtp_host is blank",
+  // which is how "off" used to be stored. That is gone: switching mail off no
+  // longer erases the relay, so nothing here touches a field's value any more.
+  (function () {
+    var hidden = document.getElementById('cfg-mail_provider');
+    var sw     = document.getElementById('mail-enabled');
+    var pills  = document.getElementById('mail-provider-pills');
+    if (!hidden || !sw || !pills) return;
+
+    // Which pill maps to which stored value. Read off the pane each pill targets
+    // so the mapping lives in the markup rather than being duplicated here.
+    function providerOf(btn) {
+      return (btn.getAttribute('data-bs-target') || '').indexOf('resend') !== -1
+        ? 'resend'
+        : 'smtp';
+    }
+
+    function selectedPill() {
+      var active = pills.querySelector('.nav-link.active');
+      return active ? providerOf(active) : 'smtp';
+    }
+
+    function write() {
+      hidden.value = sw.checked ? selectedPill() : 'off';
+    }
+
+    // Initial state comes from the stored value, so the controls always open
+    // agreeing with what is saved.
+    sw.checked = hidden.value !== 'off';
+    write();
+
+    sw.addEventListener('change', write);
+    // `shown.bs.tab` rather than `click`: Bootstrap moves the `active` class
+    // itself, and on click it has not moved yet — reading the DOM there returns
+    // the pill being left, not the one being chosen.
+    pills.addEventListener('shown.bs.tab', write);
+  }());
+
   // ── Primary color picker sync ─────────────────────────────────────
   (function () {
     var picker = document.getElementById('cfg-primary_color');

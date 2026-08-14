@@ -476,6 +476,22 @@ your shell so real secrets are generated; quoting `EOF` would write the literal
 text `$(openssl rand -hex 32)` into the file, and Postgres would start with that
 as its password.
 
+> **First install only.** `tee` truncates. Re-running this block on a box that is
+> already serving regenerates `JWT_SECRET` and `DB_PASSWORD`, at which point the app
+> can no longer authenticate to its own database and every existing session is
+> invalidated. To add a variable to a running deployment — `SECRET_ENCRYPTION_KEY`,
+> `RESEND_API_KEY` — append it instead, then recreate the container:
+>
+> ```bash
+> cd /opt/ferum
+> echo "SECRET_ENCRYPTION_KEY=$(openssl rand -hex 32)" | sudo tee -a .env.prod
+> sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate app
+> ```
+>
+> `--force-recreate`, not `restart`: `env_file` is read when a container is
+> **created**, so a restart reuses the old environment and the new variable appears
+> to have no effect.
+
 ```bash
 sudo tee /opt/ferum/.env.prod >/dev/null <<EOF
 # The registry path, without a tag. docker-compose.prod.yml reads it from here
@@ -511,6 +527,14 @@ sudo chmod 600 /opt/ferum/.env.prod
 data fetch concurrently, so one request holds 4–6 connections; 16 covers the
 ~12 req/s this box sustains, and each idle Postgres backend still costs memory
 against a 1 GB container limit.
+
+**`FROM_EMAIL` carries the sender name too.** There is no separate variable for it:
+`FROM_EMAIL=Ferum Board <noreply@$DOMAIN>` works, and applies to both providers. The
+value is parsed at startup and a malformed one **aborts the boot** — deliberately,
+because it used to be parsed only at send time, which meant a typo produced a
+container that came up healthy and then failed every message with a generic
+`internal_error`. Under Resend, make the address one on a domain you have verified
+there; an unverified sending domain is the most common rejection.
 
 **Mail is either SMTP or Resend, and Resend wins.** The four `SMTP_*` variables
 above seed `site_config` on first start, after which `/admin/settings` → Email is
@@ -860,6 +884,11 @@ It exists for the case the section above creates: **a `pg_dump` sitting in a
 bucket.** It does not protect against an attacker on the box, where the key is in
 the process environment — nobody should deploy it expecting otherwise.
 
+**Which means the key must not live beside the backups.** Storing it in the same
+bucket as `ferum-backup` writes to reduces this to obfuscation. It belongs wherever
+`JWT_SECRET` is kept — a password manager, or Secret Manager — and it must be
+recorded *somewhere*, because `.env.prod` on a single VM is not a backup of it.
+
 **Enabling it on a running forum needs no migration.** Plaintext values are read
 unchanged, and the first start with the key set converts them in one transaction
 and logs the count. Absent the key, everything behaves exactly as before, and a
@@ -870,25 +899,34 @@ while sealed values exist. That is deliberate: continuing would leave the site
 unable to read its own secrets, and re-saving any of them would seal them under the
 wrong key and destroy the originals. A refused boot is recoverable.
 
-**Rotation** — four steps, no downtime beyond two restarts:
+**Rotation** — four steps, no downtime beyond two container restarts.
+
+`ferum-deploy` takes a commit SHA and nothing else (that is what makes it safe to
+expose through sudo), so a config-only restart is a plain compose command run as
+root on the box:
 
 ```bash
-# 1. Retire the old key, install the new one.
-sudo sed -i 's/^SECRET_ENCRYPTION_KEY=/SECRET_ENCRYPTION_KEY_PREVIOUS=/' /opt/ferum/.env.prod
-echo "SECRET_ENCRYPTION_KEY=$(openssl rand -hex 32)" | sudo tee -a /opt/ferum/.env.prod
+cd /opt/ferum
+alias fc='sudo docker compose --env-file .env.prod -f docker-compose.prod.yml'
 
-# 2. Restart. Every value opens under the previous key and is re-sealed under the
-#    new one.
-sudo ferum-deploy restart
+# 1. Retire the old key, install a new one.
+sudo sed -i 's/^SECRET_ENCRYPTION_KEY=/SECRET_ENCRYPTION_KEY_PREVIOUS=/' .env.prod
+echo "SECRET_ENCRYPTION_KEY=$(openssl rand -hex 32)" | sudo tee -a .env.prod
+
+# 2. Recreate `app` so it reads the new env. `restart` would NOT do — it reuses
+#    the existing container, and env_file is read at create time.
+fc up -d --force-recreate app
 
 # 3. Confirm — look for `sealed secrets at rest` with a non-zero count.
-sudo docker compose --env-file /opt/ferum/.env.prod \
-  -f /opt/ferum/docker-compose.prod.yml logs app | grep 'sealed secrets'
+fc logs app | grep 'sealed secrets'
 
-# 4. Drop the retired key and restart again.
-sudo sed -i '/^SECRET_ENCRYPTION_KEY_PREVIOUS=/d' /opt/ferum/.env.prod
-sudo ferum-deploy restart
+# 4. Drop the retired key and recreate once more.
+sudo sed -i '/^SECRET_ENCRYPTION_KEY_PREVIOUS=/d' .env.prod
+fc up -d --force-recreate app
 ```
+
+The same `--force-recreate` applies to *any* change to `.env.prod`, including
+adding `SECRET_ENCRYPTION_KEY` or `RESEND_API_KEY` for the first time.
 
 **If the key is lost**, those two values are unrecoverable — that is what
 encryption at rest means. **Nothing else in the database is encrypted**, so posts,

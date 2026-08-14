@@ -56,7 +56,6 @@ adm-and-optionally = and optionally
 adm-any-actor = Any actor
 adm-any-author = Any author
 adm-any-registered-member-can-post = Any registered member can post
-adm-apikey-or-noreply-example-com = apikey or noreply@example.com
 adm-applied-as-the-primary-accent-color = Applied as the primary accent color across the entire site.
 adm-apply = Apply
 adm-approval-queue = Approval Queue
@@ -247,6 +246,10 @@ adm-forum-name = Forum name
 adm-fpkg = .fpkg
 adm-from = From
 adm-from-date = From date
+# Outside both provider panels because it applies to whichever one is selected.
+adm-from-email = Sender address
+adm-from-email-placeholder = e.g. noreply@yourforum.com
+adm-from-email-hint = The From address on every message, whichever provider sends it. SPF and DKIM align against this domain rather than against the relay, so it has to be a domain you control.
 adm-from-the-database-and-deletes-its = from the database and deletes its files. This cannot be undone.
 adm-ftl = .ftl
 adm-full-capabilities-requested-raw = Full capabilities requested (raw)
@@ -321,6 +324,9 @@ adm-material = Material
 adm-materials = Materials
 adm-max-posts-per-page = Max posts per page
 adm-max-threads-per-page = Max threads per page
+adm-mail-active-badge = Active
+adm-mail-enable = Email sending
+adm-mail-enable-hint = Turn this off to stop all outgoing email. New registrations are then verified automatically, and password reset stops working.
 adm-mail-not-configured = Email sending is disabled. New registrations are verified automatically, so nobody's email address is actually checked and password reset cannot work. Configure SMTP below, or set RESEND_API_KEY.
 adm-mail-provider = Mail provider
 adm-mail-provider-none = Not configured
@@ -460,6 +466,14 @@ adm-reporter = Reporter
 adm-reports = Reports
 adm-req-min = req / min
 adm-required = Required
+# The Resend panel has no inputs on purpose: ResendEmailService reads
+# RESEND_API_KEY and FROM_EMAIL from the environment, so there is no stored
+# setting to edit and a form would imply a save that cannot exist.
+adm-resend-api-key = API key
+adm-resend-api-key-hint = Set with the RESEND_API_KEY environment variable, and deliberately not stored here — a live provider API key in site_config would sit in every database backup.
+adm-resend-configuration = Resend (HTTPS API)
+adm-resend-env-only = The key is read from the environment, so this panel has nothing to save. Selecting Resend above is what routes mail through it.
+adm-resend-no-key = RESEND_API_KEY is not set, so selecting Resend would send nothing. Set it in the environment and restart.
 adm-requires-login-to-view-hidden-from = Requires login to view; hidden from guests
 adm-requires-member-trust-level-or-higher = Requires Member trust level or higher (≥30 posts, ≥15 days)
 adm-resolve = Resolve
@@ -495,6 +509,8 @@ adm-search-name-country = Search name / country…
 adm-search-reason = Search reason…
 adm-search-threads = Search threads…
 adm-secret = Secret
+adm-secret-not-set = Not set
+adm-secret-saved = Saved
 adm-secrets-at-rest-encrypted = Secrets at rest: encrypted (SECRET_ENCRYPTION_KEY is set).
 adm-secrets-at-rest-plaintext = Secrets at rest: stored in plaintext, including in database backups. Set SECRET_ENCRYPTION_KEY to encrypt them.
 adm-security = Security
@@ -521,8 +537,21 @@ adm-slogan = Slogan
 adm-slug = Slug
 adm-smtp-changes-are-applied-immediately-for = SMTP changes are applied immediately for new emails. The initial values are seeded from environment variables on first startup — updating them here overrides the env values without requiring a server restart.
 adm-smtp-configuration = SMTP Configuration
+adm-smtp-credentials = Credentials
 adm-smtp-host = SMTP Host
+# "e.g." is load-bearing. Without it a realistic example value in an empty field
+# reads as a stored setting, which is exactly how an unconfigured relay looked
+# configured.
+adm-smtp-host-placeholder = e.g. smtp.sendgrid.net
 adm-smtp-inactive-badge = Inactive
+adm-smtp-pass-placeholder = Paste the password or API key
+adm-smtp-relay = Relay
+adm-smtp-server = SMTP server
+adm-smtp-server-hint = Host and port of the relay. Use 587 for STARTTLS or 465 for implicit TLS.
+adm-smtp-user-placeholder = e.g. noreply@example.com
+# "apikey" is not an example address, it is a literal token SendGrid requires —
+# in the placeholder it read as a category name rather than a value.
+adm-smtp-user-hint = Some providers want a fixed token here instead of an address — SendGrid uses the literal word "apikey".
 adm-smtp-tls-note = Connections to any host other than localhost require TLS — STARTTLS, or implicit TLS on port 465. A relay that does not offer it is refused rather than sent to in the clear.
 adm-solid-oak = Solid oak
 adm-solid-wood = Solid wood

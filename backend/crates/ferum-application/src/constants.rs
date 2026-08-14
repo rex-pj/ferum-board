@@ -5,6 +5,24 @@ pub const DEFAULT_JWT_EXPIRY_SECS: u64 = 3600; // 1 hour
 pub const DEFAULT_REFRESH_TOKEN_EXPIRY_DAYS: u64 = 7;
 pub const PASSWORD_RESET_TOKEN_TTL_SECS: u64 = 3600; // 1 hour
 
+/// Lifetime of the token behind an email-verification link.
+///
+/// Shares the reset lifetime's value, not its meaning — a verification link is
+/// followed once, soon after signing up, and `resend_verification_email` exists
+/// for anyone slower than that.
+pub const EMAIL_VERIFICATION_TOKEN_TTL_SECS: u64 = 3600; // 1 hour
+
+/// Lifetime of the token behind an unsubscribe link.
+///
+/// A year, and deliberately nothing like the two above. Those secure an action the
+/// user is in the middle of; this one has to still work whenever they next find a
+/// notification email in their inbox, which may be months later. An expired
+/// unsubscribe link is not a minor inconvenience — it is indistinguishable from an
+/// unsubscribe that does not work, and that is what turns "mute this" into "report
+/// as spam". The token grants nothing but turning this user's own mail off, so a
+/// long life costs little.
+pub const UNSUBSCRIBE_TOKEN_TTL_SECS: u64 = 365 * 24 * 3600; // 1 year
+
 // ── Runtime-configurable defaults (fallback when site_config has no value) ──
 // Admins can override these via admin/settings; these values are used when
 // the site_config table has not been populated for the corresponding key.
@@ -67,6 +85,22 @@ pub const SMTP_HOST_KEY: &str = "smtp_host";
 pub const SMTP_PORT_KEY: &str = "smtp_port";
 pub const SMTP_USER_KEY: &str = "smtp_user";
 pub const SMTP_PASS_KEY: &str = "smtp_pass";
+
+/// Which provider sends mail: `smtp` or `resend`.
+///
+/// Editable so an operator can move between providers without a deploy. Resend's
+/// *credential* stays in the environment — this key selects, it does not
+/// authenticate, which is what keeps a live API key out of the database and out
+/// of every database backup.
+pub const MAIL_PROVIDER_KEY: &str = "mail_provider";
+
+/// The `From` address on every outgoing message.
+///
+/// In `site_config` rather than env-only because it is the single largest
+/// deliverability factor: SPF and DKIM align against this domain, not against the
+/// relay, so moving providers without being able to change it is how mail starts
+/// landing in spam with nothing in the UI to fix.
+pub const FROM_EMAIL_KEY: &str = "from_email";
 
 // ── Fixed constants — not admin-configurable ─────────────────────────────────
 

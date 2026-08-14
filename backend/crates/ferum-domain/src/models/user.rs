@@ -97,6 +97,67 @@ pub struct UserPreferences {
     pub timezone: Option<String>,
 }
 
+/// Which notification kinds a user wants delivered by email.
+///
+/// Stored as the `user_preferences.email_notifications` JSONB object, one boolean
+/// per key. Only the kinds listed here are ever emailed — reactions, follows and
+/// system notices stay in-app, because they are the highest-volume and lowest-value
+/// of the five and are the usual reason someone turns email off wholesale.
+///
+/// ## An absent key means "do not send", and that is the migration story
+///
+/// Every account created before this feature has `{}`, so every one of them is
+/// silent until the user opts in. New accounts get both keys written explicitly at
+/// registration (see `AuthUseCase::register`), so they are opted **in** by default.
+///
+/// That asymmetry is the whole design: it is the only way to have a sensible
+/// default for new members without mailing an existing community that never agreed
+/// to it. Reading a missing key as `true` would, on the first deploy, send mail to
+/// every account the forum has ever had — and a spam complaint spike is the one
+/// mistake here that cannot be undone, because it is the sending domain's
+/// reputation that pays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EmailNotificationPrefs {
+    /// A reply to a thread this user started.
+    pub reply: bool,
+    /// An `@username` mention of this user.
+    pub mention: bool,
+}
+
+impl EmailNotificationPrefs {
+    /// What a newly registered account gets. Opt-out from here on.
+    pub const OPTED_IN: Self = Self {
+        reply: true,
+        mention: true,
+    };
+
+    /// Reads the stored JSON. Anything absent, non-boolean or malformed is `false`
+    /// — the safe direction, and it means a hand-edited row cannot turn mail on.
+    pub fn from_json(value: &serde_json::Value) -> Self {
+        let flag = |key: &str| value.get(key).and_then(serde_json::Value::as_bool) == Some(true);
+        Self {
+            reply: flag("reply"),
+            mention: flag("mention"),
+        }
+    }
+
+    pub fn to_json(self) -> serde_json::Value {
+        serde_json::json!({ "reply": self.reply, "mention": self.mention })
+    }
+
+    /// True when nothing at all would be emailed. Lets the unsubscribe endpoint
+    /// and the account page report state without duplicating the field list.
+    pub fn all_off(self) -> bool {
+        !self.reply && !self.mention
+    }
+
+    /// Every flag off — what a one-click unsubscribe link writes.
+    pub const OPTED_OUT: Self = Self {
+        reply: false,
+        mention: false,
+    };
+}
+
 impl Default for UserPreferences {
     fn default() -> Self {
         Self {
@@ -104,6 +165,10 @@ impl Default for UserPreferences {
             theme: "auto".to_string(),
             font_size: "medium".to_string(),
             layout: "comfortable".to_string(),
+            // `{}` — not `OPTED_IN`. This default is used when a user has no
+            // preferences row at all, which is the shape every pre-existing
+            // account has, so it must read as "off". Registration writes
+            // `OPTED_IN` explicitly instead.
             email_notifications: serde_json::json!({}),
             muted_categories: vec![],
             watched_categories: vec![],

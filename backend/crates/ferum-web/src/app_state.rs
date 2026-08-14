@@ -125,6 +125,18 @@ pub struct AppState {
     /// admin settings page can report the posture. Holding the cipher here would
     /// invite a handler to use it and put a second sealing path outside the seam.
     pub secrets_encrypted: bool,
+    /// `RESEND_API_KEY`, if the environment supplied one.
+    ///
+    /// Env-only and therefore immutable for the process lifetime, which is the
+    /// whole reason it lives here as a plain `Option<String>` rather than in
+    /// `site_config` beside the provider it authenticates. Keeping it out of the
+    /// table keeps a live provider API key out of the database and out of every
+    /// database backup — `mail_provider` selects, this authenticates, and only the
+    /// first needs to be editable.
+    ///
+    /// Needed in `AppState` because `update_config` has to rebuild the Resend
+    /// client whenever `from_email` changes: `from` is captured at construction.
+    pub resend_api_key: Option<String>,
     /// Resolved once at startup because the CSP now depends on which storage
     /// backend was selected: `img-src` must name the origin `public_url` mints,
     /// or the browser blocks every uploaded image.

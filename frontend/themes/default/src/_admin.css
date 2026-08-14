@@ -337,3 +337,37 @@ html, body { height: 100%; margin: 0; }
     justify-content: center;
   }
 }
+
+/* ── Field group label ──────────────────────────────────────────
+   A quiet subheading that splits one card into named groups of fields, so a
+   form is read as "where to connect" then "who to connect as" rather than as a
+   flat list of inputs. Deliberately lighter than .card-header: it must not
+   compete with the card's own title, only separate what sits under it. */
+.fr-field-group-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-tertiary-color);
+  margin-bottom: 0.5rem;
+}
+
+/* ── Inert field group ──────────────────────────────────────────
+   A group whose controls are switched off. Only the CONTROLS dim: the group
+   heading and the help text stay at full contrast, because "off" is a state an
+   operator reads *before* deciding whether to turn it on. An `opacity` on the
+   container dimmed the explanation along with the inputs, and at 50% over an
+   already-tertiary colour it was barely legible — the panel read as broken.
+
+   `[readonly]` is listed beside `:disabled` because Bootstrap 5 gives the
+   disabled look to `:disabled` only, and one input here has to stay readonly
+   rather than disabled so it keeps being submitted (see ferum-admin.js). Without
+   this it would be the one control in a switched-off group still looking live. */
+.fr-fields-inert .form-control:disabled,
+.fr-fields-inert .form-control[readonly],
+.fr-fields-inert .input-group-text {
+  opacity: 0.75;
+}
+.fr-fields-inert .form-control[readonly] {
+  background-color: var(--bs-secondary-bg);
+}

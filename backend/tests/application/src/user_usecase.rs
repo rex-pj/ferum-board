@@ -10,16 +10,28 @@ use ferum_test_support::mocks::{
     password_hasher::MockPasswordHasher,
     storage_service::NoopStorageService,
     stored_file_repository::NoopStoredFileRepository,
+    token_service::MockTokenService,
     user_repository::MockUserRepository,
 };
 
 fn build_uc(users: MockUserRepository, hasher: MockPasswordHasher) -> UserUseCase {
+    build_uc_with_tokens(users, hasher, MockTokenService::new())
+}
+
+/// The same, with the token service the caller wants — only the unsubscribe path
+/// cares what it does.
+fn build_uc_with_tokens(
+    users: MockUserRepository,
+    hasher: MockPasswordHasher,
+    tokens: MockTokenService,
+) -> UserUseCase {
     UserUseCase::new(
         Arc::new(users),
         Arc::new(hasher),
         Arc::new(NoopStoredFileRepository),
         Arc::new(NoopStorageService),
         Arc::new(NoopJobQueue),
+        Arc::new(tokens),
     )
 }
 
@@ -190,4 +202,117 @@ async fn change_password_revokes_refresh_tokens() {
 
     let uc = build_uc(users, hasher).with_cache(Arc::new(cache));
     uc.change_password(&actor, "CorrectPass1!", "NewPassword1!").await.unwrap();
+}
+
+// ─── unsubscribe_from_emails ─────────────────────────────────────────────────
+//
+// Backs the one-click link in every notification email. The link is followed
+// without a session — from a mail client, by someone who is often not logged in —
+// so the signed token is the only authorisation the request carries, and these
+// tests pin what that token may and may not do.
+
+use ferum_domain::models::{EmailNotificationPrefs, UserPreferences};
+use ferum_application::ports::UNSUBSCRIBE_PURPOSE;
+
+#[tokio::test]
+async fn unsubscribe_turns_every_email_flag_off() {
+    let user_id = Uuid::new_v4();
+
+    let mut tokens = MockTokenService::new();
+    tokens
+        .expect_verify_email_token()
+        // The purpose must be checked, or a password-reset token would double as
+        // an unsubscribe link.
+        .withf(move |_, purpose| purpose == UNSUBSCRIBE_PURPOSE)
+        .returning(move |_, _| Ok(user_id));
+
+    let mut users = MockUserRepository::new();
+    users.expect_get_preferences().returning(move |_| {
+        Ok(UserPreferences {
+            user_id,
+            email_notifications: EmailNotificationPrefs::OPTED_IN.to_json(),
+            ..Default::default()
+        })
+    });
+    users
+        .expect_upsert_preferences()
+        .withf(move |p| {
+            // Written for the token's subject, with every flag off.
+            p.user_id == user_id
+                && EmailNotificationPrefs::from_json(&p.email_notifications).all_off()
+        })
+        .times(1)
+        .returning(|_| Ok(()));
+
+    let uc = build_uc_with_tokens(users, MockPasswordHasher::new(), tokens);
+    uc.unsubscribe_from_emails("a-token").await.unwrap();
+}
+
+#[tokio::test]
+async fn unsubscribe_preserves_unrelated_preferences() {
+    let user_id = Uuid::new_v4();
+
+    let mut tokens = MockTokenService::new();
+    tokens.expect_verify_email_token().returning(move |_, _| Ok(user_id));
+
+    let mut users = MockUserRepository::new();
+    users.expect_get_preferences().returning(move |_| {
+        Ok(UserPreferences {
+            user_id,
+            theme: "dark".into(),
+            timezone: Some("Asia/Ho_Chi_Minh".into()),
+            email_notifications: EmailNotificationPrefs::OPTED_IN.to_json(),
+            ..Default::default()
+        })
+    });
+    users
+        .expect_upsert_preferences()
+        // Turning email off must not reset someone's theme or time zone — the row
+        // is written whole, so anything not read back first would be silently lost.
+        .withf(|p| p.theme == "dark" && p.timezone.as_deref() == Some("Asia/Ho_Chi_Minh"))
+        .times(1)
+        .returning(|_| Ok(()));
+
+    let uc = build_uc_with_tokens(users, MockPasswordHasher::new(), tokens);
+    uc.unsubscribe_from_emails("a-token").await.unwrap();
+}
+
+#[tokio::test]
+async fn unsubscribe_is_idempotent() {
+    // Mail clients prefetch links and people click twice. A second visit must
+    // succeed rather than error, or the page would tell someone their unsubscribe
+    // failed when it had already worked.
+    let user_id = Uuid::new_v4();
+
+    let mut tokens = MockTokenService::new();
+    tokens.expect_verify_email_token().returning(move |_, _| Ok(user_id));
+
+    let mut users = MockUserRepository::new();
+    users.expect_get_preferences().returning(move |_| {
+        Ok(UserPreferences {
+            user_id,
+            email_notifications: EmailNotificationPrefs::OPTED_OUT.to_json(),
+            ..Default::default()
+        })
+    });
+    users.expect_upsert_preferences().returning(|_| Ok(()));
+
+    let uc = build_uc_with_tokens(users, MockPasswordHasher::new(), tokens);
+    uc.unsubscribe_from_emails("a-token").await.unwrap();
+}
+
+#[tokio::test]
+async fn an_invalid_token_writes_nothing() {
+    let mut tokens = MockTokenService::new();
+    tokens
+        .expect_verify_email_token()
+        .returning(|_, _| Err(AppError::forbidden("invalid_or_expired_token")));
+
+    // A bare mock: any preference read or write would panic, which is the
+    // assertion. A token that does not verify must not be able to change another
+    // account's settings.
+    let users = MockUserRepository::new();
+
+    let uc = build_uc_with_tokens(users, MockPasswordHasher::new(), tokens);
+    assert!(uc.unsubscribe_from_emails("nope").await.is_err());
 }

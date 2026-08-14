@@ -24,6 +24,35 @@ email-reset-body =
     <p>Nếu bạn không yêu cầu điều này, bạn có thể bỏ qua email — mật khẩu của bạn
     sẽ không thay đổi.</p>
 
+## ─── Email thông báo ─────────────────────────────────────────────────────────
+#
+# Chỉ gửi cho thành viên đã bật (xem `EmailNotificationPrefs`), và chỉ hai loại
+# này — reaction và follow chỉ hiện trong ứng dụng.
+#
+# Mọi email ở đây BẮT BUỘC phải mang `{ $unsubscribe_url }`. Một email thông báo
+# không có nút tắt hoạt động là email bị báo spam thay vì bị tắt, và cái giá đó
+# do domain gửi trả, không phải diễn đàn.
+
+email-notify-reply-subject = { $actor } đã trả lời "{ $thread_title }"
+email-notify-reply-body =
+    <p><strong>{ $actor }</strong> đã trả lời chủ đề <strong>{ $thread_title }</strong> của bạn trên { $site_name }.</p>
+    <p><a href="{ $url }">Xem câu trả lời</a></p>
+    <hr>
+    <p style="font-size:12px;color:#666">
+      <a href="{ $unsubscribe_url }">Ngừng nhận các email này</a> ·
+      <a href="{ $settings_url }">Cài đặt thông báo</a>
+    </p>
+
+email-notify-mention-subject = { $actor } đã nhắc tới bạn trong "{ $thread_title }"
+email-notify-mention-body =
+    <p><strong>{ $actor }</strong> đã nhắc tới bạn trong <strong>{ $thread_title }</strong> trên { $site_name }.</p>
+    <p><a href="{ $url }">Xem bài viết</a></p>
+    <hr>
+    <p style="font-size:12px;color:#666">
+      <a href="{ $unsubscribe_url }">Ngừng nhận các email này</a> ·
+      <a href="{ $settings_url }">Cài đặt thông báo</a>
+    </p>
+
 ## ─── Email thử của quản trị viên ─────────────────────────────────────────────
 #
 # Chỉ được gửi bởi nút "Send test email" trong /admin/settings, và luôn chỉ gửi

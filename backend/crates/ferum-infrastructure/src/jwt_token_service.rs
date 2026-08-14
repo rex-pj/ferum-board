@@ -3,7 +3,6 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use ferum_application::constants::PASSWORD_RESET_TOKEN_TTL_SECS;
 use ferum_application::ports::{AccessTokenClaims, TokenService};
 use ferum_application::shared::AppError;
 
@@ -78,11 +77,16 @@ impl TokenService for JwtTokenService {
         Uuid::parse_str(&data.claims.sub).map_err(|_| AppError::Unauthorized)
     }
 
-    fn mint_email_token(&self, user_id: Uuid, purpose: &str) -> Result<String, AppError> {
+    fn mint_email_token(
+        &self,
+        user_id: Uuid,
+        purpose: &str,
+        ttl_secs: u64,
+    ) -> Result<String, AppError> {
         let claims = EmailClaims {
             sub: user_id.to_string(),
             purpose: purpose.to_string(),
-            exp: (Utc::now() + Duration::seconds(PASSWORD_RESET_TOKEN_TTL_SECS as i64)).timestamp(),
+            exp: (Utc::now() + Duration::seconds(ttl_secs as i64)).timestamp(),
         };
         encode(&Header::default(), &claims, &self.encoding_key)
             .map_err(|e| AppError::internal(format!("email token error: {}", e)))

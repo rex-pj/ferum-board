@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::constants::{
     DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS, DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES,
-    PASSWORD_RESET_TOKEN_TTL_SECS,
+    EMAIL_VERIFICATION_TOKEN_TTL_SECS, PASSWORD_RESET_TOKEN_TTL_SECS,
 };
 use crate::ports::{
     CacheService, ForumJob, HookContext, HookDecision, JobQueue,
@@ -161,11 +161,34 @@ impl AuthUseCase {
                 .await;
         }
 
+        // Opt this account in to notification email, explicitly.
+        //
+        // **Writing the row here is the entire mechanism that separates new members
+        // from existing ones.** `EmailNotificationPrefs::from_json` reads an absent
+        // key as "off", and every account that predates this feature has `{}` — so
+        // they stay silent until they choose otherwise, while anyone signing up from
+        // now on gets the behaviour a forum is expected to have. The alternative,
+        // reading a missing key as "on", would mail the entire existing membership on
+        // the first deploy over something none of them agreed to; a spam-complaint
+        // spike is the one mistake in this feature that cannot be taken back.
+        //
+        // Best-effort: a failure here must not fail a registration that has already
+        // created the account and assigned its roles. The cost of losing it is that
+        // the member sees the toggles off in /account, which they can fix.
+        let prefs = ferum_domain::models::UserPreferences {
+            user_id: user.id,
+            email_notifications: ferum_domain::models::EmailNotificationPrefs::OPTED_IN.to_json(),
+            ..Default::default()
+        };
+        if let Err(e) = self.users.upsert_preferences(prefs).await {
+            tracing::warn!(error = %e, user_id = %user.id, "could not write default email preferences");
+        }
+
         if self.auto_verify_email.load(Ordering::Relaxed) {
             self.users.set_email_verified(user.id).await?;
             self.users.set_trust_level(user.id, TrustLevel::Basic).await?;
         } else {
-            let token = self.tokens.mint_email_token(user.id, "email_verification")?;
+            let token = self.tokens.mint_email_token(user.id, "email_verification", EMAIL_VERIFICATION_TOKEN_TTL_SECS)?;
             self.jobs
                 .enqueue(ForumJob::SendEmailVerification {
                     user_id: user.id,
@@ -225,7 +248,7 @@ impl AuthUseCase {
     pub async fn resend_verification_email(&self, email: &str) -> Result<(), AppError> {
         if let Some(user) = self.users.find_by_email(&email.to_lowercase()).await? {
             if !user.is_email_verified {
-                let token = self.tokens.mint_email_token(user.id, "email_verification")?;
+                let token = self.tokens.mint_email_token(user.id, "email_verification", EMAIL_VERIFICATION_TOKEN_TTL_SECS)?;
                 let locale = self.recipient_locale(user.id).await;
                 self.jobs
                     .enqueue(ForumJob::SendEmailVerification {
@@ -398,7 +421,7 @@ impl AuthUseCase {
     #[tracing::instrument(skip_all)]
     pub async fn forgot_password(&self, email: &str) -> Result<(), AppError> {
         if let Some(user) = self.users.find_by_email(&email.to_lowercase()).await? {
-            let token = self.tokens.mint_email_token(user.id, "password_reset")?;
+            let token = self.tokens.mint_email_token(user.id, "password_reset", PASSWORD_RESET_TOKEN_TTL_SECS)?;
             let locale = self.recipient_locale(user.id).await;
             self.jobs
                 .enqueue(ForumJob::SendPasswordResetEmail {

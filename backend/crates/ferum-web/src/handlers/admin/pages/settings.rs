@@ -41,6 +41,11 @@ pub async fn settings(
     // whenever RESEND_API_KEY is set: `config.smtp_host` is still populated and
     // still shown, but nothing sends through it.
     ctx.insert("mail_provider", state.email.provider().await.label());
+    // Whether Resend *can* be selected. Its credential is env-only, so this is a
+    // presence flag and never the key itself — the same treatment `smtp_pass_set`
+    // gets. Without it the panel could not tell "Resend is available but not
+    // chosen" from "choosing Resend would send nothing".
+    ctx.insert("resend_key_present", &state.resend_api_key.is_some());
     // Read-only: encryption at rest is an env-level decision, so the page reports
     // it rather than offering a control that could not take effect.
     ctx.insert("secrets_encrypted", &state.secrets_encrypted);

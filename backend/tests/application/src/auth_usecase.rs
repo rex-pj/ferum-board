@@ -104,6 +104,20 @@ async fn register_success_with_email_verification_enqueues_job() {
         let u = created_user.clone();
         move |_| Ok(u.clone())
     });
+    // Registration writes notification-email preferences explicitly, and this
+    // asserts *what* it writes. That written row is the only thing separating a new
+    // account (opted in) from every account that predates the feature (`{}`, and so
+    // silent). If this ever stopped being written, new members would quietly get no
+    // notification email at all.
+    users
+        .expect_upsert_preferences()
+        .withf(move |p| {
+            p.user_id == user_id
+                && ferum_domain::models::EmailNotificationPrefs::from_json(&p.email_notifications)
+                    == ferum_domain::models::EmailNotificationPrefs::OPTED_IN
+        })
+        .times(1)
+        .returning(|_| Ok(()));
 
     let mut roles = MockRoleRepository::new();
     roles.expect_list_default().returning(move || Ok(vec![member_role.clone()]));
@@ -118,7 +132,7 @@ async fn register_success_with_email_verification_enqueues_job() {
     hasher.expect_hash().returning(|_| Ok("$2b$12$hash".to_string()));
 
     let mut tokens = MockTokenService::new();
-    tokens.expect_mint_email_token().returning(|_, _| Ok("verify_token".to_string()));
+    tokens.expect_mint_email_token().returning(|_, _, _| Ok("verify_token".to_string()));
 
     let mut jobs = MockJobQueue::new();
     jobs.expect_enqueue()
@@ -153,6 +167,11 @@ async fn register_auto_verify_does_not_enqueue_email_job() {
     });
     users.expect_set_email_verified().returning(|_| Ok(()));
     users.expect_set_trust_level().returning(|_, _| Ok(()));
+    // Written on this path too. Auto-verify means no mail provider is configured
+    // *right now*, which is a runtime state an admin can change from
+    // /admin/settings — so the preference still has to be recorded, or accounts
+    // created while mail was off would be permanently silent once it came back.
+    users.expect_upsert_preferences().times(1).returning(|_| Ok(()));
 
     let mut roles = MockRoleRepository::new();
     roles.expect_list_default().returning(move || Ok(vec![member_role.clone()]));

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use lettre::message::header::ContentType;
+use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use std::net::IpAddr;
@@ -7,6 +8,44 @@ use std::net::IpAddr;
 use ferum_application::ports::EmailService;
 use ferum_application::shared::AppError;
 use ferum_domain::net::normalize_host;
+
+/// Parses a sender address, accepting either a bare address or the RFC 5322
+/// `Display Name <addr>` form.
+///
+/// The single parse of `FROM_EMAIL` in this codebase. `send` uses it, and so does
+/// [`validate_from_address`] at startup — deliberately the same call, because a
+/// boot check that disagreed with the parser used at send time would be worse than
+/// none: it would pass a value that then failed on every message.
+fn parse_from(from: &str) -> Result<Mailbox, AppError> {
+    from.parse::<Mailbox>().map_err(|e| {
+        AppError::internal(format!(
+            "FROM_EMAIL is not a valid sender address ({e}). Expected `user@example.com` \
+             or `Display Name <user@example.com>`."
+        ))
+    })
+}
+
+/// Rejects a malformed `FROM_EMAIL` at startup.
+///
+/// **Why this is a boot check and not a per-send concern.** `FROM_EMAIL` was
+/// validated nowhere: it is a plain `String` in `Config`, parsed only inside
+/// `send`. So a typo produced a process that started cleanly, reported
+/// `"mail": "smtp"` on `/health/ready`, showed a green banner in the admin panel —
+/// and failed every single message with a generic `internal_error`. For a
+/// verification mail, which is dispatched from a background job, the entire
+/// evidence was one log line. Nobody finds that until a user cannot register.
+///
+/// Checked whichever provider is selected, and even when none is: the address is
+/// required configuration either way, so catching it before mail is switched on is
+/// strictly better than catching it at the first send afterwards.
+///
+/// Note this applies lettre's parser to the Resend path too, where the value is
+/// only interpolated into JSON. That is intentional — one contract for
+/// `FROM_EMAIL` regardless of how it is delivered — and lettre is the stricter of
+/// the two, so nothing it accepts would be refused downstream.
+pub fn validate_from_address(from: &str) -> Result<(), AppError> {
+    parse_from(from).map(|_| ())
+}
 
 /// The SMTPS port. TLS begins before the first SMTP command here, so STARTTLS —
 /// which negotiates *inside* an already-open plaintext session — can never
@@ -131,11 +170,10 @@ impl LettreEmailService {
 impl EmailService for LettreEmailService {
     async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError> {
         let email = Message::builder()
-            .from(
-                self.from
-                    .parse()
-                    .map_err(|_| AppError::internal("invalid from address"))?,
-            )
+            // The same parse `validate_from_address` ran at startup, so reaching a
+            // failure here means the value changed under a running process rather
+            // than an operator typo that slipped through.
+            .from(parse_from(&self.from)?)
             .to(to
                 .parse()
                 .map_err(|_| AppError::internal("invalid to address"))?)
