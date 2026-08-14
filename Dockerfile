@@ -98,9 +98,28 @@ COPY --from=builder /src/backend/target/release/ferum-board /usr/local/bin/ferum
 COPY frontend ./frontend
 COPY locales  ./locales
 
+# A pristine copy of the built-in themes, kept OUTSIDE /app/frontend/themes.
+#
+# That directory carries a named volume in production so admin-uploaded themes
+# survive a container replacement — but Docker seeds a named volume from the
+# image only once, when the volume is first created. Every deploy after that,
+# the volume shadows the image, and frontend/themes/default/ (build output, not
+# user data) freezes at whatever version created the volume while static/ and
+# templates/ keep updating. docker-entrypoint.sh copies this back over the
+# volume on every start so the two halves cannot drift apart.
+RUN cp -a /app/frontend/themes /app/builtin-themes
+
+# At the repository root, not under deploy/: .dockerignore excludes deploy/
+# because it describes how the image is RUN, and is never consulted while
+# building one. This script is part of the image, so it lives beside the
+# Dockerfile that copies it.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Uploaded plugins are extracted here at runtime. Mount a volume over it in
 # production or installed plugins are lost when the container is replaced.
-RUN mkdir -p /app/plugins && chown -R ferum:ferum /app/plugins /app/frontend/themes
+RUN mkdir -p /app/plugins \
+    && chown -R ferum:ferum /app/plugins /app/frontend/themes /app/builtin-themes
 
 # These are resolved relative to the process working directory, so they are set
 # absolutely here. Getting one wrong is a silent failure: missing templates render
@@ -110,6 +129,7 @@ ENV THEMES_DIR=/app/frontend/themes \
     STATIC_DIR=/app/frontend/static \
     LOCALES_DIR=/app/locales \
     PLUGINS_DIR=/app/plugins \
+    BUILTIN_THEMES_DIR=/app/builtin-themes \
     BIND_ADDR=0.0.0.0 \
     PORT=5173 \
     LOG_FORMAT=json
@@ -118,5 +138,7 @@ USER ferum
 EXPOSE 5173
 
 # Migrations run inside the process at startup, so there is no separate migrate
-# step. SIGTERM triggers a graceful drain, which is what `docker stop` sends.
+# step. SIGTERM triggers a graceful drain, which is what `docker stop` sends —
+# the entrypoint `exec`s the server so that signal reaches it rather than a shell.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["ferum-board"]

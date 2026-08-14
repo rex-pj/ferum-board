@@ -48,8 +48,20 @@ services:
       # keys on nginx's address, so every client shares one bucket.
       TRUSTED_PROXY_COUNT: "1"
     volumes:
-      # Both directories are written at runtime by admin upload. A fresh named
-      # volume is seeded from the image, so the built-in theme survives.
+      # Both directories are written at runtime by admin upload.
+      #
+      # A named volume is seeded from the image ONLY when it is first created,
+      # while still empty. After that it SHADOWS the image — so the built-in
+      # theme under frontend/themes/default/ does not "survive" here, it
+      # FREEZES at whatever version created the volume, while frontend/static/
+      # and frontend/templates/ (not mounted) keep updating with each deploy.
+      # That split shipped a broken mobile sidebar once: new JS toggling a
+      # class the frozen CSS had no rule for.
+      #
+      # docker-entrypoint.sh (repo root) copies /app/builtin-themes over this volume on
+      # every start, so the built-in theme always matches the image. Uploaded
+      # themes live under their own slug and are untouched. /app/plugins holds
+      # nothing in the image, so it has no equivalent problem.
       - plugins:/app/plugins
       - themes:/app/frontend/themes
     depends_on:
