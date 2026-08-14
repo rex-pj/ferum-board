@@ -315,15 +315,84 @@ html, body { height: 100%; margin: 0; }
 .audit-log-popover { --bs-popover-max-width: 500px; }
 .audit-log-popover .popover-body { padding: 1rem; min-width: 440px; }
 
-/* ── Mobile sidebar toggle ──────────────────────────────────── */
+/* ── Sidebar drawer (below lg) ──────────────────────────────────
+   `position: fixed` applies across this whole range, not just to the open
+   state: the base rule is display:flex, so a merely-hidden sidebar still in
+   the flow would reserve 220px of the .adm-shell row. Hidden state is
+   visibility + transform rather than `display`, so the panel can slide out as
+   well as in; visibility is a discrete property, hence the asymmetric 0s-delay
+   transitions — see the same pattern and the same warning in _layout.css. */
 @media (max-width: 991.98px) {
-  .adm-sidebar { display: none; }
-  .adm-sidebar.show {
-    display: flex;
+  .adm-sidebar {
     position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
     z-index: 1050;
     box-shadow: 0 0 24px rgba(0,0,0,.2);
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition: transform .26s cubic-bezier(.4, 0, .2, 1), visibility 0s linear .26s;
   }
+  .adm-sidebar.is-open {
+    visibility: visible;
+    transform: none;
+    transition: transform .26s cubic-bezier(.4, 0, .2, 1), visibility 0s linear 0s;
+  }
+
+  .adm-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1049;
+    background: rgba(0, 0, 0, .45);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .26s ease, visibility 0s linear .26s;
+  }
+  .adm-sidebar.is-open ~ .adm-sidebar-backdrop {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity .26s ease, visibility 0s linear 0s;
+  }
+
+  /* Keep the brand text clear of the close button. */
+  .adm-brand { padding-right: 3.25rem; }
+}
+
+/* Close button — sits in the brand row. .adm-nav owns the scroll (flex:1;
+   overflow-y:auto), so the brand row does not move and this stays put. Outside
+   the media query above because `.d-lg-none` in the markup handles hiding it on
+   desktop. */
+.adm-sidebar-close {
+  position: absolute;
+  top: calc((var(--adm-header-h) - var(--fr-tap-target)) / 2);
+  right: .5rem;
+  z-index: 1;
+  width: var(--fr-tap-target);
+  height: var(--fr-tap-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--bs-border-radius);
+  background: transparent;
+  color: var(--bs-secondary-color);
+  cursor: pointer;
+}
+.adm-sidebar-close:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
+.adm-sidebar-close:focus-visible { outline: 2px solid var(--ferum-primary); outline-offset: 2px; }
+
+/* NF-UX-02: .btn-sm caps the toggle at 36px (_bootstrap-overrides.css), and the
+   coarse-pointer bump below only covers table buttons. _admin.css is imported
+   after _bootstrap-overrides.css, so equal specificity resolves here. */
+.adm-sidebar-toggle {
+  min-width: var(--fr-tap-target);
+  min-height: var(--fr-tap-target);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-sidebar, .adm-sidebar-backdrop { transition: none; }
 }
 
 /* ── Touch target — WCAG 2.1 AA min 44px on touch devices ──── */

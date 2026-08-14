@@ -66,6 +66,33 @@
 }
 
 /* ── Mobile sidebar drawer ────────────────────────────────────── */
+/* The overlay's layout lives here rather than inline on the element in
+   nav.html: an inline `display:none` cannot be transitioned out of (the panel
+   could only ever slide IN), and inline styles are also the one thing a child
+   theme can never restyle. */
+#mobileSidebar {
+  display: flex;
+  flex-direction: row;
+  position: fixed;
+  inset: var(--fr-topbar-height) 0 0 0;
+  z-index: 1040;
+  /* Hidden state is `visibility`, not `display`, so the panel can slide OUT as
+     well as in. visibility is a DISCRETE property, so it must flip late on
+     close (delay 0.26s) and immediately on open (delay 0s) — a plain
+     `transition: visibility 0.26s` flips it at the 50% mark and eats half the
+     animation. Do not "simplify" these delays. */
+  visibility: hidden;
+  transition: visibility 0s linear 0.26s;
+}
+#mobileSidebar.is-open {
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+/* Above lg the rail is back in the flow; the overlay has no reason to exist. */
+@media (min-width: 992px) {
+  #mobileSidebar { display: none; }
+}
+
 /* Re-enable the sidebar panel that the media query hides above   */
 #mobileSidebar .fr-sidebar-left {
   display: flex !important;
@@ -73,20 +100,45 @@
   position: relative;   /* override sticky — parent is already fixed */
   top: 0;
   height: 100%;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
   transform: translateX(-100%);
   transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
+  /* The drawer floats over page content, so it MUST be opaque — but it reuses
+     .fr-sidebar-left, and a child theme may legitimately make the DESKTOP rail
+     transparent (ferum-review does exactly that: the rail belongs to the canvas
+     plane). This ID selector outranks any child-theme class rule, and the
+     !important closes the remaining hole — a user-uploaded theme writing
+     `.fr-sidebar-left{background:transparent!important}` would otherwise punch
+     through and leave the drawer see-through again.
+     Themes wanting a different drawer colour set --fr-drawer-bg; var
+     substitution happens on the winning declaration, so the escape hatch
+     survives the !important. */
+  background: var(--fr-drawer-bg, var(--bs-body-bg)) !important;
 }
 #mobileSidebar.is-open .fr-sidebar-left {
   transform: translateX(0);
 }
 /* Backdrop fade */
 #mobileSidebar .fr-drawer-backdrop {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.45);
   opacity: 0;
   transition: opacity 0.26s ease;
 }
 #mobileSidebar.is-open .fr-drawer-backdrop {
   opacity: 1;
+}
+
+/* Body scroll lock while any drawer is open — public or admin. _admin.css
+   compiles into this same asset, which admin pages load too, so one rule
+   serves both. */
+body.fr-drawer-open { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  #mobileSidebar,
+  #mobileSidebar .fr-sidebar-left,
+  #mobileSidebar .fr-drawer-backdrop { transition: none; }
 }
 
 /* ── Sidebar nav links (left sidebar) ────────────────────────── */

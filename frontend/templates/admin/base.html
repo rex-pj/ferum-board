@@ -55,6 +55,18 @@
       </div>
     </a>
 
+    {# Mobile only. While the drawer is open it sits at z-index 1050 over the
+       sticky topbar (z-index 100), so the hamburger that opened it is covered —
+       without this button there was no way back. Absolutely positioned into the
+       brand row rather than added as a sibling, which would give the sidebar a
+       second header row on desktop. Placed before `sidebar_nav` so the mod
+       panel, which only overrides that block, inherits it. #}
+    <button type="button" class="adm-sidebar-close d-lg-none"
+            data-action="toggle-admin-sidebar"
+            aria-label="{{ t(k='adm-close') }}">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+    </button>
+
     {% block sidebar_nav %}
     <div class="adm-nav">
 
@@ -123,15 +135,22 @@
     </div>
   </nav>
 
+  {# Drawer backdrop (mobile). A SIBLING of the nav rather than a wrapper around
+     it, so the desktop .adm-shell flex row is untouched; CSS keys off
+     `#adminSidebar.is-open ~ .adm-sidebar-backdrop`. #}
+  <div class="adm-sidebar-backdrop d-lg-none" data-action="toggle-admin-sidebar"></div>
+
   <!-- ── Main body ───────────────────────────────────────────── -->
   <div class="adm-body">
 
     <!-- Top bar -->
     <header class="adm-topbar">
       <div class="d-flex align-items-center gap-3">
-        <button class="btn btn-sm btn-outline-secondary d-lg-none"
-                data-action="toggle-admin-sidebar">
-          <i class="fa-solid fa-bars"></i>
+        <button type="button" class="btn btn-sm btn-outline-secondary d-lg-none adm-sidebar-toggle"
+                data-action="toggle-admin-sidebar"
+                aria-controls="adminSidebar" aria-expanded="false"
+                aria-label="{{ t(k='ui-open-menu') }}">
+          <i class="fa-solid fa-bars" aria-hidden="true"></i>
         </button>
         <h1 class="adm-topbar-title">{% block page_title %}{% endblock %}</h1>
       </div>

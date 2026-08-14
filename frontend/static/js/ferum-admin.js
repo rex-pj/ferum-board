@@ -1,9 +1,16 @@
 (function () {
   'use strict';
 
-  // ── Admin sidebar toggle (mobile) ─────────────────────────────────
-  document.querySelector('[data-action="toggle-admin-sidebar"]')?.addEventListener('click', function () {
-    document.getElementById('adminSidebar')?.classList.toggle('show');
+  // ── Admin sidebar drawer (mobile) ─────────────────────────────────
+  // The same controller the public forum drawer uses. Escape, backdrop, close
+  // button, scroll lock, aria-expanded, and closing when the layout returns to
+  // desktop all come from there rather than being written a second time here.
+  // Serves the mod panel too — mod/base.html extends this template and only
+  // appends to the scripts block.
+  Ferum.initDrawer({
+    id: 'adminSidebar',
+    action: 'toggle-admin-sidebar',
+    desktopQuery: '(min-width: 992px)',
   });
 
   // ── Reporting timezone picker ─────────────────────────────────────

@@ -305,7 +305,12 @@
           localStorage.setItem('ferum-font-size', fontSize);
           localStorage.setItem('ferum-layout', layout);
         } catch (_) {}
-        if (theme === 'auto') document.documentElement.removeAttribute('data-bs-theme');
+        // Through FerumTheme so 'auto' resolves against the OS exactly as it
+        // does on page load. Removing the attribute instead (what this did
+        // before) matches neither token block in the CSS and always renders
+        // light, so picking "auto" on a dark-mode machine appeared to do
+        // nothing until the next reload.
+        if (window.FerumTheme) window.FerumTheme.apply(theme);
         else document.documentElement.setAttribute('data-bs-theme', theme);
         if (fontSize && fontSize !== 'medium') document.documentElement.setAttribute('data-font-size', fontSize);
         else document.documentElement.removeAttribute('data-font-size');

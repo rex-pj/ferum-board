@@ -203,26 +203,39 @@
     var btn  = document.querySelector('[data-ferum-theme-btn]');
     if (!btn) return;
     var icon = btn.querySelector('i');
+    var root = document.documentElement;
 
-    function getTheme() { try { return localStorage.getItem('ferum-theme') || 'auto'; } catch { return 'auto'; } }
-
-    function applyTheme(t) {
-      if (t === 'auto') document.documentElement.removeAttribute('data-bs-theme');
-      else              document.documentElement.setAttribute('data-bs-theme', t);
-      if (icon) icon.className = t === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    // Read the EFFECTIVE theme off the DOM, never the stored preference.
+    // ferum-preload.js has already resolved 'auto' into a concrete
+    // data-bs-theme before first paint, so this is what the reader is actually
+    // looking at. Deriving it independently here is what caused dark mode to
+    // need two clicks: this function resolved 'auto' from matchMedia while the
+    // CSS resolved it to light, so on a dark-mode OS the first click wrote the
+    // value the page was already displaying. See ferum-preload.js.
+    function effective() {
+      return root.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
     }
 
-    applyTheme(getTheme());
+    function syncIcon() {
+      if (icon) icon.className = effective() === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+    }
+
+    syncIcon();
+    // The theme can change without this button: the OS flipping while the
+    // preference is 'auto', or the account page's preferences form. Watching
+    // the attribute keeps the icon honest in both cases instead of leaving it
+    // showing the opposite of the truth.
+    new MutationObserver(syncIcon)
+      .observe(root, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
     btn.addEventListener('click', function () {
-      var cur = getTheme();
-      // Resolve 'auto' to the effective theme before toggling so the user
-      // always gets the opposite of what they see, rather than landing on
-      // a hardcoded value regardless of their system preference.
-      var effectiveDark = cur === 'dark' ||
-        (cur === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      var next = effectiveDark ? 'light' : 'dark';
-      try { localStorage.setItem('ferum-theme', next); } catch {}
-      applyTheme(next);
+      // An explicit click is an explicit choice, so it stores a concrete value
+      // and drops out of 'auto' — the reader asked for this theme, not for
+      // whatever their OS does next.
+      var next = effective() === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('ferum-theme', next); } catch (e) {}
+      if (win.FerumTheme) win.FerumTheme.apply(next);
+      else root.setAttribute('data-bs-theme', next);
 
       // Logged-in users get this synced to their account (see base.html's
       // data-prefs-ssr) so it follows them to other devices/browsers, not
@@ -520,37 +533,79 @@
     });
   }
 
-  // ── Mobile sidebar drawer ─────────────────────────────────────────
-  function initMobileSidebar() {
-    function toggleSidebar() {
-      var overlay = document.getElementById('mobileSidebar');
-      var toggleBtn = document.getElementById('sidebarToggleBtn');
-      if (!overlay) return;
-      var isOpen = overlay.classList.contains('is-open');
-      if (isOpen) {
-        overlay.classList.remove('is-open');
-        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
-        setTimeout(function () { overlay.style.display = 'none'; }, 270);
-      } else {
-        overlay.style.display = 'flex';
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            overlay.classList.add('is-open');
-            if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
-          });
-        });
+  // ── Drawer controller (shared) ────────────────────────────────────
+  // One implementation for every off-canvas panel: the public mobile sidebar
+  // and the admin/mod sidebar. State is a single class on the root element;
+  // everything visual (slide, fade, backdrop) is CSS keyed off that class.
+  //
+  // Nothing here writes inline styles, so there is no display-toggling timer to
+  // race with — the previous version scheduled `setTimeout(… display='none')`
+  // on close and never cancelled it, so reopening inside the 270ms animation
+  // hid the drawer while it still reported itself open.
+  //
+  // opts: { id, action, desktopQuery?, openClass?, initialFocus? }
+  function initDrawer(opts) {
+    var root = document.getElementById(opts.id);
+    if (!root) return null;
+    var toggles = document.querySelectorAll('[data-action="' + opts.action + '"]');
+    if (!toggles.length) return null;
+
+    var openClass = opts.openClass || 'is-open';
+    var lastFocus = null;
+
+    function isOpen() { return root.classList.contains(openClass); }
+
+    function setState(open) {
+      if (open === isOpen()) return;
+      root.classList.toggle(openClass, open);
+      document.body.classList.toggle('fr-drawer-open', open);
+      // Only elements that already declare the state get it — the backdrop is a
+      // toggle too, and aria-expanded on a bare <div> is meaningless.
+      toggles.forEach(function (el) {
+        if (el.hasAttribute('aria-expanded')) {
+          el.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+      });
+      if (open) {
+        lastFocus = document.activeElement;
+        var first = root.querySelector(opts.initialFocus || 'button, a[href]');
+        if (first) first.focus();
+      } else if (lastFocus && document.contains(lastFocus)) {
+        lastFocus.focus();
+        lastFocus = null;
       }
     }
-    document.querySelectorAll('[data-action="toggle-sidebar"]').forEach(function (el) {
-      el.addEventListener('click', toggleSidebar);
+
+    toggles.forEach(function (el) {
+      el.addEventListener('click', function () { setState(!isOpen()); });
     });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') {
-        var overlay = document.getElementById('mobileSidebar');
-        if (overlay && overlay.classList.contains('is-open')) toggleSidebar();
-      }
+      if (e.key === 'Escape' && isOpen()) setState(false);
     });
+
+    // Following a link navigates, so the drawer should not sit open over the
+    // old page while the next one loads — and a link to the page you are
+    // already on repaints nothing, so without this it would never dismiss.
+    root.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('a[href]')) setState(false);
+    });
+
+    // Crossing back to the desktop layout makes the drawer meaningless (the
+    // rail is in the flow again) and would otherwise strand the scroll lock.
+    if (opts.desktopQuery) {
+      var mq = window.matchMedia(opts.desktopQuery);
+      var onChange = function (e) { if (e.matches) setState(false); };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);   // Safari < 14
+    }
+
+    return {
+      open:   function () { setState(true); },
+      close:  function () { setState(false); },
+      toggle: function () { setState(!isOpen()); },
+      isOpen: isOpen,
+    };
   }
 
   // ── Mobile search toggle ──────────────────────────────────────────
@@ -674,7 +729,9 @@
   onReady(initTimestamps);
   onReady(initThemeToggle);
   onReady(initNavActive);
-  onReady(initMobileSidebar);
+  onReady(function () {
+    initDrawer({ id: 'mobileSidebar', action: 'toggle-sidebar', desktopQuery: '(min-width: 992px)' });
+  });
   onReady(initSearchToggle);
   onReady(initLogout);
   onReady(initLoginReturnUrl);
@@ -687,6 +744,9 @@
     showConfirm:          showConfirm,
     initPasswordToggle:   initPasswordToggle,
     initPasswordStrength: initPasswordStrength,
+    // Shared off-canvas controller — the admin/mod sidebar wires itself with
+    // this rather than carrying a second copy of the same logic.
+    initDrawer:           initDrawer,
     escapeHtml:           escapeHtml,
     errorMessage:         errorMessage,
     fillSelect:           fillSelect,

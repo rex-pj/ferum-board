@@ -114,15 +114,13 @@
   </div>
 </header>
 
-{# Mobile sidebar drawer #}
+{# Mobile sidebar drawer. Layout and hidden state live in _layout.css
+   (#mobileSidebar) — nothing inline, both so the panel can animate closed and
+   so a child theme can restyle it. #}
 <div id="mobileSidebar"
-     style="display:none;position:fixed;inset:var(--fr-topbar-height) 0 0 0;z-index:1040;flex-direction:row;"
      role="dialog" aria-modal="true" aria-label="{{ t(k='ui-navigation-menu') }}">
-  <div class="fr-sidebar-left"
-       style="box-shadow:4px 0 24px rgba(0,0,0,0.18);">
+  <div class="fr-sidebar-left">
     {% include "default/templates/partials/sidebar_left.html" %}
   </div>
-  <div class="fr-drawer-backdrop"
-       style="flex:1;background:rgba(0,0,0,0.45);"
-       data-action="toggle-sidebar"></div>
+  <div class="fr-drawer-backdrop" data-action="toggle-sidebar"></div>
 </div>

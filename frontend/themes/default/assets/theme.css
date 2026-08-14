@@ -604,6 +604,37 @@ body {
 
 /* ── Mobile sidebar drawer ────────────────────────────────────── */
 
+/* The overlay's layout lives here rather than inline on the element in
+   nav.html: an inline `display:none` cannot be transitioned out of (the panel
+   could only ever slide IN), and inline styles are also the one thing a child
+   theme can never restyle. */
+
+#mobileSidebar {
+  display: flex;
+  flex-direction: row;
+  position: fixed;
+  inset: var(--fr-topbar-height) 0 0 0;
+  z-index: 1040;
+  /* Hidden state is `visibility`, not `display`, so the panel can slide OUT as
+     well as in. visibility is a DISCRETE property, so it must flip late on
+     close (delay 0.26s) and immediately on open (delay 0s) — a plain
+     `transition: visibility 0.26s` flips it at the 50% mark and eats half the
+     animation. Do not "simplify" these delays. */
+  visibility: hidden;
+  transition: visibility 0s linear 0.26s;
+}
+
+#mobileSidebar.is-open {
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+
+/* Above lg the rail is back in the flow; the overlay has no reason to exist. */
+
+@media (min-width: 992px) {
+  #mobileSidebar { display: none; }
+}
+
 /* Re-enable the sidebar panel that the media query hides above   */
 
 #mobileSidebar .fr-sidebar-left {
@@ -612,9 +643,21 @@ body {
   position: relative;   /* override sticky — parent is already fixed */
   top: 0;
   height: 100%;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
   transform: translateX(-100%);
   transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
+  /* The drawer floats over page content, so it MUST be opaque — but it reuses
+     .fr-sidebar-left, and a child theme may legitimately make the DESKTOP rail
+     transparent (ferum-review does exactly that: the rail belongs to the canvas
+     plane). This ID selector outranks any child-theme class rule, and the
+     !important closes the remaining hole — a user-uploaded theme writing
+     `.fr-sidebar-left{background:transparent!important}` would otherwise punch
+     through and leave the drawer see-through again.
+     Themes wanting a different drawer colour set --fr-drawer-bg; var
+     substitution happens on the winning declaration, so the escape hatch
+     survives the !important. */
+  background: var(--fr-drawer-bg, var(--bs-body-bg)) !important;
 }
 
 #mobileSidebar.is-open .fr-sidebar-left {
@@ -624,12 +667,26 @@ body {
 /* Backdrop fade */
 
 #mobileSidebar .fr-drawer-backdrop {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.45);
   opacity: 0;
   transition: opacity 0.26s ease;
 }
 
 #mobileSidebar.is-open .fr-drawer-backdrop {
   opacity: 1;
+}
+
+/* Body scroll lock while any drawer is open — public or admin. _admin.css
+   compiles into this same asset, which admin pages load too, so one rule
+   serves both. */
+
+body.fr-drawer-open { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  #mobileSidebar,
+  #mobileSidebar .fr-sidebar-left,
+  #mobileSidebar .fr-drawer-backdrop { transition: none; }
 }
 
 /* ── Sidebar nav links (left sidebar) ────────────────────────── */
@@ -2836,16 +2893,89 @@ html, body { height: 100%; margin: 0; }
 
 .audit-log-popover .popover-body { padding: 1rem; min-width: 440px; }
 
-/* ── Mobile sidebar toggle ──────────────────────────────────── */
+/* ── Sidebar drawer (below lg) ──────────────────────────────────
+   `position: fixed` applies across this whole range, not just to the open
+   state: the base rule is display:flex, so a merely-hidden sidebar still in
+   the flow would reserve 220px of the .adm-shell row. Hidden state is
+   visibility + transform rather than `display`, so the panel can slide out as
+   well as in; visibility is a discrete property, hence the asymmetric 0s-delay
+   transitions — see the same pattern and the same warning in _layout.css. */
 
 @media (max-width: 991.98px) {
-  .adm-sidebar { display: none; }
-  .adm-sidebar.show {
-    display: flex;
+  .adm-sidebar {
     position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
     z-index: 1050;
     box-shadow: 0 0 24px rgba(0,0,0,.2);
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition: transform .26s cubic-bezier(.4, 0, .2, 1), visibility 0s linear .26s;
   }
+  .adm-sidebar.is-open {
+    visibility: visible;
+    transform: none;
+    transition: transform .26s cubic-bezier(.4, 0, .2, 1), visibility 0s linear 0s;
+  }
+
+  .adm-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1049;
+    background: rgba(0, 0, 0, .45);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .26s ease, visibility 0s linear .26s;
+  }
+  .adm-sidebar.is-open ~ .adm-sidebar-backdrop {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity .26s ease, visibility 0s linear 0s;
+  }
+
+  /* Keep the brand text clear of the close button. */
+  .adm-brand { padding-right: 3.25rem; }
+}
+
+/* Close button — sits in the brand row. .adm-nav owns the scroll (flex:1;
+   overflow-y:auto), so the brand row does not move and this stays put. Outside
+   the media query above because `.d-lg-none` in the markup handles hiding it on
+   desktop. */
+
+.adm-sidebar-close {
+  position: absolute;
+  top: calc((var(--adm-header-h) - var(--fr-tap-target)) / 2);
+  right: .5rem;
+  z-index: 1;
+  width: var(--fr-tap-target);
+  height: var(--fr-tap-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--bs-border-radius);
+  background: transparent;
+  color: var(--bs-secondary-color);
+  cursor: pointer;
+}
+
+.adm-sidebar-close:hover { background: var(--bs-secondary-bg); color: var(--bs-body-color); }
+
+.adm-sidebar-close:focus-visible { outline: 2px solid var(--ferum-primary); outline-offset: 2px; }
+
+/* NF-UX-02: .btn-sm caps the toggle at 36px (_bootstrap-overrides.css), and the
+   coarse-pointer bump below only covers table buttons. _admin.css is imported
+   after _bootstrap-overrides.css, so equal specificity resolves here. */
+
+.adm-sidebar-toggle {
+  min-width: var(--fr-tap-target);
+  min-height: var(--fr-tap-target);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-sidebar, .adm-sidebar-backdrop { transition: none; }
 }
 
 /* ── Touch target — WCAG 2.1 AA min 44px on touch devices ──── */
