@@ -9,6 +9,12 @@ test = false
 
 [features]
 s3 = ["dep:aws-sdk-s3", "dep:aws-config"]
+# Cloudflare R2. Turns on the SAME two crates as `s3` and adds none of its own:
+# `R2StorageService` shares `S3Compatible` (storage/s3_client.rs) for the SigV4,
+# checksum and path-style configuration, and differs only in which URLs it mints
+# and recognises. It is a separate feature rather than a mode of `s3` because
+# R2's public origin is not derivable from its API endpoint — see storage/r2.rs.
+r2 = ["dep:aws-sdk-s3", "dep:aws-config"]
 # Native Google Cloud Storage backend. Off by default, like `s3`: it is useless
 # without external infrastructure, which is the line this workspace draws
 # between opt-in and opt-out features.

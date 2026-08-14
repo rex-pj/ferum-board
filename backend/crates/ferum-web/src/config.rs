@@ -95,6 +95,28 @@ pub struct Config {
     /// other Google tool on the host. Used when `GCS_CREDENTIALS_FILE` is unset.
     pub google_application_credentials: Option<String>,
 
+    // ─── Cloudflare R2 (requires `--features r2`) ────────────────────────────
+    /// Presence of this is the toggle, and it wins over `GCS_BUCKET` and
+    /// `S3_ENDPOINT` — see the precedence comment in `startup.rs`.
+    pub r2_account_id: Option<String>,
+    /// Overrides the derived `https://{account}.r2.cloudflarestorage.com`, for
+    /// the jurisdiction-restricted endpoints. Rarely needed.
+    pub r2_endpoint: Option<String>,
+    pub r2_bucket: Option<String>,
+    /// Cloudflare calls these the Access Key ID and Secret Access Key of an R2
+    /// API token. Named for symmetry with the `S3_*` pair above.
+    pub r2_access_key: Option<String>,
+    pub r2_secret_key: Option<String>,
+    /// **Mandatory whenever `R2_ACCOUNT_ID` is set**, and the reason
+    /// `R2StorageService::new` is fallible.
+    ///
+    /// R2's S3 API endpoint serves signed requests only, so — alone among the
+    /// backends here — no public origin can be derived from the bucket. It must
+    /// be the bucket's r2.dev development URL or a custom domain bound to it.
+    /// `CDN_BASE_URL` deliberately does *not* stand in: this value is written
+    /// into content that is never rewritten, so it is worth naming explicitly.
+    pub r2_public_base_url: Option<String>,
+
     pub cdn_base_url: Option<String>,
     pub meilisearch_url: Option<String>,
     pub meilisearch_key: Option<String>,
@@ -240,6 +262,21 @@ impl std::fmt::Debug for Config {
                 "google_application_credentials",
                 &self.google_application_credentials,
             )
+            .field("r2_account_id", &self.r2_account_id)
+            .field("r2_endpoint", &self.r2_endpoint)
+            .field("r2_bucket", &self.r2_bucket)
+            .field(
+                "r2_access_key",
+                &self.r2_access_key.as_ref().map(|_| "[redacted]"),
+            )
+            .field(
+                "r2_secret_key",
+                &self.r2_secret_key.as_ref().map(|_| "[redacted]"),
+            )
+            // Not a secret, and printing it is what makes "why is every image
+            // broken?" answerable from a log — it is the one R2 value that
+            // cannot be inferred from anything else.
+            .field("r2_public_base_url", &self.r2_public_base_url)
             .field("cdn_base_url", &self.cdn_base_url)
             .field("meilisearch_url", &self.meilisearch_url)
             .field("meilisearch_index", &self.meilisearch_index)

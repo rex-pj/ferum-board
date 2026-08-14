@@ -10,8 +10,8 @@
 //! fails the same way round: a key that names nothing, so the reference lands on
 //! a file that does not exist while the real one goes uncounted.
 //!
-//! Every rule below is identical in all three backends, which is why it lives
-//! here rather than being spelled out three times. A copy that drifted would
+//! Every rule below is identical in all four backends, which is why it lives
+//! here rather than being spelled out four times. A copy that drifted would
 //! fail in the silent direction described above.
 //!
 //! # The two rules, and the order they must be applied in
@@ -117,9 +117,9 @@ pub(super) fn under_base<'a>(url: &'a str, base: &str) -> Option<UnderBase<'a>> 
 /// has ever minted a `/files/` URL under those, so admitting one would only
 /// widen what gets claimed.
 ///
-/// Only GCS has such bases — S3's single vendor base is an operator-set endpoint
-/// that a CDN could plausibly shadow, so it goes through [`under_base`] instead.
-#[cfg(feature = "gcs")]
+/// Used by GCS and R2 — S3's single vendor base is an operator-set endpoint that
+/// a CDN could plausibly shadow, so it goes through [`under_base`] instead.
+#[cfg(any(feature = "gcs", feature = "r2"))]
 pub(super) fn strip_base<'a>(url: &'a str, base: &str) -> Option<&'a str> {
     if base.is_empty() {
         return None;

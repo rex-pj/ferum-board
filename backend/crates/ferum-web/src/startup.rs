@@ -41,6 +41,8 @@ use ferum_domain::repositories::{SiteConfigRepository, ThemeRepository};
 use ferum_infrastructure::search::MeilisearchService;
 #[cfg(feature = "gcs")]
 use ferum_infrastructure::storage::GcsStorageService;
+#[cfg(feature = "r2")]
+use ferum_infrastructure::storage::R2StorageService;
 #[cfg(feature = "s3")]
 use ferum_infrastructure::storage::S3StorageService;
 use ferum_infrastructure::{
@@ -319,49 +321,98 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // Presence of the env var is the toggle, as with every other capability.
     // PRECEDENCE, when more than one backend is configured:
     //
-    //     GCS_BUCKET  >  S3_ENDPOINT  >  database
+    //     R2_ACCOUNT_ID  >  GCS_BUCKET  >  S3_ENDPOINT  >  database
     //
-    // GCS wins because it is the newer variable: an operator who adds it to a
-    // deployment that already had `S3_ENDPOINT` is expressing a new intent, and
-    // the reverse order would make that setting appear to do nothing. The loser
-    // is named in a WARN rather than ignored silently — a storage backend that
-    // is not the one you configured is not something to discover from a missing
-    // file weeks later.
+    // Newest variable wins: an operator who adds one to a deployment that
+    // already had an older one is expressing a new intent, and the reverse order
+    // would make that setting appear to do nothing. Every loser is named in a
+    // WARN rather than ignored silently — a storage backend that is not the one
+    // you configured is not something to discover from a missing file weeks
+    // later.
     //
     // A backend whose env var is set but whose cargo feature is off is also a
     // WARN, not a silent fall-through to the database, for the same reason.
-    // `unused_mut` in the lean build: with neither `gcs` nor `s3` compiled in,
-    // both assignments below are cfg'd away and this stays `None`.
+    // `unused_mut` in the lean build: with none of `r2`, `gcs` or `s3` compiled
+    // in, every assignment below is cfg'd away and these stay `None`.
     #[allow(unused_mut)]
     let mut storage: Option<Arc<dyn StorageService>> = None;
+    // `(backend name, public-read remediation)` for whichever backend won. Both
+    // used to be hardcoded for a two-backend world: the "also set" WARN said
+    // "GCS wins" whatever had actually won, and the remediation offered a
+    // `gcloud` command to operators who had never configured Google anything.
+    #[allow(unused_mut)]
+    let mut chosen: Option<(&'static str, &'static str)> = None;
 
-    if let Some(bucket) = config.gcs_bucket.as_deref() {
-        #[cfg(feature = "gcs")]
+    if let Some(account_id) = config.r2_account_id.as_deref() {
+        #[cfg(feature = "r2")]
         {
-            tracing::info!("GCS_BUCKET set — using Google Cloud Storage (bucket `{bucket}`)");
-            storage = Some(Arc::new(GcsStorageService::new(
-                bucket,
-                config.gcs_prefix.as_deref(),
-                config.cdn_base_url.as_deref(),
-                config.gcs_credentials_json.as_deref(),
-                config
-                    .gcs_credentials_file
-                    .as_deref()
-                    .or(config.google_application_credentials.as_deref()),
-            )?));
+            tracing::info!(
+                "R2_ACCOUNT_ID set — using Cloudflare R2 (account `{account_id}`, bucket `{}`)",
+                config.r2_bucket.as_deref().unwrap_or("<unset>")
+            );
+            storage = Some(Arc::new(
+                R2StorageService::new(
+                    account_id,
+                    config.r2_endpoint.as_deref(),
+                    config.r2_bucket.as_deref().unwrap_or_default(),
+                    config.r2_access_key.as_deref().unwrap_or_default(),
+                    config.r2_secret_key.as_deref().unwrap_or_default(),
+                    // Mandatory, and the `?` below is deliberate: R2's S3
+                    // endpoint serves signed requests only, so there is no
+                    // origin to fall back to. Starting anyway would write links
+                    // that can never load into post content that is never
+                    // rewritten — see `R2StorageService`.
+                    config.r2_public_base_url.as_deref(),
+                    config.cdn_base_url.as_deref(),
+                )
+                .await?,
+            ));
+            chosen = Some(("Cloudflare R2", R2_PUBLIC_READ_REMEDY));
         }
-        #[cfg(not(feature = "gcs"))]
+        #[cfg(not(feature = "r2"))]
         tracing::warn!(
-            "GCS_BUCKET is set (`{bucket}`) but this binary was built without \
-             `--features gcs`; the setting has no effect"
+            "R2_ACCOUNT_ID is set (`{account_id}`) but this binary was built without \
+             `--features r2`; the setting has no effect"
         );
     }
 
-    if let Some(endpoint) = config.s3_endpoint.as_deref() {
-        if storage.is_some() {
+    if let Some(bucket) = config.gcs_bucket.as_deref() {
+        if let Some((winner, _)) = chosen {
             tracing::warn!(
-                "Both GCS_BUCKET and S3_ENDPOINT are set. GCS wins; S3_ENDPOINT \
-                 (`{endpoint}`) is ignored — unset one of them"
+                "GCS_BUCKET is set (`{bucket}`) but {winner} was selected first \
+                 (precedence: R2 > GCS > S3 > database); GCS_BUCKET is ignored — \
+                 unset one of them"
+            );
+        } else {
+            #[cfg(feature = "gcs")]
+            {
+                tracing::info!("GCS_BUCKET set — using Google Cloud Storage (bucket `{bucket}`)");
+                storage = Some(Arc::new(GcsStorageService::new(
+                    bucket,
+                    config.gcs_prefix.as_deref(),
+                    config.cdn_base_url.as_deref(),
+                    config.gcs_credentials_json.as_deref(),
+                    config
+                        .gcs_credentials_file
+                        .as_deref()
+                        .or(config.google_application_credentials.as_deref()),
+                )?));
+                chosen = Some(("Google Cloud Storage", GCS_PUBLIC_READ_REMEDY));
+            }
+            #[cfg(not(feature = "gcs"))]
+            tracing::warn!(
+                "GCS_BUCKET is set (`{bucket}`) but this binary was built without \
+                 `--features gcs`; the setting has no effect"
+            );
+        }
+    }
+
+    if let Some(endpoint) = config.s3_endpoint.as_deref() {
+        if let Some((winner, _)) = chosen {
+            tracing::warn!(
+                "S3_ENDPOINT is set (`{endpoint}`) but {winner} was selected first \
+                 (precedence: R2 > GCS > S3 > database); S3_ENDPOINT is ignored — \
+                 unset one of them"
             );
         } else {
             #[cfg(feature = "s3")]
@@ -381,6 +432,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                     )
                     .await,
                 ));
+                chosen = Some(("S3 object storage", S3_PUBLIC_READ_REMEDY));
             }
             #[cfg(not(feature = "s3"))]
             tracing::warn!(
@@ -389,6 +441,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             );
         }
     }
+
+    // Database storage can still be probed — `CDN_BASE_URL` puts a third party
+    // in front of `/files/` — so it needs a remediation of its own rather than
+    // inheriting an object store's.
+    let public_read_remedy = chosen.map_or(DATABASE_PUBLIC_READ_REMEDY, |(_, remedy)| remedy);
 
     // Recorded here, where the answer is a fact rather than an inference. Post
     // attachments stage in the database and are promoted outward on publish, and
@@ -1160,7 +1217,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // answer is advisory, and binding process start to an outbound request would
     // turn a slow object store into a failed deploy.
     let upload_read_status = Arc::new(tokio::sync::RwLock::new(None));
-    spawn_public_read_probe(storage.clone(), upload_read_status.clone());
+    spawn_public_read_probe(
+        storage.clone(),
+        upload_read_status.clone(),
+        public_read_remedy,
+    );
 
     // After the mail transport has loaded, so this sees the provider that will
     // actually be used rather than the env vars it was derived from.
@@ -1264,6 +1325,46 @@ pub async fn maybe_run_headless_setup(config: &Config, state: &AppState) -> anyh
 /// to watch something that rarely moves.
 const PUBLIC_READ_RECHECK: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 
+// ─── Public-read remediation, one per backend ────────────────────────────────
+//
+// The WARN below tells an operator that every image on their site is a broken
+// link. It is only actionable if it names a fix for the store they actually
+// configured, so each backend carries its own text and the storage-selection
+// block picks one. This used to be a single hardcoded `gcloud` command, which
+// was noise to everybody not on Google Cloud.
+//
+// Each is gated with the feature whose arm references it, so a lean build
+// compiles none of them.
+
+#[cfg(feature = "r2")]
+const R2_PUBLIC_READ_REMEDY: &str =
+    "For Cloudflare R2: the S3 API endpoint never serves anonymous reads, so this is about \
+     the public origin. Check that R2_PUBLIC_BASE_URL names a domain actually bound to THIS \
+     bucket — in the Cloudflare dashboard, R2 → your bucket → Settings → Public access, \
+     either by enabling the r2.dev development URL (rate limited, non-production) or by \
+     connecting a custom domain.";
+
+#[cfg(feature = "gcs")]
+const GCS_PUBLIC_READ_REMEDY: &str =
+    "For Cloud Storage: `gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET \
+     --member=allUsers --role=roles/storage.legacyObjectReader`. Use that role, NOT \
+     objectViewer: objectViewer also carries storage.objects.list, which would let anyone on \
+     the internet enumerate every object in the bucket. With uniform bucket-level access \
+     enabled (recommended) the IAM binding is the only mechanism; per-object ACLs are ignored.";
+
+#[cfg(feature = "s3")]
+const S3_PUBLIC_READ_REMEDY: &str =
+    "For S3-compatible storage: grant anonymous `s3:GetObject` on the bucket — a bucket \
+     policy with `\"Principal\": \"*\"` limited to `s3:GetObject`, and nothing that also \
+     grants `s3:ListBucket`. On MinIO: `mc anonymous set download myminio/YOUR_BUCKET`.";
+
+/// Used when no object store is configured. Reachable because `CDN_BASE_URL`
+/// puts a cache in front of `/files/`, which this application serves itself.
+const DATABASE_PUBLIC_READ_REMEDY: &str =
+    "Uploads are served from this process, so the refusal came from whatever sits in front \
+     of it: check that CDN_BASE_URL points at a cache configured to forward /files/ to this \
+     app, and that no authentication rule covers that path.";
+
 /// Keeps `upload_read_status` current with whether an anonymous visitor can read
 /// what this deployment uploads.
 ///
@@ -1279,6 +1380,7 @@ const PUBLIC_READ_RECHECK: std::time::Duration = std::time::Duration::from_secs(
 fn spawn_public_read_probe(
     storage: Arc<dyn StorageService>,
     status: Arc<tokio::sync::RwLock<Option<PublicReadProbe>>>,
+    remedy: &'static str,
 ) {
     tokio::spawn(async move {
         let mut previous: Option<&'static str> = None;
@@ -1291,7 +1393,7 @@ fn spawn_public_read_probe(
             *status.write().await = Some(outcome.clone());
 
             if changed {
-                report_public_read(&outcome);
+                report_public_read(&outcome, remedy);
             }
 
             if same_origin {
@@ -1306,7 +1408,7 @@ fn spawn_public_read_probe(
     });
 }
 
-fn report_public_read(outcome: &PublicReadProbe) {
+fn report_public_read(outcome: &PublicReadProbe, remedy: &str) {
     match outcome {
         PublicReadProbe::SameOrigin => {}
         PublicReadProbe::Readable => {
@@ -1314,17 +1416,10 @@ fn report_public_read(outcome: &PublicReadProbe) {
         }
         PublicReadProbe::Forbidden => {
             tracing::warn!(
-                    "UPLOADS ARE NOT PUBLICLY READABLE. An anonymous request to the upload \
-                     origin was refused, which is exactly what every visitor's browser will \
-                     get: avatars, logos and post images will all be broken links, and \
-                     nothing on the server will report it. Grant anonymous read on the \
-                     bucket — for Cloud Storage: `gcloud storage buckets add-iam-policy-binding \
-                     gs://YOUR_BUCKET --member=allUsers \
-                     --role=roles/storage.legacyObjectReader`. Use that role, NOT \
-                     objectViewer: objectViewer also carries storage.objects.list, which would \
-                     let anyone on the internet enumerate every object in the bucket. With \
-                     uniform bucket-level access enabled (recommended) the IAM binding is the \
-                 only mechanism; per-object ACLs are ignored."
+                "UPLOADS ARE NOT PUBLICLY READABLE. An anonymous request to the upload \
+                 origin was refused, which is exactly what every visitor's browser will \
+                 get: avatars, logos and post images will all be broken links, and \
+                 nothing on the server will report it. {remedy}"
             );
         }
         PublicReadProbe::Inconclusive(why) => {
@@ -1348,7 +1443,8 @@ fn warn_degraded_capabilities(config: &Config, mail_provider: MailProvider) {
              correct for a single process, not for a horizontally scaled deployment"
         );
     }
-    if config.s3_endpoint.is_none() && config.gcs_bucket.is_none() {
+    if config.s3_endpoint.is_none() && config.gcs_bucket.is_none() && config.r2_account_id.is_none()
+    {
         // An HTTPS APP_URL is the same signal `cookies_secure` uses to decide a
         // deployment is real rather than a laptop.
         if config.app_url.starts_with("https://") {
@@ -1366,13 +1462,13 @@ fn warn_degraded_capabilities(config: &Config, mail_provider: MailProvider) {
                  limit prevents it. Either put a caching reverse proxy in front of /files/ — \
                  responses already carry `Cache-Control: immutable` and an ETag, so a warm \
                  cache keeps this traffic off the origin entirely — or move the bytes off \
-                 this process with S3_ENDPOINT (`--features s3`) or GCS_BUCKET \
-                 (`--features gcs`)."
+                 this process with R2_ACCOUNT_ID (`--features r2`), GCS_BUCKET \
+                 (`--features gcs`) or S3_ENDPOINT (`--features s3`)."
             );
         }
         tracing::warn!(
             "No object store: uploads stored in PostgreSQL — suitable for small-scale \
-             deployments. Set S3_ENDPOINT or GCS_BUCKET to move them out"
+             deployments. Set R2_ACCOUNT_ID, GCS_BUCKET or S3_ENDPOINT to move them out"
         );
     }
     if !config.rate_limit_enabled {

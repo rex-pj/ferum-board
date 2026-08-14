@@ -1,18 +1,17 @@
 
 use async_trait::async_trait;
-use aws_config::BehaviorVersion;
-use aws_sdk_s3::config::{Credentials, Region, RequestChecksumCalculation, ResponseChecksumValidation};
-use aws_sdk_s3::Client;
 use bytes::Bytes;
 
 use ferum_application::ports::StorageService;
 use ferum_application::shared::AppError;
 
+use super::s3_client::S3Compatible;
 use super::url_shapes::{strip_files_prefix, under_base, without_query_or_fragment};
 
 pub struct S3StorageService {
-    client: Client,
-    bucket: String,
+    /// The SDK client and the two operations, shared with `R2StorageService` —
+    /// see `s3_client.rs` for the signing and addressing configuration.
+    inner: S3Compatible,
     /// Origin that new URLs are minted under: the CDN when one is configured,
     /// otherwise the path-style bucket root at the endpoint.
     public_base: String,
@@ -44,49 +43,12 @@ impl S3StorageService {
         region: &str,
         cdn_base_url: Option<&str>,
     ) -> Self {
-        let credentials = Credentials::new(access_key, secret_key, None, None, "static");
-        let config = aws_config::defaults(BehaviorVersion::latest())
-            .region(Region::new(region.to_string()))
-            .credentials_provider(credentials)
-            .endpoint_url(endpoint)
-            // This adapter is only ever constructed when `S3_ENDPOINT` is set,
-            // i.e. it never talks to real AWS — its entire population is MinIO,
-            // Cloudflare R2 and Google Cloud Storage's interoperability
-            // endpoint. Since aws-sdk-s3 1.x the SDK computes a CRC32 by default
-            // and folds `x-amz-checksum-*` / `x-amz-sdk-checksum-algorithm` into
-            // the SigV4 canonical string. Those endpoints do not recognise the
-            // headers, so the signature they compute differs from ours and every
-            // request — list, put, delete — fails with `SignatureDoesNotMatch`
-            // or `XAmzContentChecksumMismatch`. `WhenRequired` restores the
-            // pre-2025 behaviour, which is what all three document as supported.
-            //
-            // The integrity this gives up is already provided end-to-end and
-            // more strongly: every key is a SHA-256 of the bytes stored under it
-            // (`storage_utils::cas_key`), so corrupted content cannot masquerade
-            // under a valid key.
-            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
-            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
-            .load()
-            .await;
+        let inner =
+            S3Compatible::connect("S3", endpoint, access_key, secret_key, bucket, region).await;
 
-        // Path-style addressing, for the same reason as the checksum settings
-        // above: this adapter never talks to real AWS, and none of the endpoints
-        // it does talk to are well served by the SDK's virtual-hosted default.
-        //
-        // * MinIO needs DNS for `{bucket}.{host}` that a compose file does not
-        //   provide, so virtual-hosted simply fails there.
-        // * A bucket name containing a dot breaks TLS under virtual-hosted —
-        //   `*.storage.googleapis.com` does not match `my.bucket.storage.…`.
-        // * It is what `public_url` already mints (`{endpoint}/{bucket}/{key}`),
-        //   so reads and writes now agree on one shape instead of two.
-        //
-        // AWS is deprecating path-style for new buckets, which does not apply
-        // here: this type is only ever constructed when `S3_ENDPOINT` is set.
-        let s3_config = aws_sdk_s3::config::Builder::from(&config)
-            .force_path_style(true)
-            .build();
-
-        // The same path-style shape the client above is pinned to.
+        // The same path-style shape `S3Compatible` pins the client to — see the
+        // `force_path_style` rationale in `s3_client.rs`. Reads and writes agree
+        // on one shape only because both come from that decision.
         let bucket_root = format!("{}/{}", endpoint.trim_end_matches('/'), bucket);
 
         let cdn_base = cdn_base_url
@@ -108,8 +70,7 @@ impl S3StorageService {
         accepted_bases.dedup();
 
         Self {
-            client: Client::from_conf(s3_config),
-            bucket: bucket.to_string(),
+            inner,
             public_base,
             accepted_bases,
         }
@@ -119,27 +80,11 @@ impl S3StorageService {
 #[async_trait]
 impl StorageService for S3StorageService {
     async fn put(&self, key: &str, data: Bytes, content_type: &str) -> Result<(), AppError> {
-        self.client
-            .put_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .content_type(content_type)
-            .body(data.into())
-            .send()
-            .await
-            .map_err(|e| AppError::internal(format!("S3 put error: {}", e)))?;
-        Ok(())
+        self.inner.put(key, data, content_type).await
     }
 
     async fn delete(&self, key: &str) -> Result<(), AppError> {
-        self.client
-            .delete_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(|e| AppError::internal(format!("S3 delete error: {}", e)))?;
-        Ok(())
+        self.inner.delete(key).await
     }
 
     fn public_url(&self, key: &str) -> String {

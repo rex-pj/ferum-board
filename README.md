@@ -29,7 +29,7 @@ Versions come from `backend/Cargo.toml` and `frontend/client-widgets/package.jso
 | Interactive widgets | Svelte 5.55 web components, built with Vite 8 |
 | CSS / icons | Bootstrap 5.3.3, Font Awesome Free 6.7.2, Alpine.js (all vendored under `frontend/static/`) |
 | Cache / rate limit | Redis 0.27 client — optional, in-memory fallback |
-| Object storage | `aws-sdk-s3` 1 (feature `s3`) or a GCS XML-API client (feature `gcs`) — optional, database fallback |
+| Object storage | `aws-sdk-s3` 1 (features `s3`, `r2`) or a GCS XML-API client (feature `gcs`) — optional, database fallback |
 | Search | PostgreSQL full-text search; Meilisearch 0.28 optional (feature `meilisearch`) |
 | Plugin scripting | `boa_engine` 0.19 (feature `script_plugins`, on by default) |
 
@@ -171,6 +171,7 @@ without it the variable is ignored and a warning is logged at startup.
 | `REDIS_URL` | — | in-memory | Shared cache and rate-limit counters across instances. Background jobs are `tokio::spawn` either way. |
 | `S3_ENDPOINT` + `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | **`s3`** | database `stored_files` table | S3-compatible object storage (AWS, MinIO, R2). |
 | `GCS_BUCKET` (+ `GCS_PREFIX`, credentials) | **`gcs`** | database `stored_files` table | Google Cloud Storage. **Wins over `S3_ENDPOINT`** when both are set. |
+| `R2_ACCOUNT_ID` + `R2_BUCKET`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`, **`R2_PUBLIC_BASE_URL`** | **`r2`** | database `stored_files` table | Cloudflare R2. **Wins over `GCS_BUCKET` and `S3_ENDPOINT`.** `R2_PUBLIC_BASE_URL` is mandatory and its absence **fails startup** — see below. |
 | `CDN_BASE_URL` | — | same-origin `/files/{key}` | Serve uploads from a CDN. |
 | `MEILISEARCH_URL` (+ `MEILISEARCH_KEY`, `MEILISEARCH_INDEX`, `MEILISEARCH_PRODUCT_INDEX`) | **`meilisearch`** | PostgreSQL FTS | Typo-tolerant, faceted search. |
 | `RATE_LIMIT_ENABLED` | — | `true` in code, `false` in `.env.example` | Per-IP rate limiting. |
@@ -183,6 +184,16 @@ GCS credentials, highest precedence first: `GCS_CREDENTIALS_JSON`,
 GCE/GKE/Cloud Run and the metadata server supplies the token. The bucket must be
 readable by `allUsers` — see the note in `.env.example` for the exact IAM binding and
 why it must be `legacyObjectReader`.
+
+R2 is the one backend whose public origin cannot be derived, which is why
+`R2_PUBLIC_BASE_URL` is mandatory rather than optional. Its S3 API endpoint serves
+*signed* requests only, so a URL built from it is refused for anonymous visitors — and
+because the minted URL is written into avatars, site config and stored post HTML that
+is never rewritten, starting without one would bake unrepairable links into your
+content. Point it at a custom domain bound to the bucket, or at the bucket's
+`https://pub-<hash>.r2.dev` development URL (rate limited and non-production;
+the app warns). `CDN_BASE_URL` is not a substitute, though it is still recognised on
+read so URLs written while the bucket was served through the S3 adapter keep resolving.
 
 ### Behaviour and logging
 
@@ -273,8 +284,9 @@ Do not run `package-examples` concurrently with `cargo test --workspace` — it 
 
 ### Cargo features
 
-Two axes with opposite defaults. `s3`/`gcs`/`meilisearch` need external infrastructure,
-so they are opt-in. `script_plugins`/`bulk_seed` work standalone, so they are opt-out.
+Two axes with opposite defaults. `s3`/`gcs`/`r2`/`meilisearch` need external
+infrastructure, so they are opt-in. `script_plugins`/`bulk_seed` work standalone, so
+they are opt-out.
 
 | Feature | Default | Compiles in |
 | --- | --- | --- |
@@ -282,6 +294,7 @@ so they are opt-in. `script_plugins`/`bulk_seed` work standalone, so they are op
 | `bulk_seed` | on | the setup wizard's example dataset |
 | `s3` | off | `S3StorageService` |
 | `gcs` | off | `GcsStorageService` |
+| `r2` | off | `R2StorageService` — shares the `aws-sdk-s3` client with `s3`, so enabling it adds no crate beyond that one |
 | `meilisearch` | off | `MeilisearchService` |
 
 ```bash

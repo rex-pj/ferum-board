@@ -54,8 +54,8 @@ FROM chef AS builder
 # Cargo features are opt-in for anything needing external infrastructure. `s3` is
 # the default here because deploy/docker-compose.prod.yml ships MinIO; without the
 # feature the S3_* variables are ignored and uploads silently land in Postgres.
-# Use `gcs` for Google Cloud Storage, or an empty string for database storage.
-# Add `,meilisearch` when running a Meilisearch instance.
+# Use `gcs` for Google Cloud Storage, `r2` for Cloudflare R2, or an empty string
+# for database storage. Add `,meilisearch` when running a Meilisearch instance.
 ARG FEATURES=s3
 
 # .cargo/config.toml MUST be in place before `cook`. It sets `rustflags` for the

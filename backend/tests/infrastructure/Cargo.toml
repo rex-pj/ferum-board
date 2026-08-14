@@ -10,10 +10,11 @@ publish = false
 doctest = false
 
 [features]
-# Forward to each adapter's own opt-in feature, so `storage/{gcs,s3}.rs` compile
-# only when the type under test exists.
+# Forward to each adapter's own opt-in feature, so `storage/{gcs,s3,r2}.rs`
+# compile only when the type under test exists.
 gcs = ["ferum-infrastructure/gcs"]
 s3 = ["ferum-infrastructure/s3"]
+r2 = ["ferum-infrastructure/r2"]
 
 [dependencies]
 ferum-domain = { path = "../../crates/ferum-domain" }

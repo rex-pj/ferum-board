@@ -21,6 +21,7 @@ test = false
 [features]
 s3 = ["ferum-infrastructure/s3"]
 gcs = ["ferum-infrastructure/gcs"]
+r2 = ["ferum-infrastructure/r2"]
 meilisearch = ["ferum-infrastructure/meilisearch"]
 script_plugins = ["ferum-infrastructure/script_plugins"]
 bulk_seed = ["ferum-infrastructure/bulk_seed"]

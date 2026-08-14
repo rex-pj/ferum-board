@@ -350,3 +350,100 @@ mod gcs {
     }
 }
 
+#[cfg(feature = "r2")]
+mod r2 {
+    use super::*;
+    use ferum_infrastructure::storage::R2StorageService;
+
+    const ACCOUNT: &str = "abc123def456";
+    const BUCKET: &str = "forum-uploads";
+    const API_ROOT: &str = "https://abc123def456.r2.cloudflarestorage.com";
+
+    async fn service(public_base: &str, cdn: Option<&str>) -> R2StorageService {
+        R2StorageService::new(
+            ACCOUNT,
+            None,
+            BUCKET,
+            "access",
+            "secret",
+            Some(public_base),
+            cdn,
+        )
+        .await
+        .expect("valid R2 configuration")
+    }
+
+    /// Unlike the other three backends there is no "no public origin" row: R2
+    /// cannot be constructed without one, which is the whole point of the
+    /// adapter. The axes that remain are which kind of public origin, and
+    /// whether a legacy `CDN_BASE_URL` is also being read.
+    #[tokio::test]
+    async fn round_trips_across_the_public_base_and_legacy_cdn_matrix() {
+        for public_base in [
+            "https://cdn.example.com",
+            // The natural choice when moving off database storage with URL
+            // shapes preserved — the base itself ends in `/files`.
+            "https://cdn.example.com/files",
+            // The Cloudflare-managed development URL.
+            "https://pub-0123456789abcdef.r2.dev",
+        ] {
+            for cdn in [None, Some("https://old-cdn.example.com")] {
+                assert_round_trips(
+                    &service(public_base, cdn).await,
+                    &format!("r2, public={public_base}, cdn={}", cdn.unwrap_or("<none>")),
+                );
+            }
+        }
+    }
+
+    /// R2 is multi-tenant on one hostname pattern, so the account id and the
+    /// bucket are the only things separating our objects from a stranger's.
+    #[tokio::test]
+    async fn rejects_urls_on_other_accounts_and_other_buckets() {
+        for cdn in [None, Some("https://old-cdn.example.com")] {
+            assert_rejects_foreign(
+                &service("https://cdn.example.com", cdn).await,
+                "r2",
+                &[
+                    // Right vendor and bucket, wrong account.
+                    format!(
+                        "https://someone-else.r2.cloudflarestorage.com/{BUCKET}/{}",
+                        KEYS[0]
+                    ),
+                    format!(
+                        "https://{BUCKET}.someone-else.r2.cloudflarestorage.com/{}",
+                        KEYS[0]
+                    ),
+                    // Right vendor and account, wrong bucket.
+                    format!("{API_ROOT}/someone-elses-bucket/{}", KEYS[0]),
+                    format!(
+                        "https://someone-elses-bucket.abc123def456.r2.cloudflarestorage.com/{}",
+                        KEYS[0]
+                    ),
+                    // An account id that merely starts with ours.
+                    format!(
+                        "https://abc123def456evil.r2.cloudflarestorage.com/{BUCKET}/{}",
+                        KEYS[0]
+                    ),
+                ],
+            );
+        }
+    }
+
+    /// The one thing no other backend has to promise: the served URL is never
+    /// under the signed-only API endpoint, whatever else is configured.
+    #[tokio::test]
+    async fn the_served_url_is_never_the_signed_only_api_endpoint() {
+        for cdn in [None, Some(API_ROOT)] {
+            let svc = service("https://cdn.example.com", cdn).await;
+            for key in KEYS {
+                let served = svc.public_url(key);
+                assert!(
+                    !served.contains("r2.cloudflarestorage.com"),
+                    "minted a signed-only URL for `{key}`: {served}"
+                );
+            }
+        }
+    }
+}
+
