@@ -68,6 +68,7 @@ error-slug-taken = That name is already in use.
 error-slug-reserved = That name is reserved and can't be used.
 error-category-nesting-too-deep =
     Categories can only be nested { $max_depth } levels deep.
+error-category-cannot-be-its-own-parent = A category cannot be its own parent.
 error-category-has-subcategories = This category still has subcategories and can't be deleted.
 error-category-has-threads = This category still has threads and can't be deleted.
 error-invalid-view-policy = That's not a valid visibility setting.

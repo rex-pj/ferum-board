@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use uuid::Uuid;
-use ferum_application::usecases::admin_usecase::{AdminUseCase, CreateCategoryCmd};
+use ferum_application::usecases::admin_usecase::{
+    AdminUseCase, CreateCategoryCmd, UpdateCategoryCmd,
+};
 use ferum_domain::AppError;
 use ferum_domain::models::category::{PostPolicy, ViewPolicy};
 use ferum_test_support::fixtures::{make_assignment, make_category, make_role, make_user, AuthUserBuilder};
@@ -106,6 +108,119 @@ async fn create_category_parent_already_has_parent_returns_422() {
     let result = uc.create_category(&actor, cmd).await;
     assert!(matches!(&result, Err(AppError::Invalid { code, .. }) if code == "category_nesting_too_deep"),
         "expected category_nesting_too_deep, got {result:?}");
+}
+
+// ─── update_category: the parent rules `create` enforces ────────────────────
+//
+// These were absent, so every rule `create_category` applies could be broken by
+// editing the category afterwards. Nothing walks the tree recursively, so a cycle
+// does not hang — it makes a category vanish from the admin page instead, since it
+// is then neither a root nor any root's child.
+
+fn update_parent_to(parent: Option<Uuid>) -> UpdateCategoryCmd {
+    UpdateCategoryCmd {
+        name: None,
+        slug: None,
+        description: None,
+        parent_id: Some(parent),
+        position: None,
+        view_policy: None,
+        post_policy: None,
+        color: None,
+    }
+}
+
+#[tokio::test]
+async fn update_category_cannot_make_a_category_its_own_parent() {
+    let actor = AuthUserBuilder::admin().build();
+    let cat_id = Uuid::new_v4();
+
+    let mut cats = MockCategoryRepository::new();
+    cats.expect_find_by_id()
+        .returning(move |_| Ok(Some(make_category(cat_id))));
+    cats.expect_update().never();
+
+    let uc = build_uc(
+        cats, MockRoleRepository::new(), MockUserRoleRepository::new(),
+        MockUserRepository::new(), MockCacheService::new(),
+    );
+    let result = uc.update_category(&actor, cat_id, update_parent_to(Some(cat_id))).await;
+    assert!(
+        matches!(&result, Err(AppError::Invalid { code, .. }) if code == "category_cannot_be_its_own_parent"),
+        "got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn update_category_cannot_nest_under_a_child() {
+    // Also the two-node cycle: for B to point back at A, B must be A's child, and
+    // a category that already has a parent cannot become one.
+    let actor = AuthUserBuilder::admin().build();
+    let cat_id = Uuid::new_v4();
+    let child_id = Uuid::new_v4();
+    let mut child = make_category(child_id);
+    child.parent_id = Some(cat_id);
+
+    let mut cats = MockCategoryRepository::new();
+    cats.expect_find_by_id().returning(move |q| {
+        Ok(Some(if q == child_id { child.clone() } else { make_category(cat_id) }))
+    });
+    cats.expect_update().never();
+
+    let uc = build_uc(
+        cats, MockRoleRepository::new(), MockUserRoleRepository::new(),
+        MockUserRepository::new(), MockCacheService::new(),
+    );
+    let result = uc.update_category(&actor, cat_id, update_parent_to(Some(child_id))).await;
+    assert!(
+        matches!(&result, Err(AppError::Invalid { code, .. }) if code == "category_nesting_too_deep"),
+        "got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn update_category_cannot_move_a_parent_under_another_root() {
+    // The check `create` does not need: this category already has children, so
+    // giving it a parent would build a three-level chain.
+    let actor = AuthUserBuilder::admin().build();
+    let cat_id = Uuid::new_v4();
+    let other_root = Uuid::new_v4();
+
+    let mut cats = MockCategoryRepository::new();
+    cats.expect_find_by_id()
+        .returning(move |q| Ok(Some(make_category(q))));
+    cats.expect_has_children().returning(|_| Ok(true));
+    cats.expect_update().never();
+
+    let uc = build_uc(
+        cats, MockRoleRepository::new(), MockUserRoleRepository::new(),
+        MockUserRepository::new(), MockCacheService::new(),
+    );
+    let result = uc.update_category(&actor, cat_id, update_parent_to(Some(other_root))).await;
+    assert!(
+        matches!(&result, Err(AppError::Invalid { code, .. }) if code == "category_nesting_too_deep"),
+        "got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn update_category_can_still_clear_its_parent() {
+    // `Some(None)` detaches and must never be blocked — otherwise a category that
+    // fell foul of the rules above could not be repaired through the UI.
+    let actor = AuthUserBuilder::admin().build();
+    let cat_id = Uuid::new_v4();
+
+    let mut cats = MockCategoryRepository::new();
+    cats.expect_find_by_id()
+        .returning(move |q| Ok(Some(make_category(q))));
+    cats.expect_update()
+        .returning(move |_, _| Ok(make_category(cat_id)));
+
+    let uc = build_uc(
+        cats, MockRoleRepository::new(), MockUserRoleRepository::new(),
+        MockUserRepository::new(), MockCacheService::new(),
+    );
+    assert!(uc.update_category(&actor, cat_id, update_parent_to(None)).await.is_ok());
 }
 
 #[tokio::test]

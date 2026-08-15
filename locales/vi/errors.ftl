@@ -78,6 +78,7 @@ error-invalid-trust-level = Chọn một trong: new, basic, member, regular ho�
 error-slug-reserved = Tên này đã được dành riêng và không thể sử dụng.
 error-category-nesting-too-deep =
     Chuyên mục chỉ có thể lồng nhau tối đa { $max_depth } cấp.
+error-category-cannot-be-its-own-parent = Một chuyên mục không thể là cha của chính nó.
 error-category-has-subcategories = Chuyên mục này vẫn còn chuyên mục con nên không thể xóa.
 error-category-has-threads = Chuyên mục này vẫn còn chủ đề nên không thể xóa.
 error-invalid-view-policy = Đây không phải là thiết lập hiển thị hợp lệ.

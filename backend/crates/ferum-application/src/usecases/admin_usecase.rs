@@ -150,6 +150,37 @@ impl AdminUseCase {
             }
         }
 
+        // `create` checks the parent; this did not, so the same rules could be
+        // broken by editing afterwards. `Some(None)` clears the parent and is
+        // always fine; `None` leaves it untouched.
+        if let Some(Some(new_parent_id)) = cmd.parent_id {
+            if new_parent_id == id {
+                return Err(AppError::invalid("category_cannot_be_its_own_parent"));
+            }
+
+            let parent = self.categories.find_by_id(new_parent_id).await?.or_not_found()?;
+
+            // Same rule as `create`. It also rules out a two-node cycle: for
+            // B to point back at A, B would have to be A's child, and a category
+            // with a parent cannot be one.
+            if parent.parent_id.is_some() {
+                return Err(AppError::invalid_with(
+                    "category_nesting_too_deep",
+                    [("max_depth", crate::constants::MAX_CATEGORY_DEPTH.into())],
+                ));
+            }
+
+            // Only `update` needs this: a category that already has children
+            // would become the middle of a three-level chain. A newly created one
+            // has none, which is why `create` gets away without it.
+            if self.categories.has_children(id).await? {
+                return Err(AppError::invalid_with(
+                    "category_nesting_too_deep",
+                    [("max_depth", crate::constants::MAX_CATEGORY_DEPTH.into())],
+                ));
+            }
+        }
+
         let category = self.categories
             .update(
                 id,
