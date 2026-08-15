@@ -463,8 +463,36 @@ that was reviewed.
 ### `[config_schema]`
 
 A JSON-Schema-shaped object: `type`, `required`, and `properties.<name>` entries with
-`type`, `title`, `description` and `default`. `default` values are seeded into the
-plugin's config at install, so a plugin can be useful the moment it is activated.
+`type`, `title`, `description`, `default` and `secret`. `default` values are seeded into
+the plugin's config at install, so a plugin can be useful the moment it is activated.
+
+#### `secret = true` — mark every credential
+
+```toml
+[config_schema.properties.webhook_url]
+type   = "string"
+title  = "Discord Webhook URL"
+secret = true
+```
+
+A field carrying `secret = true` is **encrypted at rest** in `plugins.config`
+(XChaCha20-Poly1305) whenever the operator has set `SECRET_ENCRYPTION_KEY`. Without the
+flag the value sits in plaintext in the table, and therefore in every database backup.
+
+Set it on anything that grants access on possession: passwords, API keys, bearer tokens,
+and **capability URLs** — a Discord webhook URL needs no further authentication, so
+holding it is holding the credential. When unsure, set it; the cost is nil, and the
+value still round-trips through the admin config editor in the clear.
+
+Two consequences worth knowing:
+
+- The ciphertext is bound to *this plugin's slug and this field name*, so a value copied
+  between plugins or between fields fails to decrypt rather than silently working.
+- Adding the flag to a plugin that is already installed is safe. Existing plaintext reads
+  back unchanged and is sealed on the next config save or the next restart.
+
+Ferum cannot infer which fields are credentials — only the manifest knows — so an
+unflagged secret is stored exactly as written.
 
 ### `[ui_slots.<slot_name>]`
 
@@ -528,6 +556,15 @@ Ferum.db.query(sql, params)
 
 `Ferum.storage` and `Ferum.cache` are namespaced by plugin at the repository layer. A
 plugin cannot read another plugin's keys regardless of what key string it passes.
+
+**Neither is encrypted at rest, and neither may hold a credential.** Namespacing keeps
+other *plugins* out; it does nothing about a database dump, a backup, or anyone with
+read access to `plugin_storage`. There is no `secret = true` equivalent here, because
+the values are arbitrary JSON written at runtime and nothing declares their shape in
+advance. A token a plugin needs to keep must live in a `secret = true` **config** field,
+which the operator sets and Ferum encrypts. The same applies to `Ferum.log.*` — the
+`ctx` object is stored verbatim in `plugin_logs` and shown in the admin UI, so never log
+a credential, a session token, or a raw request body that might carry one.
 
 Outbound HTTP is guarded twice: the host must be in the granted `http_allowlist`, and
 the request then goes through a client pinned to the resolved address, so a name that

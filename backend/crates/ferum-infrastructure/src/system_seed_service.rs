@@ -11,6 +11,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
+use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
     TransactionTrait,
@@ -28,11 +29,14 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::role::{PERMISSIONS, SYSTEM_ROLES};
 
 use crate::crypto::{
-    site_config_aad, SecretCipher, ENCRYPTED_CONFIG_KEYS, SEALED_PREFIX, WEBHOOK_SECRET_AAD,
+    plugin_config_aad, site_config_aad, SecretCipher, ENCRYPTED_CONFIG_KEYS, SEALED_PREFIX,
+    WEBHOOK_SECRET_AAD,
 };
 use crate::entities::{
-    permissions, product_categories, role_permissions, roles, site_config, themes, webhooks,
+    permissions, plugins, product_categories, role_permissions, roles, site_config, themes,
+    webhooks,
 };
+use ferum_domain::models::plugin::secret_config_keys;
 use crate::repositories::user_repository::domain_trust_to_entity;
 
 /// Fixed so the built-in theme keeps one identity across reinstalls — a theme
@@ -185,6 +189,44 @@ impl PgSystemSeedService {
             rewritten += 1;
         }
 
+        // Plugin credentials. Unlike the two above, which fields are secret is not
+        // known here — it comes from each plugin's own manifest.
+        for row in plugins::Entity::find().all(&txn).await? {
+            let keys = secret_config_keys(&row.manifest);
+            if keys.is_empty() {
+                continue;
+            }
+            let mut config = row.config.clone();
+            let Some(obj) = config.as_object_mut() else {
+                continue;
+            };
+            let mut touched = false;
+            for key in keys {
+                let Some(stored) = obj.get(&key).and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                if stored.is_empty() {
+                    continue;
+                }
+                let aad = plugin_config_aad(&row.slug, &key);
+                let opened = cipher.open(&aad, stored)?;
+                if !opened.needs_reseal {
+                    continue;
+                }
+                let sealed = cipher.seal(&aad, &opened.value)?;
+                obj.insert(key, serde_json::Value::String(sealed));
+                touched = true;
+            }
+            if !touched {
+                continue;
+            }
+            let mut active: plugins::ActiveModel = row.into();
+            active.config = Set(config);
+            active.updated_at = Set(Utc::now().fixed_offset());
+            active.update(&txn).await?;
+            rewritten += 1;
+        }
+
         txn.commit().await?;
         // A count, never a value.
         if rewritten > 0 {
@@ -221,6 +263,20 @@ impl PgSystemSeedService {
                 }
             }
         }
+        // Plugin config. Every plugin is scanned rather than the first one found:
+        // `LIKE '%enc:v1:%'` cannot say *which* field is sealed, and a plugin with
+        // no secret fields at all is the common case, so a one-row probe would
+        // usually verify nothing.
+        for row in plugins::Entity::find().all(&self.db).await? {
+            for key in secret_config_keys(&row.manifest) {
+                let Some(stored) = row.config.get(&key).and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                if SecretCipher::is_sealed(stored) {
+                    cipher.open(&plugin_config_aad(&row.slug, &key), stored)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -241,7 +297,22 @@ impl PgSystemSeedService {
             .filter(webhooks::Column::Secret.starts_with(SEALED_PREFIX))
             .one(&self.db)
             .await?;
-        Ok(sealed_webhook.is_some())
+        if sealed_webhook.is_some() {
+            return Ok(true);
+        }
+        // `contains`, not `starts_with`: the sealed value is a field *inside* a
+        // JSONB document, so the prefix appears mid-string. A false positive here
+        // would need a plugin storing the literal text `enc:v1:` in its config,
+        // and the cost of one is a refused boot with an actionable message — the
+        // right way round for a check whose job is to catch a removed key.
+        let sealed_plugin = plugins::Entity::find()
+            .filter(Expr::cust_with_values(
+                "plugins.config::text LIKE $1",
+                [format!("%{SEALED_PREFIX}%")],
+            ))
+            .one(&self.db)
+            .await?;
+        Ok(sealed_plugin.is_some())
     }
 
     /// Insert missing system roles. An existing row is never touched: admins

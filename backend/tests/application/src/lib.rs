@@ -15,6 +15,7 @@ mod reaction_usecase;
 mod role_usecase;
 mod search_usecase;
 mod setup_usecase;
+mod shared;
 mod tag_usecase;
 mod thread_usecase;
 mod user_usecase;

@@ -353,6 +353,52 @@ Using a predictable PRNG instead of a CSPRNG to generate secret values — an at
 
 ---
 
+### 5.4 Data-at-Rest Classification (all sensitive columns, not just passwords)
+
+**What it is:**
+Sections 5.1–5.3 only check password hashing, algorithm strength, and randomness. They do
+**not** verify that every other sensitive column in the schema is handled correctly. A column
+that should be hashed or encrypted but is stored as plain text is invisible to 5.1–5.3 and
+will silently pass the rest of the audit.
+
+**Where it appears:** Any table holding third-party tokens, webhook secrets, PII, or
+anything a support engineer or a leaked DB dump should not be able to read directly.
+
+**How to check:**
+
+- [ ] Inventory every table/column in `migration/` and `entity/` (Sea-ORM). For each column,
+      assign one classification:
+  - **Must be hashed** (one-way, never reversed): passwords, verification-only API keys
+  - **Must be encrypted at rest** (needs to be reversed/used later): OAuth/refresh tokens,
+    payment provider tokens, outbound API keys, anything a support team should not read
+    directly from a DB dump
+  - **Must be masked/truncated** in logs and API responses but may stay plaintext in DB:
+    email, IP address, phone number
+  - **Fine as plaintext**: display name, public bio, thread content
+- [ ] For every column classified "must be hashed": confirm it is actually hashed today, not
+      plaintext
+- [ ] For every column classified "must be encrypted": confirm the algorithm (must be a
+      vetted scheme, e.g. AES-256-GCM — reject XOR, ECB mode, base64-only "encryption"), and
+      confirm the encryption key is stored **outside** the database (env var / KMS / secrets
+      manager), never in the same table or a sibling config table
+- [ ] If a field was migrated from plaintext to encrypted/hashed, check for leftover
+      plaintext copies in old migrations, `audit_logs`, or backup/export code paths
+- [ ] IP addresses stored for login/audit logs: check retention — kept indefinitely, or
+      rotated/anonymized after N days per the project's stated privacy policy
+- [ ] Webhook `secret`, plugin capability tokens, and SMTP credentials that live in the
+      database (not just `.env`) are encrypted at rest, not plaintext columns
+
+**Output:** a table — `column | table | classification | current state (plaintext / hashed /
+encrypted) | verdict (PASS/FAIL) | recommended fix`.
+
+**PASS:** every column requiring hashing is hashed; every column requiring encryption uses a
+vetted algorithm with the key stored outside the database table it protects.
+
+**FAIL:** any column that should be hashed/encrypted is found as plaintext, or the encryption
+key sits in the same DB/table as the encrypted data it protects.
+
+---
+
 ## 6. Security Misconfiguration
 
 ### 6.1 Disable Security Features
@@ -809,6 +855,7 @@ All items below must PASS before every release:
 | No `\| safe` on user fields     | `grep -rn "\| safe" frontend/`                               |
 | No hardcoded secrets            | `grep -rn 'JWT_SECRET\s*=\s*"' backend/`                     |
 | Security headers present        | Manual: `curl -I http://localhost:5173/`                     |
+| Sensitive columns classified (5.4) | Manual: review data-at-rest classification table         |
 
 ---
 

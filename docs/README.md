@@ -11,6 +11,7 @@ Setup, configuration and day-to-day commands live in the
 | [db-entities-and-testing.md](db-entities-and-testing.md) | Regenerating Sea-ORM entities from migrations, and the per-test database harness. |
 | [i18n.md](i18n.md) | Locale catalogs, key namespaces, locale negotiation, `/admin/languages`. |
 | [security-audit-checklist.md](security-audit-checklist.md) | Pre-release audit procedure, with PASS/FAIL criteria per vulnerability class. |
+| [security-audit-5.4-data-at-rest.md](security-audit-5.4-data-at-rest.md) | Result of the §5.4 audit: every sensitive column classified, four findings, and the production status of `SECRET_ENCRYPTION_KEY`. |
 
 Removed in 2026-08: `i18n-plan.md`, `unit-testing-plan.md` and `marketplace-spec.md`.
 The first two were design plans that have since been implemented — `i18n.md` above

@@ -64,8 +64,16 @@ it — an unverified domain is the most common cause of a rejected send.
 
 ### `SECRET_ENCRYPTION_KEY`
 
-64 hex characters (32 bytes). Encrypts the only two secrets this app stores in
-PostgreSQL: the SMTP password in `site_config`, and each webhook's HMAC key.
+64 hex characters (32 bytes). **Required once `APP_URL` is https** — the app
+refuses to start without it. Optional on http, where its absence is a WARN.
+
+Encrypts every secret this app stores in PostgreSQL:
+
+| Value | Where |
+| --- | --- |
+| SMTP password | `site_config`, key `smtp_pass` |
+| Webhook HMAC key | `webhooks.secret` |
+| Plugin credentials | `plugins.config`, each field the plugin's manifest marks `secret = true` |
 
 **What it protects:** someone who reads the database *without* reading this
 environment — a dump, a backup on third-party storage, a leaked replica. It does
@@ -74,8 +82,20 @@ nothing against an attacker already on the host, where the key is readable.
 Enabling it needs no migration: existing plaintext rows are read unchanged and
 converted on the next start.
 
-**Losing the key makes those two values unrecoverable.** Nothing else in the
+**Losing the key makes those values unrecoverable.** Nothing else in the
 database is encrypted, so posts, users and threads are never at risk.
+
+**Turning it on does not protect backups already taken.** The sweep updates rows
+in place, so under MVCC the old plaintext tuples survive until `VACUUM`, and any
+dump made earlier is unaffected. If a pre-encryption backup may have leaked,
+rotate the SMTP password, every webhook secret and every plugin credential —
+encrypting the current values does nothing for copies already elsewhere.
+
+**A plugin credential is only encrypted if its manifest says so.** Which fields
+are secret cannot be a fixed list here: plugin config is defined by whoever wrote
+the plugin. See `plugin-system/plugin-developer-guide.md` § `secret = true`. A
+plugin that omits the flag stores its credential in plaintext even with this key
+set.
 
 ### `SECRET_ENCRYPTION_KEY_PREVIOUS`
 

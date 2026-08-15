@@ -17,6 +17,12 @@ required = ["webhook_url"]
 type        = "string"
 title       = "Discord Webhook URL"
 description = "The Discord channel webhook URL (Settings → Integrations → Webhooks)."
+# This URL IS a credential: anyone holding it can post into the channel, with no
+# further authentication. `secret = true` makes Ferum encrypt it at rest in
+# plugins.config whenever SECRET_ENCRYPTION_KEY is configured, so it does not sit
+# in plaintext in every database backup. Set it on any config field that is a
+# password, token, API key or capability URL.
+secret      = true
 
 [config_schema.properties.notify_on_post]
 type        = "boolean"

@@ -38,3 +38,18 @@ pub fn site_config_aad(key: &str) -> Vec<u8> {
 /// Distinct from every `site_config` AAD, so a secret lifted from one table
 /// cannot be decrypted as a value of the other.
 pub const WEBHOOK_SECRET_AAD: &[u8] = b"webhooks.secret";
+
+/// Additional authenticated data for one secret field in `plugins.config`.
+///
+/// Binds the ciphertext to **both** the plugin and the field. Binding only the
+/// field would let an operator with database access move a sealed credential
+/// between two installs of the same plugin — or between two plugins that happen
+/// to name a config key `api_key` — and have it decrypt cleanly into a context
+/// its owner never granted.
+///
+/// The slug is used rather than the plugin's UUID so the value survives an
+/// uninstall/reinstall cycle, which mints a new id for what the operator
+/// reasonably considers the same plugin.
+pub fn plugin_config_aad(plugin_slug: &str, key: &str) -> Vec<u8> {
+    format!("plugins.config:{plugin_slug}:{key}").into_bytes()
+}

@@ -124,6 +124,106 @@ fn folding_is_documented_where_it_is_lossy() {
     );
 }
 
+// ─── Which config fields are credentials ────────────────────────────────────
+//
+// `secret_config_keys` decides what the plugin repository encrypts at rest. Two
+// failure directions, and they are not symmetric: missing a key leaves a
+// credential in plaintext in every backup, while inventing one seals a value the
+// admin expects to read back and edit. Both are silent.
+
+use ferum_domain::models::plugin::secret_config_keys;
+
+#[test]
+fn reads_the_secret_flag_from_config_schema() {
+    let manifest = serde_json::json!({
+        "config_schema": {
+            "properties": {
+                "webhook_url":    { "type": "string",  "secret": true },
+                "notify_on_post": { "type": "boolean" },
+                "username":       { "type": "string",  "secret": false },
+            }
+        }
+    });
+    assert_eq!(secret_config_keys(&manifest), vec!["webhook_url"]);
+}
+
+#[test]
+fn only_a_literal_true_marks_a_field_secret() {
+    // A truthy-looking value is not a flag. TOML has real booleans, so `secret =
+    // "true"` is an author error — and silently honouring it would mean the
+    // opposite mistake (`secret = "false"`) also seals, which is worse.
+    for spec in [
+        serde_json::json!({ "secret": "true" }),
+        serde_json::json!({ "secret": 1 }),
+        serde_json::json!({ "secret": "yes" }),
+    ] {
+        let manifest = serde_json::json!({ "config_schema": { "properties": { "k": spec } } });
+        assert!(
+            secret_config_keys(&manifest).is_empty(),
+            "only a boolean true may mark a field secret"
+        );
+    }
+}
+
+#[test]
+fn a_manifest_without_a_config_schema_yields_nothing() {
+    // The common case — most plugins take no configuration at all. Returning
+    // empty rather than erroring is what keeps this safe to call on every read.
+    for manifest in [
+        serde_json::json!({}),
+        serde_json::json!({ "config_schema": {} }),
+        serde_json::json!({ "config_schema": { "properties": {} } }),
+        // Malformed shapes must not make an installed plugin unreadable.
+        serde_json::json!({ "config_schema": "nonsense" }),
+        serde_json::json!({ "config_schema": { "properties": ["a", "b"] } }),
+        serde_json::json!({ "config_schema": { "properties": { "k": "not-an-object" } } }),
+    ] {
+        assert!(secret_config_keys(&manifest).is_empty(), "{manifest}");
+    }
+}
+
+#[test]
+fn the_result_is_sorted_so_it_does_not_depend_on_map_order() {
+    let manifest = serde_json::json!({
+        "config_schema": {
+            "properties": {
+                "zeta":  { "secret": true },
+                "alpha": { "secret": true },
+                "mid":   { "secret": true },
+            }
+        }
+    });
+    assert_eq!(secret_config_keys(&manifest), vec!["alpha", "mid", "zeta"]);
+}
+
+#[test]
+fn the_shipped_discord_notifier_marks_its_webhook_url_secret() {
+    // The one credential among the example plugins. A Discord webhook URL needs
+    // no further authentication — holding it is enough to post to the channel —
+    // so it must not sit in plaintext in `plugins.config`.
+    let path = examples_plugins_dir()
+        .join("discord-notifier")
+        .join("plugin.toml");
+    let src = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+
+    let webhook_section = src
+        .split("[config_schema.properties.")
+        .find(|s| s.starts_with("webhook_url]"))
+        .expect("discord-notifier declares a webhook_url config field");
+    // Stop at the next section so a `secret = true` further down cannot satisfy
+    // this by accident.
+    let body = webhook_section.split("\n[").next().unwrap();
+
+    assert!(
+        body.lines()
+            .any(|l| l.split('#').next().unwrap().trim() == "secret      = true"
+                || l.split('#').next().unwrap().replace(' ', "") == "secret=true"),
+        "discord-notifier's webhook_url must carry `secret = true`; without it the \
+         credential is stored in plaintext even when SECRET_ENCRYPTION_KEY is set"
+    );
+}
+
 // ─── Drift guard against the shipped bundles ────────────────────────────────
 //
 // The assertions above pin the *rule*. They cannot catch the other half of the

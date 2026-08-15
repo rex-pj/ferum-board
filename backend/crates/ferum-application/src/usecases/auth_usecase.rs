@@ -14,7 +14,7 @@ use crate::ports::{
     NullPluginRuntime, PasswordHasher, PluginHookRuntime, TokenService,
 };
 use super::{build_access_token_claims, refresh_token_key};
-use crate::shared::{AppError, OptionExt};
+use crate::shared::{email_log_key, AppError, OptionExt};
 use ferum_domain::models::user::{TrustLevel, User};
 use ferum_domain::repositories::role_repository::RoleRepository;
 use ferum_domain::repositories::site_config_repository::{
@@ -267,7 +267,10 @@ impl AuthUseCase {
                 .hasher
                 .verify(&cmd.password, "$2b$12$invalidhashpaddinginvalidhashpa")
                 .await;
-            tracing::warn!(email = %cmd.email.to_lowercase(), "login failed: unknown email");
+            // Hashed, not raw: this branch fires for addresses that have no
+            // account, and users paste passwords into this field. See
+            // `email_log_key`.
+            tracing::warn!(email = %email_log_key(&cmd.email), "login failed: unknown email");
             return Err(AppError::Unauthorized);
         }
         let mut user = user_opt.unwrap();

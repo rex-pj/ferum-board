@@ -874,11 +874,19 @@ rm /tmp/f.dump.gz
 
 ### Secrets at rest
 
-`SECRET_ENCRYPTION_KEY` encrypts the only two secrets this application stores in
-PostgreSQL: the SMTP password in `site_config`, and each webhook's HMAC key. It is
+`SECRET_ENCRYPTION_KEY` encrypts every secret this application stores in
+PostgreSQL: the SMTP password in `site_config`, each webhook's HMAC key, and every
+plugin config field whose manifest marks it `secret = true` (the Discord notifier's
+webhook URL is one — holding it is enough to post to the channel). It is
 XChaCha20-Poly1305 with a random nonce per value, and each ciphertext is bound to
-the row it belongs to, so one moved between columns fails authentication rather
-than decrypting.
+the row it belongs to, so one moved between columns — or between plugins — fails
+authentication rather than decrypting.
+
+**It is mandatory on any https deployment: the app refuses to start without it.**
+That check does not wait until there is a secret to protect. It fires on an empty
+database, at first deploy, because the alternative is a boot that succeeds right up
+until the operator saves SMTP settings — the worst possible moment to discover the
+requirement. On an http `APP_URL` (a laptop) it stays a warning.
 
 It exists for the case the section above creates: **a `pg_dump` sitting in a
 bucket.** It does not protect against an attacker on the box, where the key is in
@@ -891,8 +899,13 @@ recorded *somewhere*, because `.env.prod` on a single VM is not a backup of it.
 
 **Enabling it on a running forum needs no migration.** Plaintext values are read
 unchanged, and the first start with the key set converts them in one transaction
-and logs the count. Absent the key, everything behaves exactly as before, and a
-warning says so at startup. The admin Email tab reports which state you are in.
+and logs the count. The admin Email tab reports which state you are in.
+
+**But it does nothing for backups already taken.** The sweep updates rows in place,
+so the old plaintext tuples survive until `VACUUM` and every earlier `pg_dump` is
+untouched. If a pre-encryption backup may have leaked, rotate the SMTP password,
+every webhook secret and every plugin credential — encrypting today's values does
+not help copies that already left.
 
 **Startup refuses to boot** if the key does not match the data, or if it is missing
 while sealed values exist. That is deliberate: continuing would leave the site

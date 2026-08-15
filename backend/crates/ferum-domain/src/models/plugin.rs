@@ -135,6 +135,47 @@ pub fn ui_slot_element_tag(plugin_slug: &str, slot_name: &str) -> String {
     )
 }
 
+/// Config keys a plugin's manifest marks as credentials, sorted and deduplicated.
+///
+/// Read from `[config_schema.properties.<key>] secret = true` in `plugin.toml`.
+/// The repository seals exactly these values in `plugins.config` before they
+/// reach the database.
+///
+/// **Which keys are secret cannot be a fixed list the way `ENCRYPTED_CONFIG_KEYS`
+/// is.** Site config has a closed set of keys defined in this repository; plugin
+/// config is defined by whoever wrote the plugin, so the manifest is the only
+/// place the answer can live. That does mean a plugin author who omits the flag
+/// gets no protection — the same trade as a plugin that declares no capabilities,
+/// and the reason the flag is documented next to `required` where it is hard to
+/// miss.
+///
+/// Returns an empty vec for any manifest shape that does not match, rather than
+/// erroring: a manifest with no `[config_schema]` is the common case, and a
+/// malformed one must not make an installed plugin unreadable.
+pub fn secret_config_keys(manifest: &serde_json::Value) -> Vec<String> {
+    let Some(properties) = manifest
+        .get("config_schema")
+        .and_then(|s| s.get("properties"))
+        .and_then(|p| p.as_object())
+    else {
+        return Vec::new();
+    };
+
+    let mut keys: Vec<String> = properties
+        .iter()
+        .filter(|(_, spec)| spec.get("secret").and_then(|v| v.as_bool()) == Some(true))
+        .map(|(key, _)| key.clone())
+        .collect();
+
+    // A serde_json map preserves insertion order only with the `preserve_order`
+    // feature, which this workspace does not enable — so without sorting, the
+    // order here follows the map's internal layout. Sealing does not care, but a
+    // test asserting on this would be flaky, and so would any future log line.
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
 #[derive(Clone, Debug)]
 pub struct PluginLog {
     pub id: Uuid,

@@ -4,7 +4,8 @@
 //! supplies its own key, so the whole file runs on a machine with nothing set up.
 
 use ferum_infrastructure::crypto::{
-    site_config_aad, SecretCipher, ENCRYPTED_CONFIG_KEYS, SEALED_PREFIX, WEBHOOK_SECRET_AAD,
+    plugin_config_aad, site_config_aad, SecretCipher, ENCRYPTED_CONFIG_KEYS, SEALED_PREFIX,
+    WEBHOOK_SECRET_AAD,
 };
 
 /// Two distinct, valid keys. Fixed rather than random so a failure is reproducible.
@@ -221,4 +222,73 @@ fn smtp_pass_is_the_encrypted_config_key() {
     // sealed rows being handed to callers as literal `enc:v1:…` text — the one
     // change to this list that is not backward compatible.
     assert!(ENCRYPTED_CONFIG_KEYS.contains(&"smtp_pass"));
+}
+
+// ─── Plugin config AAD ───────────────────────────────────────────────────────
+
+#[test]
+fn a_plugin_secret_cannot_be_moved_between_plugins() {
+    let c = cipher(KEY_A, None);
+    let sealed = c
+        .seal(
+            &plugin_config_aad("discord-notifier", "webhook_url"),
+            "https://discord.com/api/webhooks/1/abc",
+        )
+        .unwrap();
+
+    // The same field name under a different plugin. Without the slug in the AAD
+    // this would decrypt cleanly, letting anyone with database access graft one
+    // install's credential onto another plugin and have it used.
+    assert!(
+        c.open(&plugin_config_aad("other-plugin", "webhook_url"), &sealed)
+            .is_err(),
+        "a sealed plugin credential must not open under a different plugin slug"
+    );
+}
+
+#[test]
+fn a_plugin_secret_cannot_be_moved_between_fields() {
+    let c = cipher(KEY_A, None);
+    let sealed = c
+        .seal(&plugin_config_aad("acme", "api_key"), "sk-live-1")
+        .unwrap();
+    assert!(
+        c.open(&plugin_config_aad("acme", "fallback_key"), &sealed)
+            .is_err(),
+        "a sealed plugin credential must not open under a different config key"
+    );
+}
+
+#[test]
+fn plugin_config_aad_is_distinct_from_the_other_two_tables() {
+    let c = cipher(KEY_A, None);
+    let sealed = c
+        .seal(&plugin_config_aad("acme", "smtp_pass"), "hunter2")
+        .unwrap();
+
+    // A plugin that happens to name a field `smtp_pass` must not produce a value
+    // interchangeable with the site's actual SMTP password, in either direction.
+    assert!(c.open(&site_config_aad("smtp_pass"), &sealed).is_err());
+    assert!(c.open(WEBHOOK_SECRET_AAD, &sealed).is_err());
+
+    let site_sealed = c.seal(&site_config_aad("smtp_pass"), "hunter2").unwrap();
+    assert!(c
+        .open(&plugin_config_aad("acme", "smtp_pass"), &site_sealed)
+        .is_err());
+}
+
+#[test]
+fn plaintext_plugin_config_passes_through_and_is_flagged() {
+    let c = cipher(KEY_A, None);
+    // The lazy-migration path: a plugin configured before encryption was turned
+    // on keeps working, and the sweep reseals it. Were this an error instead,
+    // setting SECRET_ENCRYPTION_KEY would break every already-installed plugin.
+    let opened = c
+        .open(
+            &plugin_config_aad("discord-notifier", "webhook_url"),
+            "https://discord.com/api/webhooks/1/abc",
+        )
+        .unwrap();
+    assert_eq!(opened.value, "https://discord.com/api/webhooks/1/abc");
+    assert!(opened.needs_reseal);
 }

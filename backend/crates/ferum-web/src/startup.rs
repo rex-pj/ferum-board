@@ -230,8 +230,37 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                     "This database holds encrypted secrets but SECRET_ENCRYPTION_KEY is not set. \
                      Restore the key, or clear the sealed values and re-enter them: \
                      `UPDATE site_config SET value = '' WHERE key = 'smtp_pass' AND value LIKE \
-                     'enc:v1:%';` and `UPDATE webhooks SET secret = NULL WHERE secret LIKE \
-                     'enc:v1:%';`. Nothing else in the database is encrypted. \
+                     'enc:v1:%';`, `UPDATE webhooks SET secret = NULL WHERE secret LIKE \
+                     'enc:v1:%';` and `UPDATE plugins SET config = '{{}}'::jsonb WHERE config::text \
+                     LIKE '%enc:v1:%';`. Nothing else in the database is encrypted. \
+                     See docs/deployment.md § Secrets at rest."
+                );
+            }
+            // An https APP_URL means a real deployment, and a real deployment
+            // stores an SMTP password, webhook secrets, or plugin credentials
+            // sooner or later — all of which then sit in plaintext in every
+            // `pg_dump`. This used to be a WARN, and a WARN is what let a
+            // production install run for two days without the key: nobody reads
+            // startup logs on a deploy that came up healthy.
+            //
+            // Deliberately not gated on "does this database already hold a
+            // secret". The point is to fail on the empty database, at first
+            // deploy, before there is anything to lose — checking for existing
+            // secrets would let the boot succeed right up until the operator
+            // saves SMTP settings, which is the worst possible moment to learn.
+            //
+            // http stays a warning: that is a laptop, and forcing a key there
+            // buys nothing but friction.
+            if config.app_url.starts_with("https://") {
+                anyhow::bail!(
+                    "SECRET_ENCRYPTION_KEY is not set, and APP_URL is https. On a real \
+                     deployment the SMTP password, every webhook HMAC secret and every plugin \
+                     credential would be stored as plaintext in PostgreSQL, including in every \
+                     backup. Generate a key and add it to the environment:\n\n    \
+                     echo \"SECRET_ENCRYPTION_KEY=$(openssl rand -hex 32)\" >> .env.prod\n\n\
+                     Then recreate the container (`up -d --force-recreate app`) — `env_file` is \
+                     read at container creation, so a restart reuses the old environment. Back \
+                     the key up: losing it makes those values unrecoverable. \
                      See docs/deployment.md § Secrets at rest."
                 );
             }
@@ -640,7 +669,17 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let hasher = Arc::new(BcryptPasswordHasher);
 
     // ─── Plugin system (before event_bus so plugin_runtime can be injected) ──
-    let plugin_repo = Arc::new(PgPluginRepository::new(pg_write.clone()));
+    // Takes the cipher: a plugin's config can hold a credential (the Discord
+    // notifier's webhook URL is one — anyone holding it can post to the channel),
+    // and which fields those are is declared per plugin by `secret = true` in the
+    // manifest's `[config_schema]`.
+    let plugin_repo = Arc::new({
+        let repo = PgPluginRepository::new(pg_write.clone());
+        match &secret_cipher {
+            Some(cipher) => repo.with_cipher(cipher.clone()),
+            None => repo,
+        }
+    });
     let plugin_storage_repo = Arc::new(PgPluginStorageRepository::new(pg_write.clone()));
     let plugin_db_gateway = Arc::new(PgPluginDbGateway::new(pg_write.clone()));
     let plugin_registry = Arc::new(PluginRegistry::new(
@@ -1439,14 +1478,16 @@ fn warn_degraded_capabilities(config: &Config, mail_provider: MailProvider) {
              SMTP_HOST on first run, or /admin/settings afterwards) or RESEND_API_KEY."
         );
     }
-    // Not gated on https: a plaintext secret is in every `pg_dump` regardless of
-    // how the site is served, and a dev database is often the one copied around.
+    // Only reachable on http — an https deployment without the key aborts in
+    // `build_state` long before this runs. Still worth saying on a laptop: a dev
+    // database is often the one copied around, and the plaintext travels with it.
     if config.secret_encryption_key.is_none() {
         tracing::warn!(
-            "SECRET_ENCRYPTION_KEY is not set — the SMTP password and every webhook secret \
-             are stored in plaintext in PostgreSQL, including in every backup. Set it to a \
-             64-character hex key (`openssl rand -hex 32`) to encrypt them at rest; existing \
-             values are converted on the next start."
+            "SECRET_ENCRYPTION_KEY is not set — the SMTP password, every webhook secret and \
+             every plugin credential are stored in plaintext in PostgreSQL, including in every \
+             backup. Set it to a 64-character hex key (`openssl rand -hex 32`) to encrypt them \
+             at rest; existing values are converted on the next start. Required once APP_URL \
+             is https."
         );
     }
 }

@@ -4,21 +4,125 @@ use sea_orm::prelude::*;
 use sea_orm::*;
 use uuid::Uuid;
 
+use crate::crypto::{plugin_config_aad, SecretCipher};
 use crate::entities::{plugin_hooks, plugin_logs, plugin_ui_slots, plugins, sea_orm_active_enums};
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::{
-    ui_slot_element_tag, NewPlugin, NewPluginHook, NewPluginLog, NewPluginUiSlot, Plugin,
-    PluginHook, PluginLog, PluginLogQuery, PluginStatus, PluginTier, PluginUiSlot,
+    secret_config_keys, ui_slot_element_tag, NewPlugin, NewPluginHook, NewPluginLog,
+    NewPluginUiSlot, Plugin, PluginHook, PluginLog, PluginLogQuery, PluginStatus, PluginTier,
+    PluginUiSlot,
 };
 use ferum_domain::repositories::plugin_repository::PluginRepository;
+use std::sync::Arc;
 
 pub struct PgPluginRepository {
     db: DatabaseConnection,
+    cipher: Option<Arc<SecretCipher>>,
 }
 
 impl PgPluginRepository {
     pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+        Self { db, cipher: None }
+    }
+
+    /// Encrypts the `plugins.config` fields a manifest marks `secret = true`.
+    ///
+    /// **The seam is entity→domain, for the same reason it is in
+    /// `PgWebhookRepository`.** Every consumer of a plugin credential — the Tier 1
+    /// webhook templater substituting `{{config.webhook_url}}`, the Tier 2 script
+    /// runtime exposing `Ferum.config`, the admin detail page — reads it through
+    /// `Plugin`, so decrypting here covers all of them at once and leaves no path
+    /// that could hand ciphertext to an outbound request. Decrypting further up
+    /// would mean auditing each consumer separately, and a missed one fails
+    /// silently: a webhook POSTed to the literal string `enc:v1:…` is a 404 at the
+    /// far end, recorded as an ordinary delivery failure.
+    pub fn with_cipher(mut self, cipher: Arc<SecretCipher>) -> Self {
+        self.cipher = Some(cipher);
+        self
+    }
+
+    /// Opens every sealed secret field in a plugin's config.
+    ///
+    /// Plaintext passes through untouched, so turning encryption on is a no-op for
+    /// plugins configured before it, and each value is sealed on its next save.
+    fn open_config(
+        &self,
+        slug: &str,
+        manifest: &serde_json::Value,
+        mut config: serde_json::Value,
+    ) -> Result<serde_json::Value, AppError> {
+        let keys = secret_config_keys(manifest);
+        if keys.is_empty() {
+            return Ok(config);
+        }
+        let Some(obj) = config.as_object_mut() else {
+            return Ok(config);
+        };
+
+        for key in keys {
+            let Some(stored) = obj.get(&key).and_then(|v| v.as_str()) else {
+                continue;
+            };
+            match &self.cipher {
+                Some(cipher) => {
+                    let opened = cipher.open(&plugin_config_aad(slug, &key), stored)?;
+                    obj.insert(key, serde_json::Value::String(opened.value));
+                }
+                // No key configured but the row is sealed. Handing back the
+                // ciphertext would send `enc:v1:…` to whatever the plugin points
+                // at — a Discord webhook URL, an outbound API — where it fails as
+                // an ordinary delivery error with nothing naming the cause.
+                // Startup refuses to boot in this state; this is the backstop.
+                None if SecretCipher::is_sealed(stored) => {
+                    return Err(AppError::internal(format!(
+                        "plugin `{slug}` has an encrypted config field `{key}` but \
+                         SECRET_ENCRYPTION_KEY is not set"
+                    )))
+                }
+                None => {}
+            }
+        }
+        Ok(config)
+    }
+
+    /// Seals every secret field on the way in.
+    ///
+    /// An empty string is left alone: a blank credential means "not set", and
+    /// sealing it would produce a non-blank ciphertext that every presence check
+    /// then reads as configured.
+    fn seal_config(
+        &self,
+        slug: &str,
+        manifest: &serde_json::Value,
+        mut config: serde_json::Value,
+    ) -> Result<serde_json::Value, AppError> {
+        let Some(cipher) = &self.cipher else {
+            return Ok(config);
+        };
+        let keys = secret_config_keys(manifest);
+        if keys.is_empty() {
+            return Ok(config);
+        }
+        let Some(obj) = config.as_object_mut() else {
+            return Ok(config);
+        };
+
+        for key in keys {
+            let Some(plain) = obj.get(&key).and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if plain.is_empty() || SecretCipher::is_sealed(plain) {
+                continue;
+            }
+            let sealed = cipher.seal(&plugin_config_aad(slug, &key), plain)?;
+            obj.insert(key, serde_json::Value::String(sealed));
+        }
+        Ok(config)
+    }
+
+    fn plugin_from_entity(&self, m: plugins::Model) -> Result<Plugin, AppError> {
+        let config = self.open_config(&m.slug, &m.manifest, m.config.clone())?;
+        Ok(plugin_from_entity_with_config(m, config))
     }
 }
 
@@ -62,7 +166,9 @@ fn status_from_entity(e: sea_orm_active_enums::PluginStatus) -> PluginStatus {
     }
 }
 
-fn plugin_from_entity(m: plugins::Model) -> Plugin {
+/// `config` is passed separately because it has already been through the cipher —
+/// taking it from `m` here would quietly undo that.
+fn plugin_from_entity_with_config(m: plugins::Model, config: serde_json::Value) -> Plugin {
     Plugin {
         id: m.id,
         slug: m.slug,
@@ -71,7 +177,7 @@ fn plugin_from_entity(m: plugins::Model) -> Plugin {
         tier: tier_from_entity(m.tier),
         status: status_from_entity(m.status),
         manifest: m.manifest,
-        config: m.config,
+        config,
         granted_capabilities: m.granted_capabilities,
         install_path: m.install_path,
         db_schema_name: m.db_schema_name,
@@ -137,28 +243,30 @@ fn log_from_entity(m: plugin_logs::Model) -> PluginLog {
 #[async_trait]
 impl PluginRepository for PgPluginRepository {
     async fn list(&self) -> Result<Vec<Plugin>, AppError> {
-        Ok(plugins::Entity::find()
+        plugins::Entity::find()
             .order_by_asc(plugins::Column::InstalledAt)
             .all(&self.db)
             .await?
             .into_iter()
-            .map(plugin_from_entity)
-            .collect())
+            .map(|m| self.plugin_from_entity(m))
+            .collect()
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Plugin>, AppError> {
-        Ok(plugins::Entity::find_by_id(id)
+        plugins::Entity::find_by_id(id)
             .one(&self.db)
             .await?
-            .map(plugin_from_entity))
+            .map(|m| self.plugin_from_entity(m))
+            .transpose()
     }
 
     async fn find_by_slug(&self, slug: &str) -> Result<Option<Plugin>, AppError> {
-        Ok(plugins::Entity::find()
+        plugins::Entity::find()
             .filter(plugins::Column::Slug.eq(slug))
             .one(&self.db)
             .await?
-            .map(plugin_from_entity))
+            .map(|m| self.plugin_from_entity(m))
+            .transpose()
     }
 
     async fn create(&self, data: NewPlugin) -> Result<Plugin, AppError> {
@@ -176,7 +284,7 @@ impl PluginRepository for PgPluginRepository {
             installed_by: Set(data.installed_by),
             ..Default::default()
         };
-        Ok(plugin_from_entity(model.insert(&self.db).await?))
+        self.plugin_from_entity(model.insert(&self.db).await?)
     }
 
     async fn update_status(
@@ -198,12 +306,18 @@ impl PluginRepository for PgPluginRepository {
     }
 
     async fn update_config(&self, id: Uuid, config: serde_json::Value) -> Result<(), AppError> {
-        let mut active = plugins::Entity::find_by_id(id)
+        let row = plugins::Entity::find_by_id(id)
             .one(&self.db)
             .await?
-            .ok_or(AppError::NotFound)?
-            .into_active_model();
+            .ok_or(AppError::NotFound)?;
 
+        // Sealed against the row's own slug and manifest, not against anything the
+        // caller supplies: the manifest names which fields are credentials, and
+        // accepting that from the request would let a config save decide its own
+        // value was not a secret.
+        let config = self.seal_config(&row.slug, &row.manifest, config)?;
+
+        let mut active = row.into_active_model();
         active.config = Set(config);
         active.update(&self.db).await?;
         Ok(())
