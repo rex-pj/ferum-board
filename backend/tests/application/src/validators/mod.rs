@@ -97,6 +97,18 @@ fn empty_slug_rejected() {
     assert!(!validate_slug_format(""));
 }
 
+#[test]
+fn slug_cannot_name_a_filesystem_path() {
+    // Theme upload joins the slug onto `themes_dir` and extracts into the result.
+    // `""` and `"."` both collapse that back to `themes_dir`, so an archive entry
+    // could land in another theme's directory — including the built-in one.
+    // The handler's own containment check cannot catch it: it compares against
+    // the already-wrong root.
+    for slug in ["", ".", "..", "a/b", "a\\b", "./x", "~"] {
+        assert!(!validate_slug_format(slug), "slug {slug:?} must be rejected");
+    }
+}
+
 // ─── is_reserved_slug ────────────────────────────────────────────────────────
 
 #[test]
