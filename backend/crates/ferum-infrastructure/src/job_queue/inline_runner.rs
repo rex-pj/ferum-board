@@ -195,6 +195,17 @@ async fn dispatch_webhook(
     payload: serde_json::Value,
     webhooks: &Arc<dyn WebhookRepository>,
 ) -> Result<(), AppError> {
+    // `validate_webhook_url` now refuses `http` on save, but rows predating that
+    // still deliver. Warned rather than blocked: the HMAC still protects
+    // integrity, and failing them here would look like the receiver breaking.
+    if url.starts_with("http://") {
+        tracing::warn!(
+            webhook_id = %webhook_id,
+            "delivering over plaintext http — payload is readable in transit. \
+             Re-save this webhook with an https URL."
+        );
+    }
+
     let pinned_client = match build_pinned_client(&url).await {
         Ok(c) => c,
         Err(reason) => {

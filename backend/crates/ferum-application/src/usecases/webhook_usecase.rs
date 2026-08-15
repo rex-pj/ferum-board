@@ -151,15 +151,26 @@ impl WebhookUseCase {
     }
 }
 
-/// Syntactic validation of a webhook URL: must be http/https, must have a host,
-/// and must not be an IP *literal* in a private/loopback/link-local range. Also
-/// used by plugin-manifest-declared webhooks — any code path that inserts a row
-/// into the webhooks table must call this first.
+/// Syntactic validation of a webhook URL: must be https, must have a host, and
+/// must not be an IP *literal* in a private/loopback/link-local range. Also used
+/// by plugin-manifest-declared webhooks — any code path that inserts a row into
+/// the webhooks table must call this first.
 ///
 /// Deliberately synchronous, so it cannot see that `evil.example.com` resolves
 /// to 127.0.0.1. `WebhookUseCase::assert_hostname_not_private` adds that DNS
 /// check on the admin path; the actual SSRF boundary is the DNS pinning in
 /// `build_pinned_client` at dispatch time.
+///
+/// **`http` used to be accepted.** The HMAC signature protects integrity, not
+/// confidentiality, so a plaintext delivery puts post bodies, author identity and
+/// category on the wire in the clear. The usual argument for allowing it — a
+/// receiver on the local network — does not apply here: private addresses are
+/// already refused, both as literals below and by DNS pinning at dispatch, so
+/// `http` could only ever reach a *public* plaintext endpoint.
+///
+/// Existing `http` rows are NOT rewritten and keep being delivered; they are
+/// warned about at dispatch instead. Failing them silently would look like the
+/// receiver breaking.
 pub fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppError> {
     use crate::shared::AppError;
 
@@ -172,8 +183,7 @@ pub fn validate_webhook_url(url: &str) -> Result<(), crate::shared::AppError> {
         .parse()
         .map_err(|_| AppError::invalid("webhook_url_invalid"))?;
 
-    let scheme = uri.scheme_str().unwrap_or("");
-    if scheme != "http" && scheme != "https" {
+    if uri.scheme_str() != Some("https") {
         return Err(AppError::invalid("webhook_url_scheme"));
     }
 

@@ -29,17 +29,32 @@ fn rejects_bracketed_ipv6_private_and_loopback_literals() {
 }
 
 #[test]
-fn rejects_non_http_schemes_and_empty() {
+fn rejects_non_https_schemes_and_empty() {
     assert!(validate_webhook_url("").is_err());
     assert!(validate_webhook_url("ftp://example.com/x").is_err());
     assert!(validate_webhook_url("file:///etc/passwd").is_err());
 }
 
 #[test]
-fn accepts_public_hosts() {
+fn plaintext_http_is_refused() {
+    // The HMAC signature protects integrity, not confidentiality: over http the
+    // post body, author identity and category are readable in transit. The usual
+    // argument for allowing it — a receiver on the local network — is moot,
+    // because private addresses are refused anyway.
+    for u in [
+        "http://example.com/hook",
+        "http://example.com:5173/hook",
+        "http://8.8.8.8/hook",
+    ] {
+        assert!(validate_webhook_url(u).is_err(), "{u} must be refused");
+    }
+}
+
+#[test]
+fn accepts_public_https_hosts() {
     for u in [
         "https://hooks.slack.com/services/abc",
-        "http://example.com:5173/hook",
+        "https://example.com:5173/hook",
         "https://8.8.8.8/hook",
         "https://[2606:4700::1111]/hook",
     ] {
