@@ -334,22 +334,56 @@ Using outdated cryptographic algorithms: MD5/SHA1 for passwords; DES/RC4 for enc
 
 ---
 
-### 5.3 Insecure Randomness
+### 5.3 Insecure Randomness — and Unforgeable Tokens
 
 **What it is:**
-Using a predictable PRNG instead of a CSPRNG to generate secret values — an attacker can predict the next token.
+Using a predictable PRNG instead of a CSPRNG to generate secret values — an attacker
+can predict the next token.
 
-**How to check:**
+> **Read this before checking anything below.** Password reset and email verification
+> in this codebase are **signed JWTs**, not stored random strings. `jwt_token_service.rs`
+> mints them with a `purpose` claim (`"password_reset"`, the verification purpose) and
+> HS256; there is no `reset_token` column anywhere, and `users` has none. So
+> "is the token generated from `OsRng`?" is the wrong question — unguessability comes
+> from the HMAC, not from entropy in the payload. An earlier revision of this section
+> asked for `Uuid::new_v4()` here, which describes a design this project does not have
+> and would send an auditor looking for a column that does not exist.
 
-- [ ] Password reset token: `uuid::Uuid::new_v4()` or `rand::rngs::OsRng`
-- [ ] Email verification token: same requirement
-- [ ] Webhook secret (if auto-generated): uses `OsRng`
-- [ ] CSRF token: cryptographically secure RNG
-- [ ] Grep for `rand::random()` or `SystemTime::now()` used as a token seed
+**How to check — token unforgeability (the JWT path):**
 
-**PASS:** All secrets and tokens are generated from an OS entropy source.
+- [ ] Reset and verification tokens are verified with `Algorithm::HS256` and a
+      `Validation` that checks expiry — not decoded without verification
+- [ ] The `purpose` claim is compared against the expected value, so a refresh token
+      cannot be replayed as a password reset (`verify_email_token` takes
+      `expected_purpose` for exactly this reason)
+- [ ] `JWT_SECRET` is ≥ 256 bits of real entropy — the signature is the *only* thing
+      making these tokens unguessable, so a weak secret defeats the whole scheme
+- [ ] Single use is enforced by `cache.set_nx("used_token:{token}", …)` with a TTL
+      that **outlives the token** (`PASSWORD_RESET_TOKEN_TTL_SECS + 60`). A shorter
+      TTL would let a still-valid token be replayed after the marker expired
 
-**FAIL:** A token is generated from a predictable source (timestamp, sequential counter, weak PRNG).
+> **Single use depends on the cache, and that is a deployment constraint, not just a
+> code one.** With no `REDIS_URL` the cache is `InMemoryCacheService`, which is
+> per-process. Two app instances behind a load balancer therefore have two separate
+> "used token" sets, and a reset token can be redeemed once per instance. Verify
+> `REDIS_URL` is set on any deployment running more than one instance.
+
+**How to check — actual randomness (what genuinely is random here):**
+
+- [ ] Encryption nonces: `XNonce::try_generate()` (OS RNG), and `try_` rather than the
+      panicking form, because it runs on a request path
+- [ ] Webhook secret, when generated rather than operator-supplied: OS entropy
+- [ ] CAS storage keys are SHA-256 **of the content** — deliberately not random, which
+      is what makes deduplication work. Do not "fix" this to a UUID
+- [ ] Grep for `rand::random()`, `SystemTime::now()`, or a counter used as a token seed
+
+**PASS:** Reset/verification tokens are HS256-signed with a purpose claim, an enforced
+expiry, and a single-use marker outliving the token. Everything genuinely random comes
+from an OS entropy source.
+
+**FAIL:** A token is accepted without signature verification, a purpose claim is not
+checked, the single-use marker expires before the token does, or any secret is derived
+from a predictable source.
 
 ---
 
@@ -409,14 +443,43 @@ Security headers turned off, CORS too permissive, cookie flags missing.
 **How to check:**
 
 - [ ] Responses include all required headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`
-- [ ] CSP header present and correct: no `unsafe-eval`, `script-src` is restricted
 - [ ] CORS `Access-Control-Allow-Origin` is not `*` on authenticated endpoints
 - [ ] Cookie flags: `HttpOnly`, `Secure` (when `APP_URL` is https), `SameSite=Lax`
 - [ ] HSTS header set (typically via Nginx — verify nginx config)
 
-**PASS:** All security headers present. CORS restricted to correct origin. All cookie flags set.
+**CSP — `'unsafe-eval'` is present on purpose, so do not check for its absence.**
+An earlier revision of this section required "no `unsafe-eval`", which fails a
+deliberate decision documented at the top of `security_headers.rs`: Alpine.js compiles
+every `x-data` / `x-show` / `x-for` expression at runtime through the `Function`
+constructor, and without it the browser blocks every Alpine directive on both the admin
+panel and the themes. Inline `<script>` and `on*=` attributes stay forbidden — only
+Alpine's evaluator is permitted.
+
+Check the policy against what it is supposed to allow, not against a generic ideal:
+
+- [ ] `script-src 'self' 'unsafe-eval'` — and **nothing else**. No `'unsafe-inline'`,
+      no host allowlist, no `data:`
+- [ ] `connect-src 'self'` — never widened. See the rule below
+- [ ] `style-src 'self' 'unsafe-inline'` — Bootstrap injects inline styles at runtime
+- [ ] `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'` all present
+- [ ] `img-src` is **not** a constant: `startup.rs` appends the origin of
+      `StorageService::public_url`, so an S3/GCS/R2/CDN install serves
+      `img-src 'self' data: blob: https://that-origin`. A hardcoded `img-src`
+      silently breaks every non-same-origin upload configuration — the upload
+      succeeds, the row is written, and the browser then refuses to load it, with
+      nothing in the server logs
+- [ ] **Only `img-src` widens.** If a bucket origin has leaked into `script-src` or
+      `connect-src`, that is a real finding: a bucket holds user-uploaded bytes, and
+      letting it serve scripts to this origin turns an upload-validation bug into
+      code execution
+
+**PASS:** All security headers present. CSP matches the policy above exactly, with the
+storage origin appearing in `img-src` and nowhere else. CORS restricted to the correct
+origin. All cookie flags set.
 
 **FAIL:** Any security header missing. `Allow-Origin: *` on an authenticated endpoint.
+A storage or CDN origin present in `script-src` or `connect-src`. `img-src` hardcoded
+while an object-store backend is configured.
 
 ---
 
@@ -450,13 +513,35 @@ Dependencies from unverified sources, external CDN assets without integrity chec
 **How to check:**
 
 - [ ] `Cargo.lock` is committed — verify checksums have not changed unexpectedly
-- [ ] CDN assets (Bootstrap, FontAwesome) use `integrity="sha384-..."` attribute in HTML
 - [ ] Plugin `.fpkg` uploads: manifest structure is validated before installation
 - [ ] `cargo audit` passes — no known CVE in the dependency tree
 
-**PASS:** `cargo audit` is clean. CDN assets have SRI hashes. Plugins are validated before install.
+**Front-end assets are vendored, not loaded from a CDN — so SRI does not apply.**
+Bootstrap 5.3.3, FontAwesome 6.7.2 and Alpine.js all live under `frontend/static/`
+and are served same-origin. An earlier revision of this section asked for
+`integrity="sha384-…"` attributes; there are no external `<script>`/`<link>` tags to
+put them on, so that check could only ever be ticked by inventing something. The
+CSP's `default-src 'self'` enforces the same property more strongly — a third-party
+script tag would simply be blocked.
 
-**FAIL:** `cargo audit` reports a high/critical advisory. A CDN link has no integrity hash.
+What to check instead:
+
+- [ ] No `<script src>` or `<link href>` in `frontend/` points at an external host —
+      this is the invariant SRI would otherwise be protecting. Grep for `//cdn`,
+      `jsdelivr`, `cdnjs`, `unpkg`
+- [ ] If a CDN asset is ever introduced, it carries `integrity` + `crossorigin`, and
+      the CSP is widened for that origin in the **same** change — a script from an
+      origin `script-src` does not list is dead code that fails silently in the
+      browser console
+- [ ] Vendored library versions are recorded somewhere an upgrade will be noticed
+      (`CLAUDE.md` names them today), since a vendored file receives no dependency
+      alerts of any kind
+
+**PASS:** `cargo audit` is clean. No external asset origins. Plugins are validated
+before install.
+
+**FAIL:** `cargo audit` reports a high/critical advisory. An external asset is loaded
+without an integrity hash, or without the matching CSP change.
 
 ---
 
@@ -556,17 +641,55 @@ A malicious site tricks a logged-in user's browser into sending a request to the
 </script>
 ```
 
+> ### There is deliberately no CSRF token in this codebase
+>
+> **Do not check for one, and do not add one to "fix" this section.** Earlier
+> revisions of this document required a `X-CSRF-Token` header and a per-session
+> token. None of that was ever implemented — grep the repository and the only file
+> containing the string `csrf_token` is *this document*. An auditor working from the
+> old text finds a FAIL, goes looking for the missing middleware, and the code they
+> end up touching is the protection that actually works.
+>
+> The real control is two layers, and the second only matters because of the first:
+>
+> 1. **`SameSite=Lax` on the auth cookie** (`utils.rs`) — the browser will not attach
+>    it to a cross-site POST/PATCH/DELETE at all, so a forged state-changing request
+>    arrives unauthenticated and fails on its own.
+> 2. **`Origin` allowlist** (`middleware/csrf.rs`) — any non-GET request whose
+>    `Origin` header is present and not in the allowlist is rejected with 403.
+>
+> **A request with no `Origin` header is allowed through, and that is correct.** Such
+> requests come from server-to-server callers, curl, and old browsers — none of which
+> can be made to attach another user's cookie cross-site. Modern browsers *do* send
+> `Origin` on cross-origin form POSTs, which is the case that matters.
+
 **How to check:**
 
-- [ ] Cookie `SameSite=Lax` — blocks cross-site POST requests
-- [ ] CSRF token middleware active on all POST/PATCH/PUT/DELETE requests
-- [ ] CSRF token validated via `X-CSRF-Token` header or `csrf_token` form field
-- [ ] CSRF token is per-session and not static
+- [ ] Auth cookie carries `HttpOnly; SameSite=Lax` (and `Secure` when `APP_URL` is
+      https). `tests/web/` asserts the attribute — **do not relax that test**
+- [ ] `csrf_origin_check` is mounted on every state-changing router, and skips only
+      `GET`/`HEAD`/`OPTIONS`
+- [ ] The allowlist is `APP_URL` + `CORS_ORIGINS`, built at startup — and `localhost`
+      entries are dropped once `APP_URL` is non-local, so a production deploy that
+      never set `CORS_ORIGINS` does not still trust the dev origin
+- [ ] Origin comparison is exact string equality against the allowlist — not
+      `starts_with`, not a substring test (`https://evil-app.com` must not match an
+      allowlisted `https://app.com`)
 - [ ] `GET /api/notifications/stream` (SSE) has no side effects — read-only
+- [ ] No state-changing operation is reachable by `GET`
 
-**PASS:** SameSite=Lax and CSRF token enforcement both active. No state-changing GET requests.
+**The condition that invalidates this whole scheme:**
 
-**FAIL:** Cookie missing SameSite. CSRF middleware can be bypassed with `Content-Type: text/plain`.
+- [ ] The auth cookie is **not** `SameSite=None`. If it ever becomes so, layer 1
+      disappears, the `Origin` check becomes the only defence, and a real
+      per-session token becomes mandatory — at which point this section must be
+      rewritten rather than re-ticked
+
+**PASS:** `SameSite=Lax` on the auth cookie, `Origin` allowlist enforced on every
+non-GET route with exact matching, no state-changing GETs.
+
+**FAIL:** Cookie missing `SameSite`, or weakened to `None` with no token added. Origin
+matched by prefix or substring. A state-changing operation reachable by `GET`.
 
 ---
 
@@ -628,17 +751,71 @@ The app checks only the file extension or the `Content-Type` header (both forgea
 
 **How to check:**
 
-- [ ] Avatar/cover/thumbnail: magic bytes verified (JPEG: `FF D8 FF`, PNG: `89 50 4E 47`, WebP: `52 49 46 46 ... 57 45 42 50`)
-- [ ] `Content-Type` request header is never trusted alone — magic bytes are the source of truth
-- [ ] File size limits enforced server-side: avatar ≤ `MAX_AVATAR_BYTES`, cover ≤ `MAX_COVER_BYTES`
-- [ ] Theme ZIP: rejected if it contains `.php`, `.rb`, `.py`, `.svelte`, `.ts`, `.tsx`, `.jsx` files
-- [ ] Plugin `.fpkg`: manifest validated, extracted only to `install_path`, archive entries checked for path traversal
-- [ ] Stored files are served with the `Content-Type` from the DB row — not derived from the file extension
-- [ ] Uploaded files are not executable — served from a CDN/S3 subdomain separate from the app domain
+**Images — every upload path, not just the obvious ones:**
 
-**PASS:** Magic byte validation for all image uploads. Archive entry validation for ZIP/FPKG.
+- [ ] Magic bytes verified (JPEG `FF D8 FF`, PNG `89 50 4E 47`, GIF `GIF8[79]a`,
+      WebP `RIFF????WEBP`), **paired with** the declared content type. There are seven
+      such paths — avatar, cover, thread thumbnail, product media, plugin media,
+      favicon, post attachment — and the check is written out at each one, so a new
+      upload feature can silently omit it
+- [ ] `validate_image_magic` keeps its length guard. The WebP branch slices
+      `data[8..12]`, so without it a 4-byte `RIFF` upload panics the handler
+- [ ] Size limits enforced server-side from the `MAX_*_BYTES` constants
+- [ ] SVG stays out of both allowlists — it is XML and can carry script (see §10)
 
-**FAIL:** Only extension or `Content-Type` header checked. No magic byte validation.
+**Archives — the slug is as dangerous as the entry paths:**
+
+- [ ] Plugin `.fpkg`: `enclosed_name()`, explicit `ParentDir`/`RootDir` rejection,
+      `starts_with` containment, file-count cap, and a decompression bound taken from
+      the *remaining budget* rather than the entry's declared `uncompressed_size`,
+      which is attacker-controlled
+- [ ] **The directory name is validated by a whitelist before it is joined.** Plugin
+      IDs go through `validate_plugin_id`; theme slugs through `check_theme_slug`.
+      A blocklist is not enough: the theme guard rejected `..`, `/` and `\` and still
+      let `""` and `"."` through, both of which collapse `themes_dir.join(slug)` back
+      to `themes_dir`
+- [ ] **`starts_with(&target_dir)` proves nothing if `target_dir` is itself
+      attacker-named.** It passed in every one of those cases. Validate the root
+      first; the containment check only covers entry paths
+- [ ] Theme upload refuses `DEFAULT_THEME_SLUG`. `templates/base.html` is mandatory
+      in the archive, so an upload under that slug overwrites the root of every
+      inheritance chain — and the likeliest cause is an admin editing the shipped
+      theme and re-uploading it, not an attack
+- [ ] Extraction propagates I/O errors instead of `.ok()` — a truncated read that
+      still reports success writes a broken template and surfaces later as an
+      unexplained Tera error
+
+> **The theme extension blocklist is a build-step guard, not a security control.**
+> `["svelte","ts","tsx","jsx","vue"]` are source formats nothing here compiles. Plain
+> `.js` is allowed, served same-origin from `/themes/{slug}/assets/**`, and executes
+> under `script-src 'self'`. An admin-uploaded theme can ship arbitrary client-side
+> code and always could — do not read this list as preventing that, and do not add
+> `.php`/`.rb`/`.py` expecting it to mean something (there is no interpreter).
+
+**Serving:**
+
+- [ ] `/files/` serves the `Content-Type` from the DB row, with
+      `Content-Disposition: attachment` — never a type derived from the key's
+      extension. (`content_type_for_path` in `uploads.rs` is for *plugin assets*,
+      which are files on disk with no DB row; that one has no alternative)
+- [ ] `is_safe_key` runs before anything else on `/files/`
+- [ ] Post attachments carry a per-account rolling quota, since the rate limiter keys
+      on IP and caps burst rate rather than total stored bytes
+
+> **"Served from a separate CDN subdomain" is not achievable on the default
+> deployment, and that is accepted.** Database storage serves uploads same-origin from
+> `/files/`. The compensating controls are `Content-Disposition: attachment`,
+> `X-Content-Type-Options: nosniff`, CSP `default-src 'self'`, and CAS keys that are a
+> hash of the content. Check those instead of checking for a subdomain that only
+> exists under an object-store backend.
+
+**PASS:** Magic bytes plus declared type on every image path. Archive roots validated
+by whitelist before joining, entry paths validated after. Stored files served with the
+DB content type and `attachment` disposition.
+
+**FAIL:** Only extension or `Content-Type` header checked. An archive directory name
+taken from user input without whitelist validation. A containment check standing in
+for root validation.
 
 ---
 
@@ -833,6 +1010,14 @@ grep -rn "Command::new\|std::process::Command" backend/
 # Hardcoded secrets
 grep -rn 'secret\s*=\s*"' backend/crates/
 
+# External asset origins — must return nothing (assets are vendored; see 7.1)
+grep -rnE '(src|href)="(https?:)?//' frontend/ --include=*.html
+
+# Raw email addresses in logs — every such line must go through email_log_key (5.4).
+# The second grep is not optional: without it this flags the correctly-masked call.
+grep -rnE 'tracing::(warn|info|error|debug)!\([^)]*email\s*=\s*%' backend/crates/ \
+  | grep -v email_log_key
+
 # 3. Manual test checklist
 # - Submit wrong password 6 times → verify account lockout
 # - Call DELETE /api/admin/users/xxx without auth → verify 401
@@ -856,7 +1041,32 @@ All items below must PASS before every release:
 | No hardcoded secrets            | `grep -rn 'JWT_SECRET\s*=\s*"' backend/`                     |
 | Security headers present        | Manual: `curl -I http://localhost:5173/`                     |
 | Sensitive columns classified (5.4) | Manual: review data-at-rest classification table         |
+| No external asset origins (7.1) | `grep -rnE '(src\|href)="(https?:)?//' frontend/ --include=*.html` |
+| No raw email in logs (5.4)      | `grep -rnE 'email\s*=\s*%' backend/crates/ \| grep -v email_log_key` |
+| Auth cookie still `SameSite=Lax` (9) | `cargo test -p ferum-web-tests` — the assertion is the CSRF defence |
 
 ---
+
+## Maintaining this document
+
+**When this checklist and the codebase disagree, the codebase is right — fix the
+checklist.** Three sections had drifted far enough to be actively harmful, and all
+three failed the same way: they described a control the project had considered and
+deliberately not built, so an auditor following them would report a FAIL against
+working code and "fix" it by removing the real protection.
+
+- **§9** required a CSRF token. There has never been one; the defence is
+  `SameSite=Lax` plus an `Origin` allowlist.
+- **§6.1** required no `'unsafe-eval'`. It is present on purpose, for Alpine.
+- **§7.1** required SRI hashes on CDN assets. Every asset is vendored same-origin.
+
+Each now carries a note saying what the old text asked for and why it was wrong,
+rather than being quietly deleted — the wrong version is what a reader arrives with
+if they have seen this document before, and silently changing a criterion teaches
+nobody why.
+
+When you add a section, prefer a criterion that a grep or a test can settle over one
+that needs judgement, and put the mechanical form in the Release Gate above. A
+criterion nobody can run is how the drift above started.
 
 _This document is maintained for Ferum Board — update it when new features are added or new risky patterns are discovered._
