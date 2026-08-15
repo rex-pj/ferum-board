@@ -473,6 +473,14 @@ impl ModerationUseCase {
         // out and bans permanently without holding the permission. In the use
         // case, not the handler, so it holds for every caller.
         // `chrono::Duration` spelled out — `Duration` here is `std::time`'s.
+        // A past date writes `is_banned = true` alongside an expiry that has
+        // already gone, and `is_currently_banned()` reads that as not banned. The
+        // ban does nothing while the audit log records one — a moderator gets a
+        // silent no-op and a record that says otherwise.
+        if until <= Utc::now() {
+            return Err(AppError::invalid("ban_until_in_past"));
+        }
+
         if until > Utc::now() + chrono::Duration::days(MAX_TEMP_BAN_DAYS) {
             return Err(AppError::invalid_with(
                 "ban_duration_too_long",

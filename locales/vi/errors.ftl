@@ -99,6 +99,9 @@ error-reason-too-long =
 error-ban-duration-too-long =
     Khoá tạm thời tối đa { $max_days } ngày. Lâu hơn thế là khoá vĩnh viễn và
     cần quyền khoá vĩnh viễn.
+error-ban-until-in-past =
+    Thời điểm hết hạn khoá phải nằm ở tương lai. Một mốc đã qua sẽ ghi nhận lệnh
+    khoá nhưng lệnh đó không có hiệu lực.
 error-cannot-moderate-self =
     Bạn không thể tự áp dụng hành động kiểm duyệt lên tài khoản của chính mình.
 error-cannot-moderate-staff =

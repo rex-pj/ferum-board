@@ -386,6 +386,12 @@ impl AdminUseCase {
             return Err(AppError::forbidden("cannot_moderate_self"));
         }
 
+        // `None` is a permanent ban and always takes effect. A `Some` in the past
+        // does not — see `ModerationUseCase::temp_ban`.
+        if banned_until.is_some_and(|until| until <= Utc::now()) {
+            return Err(AppError::invalid("ban_until_in_past"));
+        }
+
         self.users.find_by_id(id).await?.or_not_found()?;
 
         let hook_ctx = HookContext {

@@ -383,6 +383,31 @@ fn one_day_out() -> chrono::DateTime<chrono::Utc> {
 }
 
 #[tokio::test]
+async fn a_ban_expiring_in_the_past_is_refused() {
+    // `is_currently_banned()` is `banned_until > now`, so a past expiry writes
+    // `is_banned = true` and changes nothing — the ban is a no-op while the audit
+    // log records one. `expect_update().never()` is the assertion that matters:
+    // nothing may be written.
+    let mut users = MockUserRepository::new();
+    users.expect_update().never();
+
+    let uc = build_uc_with_target_perms(
+        users,
+        MockNotificationRepository::new(),
+        MockCacheService::new(),
+        MockEventPublisher::new(),
+        FixedPermissionResolver::global(&[]),
+    );
+
+    let past = chrono::Utc::now() - chrono::Duration::hours(1);
+    let result = uc.temp_ban(&an_admin(), ids::user_b(), "spam".into(), past).await;
+    assert!(
+        matches!(&result, Err(AppError::Invalid { code, .. }) if code == "ban_until_in_past"),
+        "got {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn a_moderator_cannot_ban_an_admin() {
     let mut users = MockUserRepository::new();
     users.expect_update().never();
