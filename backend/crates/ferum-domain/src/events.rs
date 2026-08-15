@@ -4,6 +4,14 @@ use uuid::Uuid;
 
 use crate::models::reaction::ReactionKind;
 
+/// Published by a use case *after* its state change commits, then fanned out by
+/// `EventBus` to notification, audit-log, webhook and plugin subscribers.
+///
+/// Delivery is fire-and-forget — nothing is retried, so no subscriber may be
+/// part of the operation's correctness. Denormalised fields (slug, title beside
+/// the ids) describe the moment it fired, not the current row.
+/// [`event_type_str`](ForumEvent::event_type_str) is public API: webhook
+/// subscriptions are stored against those strings.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ForumEvent {
     PostCreated {

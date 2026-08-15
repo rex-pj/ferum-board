@@ -1,3 +1,9 @@
+//! RBAC + trust + category-policy checks. Every state-changing use case calls
+//! one of these BEFORE mutating; middleware only resolves identity.
+//!
+//! Order matters: ban → permission → trust → category policy. A banned user
+//! must never reach a permission check that could grant them something.
+
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -89,17 +95,10 @@ impl PermissionChecker {
 
     /// Starting a new thread in `category`.
     ///
-    /// Everything `can_create_post` enforces (ban, category visibility, closed
-    /// categories, `post.create`, the category's trust floor) plus `thread.create`
-    /// on top — which is the whole point of the key existing. Opening a topic and
-    /// replying to one are different acts, and a forum that wants reply-only
-    /// members has no way to say so if the two share a single permission.
-    ///
-    /// Until this existed, `thread.create` was seeded, listed in
-    /// /admin/permissions and grantable, while no code path read it: revoking it
-    /// changed nothing. The system roles grant it to member, moderator and admin
-    /// exactly as they grant `post.create`, so enforcing it takes nothing away
-    /// from anyone on a default install.
+    /// Everything `can_create_post` enforces, plus `thread.create` — the whole
+    /// reason that key exists. Opening a topic and replying are different acts,
+    /// and a forum wanting reply-only members cannot say so if they share one
+    /// permission. Default roles grant both, so this takes nothing away.
     pub fn can_create_thread(user: &AuthUser, category: &Category) -> Result<(), AppError> {
         Self::can_create_post(user, category)?;
 

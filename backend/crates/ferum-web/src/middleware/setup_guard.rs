@@ -1,3 +1,5 @@
+//! Redirects every HTML request to /setup until first-run completes.
+
 use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};

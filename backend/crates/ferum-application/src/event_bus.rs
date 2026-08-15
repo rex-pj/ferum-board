@@ -1,3 +1,8 @@
+//! Fans `ForumEvent`s out to subscribers after a use case commits.
+//!
+//! Subscribers run detached and their failures never reach the request, so
+//! nothing whose loss would matter may be delivered this way.
+
 use std::sync::Arc;
 
 use async_trait::async_trait;

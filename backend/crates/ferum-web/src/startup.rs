@@ -83,64 +83,29 @@ const PLUGIN_LOG_RETENTION_DAYS: u32 = 30;
 
 /// How many `/files/` blob reads may run at once.
 ///
-/// Serving a blob reads the whole file into memory over a pooled connection, so
-/// the natural assumption is that this caps *connection* use. Measured, that is
-/// not what it does. Flooding `/files/` with 120 concurrent requests for a
-/// 1.95 MB image, page latency was ~765-800ms whether this was 6 or 500, and
-/// whether the pool held 5 connections or 40 — the blob bytes themselves are
-/// the bottleneck, not the pool.
-///
-/// What it does cap is *memory*: the same flood grew the process by 15 MB at 6
-/// permits and 74 MB at 500. That is the reason to keep it, and it scales with
-/// the per-file limits in `constants.rs`, not with `DB_MAX_CONNECTIONS` — which
-/// is also why raising the pool must not widen it.
-///
-/// The latency result is the stronger argument for the documented production
-/// path: serving large blobs out of Postgres degrades under load no matter how
-/// it is rationed, so real deployments set `S3_ENDPOINT`.
+/// This caps **memory, not connections** — measured, latency was identical at 6
+/// and 500 permits, but the process grew 15 MB vs 74 MB. So it scales with the
+/// per-file limits in `constants.rs`, NOT with `DB_MAX_CONNECTIONS`; raising the
+/// pool must not widen it.
 const BLOB_READ_CONCURRENCY: usize = 6;
 
-/// Server-side ceilings applied to every application connection.
+/// Server-side ceilings on every application connection. Backstops, not tuning:
+/// nothing legitimate here runs near 30s.
 ///
-/// Until this existed, nothing in the process bounded a query's runtime — a
-/// single pathological statement held its connection until the client or the
-/// TCP layer gave up, while `acquire_timeout` failed every other caller after
-/// five seconds. These are backstops, not tuning: no legitimate request in this
-/// application is anywhere near 30s, and a transaction left idle for a minute
-/// is a bug holding locks.
-///
-/// Expressed as libqp `options` rather than a `SET` on checkout because it then
-/// applies from the connection's first statement, including ones issued before
-/// any repository code runs. `SET LOCAL` inside a transaction still overrides
-/// it — that is how the plugin gateway imposes its much tighter 2s ceiling.
+/// Sent as libpq `options` rather than a `SET` on checkout, so they apply from
+/// the connection's first statement. `SET LOCAL` still overrides — that is how
+/// the plugin gateway imposes its tighter 2s ceiling.
 const STATEMENT_TIMEOUT_MS: u32 = 30_000;
 const IDLE_IN_TRANSACTION_TIMEOUT_MS: u32 = 60_000;
 
-/// Session timezone requested for every application connection.
+/// Session timezone for every application connection.
 ///
-/// `CURRENT_DATE`, `NOW()` and every `timestamptz`-to-`date` cast resolve
-/// against the session's `TimeZone`. Left to the server that value is whatever
-/// `initdb` copied from the host, which would make a day boundary an accident
-/// of deployment.
+/// Redundant today — `sqlx-postgres` already hardcodes UTC into each startup
+/// packet, which beats this `options` value. Kept so the requirement lives in
+/// our code, and for a pooler or non-sqlx client that would need it.
 ///
-/// **In practice this line changes nothing today, and the honest version of
-/// that is worth writing down.** `sqlx-postgres` puts `("TimeZone", "UTC")`
-/// directly into the startup packet of every connection it opens
-/// (`sqlx-postgres/src/connection/establish.rs`), and that beats the `options`
-/// parameter appended after it — verified by setting `options` to a different
-/// zone and watching `SHOW TimeZone` still answer `UTC`. So every connection
-/// this application has ever made was already UTC, and the host-dependency was
-/// latent rather than live.
-///
-/// It stays for two reasons. It states the requirement in our own code instead
-/// of resting on an undocumented detail of a dependency that could change in any
-/// release; and it is the setting a connection pooler in transaction mode, or a
-/// future non-sqlx client, would actually need.
-///
-/// What it is *not* is the thing that makes reporting correct. That is
-/// `reporting_timezone` plus an explicit `AT TIME ZONE` in the analytics
-/// queries, which is deliberately independent of the session — see
-/// `PgStatsRepository`.
+/// **Do not build correctness on it.** Reporting names its own zone via
+/// `reporting_timezone` + `AT TIME ZONE`; see `PgStatsRepository`.
 const SESSION_TIME_ZONE: &str = "UTC";
 
 /// Appends the server-side session settings to a connection URL.
@@ -286,20 +251,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     };
 
     // ─── Email service ──────────────────────────────────────────────────────
-    // Created unconfigured and loaded further down, once site_config is available:
-    // SMTP settings are editable from /admin/settings and stored values win over
-    // env (env seeds them on first run — see the seeding block below). The
-    // reloadable wrapper also owns the "auto-verify registrations" flag, so
-    // turning mail on or off at runtime takes effect without a restart.
-    //
-    // Which provider is live is a stored setting (`mail_provider`), not a
-    // consequence of which environment variable happens to be present. Resend's
-    // *credential* is still env-only — `RESEND_API_KEY` authenticates, the setting
-    // selects — which is what keeps a live provider API key out of the database.
-    // Refuse to boot on a malformed sender address, alongside the other config
-    // faults that abort rather than degrade. Validated even when no provider is
-    // configured: it is required configuration either way, and the alternative is
-    // discovering the typo when the first user cannot register.
+    // Created unconfigured, loaded once site_config exists: stored settings win
+    // over env, which only seeds them on first run. Which provider is live is a
+    // stored setting; Resend's credential stays env-only, keeping the API key
+    // out of the database. A malformed sender address aborts the boot even with
+    // no provider configured — else the typo surfaces at first registration.
     validate_from_address(&config.from_email)
         .map_err(|e| anyhow::anyhow!("{e} Current value: {:?}", config.from_email))?;
 
@@ -317,23 +273,12 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     let broadcaster = broadcaster_concrete as Arc<dyn ferum_application::ports::NotificationSubscriber>;
 
     // ─── Storage ────────────────────────────────────────────────────────────
+    // PRECEDENCE:  R2_ACCOUNT_ID > GCS_BUCKET > S3_ENDPOINT > database
     //
-    // Presence of the env var is the toggle, as with every other capability.
-    // PRECEDENCE, when more than one backend is configured:
-    //
-    //     R2_ACCOUNT_ID  >  GCS_BUCKET  >  S3_ENDPOINT  >  database
-    //
-    // Newest variable wins: an operator who adds one to a deployment that
-    // already had an older one is expressing a new intent, and the reverse order
-    // would make that setting appear to do nothing. Every loser is named in a
-    // WARN rather than ignored silently — a storage backend that is not the one
-    // you configured is not something to discover from a missing file weeks
-    // later.
-    //
-    // A backend whose env var is set but whose cargo feature is off is also a
-    // WARN, not a silent fall-through to the database, for the same reason.
-    // `unused_mut` in the lean build: with none of `r2`, `gcs` or `s3` compiled
-    // in, every assignment below is cfg'd away and these stay `None`.
+    // Newest variable wins, so adding one to an existing deployment does what
+    // the operator meant. Every loser — and every var set without its cargo
+    // feature — gets a WARN, never a silent fall-through.
+    // `unused_mut` in the lean build: all assignments below are cfg'd away.
     #[allow(unused_mut)]
     let mut storage: Option<Arc<dyn StorageService>> = None;
     // `(backend name, public-read remediation)` for whichever backend won. Both
@@ -544,16 +489,10 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         .unwrap_or_else(|| ferum_application::constants::DEFAULT_SITE_NAME.to_string());
 
     // ─── Translation catalogs ─────────────────────────────────────────────────
-    // Built early because the job executor below needs it: transactional emails
-    // are written in the recipient's language, and the executor is constructed
-    // as part of the Redis/in-memory branch.
-    //
-    // Roots are listed in ascending precedence: a theme's catalog shadows core,
-    // the same direction the theme template chain resolves.
-    //
-    // Both candidate paths are tried because the app is normally run from
-    // `backend/` (so `../locales`) but the compiled binary may be run from the
-    // repository root (so `./locales`) — the same split THEMES_DIR has.
+    // Built before the job executor, which needs it to write email in the
+    // recipient's language. Roots ascend in precedence, so a theme catalog
+    // shadows core. Two candidate paths because the binary may run from the repo
+    // root or from `backend/` — the same split THEMES_DIR has.
     let locales_dir = {
         let configured = std::path::PathBuf::from(&config.locales_dir);
         let candidates = [
@@ -1365,18 +1304,11 @@ const DATABASE_PUBLIC_READ_REMEDY: &str =
      of it: check that CDN_BASE_URL points at a cache configured to forward /files/ to this \
      app, and that no authentication rule covers that path.";
 
-/// Keeps `upload_read_status` current with whether an anonymous visitor can read
-/// what this deployment uploads.
+/// Tracks whether an anonymous visitor can read what this deployment uploads.
 ///
-/// A private bucket is invisible from the server — uploads succeed, rows are
-/// written, logs stay clean — and shows up only as broken images in somebody's
-/// browser. Checking once at startup caught the deploy that got it wrong; it did
-/// not catch permissions being changed on a running bucket, which is why this
-/// repeats.
-///
-/// Only *transitions* are logged. A WARN repeated every fifteen minutes forever
-/// stops being read, and the state is on `/health/ready` for anyone who wants to
-/// poll it.
+/// A private bucket is invisible server-side — uploads succeed, logs stay clean,
+/// and it surfaces only as broken images. Repeats rather than checking once,
+/// since permissions change on running buckets. Logs transitions only.
 fn spawn_public_read_probe(
     storage: Arc<dyn StorageService>,
     status: Arc<tokio::sync::RwLock<Option<PublicReadProbe>>>,

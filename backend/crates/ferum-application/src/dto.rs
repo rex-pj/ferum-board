@@ -1,10 +1,15 @@
+//! Cross-use-case data carriers: shapes assembled by one use case and consumed
+//! by another layer, where no single domain model is the natural home.
+//!
+//! Nothing here holds business rules — these are the join results and rollups
+//! that a handler needs and a repository cannot return on its own.
+
 use serde::{Deserialize, Serialize};
 
 use ferum_domain::models::category::Category;
 use ferum_domain::models::report::Report;
 use ferum_domain::models::thread::Thread;
 
-// ─── Category / Forum index ───────────────────────────────────────────────────
 
 pub struct SubcategoryCount {
     pub category: Category,
@@ -18,7 +23,6 @@ pub struct ForumIndexItem {
     pub recent_threads: Vec<Thread>,
 }
 
-// ─── Moderation ───────────────────────────────────────────────────────────────
 
 pub struct ReportWithContext {
     pub report: Report,
@@ -27,7 +31,6 @@ pub struct ReportWithContext {
     pub thread_title: Option<String>,
 }
 
-// ─── Social ───────────────────────────────────────────────────────────────────
 
 pub struct FollowStatus {
     pub following: bool,
@@ -35,7 +38,6 @@ pub struct FollowStatus {
     pub following_count: u64,
 }
 
-// ─── Admin stats ──────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize)]
 pub struct DashboardStats {

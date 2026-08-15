@@ -261,20 +261,13 @@ impl AdminUseCase {
             .await?
             .ok_or_else(|| AppError::internal("moderator role not found".to_string()))?;
 
-        // The same escalation guard `RoleUseCase::assign_role` applies, because
-        // this is the same act by a different door.
+        // The same escalation guard as `RoleUseCase::assign_role` — this grants
+        // the identical role by a different door, scoped to a category. Without
+        // it a limited admin holding only `admin.users` could appoint themselves
+        // moderator here and pick up `moderation.ban_temp`.
         //
-        // `assign_role` refuses to grant a role carrying permissions the actor
-        // does not hold — so a custom "User Manager" role holding only
-        // `admin.users` cannot hand out `moderator` through
-        // `POST /api/admin/users/:id/roles`. This endpoint grants the identical
-        // role, scoped to a category, and checked nothing: the same actor could
-        // appoint themselves moderator here, pick up `moderation.ban_temp`, and
-        // start banning people. One door locked, one open, same room.
-        //
-        // Costs nothing on a default install — the only role with `admin.users`
-        // is `admin`, which holds every permission — so this binds exactly when
-        // an operator has deliberately created a limited admin.
+        // Free on a default install, where the only role with `admin.users` is
+        // `admin`; it binds exactly when someone has created a limited admin.
         if let Some(permissions) = self.permissions.as_ref() {
             let role_perms = permissions.list_for_role(mod_role.id).await?;
             let actor_has_all = role_perms
@@ -567,20 +560,14 @@ impl AdminUseCase {
     }
 
     #[tracing::instrument(skip(self, actor), fields(user_id = %actor.id, target_user_id = %id))]
-    /// Mark an account's address verified on the owner's behalf.
+    /// Marks an address verified on the owner's behalf.
     ///
-    /// Verification is what lifts a user from `New` to `Basic`, and `Basic` is
-    /// the floor for posting — so the promotion is half of what verification
-    /// *means*, not a side effect. Both self-service paths do it
-    /// (`AuthUseCase::verify_email` via the emailed token, and auto-verify at
-    /// registration when no SMTP transport is configured); this one did not, so
-    /// an admin could verify an account and the user would still be refused
-    /// with `trust_level_insufficient` on their first post, with nothing on
-    /// either screen explaining why.
+    /// **Must also promote New → Basic**, like both self-service paths do:
+    /// `Basic` is the floor for posting, so verifying without it leaves the user
+    /// refused with `trust_level_insufficient` and no screen explaining why.
     ///
-    /// Guarded on the current state for the same reason `verify_email` is: this
-    /// only ever promotes. Re-verifying an established member must not knock a
-    /// Regular back down to Basic.
+    /// Guarded on current state — only ever promotes, so re-verifying an
+    /// established member cannot knock a Regular back to Basic.
     pub async fn verify_user_email(&self, actor: &AuthUser, id: Uuid) -> Result<(), AppError> {
         PermissionChecker::can_manage_users(actor)?;
         let user = self.users.find_by_id(id).await?.or_not_found()?;

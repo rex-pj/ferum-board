@@ -1,16 +1,11 @@
-//! Renders the example themes' own pages for real, to pin the two halves of
-//! theme inheritance that nothing else checks.
+//! Renders the example themes for real, pinning both halves of inheritance.
 //!
-//! `tera_templates.rs` proves a template *parses*, which is not the same thing:
-//! ferum-arcade and ferum-sumi used to ship full clones of the default
-//! `base.html`, and those clones parsed perfectly while having silently lost the
-//! `ferum-i18n` meta (so every `Ferum.t()` string rendered as its raw key), the
-//! Open Graph and Twitter Card tags, and the hreflang alternates. Nothing failed
-//! — the pages just quietly served less than they should.
+//! Parsing is not enough: the arcade and sumi themes once shipped clones of the
+//! default `base.html` that parsed perfectly while having silently lost the
+//! `ferum-i18n` meta, the Open Graph tags and the hreflang alternates.
 //!
-//! So this asserts both directions at once: that a theme extending the default
-//! still RECEIVES the shell it inherits, and that its own chrome — emitted
-//! through block overrides with `{{ super() }}` — survives the inheritance.
+//! Asserts both directions — a theme still RECEIVES the inherited shell, and its
+//! own chrome survives the override.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -30,22 +25,15 @@ fn repo_root() -> PathBuf {
         .join("..")
 }
 
-/// A themes root staged from the two COMMITTED sources: `frontend/themes/default`
-/// plus each example theme's own directory under `examples/themes/`.
+/// A themes root staged from the COMMITTED sources: `frontend/themes/default`
+/// plus each theme's directory under `examples/themes/`.
 ///
-/// Rendering straight out of `frontend/themes` is what this test used to do, and
-/// it is not reproducible: `/frontend/themes/*/` is gitignored except `default/`,
-/// so ferum-arcade and ferum-sumi are only there on a machine where an admin has
-/// installed the archives. A fresh checkout has neither — which is why this
-/// passed on developer machines and failed in CI with "Template not found".
-/// Worse, where they *are* installed they can be a different version from the
-/// source (they were: 1.0.0 on disk against 1.1.0 in `examples/`), so the test
-/// was asserting against whatever each developer happened to have extracted.
+/// **Never read `frontend/themes` directly** — everything but `default/` is
+/// gitignored, so this passed locally and failed CI with "Template not found",
+/// and where installed the copies can be an older version than the source.
 ///
-/// `examples/themes/<slug>/` is also what the `.zip` beside it is packaged from,
-/// so this checks the artifact that actually ships. Only `templates/` is copied:
-/// `.html` files are the only thing `TeraEngine` reads out of a themes dir, and
-/// skipping the rest keeps `default/node_modules/` out of the walk.
+/// `examples/themes/<slug>/` is what the `.zip` is packaged from, so this checks
+/// the shipped artifact. Only `templates/` is copied.
 fn staged_themes_dir() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {

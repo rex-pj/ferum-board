@@ -1,30 +1,11 @@
-//! Unit tests for [`R2StorageService`]'s URL handling and constructor rules.
+//! URL handling and constructor rules for [`R2StorageService`].
 //!
-//! # What is actually at stake here
+//! Both directions fail silently: missing our own URL leaks or collects a CAS
+//! reference, claiming a foreign one releases somebody else's. R2's public
+//! origin is a different host from its API endpoint, so the boundary matters
+//! more here than for S3.
 //!
-//! Two different silent failures, and this adapter exists to make both loud.
-//!
-//! `key_from_url` returning `None` for a URL we minted is not an error — it
-//! reports "not one of ours", so a CAS reference is never taken or never
-//! released, and files are either leaked or garbage collected out from under
-//! posts still displaying them. Claiming a URL that is *not* ours fails the same
-//! way in reverse. R2 is served under more shapes than S3 is (the public origin
-//! is a different host from the API endpoint), so the accept/reject boundary
-//! carries more weight.
-//!
-//! The constructor rules guard the worse one. `public_url` is written into
-//! `users.avatar_url`, `site_config` and the stored HTML of every post, and
-//! those strings are never rewritten — so a configuration that mints signed-only
-//! URLs does not degrade, it writes permanently-broken links into content that
-//! cannot be repaired without a data migration. Every rejection below is
-//! preventing exactly that.
-//!
-//! # Scope
-//!
-//! Offline only. `put` and `delete` issue real requests and are not covered here
-//! or anywhere else — the same honest limitation as the S3 and GCS adapters. The
-//! constructor performs no network I/O, which is what lets these run without a
-//! bucket.
+//! Offline only — `put`/`delete` issue real requests and are uncovered.
 
 use ferum_application::ports::StorageService;
 use ferum_application::shared::AppError;

@@ -8,25 +8,16 @@ impl MigrationName for Migration {
     }
 }
 
-// A taxonomy for the catalogue, separate from forum categories.
+// A catalogue taxonomy, separate from forum categories — `products.category_id`
+// once pointed at the forum tree, where no category is a sensible home for a
+// sofa, so the column stayed NULL and every filter on it returned nothing.
 //
-// `products.category_id` used to point at `categories` — the forum's tree of
-// discussion topics: General Discussion, Off-Topic, Technology, Programming,
-// Site Feedback. A sofa does not belong in any of them, which is why nothing
-// ever populated the column and why the catalogue's category filter could never
-// return anything. The two trees answer different questions and only one of
-// them is about furniture.
+// `match_keywords` drives auto-filing: Vietnamese furniture names lead with the
+// type ("Sofa da Milano"), so the name is real evidence. Data-driven, so an
+// admin can teach it a word without a code change.
 //
-// Giving products their own tree also makes filing automatic rather than a
-// curator's chore: Vietnamese furniture names lead with the type — "Sofa da
-// Milano", "Ghế ăn Bắc Âu", "Bàn trà gỗ sồi" — so the category name IS the
-// first word of the product name. `match_keywords` makes that matcher
-// data-driven, so an admin can teach it a new word without a code change and
-// re-run it over whatever is still unfiled, from
-// /admin/products → Categories → Auto-assign.
-//
-// The starter taxonomy itself is seeded by PgSystemSeedService; the matcher
-// lives once, in PgProductCategoryRepository.
+// Starter rows are seeded by PgSystemSeedService; the matcher lives once, in
+// PgProductCategoryRepository.
 #[derive(Iden)]
 pub enum ProductCategories {
     Table,

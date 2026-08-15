@@ -308,17 +308,12 @@ impl PluginRepository for PgPluginRepository {
             })
             .collect();
 
-        // `load_order` alone does not decide the order. It is seeded per plugin
-        // from that plugin's own position in its manifest, so two plugins that
-        // each declare one slot both arrive at 100 — and the SQL sort then leaves
-        // their relative order to whatever the planner returns, which can differ
-        // between two requests on the same data. Widgets swapping places on
-        // refresh is the kind of bug nobody manages to reproduce.
+        // `load_order` alone is not enough: it is seeded per plugin, so two
+        // plugins each declaring one slot both land on 100 and the planner picks
+        // their order — widgets swapping places between refreshes.
         //
-        // Slug is the tiebreak because it is stable and visible: an operator who
-        // wants a specific order sets `load_order` through
-        // PATCH /api/admin/plugins/:slug/ui-slots/:slot_id, and until they do,
-        // alphabetical is at least an answer they can predict.
+        // Slug is the tiebreak: stable, predictable, and overridable via
+        // PATCH /api/admin/plugins/:slug/ui-slots/:slot_id.
         slots.sort_by(|a, b| {
             a.load_order
                 .cmp(&b.load_order)

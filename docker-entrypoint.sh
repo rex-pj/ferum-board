@@ -1,26 +1,14 @@
 #!/bin/sh
 # Re-sync the built-in themes into THEMES_DIR before starting the server.
 #
-# ─── Why this exists ────────────────────────────────────────────────────────
-# docker-compose.prod.yml mounts a named volume over /app/frontend/themes so
-# that admin-uploaded themes survive a container replacement. Docker seeds a
-# named volume from the image ONLY when the volume is first created, while it
-# is still empty. On every deploy after that the volume's contents shadow the
-# image completely — including frontend/themes/default/, which is not user data
-# at all but part of the build.
+# A named volume covers /app/frontend/themes so uploaded themes survive a
+# container swap, but Docker seeds it from the image only on first creation —
+# afterwards it shadows themes/default/, which is build output, not user data.
+# static/ and templates/ are NOT under the volume, so they keep updating and the
+# two halves silently disagree (a stale theme.css against new JS).
 #
-# That produced a genuinely confusing failure. frontend/static/ and
-# frontend/templates/ are NOT under the volume, so a deploy shipped new JS and
-# new admin templates while the built-in theme's templates and compiled CSS
-# stayed frozen at whatever version created the volume. The mobile sidebar
-# broke exactly there: new ferum-utils.js toggled a class the stale theme.css
-# had no rule for, over stale nav.html that still carried an inline
-# `display:none`, so the drawer could no longer be opened at all. Nothing
-# errored — the two halves simply disagreed.
-#
-# So the image keeps a pristine copy at /app/builtin-themes, outside the mount
-# point, and this script copies it over the volume on every start. Themes an
-# admin uploaded live under their own slug and are never touched.
+# The image keeps a pristine copy outside the mount point; this copies it back
+# each start. Admin-uploaded themes live under their own slug and are untouched.
 set -eu
 
 BUILTIN_DIR="${BUILTIN_THEMES_DIR:-/app/builtin-themes}"

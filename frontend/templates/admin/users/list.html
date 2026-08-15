@@ -108,11 +108,9 @@
               {% endfor %}
             </div>
           </td>
-          {# JOINED cell #}
           <td class="align-middle text-muted small text-nowrap">
             <time data-rel datetime="{{ user.created_at }}">{{ user.created_at | localdate }}</time>
           </td>
-          {# STATE cell #}
           <td class="align-middle">
             {% if user.is_banned %}
               <span class="badge bg-danger">{{ t(k="adm-banned") }}</span>

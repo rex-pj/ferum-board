@@ -1,35 +1,11 @@
-//! Fluent-backed implementation of the `Translator` port.
+//! Fluent-backed `Translator`. Every `.ftl` in a locale directory merges into
+//! one bundle, so keys — not filenames — are the namespace.
 //!
-//! Catalogs are plain `.ftl` files on disk, grouped by locale:
+//! Fluent ids forbid dots, hence kebab-case prefixes (`error-thread-locked`).
 //!
-//! ```text
-//! locales/
-//!   en/  errors.ftl  common.ftl  forum.ftl
-//!   vi/  errors.ftl  common.ftl
-//! ```
-//!
-//! Every `.ftl` in a locale directory is merged into one bundle, so splitting by
-//! domain is purely an authoring convenience — key names, not filenames, are the
-//! namespace.
-//!
-//! ## Key naming
-//!
-//! Fluent message identifiers are `[a-zA-Z][a-zA-Z0-9_-]*` — **dots are not
-//! legal**. Keys are therefore kebab-case with the namespace as a prefix
-//! (`error-thread-locked`, `forum-reply-button`), not dotted paths.
-//!
-//! ## Concurrency
-//!
-//! The bundle is built with `new_concurrent`, which swaps Fluent's default
-//! `RefCell`-based memoizer for a thread-safe one. The default memoizer is not
-//! `Sync`, so a plain `FluentBundle` cannot live in `AppState` at all.
-//!
-//! Catalogs sit behind a `std::sync::RwLock<Arc<..>>` rather than a
-//! `tokio::sync::RwLock` on purpose: `translate` is called from inside Tera's
-//! synchronous `register_function` closure and cannot await. Readers clone the
-//! `Arc` and release the lock immediately, so a reload never blocks rendering —
-//! in-flight renders finish against the old catalog, exactly like the theme
-//! hot-reload's `Arc<Tera>` swap.
+//! `new_concurrent` is required: the default `RefCell` memoizer is not `Sync`,
+//! so a plain bundle cannot live in `AppState`. The lock is `std::sync`, not
+//! `tokio::sync`, because `translate` runs inside Tera's sync closure.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};

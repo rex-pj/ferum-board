@@ -1,17 +1,10 @@
-//! The UI-slot custom element naming rule.
+//! The UI-slot custom element naming rule — a contract between the server, which
+//! emits the tag, and a plugin bundle, which calls `customElements.define`.
 //!
-//! This name is a contract between two things that cannot see each other: the
-//! server, which emits `<tag></tag>` into the page, and a plugin's JavaScript
-//! bundle, which calls `customElements.define(tag, …)`. Nothing checks that they
-//! agree at build time, and a disagreement produces no error — an unknown custom
-//! element is a valid, empty inline box. The widget simply never appears.
-//!
-//! The rule previously ignored the plugin slug, which made a slot effectively
-//! single-occupancy without saying so. The server emits one element per slot
-//! *row*, so two plugins in `home_feed_top` produced two identical tags; both
-//! `define` calls raced for the one name, and the winner then rendered into
-//! **both** elements. What an operator saw was one plugin's widget twice and the
-//! other's not at all.
+//! Nothing checks they agree at build time and a mismatch raises no error: an
+//! unknown custom element is a valid empty box, so the widget just never
+//! appears. The slug is in the name because omitting it made two plugins in one
+//! slot race for the same tag.
 
 use ferum_domain::models::plugin::ui_slot_element_tag;
 

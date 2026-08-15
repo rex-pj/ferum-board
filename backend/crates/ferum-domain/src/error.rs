@@ -3,6 +3,12 @@ use thiserror::Error;
 
 use crate::i18n::{error_key, TransArg};
 
+/// The single error type every layer returns.
+///
+/// Variants carry a machine **code**, never user-facing prose: `translate_errors`
+/// resolves `error-<code-kebab>` against `errors.ftl` on the way out, so English
+/// written at the construction site is untranslatable.
+/// [`UnprocessableEntity`](AppError::UnprocessableEntity) is the one exception.
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("unauthorized")]
@@ -104,17 +110,13 @@ impl AppError {
         }
     }
 
-    /// Which errors carry text the catalog owns, and with what arguments.
+    /// Which errors carry catalog-owned text, and with what arguments.
     ///
-    /// `PluginBlocked` is deliberately excluded: its `reason` is authored by a
-    /// third-party plugin at runtime, so there is no key for it and no catalog
-    /// we could translate it against. `UnprocessableEntity` is excluded for the
-    /// same structural reason — it carries free-form prose, not a code.
+    /// `PluginBlocked` and `UnprocessableEntity` are excluded structurally: both
+    /// carry runtime-authored prose, not a key anything could translate.
     ///
-    /// Public because two callers need it: `IntoResponse` below, which hands it
-    /// to the `translate_errors` middleware, and the page handlers that answer a
-    /// `fetch()` with plain text and therefore have to resolve the message
-    /// themselves.
+    /// Public for `IntoResponse` and for page handlers that answer a `fetch()`
+    /// with plain text and must resolve the message themselves.
     pub fn error_payload(&self) -> Option<ErrorPayload> {
         match self {
             AppError::Forbidden(c) | AppError::Conflict(c) => {
@@ -184,17 +186,13 @@ impl axum::response::IntoResponse for AppError {
         }
         let payload = self.error_payload();
 
-        // The body is written with an *untranslated* placeholder. The
-        // `translate_errors` middleware rewrites `message` using the request's
-        // locale before the response leaves the server.
+        // Untranslated placeholder; `translate_errors` rewrites `message` in the
+        // request's locale on the way out. In middleware because `IntoResponse`
+        // cannot reach `AppState`, and the alternatives are a process-wide
+        // static or a task-local.
         //
-        // Doing it in middleware rather than here is what keeps this crate free
-        // of a global translator handle: `IntoResponse` has no access to
-        // `AppState` or to request extensions, so the only alternatives would be
-        // a process-wide static or a task-local — both of which this codebase
-        // deliberately avoids.
-        // Readable degradation if the middleware is ever absent: the user sees
-        // "thread locked" rather than a blank string.
+        // Degrades readably if that middleware is absent: "thread locked"
+        // rather than an empty string.
         let message = self.fallback_message();
 
         let body = json!({ "error": { "code": code, "message": message } });
@@ -243,9 +241,11 @@ impl ErrorPayload {
     }
 }
 
-// ─── Option convenience ───────────────────────────────────────────────────────
-
+/// Turns a lookup miss into [`AppError::NotFound`] with `?`, so the "row absent"
+/// case reads the same at every call site.
 pub trait OptionExt<T>: Sized {
+    /// # Errors
+    /// [`AppError::NotFound`] when `None`.
     fn or_not_found(self) -> Result<T, AppError>;
 }
 

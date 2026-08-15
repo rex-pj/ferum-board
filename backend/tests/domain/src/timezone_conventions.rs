@@ -1,23 +1,12 @@
 //! Enforces the workspace's timezone conventions by scanning source.
 //!
-//! Written as a test rather than a CI grep on purpose. A grep in a workflow file
-//! only runs on push, only on Linux, and is invisible to whoever is actually
-//! writing the code; this runs in every `cargo test --workspace`, on every
-//! platform, and fails next to the change that caused it. The repo already
-//! scans source this way — `models/plugin.rs` reads every `plugin.toml`, and
-//! `tests/web/src/template_integrity.rs` walks the template tree.
+//! 1. **Instants are `DateTime<Utc>`** — nothing reads the ambient process zone,
+//!    which is invisible to anyone already on UTC.
+//! 2. **"Today" in SQL is named, not inherited** — `CURRENT_DATE` and `NOW()`
+//!    are only as stable as the server's session configuration.
 //!
-//! ## The conventions
-//!
-//! 1. **Instants are `DateTime<Utc>`.** Nothing may read the ambient process
-//!    timezone: it makes behaviour depend on where the binary happens to run,
-//!    and it is invisible to everyone whose machine is already UTC.
-//! 2. **"Today" in SQL is named, not inherited.** `CURRENT_DATE` and `NOW()`
-//!    resolve against the session `TimeZone`, so any day boundary built on them
-//!    is only as stable as the server's configuration.
-//!
-//! Both rules were clean-ish when written and are cheap to keep that way; the
-//! expensive version of this file is the one written after a shipped bug.
+//! A test, not a CI grep: this runs on every platform and fails next to the
+//! change that caused it.
 
 use std::path::{Path, PathBuf};
 

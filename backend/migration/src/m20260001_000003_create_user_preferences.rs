@@ -72,18 +72,13 @@ impl MigrationTrait for Migration {
                     // follow the site default when an admin changes it, or fall
                     // through to Accept-Language negotiation.
                     .col(ColumnDef::new(UserPreferences::Locale).string().null())
-                    // Display timezone, IANA name. Nullable for the same reason
-                    // as `locale`, and the distinction matters more here: NULL
-                    // means "follow whatever zone this device reports", which
-                    // keeps tracking the device if the user travels. Storing
-                    // their current zone instead would pin them to it.
+                    // Display timezone, IANA name. NULL means "follow the
+                    // device", which keeps tracking it as the user travels —
+                    // storing their current zone would pin them to it.
                     //
-                    // Timestamps are server-rendered in UTC and localised in the
-                    // browser (see CLAUDE.md → Time and Timezones), so this
-                    // column is for the case the browser cannot serve: a device
-                    // whose own zone is wrong, or a traveller who wants the
-                    // community's zone. It is also what a server-rendered email
-                    // would need, though no email renders a date today.
+                    // Timestamps render in UTC and localise in the browser, so
+                    // this is only for what the browser cannot serve: a device
+                    // set wrong, or someone wanting the community's zone.
                     .col(ColumnDef::new(UserPreferences::Timezone).text().null())
                     .foreign_key(
                         ForeignKey::create()

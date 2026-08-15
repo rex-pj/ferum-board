@@ -1,7 +1,15 @@
-# ─── sccache ──────────────────────────────────────────────────────────────────
-# Caches compiled artifacts across cargo clean / CI runs.
-# Install: winget install Mozilla.sccache
-# Uncomment the line below AFTER installing sccache:
+# ─── sccache (opt-in; not configuration this repo disables) ───────────────────
+# Caches compiled artifacts across `cargo clean`, so a wipe-and-rebuild replays
+# from cache instead of recompiling. Worth it here because the dependency tree
+# is 393 crates.
+#
+# Left commented deliberately rather than enabled: naming a `rustc-wrapper` that
+# is not installed makes EVERY cargo command in this workspace fail immediately,
+# which would break a fresh clone for anyone who has not run the install first.
+# So the order matters — install, then uncomment:
+#
+#   winget install Mozilla.sccache     # or: cargo install sccache
+#
 # [build]
 # rustc-wrapper = "sccache"
 
@@ -34,6 +42,18 @@ linker = "rust-lld"
 # On Linux, use mold (fastest) if available, otherwise lld.
 # Install: apt install mold  OR  apt install lld
 # Comment out if neither is installed on the build machine.
+#
+# This is a HARD REQUIREMENT of the container build, not a local optimisation:
+# the Dockerfile installs clang and mold specifically because these two lines
+# pin them, and the link step fails outright on an image without them.
+#
+# `rustflags` HERE IS DEAD IN CI. Cargo takes rustflags from exactly one source,
+# and a `RUSTFLAGS` environment variable outranks every `target.*.rustflags` in
+# a config file — .github/workflows/ci.yml sets one at workflow level, so this
+# array is ignored for the whole run. The `linker` key above is a separate
+# setting and is unaffected, which is why CI still links with clang. Anything
+# added to this array must be added to the workflow's RUSTFLAGS too, or it will
+# apply locally and nowhere else.
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]

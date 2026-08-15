@@ -91,7 +91,6 @@
           <th>{{ t(k="adm-report") }}</th>
           {# SOURCE: reporter + date #}
           <th style="width:18%">{{ t(k="adm-reporter") }}</th>
-          {# STATE #}
           <th style="width:9%">{{ t(k="adm-status") }}</th>
           {# ACTIONS #}
           <th style="width:14%"></th>
@@ -144,7 +143,6 @@
                 <time data-rel datetime="{{ report.created_at }}">{{ report.created_at | localdate }}</time>
               </div>
             </td>
-            {# STATUS cell #}
             <td class="align-middle">
               {% if report.status == "pending" %}
                 <span class="badge bg-warning text-dark">{{ t(k="adm-pending") }}</span>

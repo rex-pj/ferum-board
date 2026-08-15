@@ -1,3 +1,8 @@
+//! Dashboard counts and historical series.
+//!
+//! Day buckets use `(ts AT TIME ZONE <reporting_timezone>)::date`, never bare
+//! `CURRENT_DATE` — the boundary must be named, not inherited from the session.
+
 use async_trait::async_trait;
 use sea_orm::sea_query::{
     Alias, Asterisk, Condition, Expr, ExprTrait, Func, JoinType, OnConflict, Order,
@@ -33,27 +38,14 @@ fn scalar(stmt: SelectStatement) -> SimpleExpr {
 
 // ─── Reporting day boundaries ────────────────────────────────────────────────
 //
-// Everything below used bare `CURRENT_DATE`, which resolves against the session
-// `TimeZone`. Two problems with that, and the second is the one that made the
-// numbers wrong rather than merely fragile:
+// Never bare `CURRENT_DATE` — it resolves against the session zone, so the day
+// boundary would come from whatever host ran `initdb`, and even UTC splits one
+// local day across two dates for a single-region community.
 //
-//   1. The session zone was never pinned, so the day boundary came from whatever
-//      host `initdb` ran on.
-//   2. Even pinned to UTC it is the wrong boundary for a community that sits in
-//      one region: UTC midnight then falls in the middle of the members' day, so
-//      one local day is split across two dates. Each "day" in the chart is a
-//      window offset by however far the community is from UTC — the small hours
-//      fall into the previous date east of UTC, the evening into the next date
-//      west of it.
-//
-// The three helpers below take the reporting zone explicitly and bind it as a
-// parameter. `AT TIME ZONE` accepts a text expression, so no interpolation is
-// needed and a hostile config value cannot become SQL.
-//
-// The round trip is deliberate and is the standard idiom:
-//   ts AT TIME ZONE tz   → timestamp   (wall-clock reading in that zone)
-//   date_trunc('day', …) → timestamp   (local midnight)
-//   … AT TIME ZONE tz    → timestamptz (the instant that local midnight happened)
+// The zone is BOUND as a parameter, so a hostile config value cannot become SQL.
+// The round trip is the standard idiom:
+//   ts AT TIME ZONE tz → timestamp; date_trunc('day', …) → local midnight;
+//   … AT TIME ZONE tz  → timestamptz (the instant that midnight happened)
 
 /// Today's date **in the reporting zone**, as a `DATE`. Use for `daily_stats.date`.
 fn today(tz: &str) -> SimpleExpr {
@@ -99,18 +91,10 @@ fn day_bucket(col: &str, tz: &str) -> SimpleExpr {
     Expr::cust_with_values(format!("({col} AT TIME ZONE $1)::date"), [tz])
 }
 
-/// `GROUP BY 1` — group by the first select column, by ordinal.
-///
-/// Not a style choice. The bucket expression contains a bind parameter, and
-/// every place `cust_with_values` renders it emits a *fresh* placeholder: the
-/// SELECT gets `AT TIME ZONE $1` while the GROUP BY gets `AT TIME ZONE $3`.
-/// Postgres matches GROUP BY expressions syntactically, so those two are
-/// different expressions and it rejects the query outright with "column
-/// created_at must appear in the GROUP BY clause". An ordinal refers to the
-/// select list by position and sidesteps the comparison entirely.
-///
-/// (`WHERE` needs no such treatment — it only has to be a valid predicate, not
-/// to match anything.)
+/// `GROUP BY 1` — by ordinal, not style. The bucket expression holds a bind
+/// parameter and `cust_with_values` emits a fresh placeholder each time, so
+/// SELECT gets `$1` and GROUP BY `$3`. Postgres matches GROUP BY syntactically
+/// and rejects the query outright; an ordinal sidesteps the comparison.
 fn group_by_first_column() -> SimpleExpr {
     Expr::cust("1")
 }
@@ -501,17 +485,12 @@ impl StatsRepository for PgStatsRepository {
     }
 
     async fn backfill_history(&self, tz: &str) -> Result<(), AppError> {
-        // INSERT <day in tz>, '<metric>', COUNT(*) … ON CONFLICT DO NOTHING.
+        // `day_bucket` names the zone; never `CAST(created_at AS date)`, which
+        // casts a timestamptz through the SESSION zone and lets a backfill
+        // disagree with the dashboard it was meant to reconstruct.
         //
-        // The bucket used to be `CAST(created_at AS date)`, which for a
-        // `timestamptz` casts through the SESSION timezone — the same
-        // inherited-boundary problem as `CURRENT_DATE`, and the reason a
-        // backfill could disagree with the live dashboard it was meant to
-        // reconstruct. `day_bucket` names the zone instead.
-        //
-        // ON CONFLICT DO NOTHING means this only ever FILLS GAPS. It will not
-        // re-bucket rows written under a different reporting zone; changing the
-        // zone and re-running leaves the old rows exactly as they were.
+        // ON CONFLICT DO NOTHING means this only FILLS GAPS — re-running after a
+        // zone change leaves the old rows as they were.
         let build = |day_select: SelectStatement| -> (String, Values) {
             let mut ins = Query::insert();
             ins.into_table(daily_stats::Entity).columns([

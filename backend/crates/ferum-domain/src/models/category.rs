@@ -19,18 +19,31 @@ pub struct Category {
     pub updated_by_id: Option<Uuid>,
 }
 
+/// Who may see a category exists. Enforced by `PermissionChecker`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Copy)]
 pub enum ViewPolicy {
     Public,
+    /// Basic trust; a guest gets 401, so existence is not hidden.
     MembersOnly,
+    /// Refused with **404, not 403** — a 403 would confirm the category exists
+    /// to an unauthorised reader.
     StaffOnly,
 }
 
+/// Minimum trust to post into a category. Does not grant permission — RBAC
+/// still applies — and staff with moderation rights here bypass the gate.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Copy)]
 pub enum PostPolicy {
+    /// Basic trust and above.
     Members,
+    /// Member trust and above.
     Trusted,
+    /// Leader trust, which is only ever assigned by hand.
     StaffOnly,
+    /// Nobody, staff included. Checked before the permission and trust gates.
     Closed,
+    /// Same trust floor as [`Members`](PostPolicy::Members) — the difference
+    /// lands after acceptance, where `PostUseCase` marks the post `pending`.
+    /// Gating it harder would reject the authors the queue exists to catch.
     Moderated,
 }

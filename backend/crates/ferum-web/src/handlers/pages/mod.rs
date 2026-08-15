@@ -59,18 +59,12 @@ pub fn require_page_auth(auth_user: Option<AuthUser>) -> Result<AuthUser, PageEr
     auth_user.ok_or(PageError::Unauthorized)
 }
 
-/// The `/login` redirect for a member-only page, carrying a `next` pointer so a
-/// signed-out visitor lands on the page they asked for instead of the homepage.
+/// `/login` redirect for a member-only page, carrying `?next=` so the visitor
+/// returns where they asked. `require_page_auth` is the admin/mod counterpart
+/// and deliberately omits `next`.
 ///
-/// `require_page_auth` above is the admin/mod counterpart and deliberately does
-/// NOT carry `next` — those pages send the visitor to a bare `/login`. The two
-/// are separate on purpose; this one exists so the `?next=` shape has a single
-/// definition rather than being spelled out at each member page that needs it.
-///
-/// `next` is expected to be an in-site path — a literal (`/account`) or one
-/// built from a slug (`/edit-thread/{slug}`). It is not percent-encoded,
-/// because slugs are already URL-safe by construction; feeding this a
-/// user-supplied string would want encoding first.
+/// `next` must be an in-site path. It is NOT percent-encoded — slugs are
+/// URL-safe by construction, so a user-supplied string would need encoding first.
 pub(crate) fn login_redirect(next: &str) -> Response {
     axum::response::Redirect::to(&format!("/login?next={next}")).into_response()
 }
@@ -101,18 +95,14 @@ pub(super) async fn user_ctx(
     Some(ctx)
 }
 
-/// Fills in `timezone` on a context built by `CurrentUserCtx::from(&AuthUser)`.
+/// Fills in `timezone` on a context built from `AuthUser`.
 ///
-/// The admin and moderator panels build their user context from the JWT, which
-/// carries no preferences — so `timezone` was `None` on all ~22 of those pages
-/// and `<meta name="ferum-tz">` never rendered there. An operator who set a zone
-/// on their account got it on the forum and not in the panels, which is where
-/// exact timestamps matter most: the audit log and the plugin log.
+/// The JWT carries no preferences, so without this the admin and mod panels
+/// render no `<meta name="ferum-tz">` — losing the operator's zone exactly where
+/// timestamps matter most, the audit and plugin logs.
 ///
-/// One indexed lookup on `user_preferences`, and only on HTML page renders for
-/// an authenticated staff user — not on the API paths. It deliberately does not
-/// fetch the unread count the public `user_ctx` does, because no panel template
-/// shows it.
+/// One indexed lookup, HTML renders only. Skips the unread count `user_ctx`
+/// fetches, since no panel template shows it.
 pub async fn with_viewer_timezone(
     state: &AppState,
     auth_user: &AuthUser,
@@ -199,7 +189,7 @@ pub(super) async fn plugin_ctx_data(
 /// This used to *build* the dictionary here, on every render: clone the entire
 /// default key set (`ui-`, `js-`, `adm-` and `error-` alike), filter it, then
 /// Fluent-format each survivor. It is now resolved once per catalog load inside
-/// the translator and handed back as an `Arc` — see [`Translator::js_strings`].
+/// the translator and handed back as an `Arc` — see `Translator::js_strings`.
 pub fn js_strings_for(
     state: &AppState,
     locale: &ferum_domain::Locale,

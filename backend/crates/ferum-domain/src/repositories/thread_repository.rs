@@ -78,18 +78,13 @@ impl ThreadFeedFilter {
     }
 }
 
-/// Reads the `?sort=` / `?filter=` pair off a listing URL, accepting both the
-/// current vocabulary and the pre-split one.
+/// Reads `?sort=` / `?filter=` off a listing URL, accepting the current and
+/// legacy vocabularies. The third element flags legacy input so an HTML handler
+/// can 301 to the canonical URL.
 ///
-/// The third element is `true` when the input used the legacy vocabulary, so an
-/// HTML handler can answer 301 with the canonical URL. Every legacy value is
-/// still accepted forever — those URLs are bookmarked, linked from posts, and
-/// indexed by search engines, and dropping them would fail silently: the request
-/// would quietly fall back to the default listing with no error anywhere.
-///
-/// This lives in the domain, and is the ONLY place that knows the old spelling.
-/// It is pure — no DB, no HTTP — which is what makes it cheap to test
-/// exhaustively.
+/// **Legacy values are accepted forever** — those URLs are bookmarked and
+/// indexed, and dropping one fails silently into the default listing. This is
+/// the only place that knows the old spelling.
 pub fn parse_feed_query(
     sort: Option<&str>,
     filter: Option<&str>,
@@ -175,20 +170,14 @@ pub trait ThreadRepository: Send + Sync {
         product_id: Uuid,
         limit: u64,
     ) -> Result<Vec<Thread>, AppError>;
-    /// The most recent review threads across all products, **at most one per
-    /// product** (the newest), newest first.
+    /// Most recent review threads, **at most one per product**, newest first.
     ///
-    /// Backs the homepage "latest reviews" panel. The per-product cap is the point:
-    /// a product that several people review in the same week would otherwise fill
-    /// the panel by itself, and a five-row panel showing five different products
-    /// carries five times the information. Note this is not a spam guard — a single
-    /// account already cannot review one product twice (`uq_threads_product_author`,
-    /// `uq_threads_product_author`), so the duplicates this collapses come from *different* people,
-    /// which is exactly the signal the rating system wants. It is collapsed for
-    /// display only; the product page still lists every review.
+    /// Backs the homepage panel: without the cap one popular product fills it
+    /// alone. Not a spam guard — `uq_threads_product_author` already stops one
+    /// account reviewing twice, so this collapses *different* people, and only
+    /// for display; the product page still lists every review.
     ///
-    /// Reviews of unpublished (draft) products are excluded, matching every other
-    /// public listing.
+    /// Excludes reviews of draft products, like every public listing.
     async fn list_latest_reviews(&self, limit: u64) -> Result<Vec<Thread>, AppError>;
 
     /// The author's existing (non-deleted) review of this product, if any.

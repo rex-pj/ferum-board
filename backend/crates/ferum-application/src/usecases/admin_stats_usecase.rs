@@ -15,17 +15,12 @@ use ferum_domain::AuthUser;
 /// [`dashboard_cache_key`].
 const DASHBOARD_CACHE_PREFIX: &str = "stats:dashboard";
 
-/// Cache key for the dashboard, scoped to the timezone the numbers were computed
-/// under.
+/// Dashboard cache key, **scoped to the timezone the numbers were computed
+/// under**. Without the zone, changing `reporting_timezone` keeps serving the
+/// old day boundary for the whole TTL while the settings page reports success —
+/// so the admin reloads, sees the same figures, and concludes it does not work.
 ///
-/// Without the zone in the key, changing `reporting_timezone` served figures
-/// from the old day boundary for up to the TTL — while the settings page said
-/// the change had saved. Worse than the staleness itself: the admin's obvious
-/// next move is to reload, see the same numbers, and conclude the setting does
-/// not work.
-///
-/// Including it also means switching back and forth reuses each zone's entry
-/// instead of repeatedly invalidating one.
+/// It also lets each zone keep its own entry across a switch back and forth.
 fn dashboard_cache_key(tz: &str) -> String {
     format!("{DASHBOARD_CACHE_PREFIX}:{tz}")
 }

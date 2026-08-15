@@ -1,23 +1,11 @@
-//! The datetime wire contract: RFC 3339 with an offset, in both directions.
+//! The datetime wire contract: RFC 3339 with an offset, both directions.
 //!
-//! These exist because the admin ban form was broken for every temporary ban and
-//! nothing caught it. `ferum-admin.js` posted the raw
-//! `<input type="datetime-local">` value — `"2026-08-15T09:00"`, which carries no
-//! offset — straight into a field typed `DateTime<Utc>`. Serde rejected it, axum
-//! turned that into a 422, and the form surfaced "Failed to ban user."
+//! A bare `<input type="datetime-local">` value is ZONELESS and serde rejects
+//! it — which broke every temporary ban from the admin form while permanent bans
+//! (sending `null`) kept working, so it read as intermittent.
 //!
-//! Three things made it survive:
-//!
-//! * A **permanent** ban sends `null` and worked, so the failure looked
-//!   intermittent rather than total.
-//! * The moderator ban form, in a different file, converted correctly — so the
-//!   same action worked from `/mod/users` and not from `/admin/users/{id}`.
-//! * Nothing asserted the contract, so there was no failing test to read.
-//!
-//! The fix is `Ferum.localInputToIso()` on the client. What is pinned here is the
-//! server half: that a zoneless string is genuinely rejected (so the client can
-//! never quietly go back to sending one) and that a correct one round-trips to
-//! the exact instant intended.
+//! Clients must convert with `Ferum.localInputToIso()`. Pinned here is the
+//! server half: a zoneless string stays rejected.
 
 use chrono::{TimeZone, Utc};
 use ferum_web::handlers::admin::api::users::BanUserRequest;

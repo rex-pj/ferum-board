@@ -1,20 +1,10 @@
-//! Tests for the connection-URL construction in `startup`.
+//! Connection-URL construction in `startup` — one half of the query ceiling.
+//! The other half, that the driver forwards `options=`, is pinned against a real
+//! Postgres in `ferum-infrastructure-tests`.
 //!
-//! These pin one half of the application-wide query ceiling. The other half —
-//! that a driver actually forwards `options=` to the server — is verified
-//! against a real Postgres in
-//! `ferum-infrastructure-tests::repositories::plugin_db_repository::
-//! statement_timeout_can_be_set_through_the_connection_url`.
-//!
-//! Split that way because neither half is convincing alone: a correctly built
-//! URL that the driver silently drops leaves every query unbounded, and a
-//! driver that forwards a parameter nothing sets protects nothing. Both
-//! failures are invisible at runtime — nothing errors, queries merely stop
-//! being capped — which is why they are pinned rather than assumed.
-//!
-//! The same split now applies to `TimeZone`, with a sharper failure mode: a
-//! dropped timeout costs a backstop, a dropped `TimeZone` changes what
-//! `CURRENT_DATE` *means* and silently re-buckets every daily statistic.
+//! Neither half convinces alone: a correct URL the driver drops leaves every
+//! query unbounded, and both failures are invisible at runtime. The same split
+//! covers `TimeZone`, where a drop silently re-buckets every daily statistic.
 
 use ferum_web::startup::with_session_settings;
 

@@ -5,17 +5,12 @@
 //! The concrete subscriber (stdout / JSON / OTLP) is wired once in `main::init_tracing` —
 //! no code change needed here when the destination changes.
 
-/// RAII guard that emits a `tracing::debug!` event with the elapsed time when dropped.
-///
-/// OCP: callers add timing without touching their own logic — just wrap the scope.
-/// New call sites adopt this type without modifying it.
+/// RAII guard logging elapsed time at `debug!` when dropped.
 ///
 /// # Example
 /// ```rust
 /// use ferum_web::telemetry::Latency;
 /// let _lat = Latency::start("site_ctx");
-/// // ... synchronous work ...
-/// // elapsed is logged when `_lat` goes out of scope
 /// ```
 pub struct Latency {
     op: &'static str,

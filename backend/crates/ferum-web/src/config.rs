@@ -43,16 +43,11 @@ pub struct Config {
     pub resend_api_key: Option<String>,
 
     // ─── Secrets at rest ─────────────────────────────────────────────────────
-    /// 64 hex characters (32 bytes), e.g. from `openssl rand -hex 32`.
+    /// 64 hex characters. Encrypts the SMTP password and webhook HMAC keys;
+    /// absent means plaintext, so enabling it needs no migration.
     ///
-    /// Encrypts the two secrets this application stores in PostgreSQL: the SMTP
-    /// password in `site_config` and each webhook's HMAC key. Absent means they
-    /// are stored in plaintext, which is what every earlier release did — so this
-    /// is opt-in and enabling it needs no migration.
-    ///
-    /// **Losing it is unrecoverable for those two values.** Nothing else in the
-    /// database is encrypted, so posts, users and threads are never at risk. See
-    /// `docs/deployment.md` for the recovery and rotation runbooks.
+    /// **Losing it is unrecoverable for those two values** — nothing else is
+    /// encrypted. Runbooks in `docs/deployment.md`.
     pub secret_encryption_key: Option<String>,
     /// The key being rotated *out*. Values are opened with the current key first,
     /// then this one, and anything that needed it is re-sealed by the startup
@@ -320,17 +315,11 @@ fn default_meilisearch_index() -> String {
 fn default_meilisearch_product_index() -> String {
     "products".to_string()
 }
-/// Sized for how many connections a *request* takes, not how many requests run.
+/// Sized per REQUEST, not per request-rate: handlers run COUNT and data fetch
+/// concurrently, so one search can hold 4-6 connections at once.
 ///
-/// Handlers deliberately run their COUNT and their data fetch concurrently
-/// (`tokio::try_join!`), and pages compose several such calls, so a single
-/// search or thread render can hold 4-6 connections at once. At 20 the pool
-/// therefore served roughly 4-8 concurrent requests before callers began
-/// failing on `acquire_timeout` — well short of what the hardware could do.
-///
-/// Past this range more connections stop buying throughput and start costing
-/// Postgres memory and scheduling; a deployment that needs to go further wants
-/// PgBouncer in transaction mode rather than a larger number here.
+/// Past this range more connections cost Postgres memory without buying
+/// throughput — a deployment needing more wants PgBouncer in transaction mode.
 fn default_db_max_connections() -> u32 {
     40
 }

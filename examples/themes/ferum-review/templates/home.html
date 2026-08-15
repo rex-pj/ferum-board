@@ -2,42 +2,15 @@
 {% import "default/templates/macros.html" as m %}
 
 {#
-  Ferum Review — home.html
-  ─────────────────────────────────────────────────────────────────────────────
-  Copied verbatim from default/templates/home.html, then changed in exactly two
-  places. Every other block — plugin slots, the top-rated shelf, tag filtering,
-  sort tabs, all four empty-state branches, pagination and the whole right
-  sidebar — is carried over unchanged, so no behaviour is lost by activating
-  this theme.
+  Ferum Review — home.html. A copy of default/templates/home.html with two
+  changes: the masthead moved to the `home-hero` plugin, and the counter band is
+  withheld until the catalogue is large enough not to advertise emptiness.
 
-  CHANGE 1 — Masthead, now the `home-hero` plugin
-    The page used to open on a row of counters. On a young board those counters
-    read as "nobody is here", so it opened on a thesis instead: what this place
-    is, who writes here, and one action.
-    That masthead was built in this file and drew its headline from
-    site.tagline — a field that is simultaneously this page's meta description
-    and its og:description, so one string had to serve two incompatible jobs.
-    It now lives in examples/plugins/home-hero, injected through the
-    plugin_slots.home_feed_top block below, which makes it admin-editable and
-    theme-independent. Nothing renders when that plugin is absent.
+  KEEP IN SYNC with default/templates/home.html — shared strings must reuse its
+  exact i18n keys, never re-typed duplicates.
 
-  CHANGE 2 — Counters gated behind a credibility threshold
-    "4 products · 3 reviews" is an anti-signal: it advertises emptiness. The
-    band is now withheld until the numbers support the claim. Nothing is
-    fabricated and nothing is permanently hidden — it appears on its own once
-    the catalogue passes the threshold.
-
-  KEEP IN SYNC WITH default/templates/home.html
-  Every i18n key below outside the masthead is the exact key default/home.html
-  uses for the same string — a new key added there for shared copy belongs
-  here too, not a re-typed duplicate.
-
-  THIS FILE IS THE SOURCE OF TRUTH for the ferum-review theme. It is packaged
-  into examples/themes/ferum-review-1.1.0.zip and installed from there into
-  frontend/themes/ferum-review/ via the admin theme-upload flow. Editing the
-  installed copy directly is a dead end — the next reinstall of this zip
-  overwrites it back to whatever is here. Edit this file, then repackage the
-  zip and reinstall (or copy this file over the installed one) to deploy.
+  SOURCE OF TRUTH. Packaged into ferum-review-*.zip; editing the installed copy
+  under frontend/themes/ is overwritten by the next reinstall.
 #}
 
 {% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
@@ -59,28 +32,16 @@
 {% endif %}
 
 {# ── Masthead ─────────────────────────────────────────────────────────────────
-   The masthead that used to live here — eyebrow, headline, sub-copy, two actions
-   and a photo mosaic — is now the `home-hero` plugin, injected through the
-   `plugin_slots.home_feed_top` block near the top of this file.
-
-   It moved for two reasons. Its headline borrowed `site.tagline`, which is also
-   this page's `<meta name="description">` and its og:description, so a string
-   written to work as one could not work as the other. And it existed only in
-   this theme, so switching themes lost it outright.
-
-   Nothing renders here when the plugin is absent (uninstalled, deactivated, or a
-   `--no-default-features` build with `script_plugins` off). That is deliberate:
-   the homepage opens straight onto the feed rather than a half-masthead.
-   See examples/plugins/home-hero/README.md. #}
+   Now the `home-hero` plugin, injected via plugin_slots.home_feed_top above. It
+   moved because its headline borrowed `site.tagline`, which is also this page's
+   meta description, and because a theme-local masthead was lost on theme switch.
+   Nothing renders when the plugin is absent — deliberate. #}
 {% if not active_tag %}
 
-{# ── Browse by type — three always-valid entry points into the catalogue ───────
-   The catalogue's only stable, guaranteed-non-empty facet is product_type
-   (furniture / material / room — the three the /catalog `?type=` filter accepts).
-   Finer buckets like "flooring" or "paint" are not a queryable dimension, so a
-   strip of them would link to filters the backend can't honour — this stays on
-   the three that always resolve. Labels reuse the existing ui-product-type-* keys
-   rather than minting theme-local duplicates. #}
+{# ── Browse by type ───────────────────────────────────────────────────────────
+   Only these three: `product_type` is the sole facet `/catalog?type=` accepts,
+   so finer buckets ("flooring") would link to filters the backend cannot honour.
+   Labels reuse the shared ui-product-type-* keys, never theme-local copies. #}
 <nav class="fr-typenav" aria-label="{{ t(k='ui-browse-by-type') }}">
   <a class="fr-typenav-tile" href="/catalog?type=furniture">
     <span class="fr-typenav-icon"><i class="fa-solid fa-couch" aria-hidden="true"></i></span>
@@ -129,22 +90,10 @@
    until reviews accumulate would leave the homepage of a product-review site
    with no products on it. #}
 {% if top_rated %}
-{# Show more / show less. At rest the shelf is clipped to exactly one row
-   (mechanism inherited from the default theme); expanding lifts the clip so the
-   grid shows the whole fetched set. It is NOT a collapse — the shelf never
-   hides, because a product-review homepage with no products on it is a worse
-   page.
-
-   The button carries the whole signal, and carries a count with it ("show 7
-   more"), which is why there is no fading peek of the next row underneath: that
-   would be a second, weaker voice saying the same thing, and it made the shelf
-   look broken whenever the next row happened to hold a single card.
-
-   The control is at the FOOT of the shelf, not in the header, and the header
-   stays an inert label. Two reasons: the arrow belongs on the seam where the
-   grid is cut off, pointing at what it opens; and a chevron in a section header
-   already means "collapse this section" on /forum, so reusing it here for "there
-   is more below" would give one icon two meanings in one app.
+{# Show more / show less: the shelf clips to one row and expands, but never
+   hides — it is not a collapse. The control sits at the FOOT, on the seam where
+   the grid is cut, because a chevron in a section header already means "collapse"
+   on /forum.
 
    KEEP IN SYNC with default/templates/home.html — this block is a copy of it. #}
 <div class="fr-feed mb-3" x-data="productShelf()">

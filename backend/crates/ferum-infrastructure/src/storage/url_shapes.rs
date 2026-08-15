@@ -1,34 +1,14 @@
-//! URL-shape helpers shared by every `StorageService` backend.
+//! URL-shape rules shared by every `StorageService` backend — here, not copied
+//! four times, because a drifted copy fails silently.
 //!
-//! `public_url` and `key_from_url` are inverses, and the reverse direction
-//! carries far more weight than its size suggests: file URLs are denormalised
-//! into `users.avatar_url`, `site_config` and the stored HTML of every post, and
-//! those strings are never rewritten. `key_from_url` failing to recognise one is
-//! not an error — it silently reports "not one of ours", so the reference is
-//! never taken or never released, and files are either leaked or garbage
-//! collected out from under posts still displaying them. Recognising *too much*
-//! fails the same way round: a key that names nothing, so the reference lands on
-//! a file that does not exist while the real one goes uncounted.
+//! `key_from_url` mis-recognising a URL is never an error: it reports "not
+//! ours", so a reference is never taken or never released and files leak or get
+//! collected out from under live posts.
 //!
-//! Every rule below is identical in all four backends, which is why it lives
-//! here rather than being spelled out four times. A copy that drifted would
-//! fail in the silent direction described above.
-//!
-//! # The two rules, and the order they must be applied in
-//!
-//! 1. **Under one of our own bases** — the configured CDN, or (for an object
-//!    store) the vendor host anchored on our bucket. Handled by [`under_base`].
-//! 2. **The bare resolver path** `/files/{key}`, which is what
-//!    [`ferum_application::ports::file_url`] persists. Handled by
-//!    [`strip_files_prefix`], and it must be tried **last**.
-//!
-//! Reversing that order is not cosmetic. A CDN can legitimately be mounted at a
-//! path ending in `/files` — the natural choice for an operator moving from
-//! database storage to an object store who wants existing URLs to keep their
-//! shape — and a rule that scanned for `/files/` anywhere in the string would
-//! then match the *base* and hand back a key still carrying the object-store
-//! prefix. Reference counting would look that key up, find nothing, and report
-//! success.
+//! **Rule order is load-bearing.** [`under_base`] (CDN or vendor host) FIRST,
+//! then [`strip_files_prefix`] LAST and anchored — a CDN legitimately mounted at
+//! a path ending in `/files` would otherwise match inside the base and yield a
+//! key still carrying the object-store prefix.
 
 use ferum_application::ports::FILES_PREFIX;
 
@@ -45,19 +25,13 @@ pub(super) fn without_query_or_fragment(url: &str) -> &str {
 
 /// The bare resolver path `/files/{key}` — **anchored at the start of the URL**.
 ///
-/// This is the form `ports::file_url` persists, so it is what avatars, site
-/// config and the stored HTML of every post actually contain, whichever backend
-/// is live. Reference counting resolves through it, so an adapter that stopped
-/// recognising it would collect files that posts still display.
+/// The form `ports::file_url` persists, so every adapter must recognise it or
+/// collect files that posts still display.
 ///
-/// The anchor is what limits it to *our* origin. Matching `/files/` anywhere in
-/// the string would claim `https://anyone-at-all.example.com/files/avatars/a.jpg`
-/// as one of ours — and since `key_from_url` feeds `decrement_ref` and
-/// `delete_by_key` (see `ThreadUseCase::set_thumbnail`, `UserUseCase` avatar and
-/// cover replacement), an externally-hosted URL stored in one of those fields
-/// could release a CAS reference it has nothing to do with.
-/// A URL under our own CDN is absolute and is *not* handled here; it goes
-/// through [`under_base`], which knows what our CDN is.
+/// The anchor limits it to OUR origin: matching `/files/` anywhere would claim
+/// `https://anyone.example.com/files/a.jpg`, and since this feeds
+/// `decrement_ref`, a foreign URL could release someone else's reference.
+/// Absolute CDN URLs go through [`under_base`] instead.
 pub(super) fn strip_files_prefix(url: &str) -> Option<&str> {
     url.strip_prefix(FILES_PREFIX).filter(|key| !key.is_empty())
 }

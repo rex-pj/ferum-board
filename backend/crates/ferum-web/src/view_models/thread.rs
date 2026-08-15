@@ -7,7 +7,6 @@ use ferum_domain::models::thread::Thread;
 use super::tag::TagResponse;
 use super::AuthorInfo;
 
-// ─── Requests ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 pub struct MoveThreadRequest {
@@ -32,7 +31,6 @@ pub struct ThreadListQuery {
     pub filter: Option<String>,
 }
 
-// ─── Nested response types ─────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct ThreadCategoryResponse {
@@ -40,7 +38,6 @@ pub struct ThreadCategoryResponse {
     pub name: String,
 }
 
-// ─── Thread Response ───────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct ThreadResponse {

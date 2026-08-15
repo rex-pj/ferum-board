@@ -32,28 +32,15 @@ pub struct Opened {
     pub needs_reseal: bool,
 }
 
-/// Authenticated encryption for the handful of secrets this application stores in
-/// PostgreSQL.
+/// Authenticated encryption for the secrets this application stores in Postgres.
 ///
-/// ## What this protects against, and what it does not
+/// Protects exactly one scenario: the database is read without the process
+/// environment — a dump, a backup, a leaked replica. It does NOT protect against
+/// an attacker on the host, where the key is readable.
 ///
-/// It protects exactly one scenario: someone reads the database — a dump, a
-/// backup on third-party storage, a leaked replica, a read-only SQL injection —
-/// **without** also reading the process environment. That is a real and common
-/// separation, and it is the reason backups are the usual place secrets leak.
-///
-/// It does **not** protect against an attacker on the host: the key is in the
-/// environment of a process they can read. Nobody should reach for this expecting
-/// otherwise.
-///
-/// ## Why AEAD specifically, and not a plain stream cipher
-///
-/// Because one of the two protected values is an HMAC key. A cipher without
-/// authentication would happily turn a corrupted or key-mismatched ciphertext
-/// into 32 bytes of garbage, and the webhook dispatcher would then sign every
-/// payload with it. Subscribers would reject the signatures, `record_failure`
-/// would tick up, and nothing anywhere would say why. AEAD makes that
-/// impossible — authentication fails loudly instead of yielding plausible junk.
+/// AEAD specifically, because one protected value is an HMAC key: an
+/// unauthenticated cipher would yield 32 bytes of garbage that the webhook
+/// dispatcher would then sign with, failing silently at every subscriber.
 pub struct SecretCipher {
     current: XChaCha20Poly1305,
     /// Opened-with-only-this reports `needs_reseal`, which the startup sweep acts

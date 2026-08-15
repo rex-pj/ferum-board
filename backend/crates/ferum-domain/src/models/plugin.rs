@@ -1,10 +1,16 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+/// An escalating trust ladder, not interchangeable packaging formats: each tier
+/// buys capability by giving up isolation.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PluginTier {
+    /// Declarative webhooks only; no code runs in this process.
     Manifest,
+    /// JS in a `boa_engine` sandbox, own thread, hook timeout + circuit breaker.
+    /// Needs the `script_plugins` feature, else reported as unsupported.
     Script,
+    /// Out-of-process sidecar. Phase 3 — does not yet select a working runtime.
     Service,
 }
 
@@ -100,24 +106,15 @@ pub struct PluginUiSlot {
     pub is_active: bool,
 }
 
-/// The custom element name that carries a plugin's widget in a named slot.
+/// The custom element name carrying a plugin's widget in a named slot.
 ///
-/// **The plugin slug is part of the name, and that is the whole point.** The tag
-/// used to come from the slot name alone, which made a slot single-occupancy in
-/// a way nothing announced: the server emits one element per slot *row*, so two
-/// plugins in `home_feed_top` produced two identical `<ferum-slot-home-feed-top>`
-/// tags, both `customElements.define` calls raced for the one name, and whichever
-/// registered first then rendered into **both** elements. The observable symptom
-/// was one plugin's widget appearing twice and the other's not at all — with no
-/// error anywhere, because nothing in that sequence is a failure.
+/// **The slug is in the name, which is what makes a slot multi-occupancy.**
+/// Naming it after the slot alone gave two plugins in `home_feed_top` identical
+/// tags; both `customElements.define` calls raced and the winner rendered into
+/// both elements — one widget twice, the other missing, no error anywhere.
 ///
-/// With the slug in the name each plugin owns its own element, so several
-/// plugins share a slot and render in `load_order` sequence.
-///
-/// The output is a valid custom element name for any slug: lowercased, every
-/// character outside `[a-z0-9]` folded to a single `-`, and the constant prefix
-/// guarantees both the required hyphen and a leading letter — which a slug
-/// starting with a digit would otherwise violate.
+/// The constant prefix guarantees the required hyphen and a leading letter, so
+/// the output is valid even for a slug starting with a digit.
 pub fn ui_slot_element_tag(plugin_slug: &str, slot_name: &str) -> String {
     fn sanitize(s: &str) -> String {
         let mut out = String::with_capacity(s.len());
@@ -149,8 +146,6 @@ pub struct PluginLog {
     pub context: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
 }
-
-// ─── Input DTOs ───────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 pub struct NewPlugin {

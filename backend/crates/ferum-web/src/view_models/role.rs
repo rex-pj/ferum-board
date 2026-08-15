@@ -5,7 +5,6 @@ use validator::Validate;
 
 use ferum_domain::models::role::{Permission, Role};
 
-// ─── Responses ────────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Clone)]
 pub struct RoleResponse {
@@ -67,7 +66,6 @@ pub struct UserRoleResponse {
     pub permissions: Vec<String>,
 }
 
-// ─── Requests ─────────────────────────────────────────────────────────────────
 
 
 #[derive(Debug, Deserialize, Validate)]

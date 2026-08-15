@@ -1,3 +1,8 @@
+//! PostgreSQL full-text search over threads and products.
+//!
+//! Every predicate here must stay character-identical to its index expression
+//! in the migrations; drift silently drops to a sequential scan on each search.
+
 use async_trait::async_trait;
 use sea_orm::{DatabaseConnection, DbBackend, FromQueryResult, Statement};
 use uuid::Uuid;
@@ -106,28 +111,13 @@ fn build_tsquery(raw: &str) -> Option<String> {
 
 /// Threads whose *body* matches, as a subquery over `idx_posts_fts`.
 ///
-/// F-ORG-03 asks for "thread title + post content", and the index for the second
-/// half has existed since migration 6 — but nothing queried it, so a term that
-/// appeared only in a reply was unfindable. On a discussion forum that is most
-/// of the text on the site: the title is one line, the answers are the substance.
+/// **Must match `idx_posts_fts` character for character** or Postgres quietly
+/// ignores the index and sequentially scans `posts` on every search — no error,
+/// no wrong answer, just a bill. `pub` so the test can `EXPLAIN` this exact
+/// string rather than a copy of it.
 ///
-/// Uncorrelated `IN`, exactly like [`BRAND_MATCH_SUBQUERY`] and for the same
-/// reason: an `OR` spanning two tables cannot use either index, so written as a
-/// join Postgres would sequentially scan `threads`. In this shape it runs one
-/// GIN scan over `posts`, hashes the thread ids, and BitmapOrs that against the
-/// title index.
-///
-/// Only `published` posts, and never a soft-deleted one. A pending post is
-/// awaiting moderation and must not be reachable — not even by its own author,
-/// who can already see it in the thread. Making that viewer-dependent would put
-/// a viewer term into `count_sql` for a case nobody asked for.
-///
-/// Public only so the test suite can `EXPLAIN` this exact string. The
-/// `to_tsvector(...)` here has to match `idx_posts_fts` character for character
-/// or Postgres quietly ignores the index and sequentially scans `posts` on every
-/// search — a failure with no error and no wrong answer, only a bill. Asserting
-/// against a copy of the text would assert against the copy, so the test reads
-/// the real one.
+/// Uncorrelated `IN`, not a join: an `OR` spanning two tables can use neither
+/// index. Published posts only — a pending one is awaiting moderation.
 #[doc(hidden)]
 pub const POST_MATCH_SUBQUERY: &str = "SELECT po.thread_id FROM posts po \
      WHERE po.is_deleted = false \
@@ -182,21 +172,14 @@ fn plan_threads(tsquery: &str, query: &SearchQuery) -> Option<Plan> {
     let limit_idx = values.len() + 1;
     let offset_idx = values.len() + 2;
 
-    // Each ordering is reduced to one numeric key, selected as a column, so the
-    // outer query can re-state the sort without recomputing it. That matters
-    // because the body snippet is joined on *after* the page is chosen: a
-    // subquery's ORDER BY is not carried through a join by any rule Postgres
-    // guarantees, so an outer ORDER BY is required and it must key off something
-    // the inner query actually emits.
+    // One numeric sort key as a column, because the snippet is joined on AFTER
+    // the page is chosen and Postgres guarantees no ORDER BY through a join.
     //
-    // Every ordering still ends with `created_at DESC` as a deterministic
-    // tiebreak, so paging is total: without it two equally-ranked (or equal
-    // reply_count) threads can swap between pages and the reader sees one twice.
+    // Always ends `created_at DESC` as a deterministic tiebreak, or equally
+    // ranked threads swap between pages and the reader sees one twice.
     //
-    // Relevance repeats the body subquery rather than joining its result in,
-    // because `count_sql` shares `where_sql` and has no joins of its own — the
-    // same constraint the brand-match ranking works around. Both occurrences are
-    // uncorrelated, so each is one hashed subplan, not a scan per row.
+    // Relevance repeats the body subquery rather than joining it, since
+    // `count_sql` shares `where_sql` and has no joins.
     let sort_key = match query.thread_sort {
         ThreadSearchSort::Relevance => format!(
             "(ts_rank(to_tsvector('simple', f_unaccent(t.title)), \
@@ -303,11 +286,9 @@ const BRAND_MATCH_RANK_BONUS: f32 = 0.25;
 /// can swap places between page 1 and page 2 and the reader sees one twice
 /// while never seeing the other.
 ///
-/// `TopRated` uses the same Bayesian shrinkage as the catalogue
-/// (`ProductListFilter`'s `bayesian` module) rather than a raw average — one
+/// `TopRated` uses the catalogue's Bayesian shrinkage, not a raw average — one
 /// 5★ review must not outrank a 4.6★ backed by two hundred. The `CASE` keeps
-/// unrated products NULL so they sort last instead of inheriting the 3.5 prior
-/// and landing above products that genuinely scored below it.
+/// unrated products NULL so they sort last rather than inheriting the prior.
 fn product_order_by(sort: ProductSearchSort, rank_expr: &str) -> String {
     match sort {
         ProductSearchSort::Relevance => format!("{rank_expr} DESC, p.created_at DESC"),

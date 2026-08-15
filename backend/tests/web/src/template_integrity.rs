@@ -281,16 +281,12 @@ async fn both_shells_use_the_same_brand_mark() {
 /// Every `| localdate` must sit inside a `<time>` carrying `data-rel` or
 /// `data-abs`.
 ///
-/// The filter renders **UTC**, and deliberately so — it localises month names
-/// and field order through the Fluent catalog, which is all the server can do
-/// without knowing the reader's zone. Turning that into the reader's actual
-/// local time is `ferum-utils.js`'s job, and it only looks at `<time>` elements
-/// carrying one of those two markers.
+/// The filter renders **UTC** by design — it localises month names, not zones —
+/// and `ferum-utils.js` converts only elements carrying those markers.
 ///
-/// So a bare `{{ ts | localdate }}` is not "unstyled" — it is a timestamp
-/// permanently stuck in UTC, which for a reader at +07 shows the previous day's
-/// date for anything posted before 07:00 local. There were six of them, and
-/// every one looked completely fine on a UTC developer machine.
+/// So a bare `{{ ts | localdate }}` is stuck in UTC: at +07 it shows the
+/// previous day for anything posted before 07:00, and looks fine on a UTC
+/// developer machine.
 #[test]
 fn every_localdate_is_inside_a_client_corrected_time_element() {
     let mut offenders = Vec::new();

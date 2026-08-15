@@ -1,15 +1,10 @@
 //! `POST /api/admin/email/test` — prove the configured mail provider works.
 //!
-//! Modelled on `POST /api/admin/webhooks/:id/test`, and the property worth
-//! copying is this: **a failed delivery is a 200 with `success: false`, not an
-//! error response.** The request itself succeeded; what it reports is a
-//! diagnosis. Returning 500 here would make the browser's generic error handling
-//! swallow the one piece of information the admin came for.
+//! **A failed delivery is a 200 with `success: false`, never an error status.**
+//! The request succeeded; what it carries is a diagnosis, and a 500 would let
+//! the browser's generic handling swallow the one thing the admin came for.
 //!
-//! It exists because the alternatives for "is mail working?" are all bad. The
-//! startup log has scrolled away by the time anyone asks, `/health/ready` says
-//! which provider is selected but deliberately never probes it, and the only
-//! other way to find out is to ask a stranger to register an account.
+//! Exists because `/health/ready` deliberately never probes the provider.
 
 use axum::extract::{Extension, State};
 use axum::response::IntoResponse;

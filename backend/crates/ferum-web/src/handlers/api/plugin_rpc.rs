@@ -8,23 +8,15 @@ use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::ports::HookContext;
 
-/// Generic inbound entry point for Tier 2 (Script) plugins that need to accept
-/// arbitrary client requests — not just react to core hooks. The plugin's JS
-/// bundle registers a handler via `__ferum_rpc[action] = function(ctx) {...}`;
-/// this route forwards the caller's identity (if any) plus the request body to
-/// that handler and returns whatever JSON it produces.
+/// Inbound entry point for Script plugins accepting arbitrary client requests.
+/// The bundle registers `__ferum_rpc[action]`; this forwards caller identity and
+/// body, and returns whatever JSON the handler produces.
 ///
-/// Deliberately does NOT require auth at this layer: per NF-UX-05, guests can
-/// read all public content without logging in, and most plugin actions split
-/// into public reads (e.g. viewing poll results, chat history) and
-/// member-only writes (voting, posting). The host can't know which is which
-/// for an arbitrary plugin action, so `ctx.actor_id` is `null` for anonymous
-/// callers and each __ferum_rpc handler decides for itself whether an action
-/// needs a logged-in actor — see the `if (!ctx.actor_id) return {...}` guards
-/// in the write actions of examples/plugins/{simple-chatbox,community-polls}.
+/// **Deliberately unauthenticated** — the host cannot know which of a plugin's
+/// actions are public reads, so `ctx.actor_id` is null for guests and **every
+/// write action must check it itself** (see the guards in simple-chatbox).
 ///
-/// Unlike before-hooks, a failed dispatch here is a real HTTP error — there is
-/// no "fail open" for a request whose entire purpose is to get a response.
+/// Unlike before-hooks this does NOT fail open: a bad dispatch is a real error.
 pub async fn invoke(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,

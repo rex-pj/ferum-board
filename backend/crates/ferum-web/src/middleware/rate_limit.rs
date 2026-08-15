@@ -1,3 +1,6 @@
+//! Fixed-window per-IP rate limiting. Fails CLOSED: a backend error is a 503,
+//! not a free pass, so an outage cannot silently disable brute-force limits.
+
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,21 +15,12 @@ use crate::app_state::AppState;
 use ferum_application::ports::RateLimitResult;
 
 pub struct RateLimitConfig {
-    /// Stable name of the counter this group shares, per client.
+    /// Stable counter name shared by this group, per client.
     ///
-    /// Load-bearing, and the reason this field exists at all: the key used to be
-    /// built from `req.uri().path()`, so every distinct *concrete* path got its
-    /// own budget. Most rate-limited routes carry a path parameter, which made
-    /// the limits far weaker than the numbers suggested — `/api/posts/{id}/reactions`
-    /// gave a fresh allowance per post, and `/files/{key}` (unbounded
-    /// cardinality) gave one per file, so the scraper the blob limit was added
-    /// to stop simply walked keys and never hit it.
-    ///
-    /// A fixed name per group makes the limit what NF-SC-05 always described:
-    /// per client, per capability. Note this is stricter than the old behaviour
-    /// for groups spanning several endpoints — auth is now 10/min across login,
-    /// registration and password reset combined rather than 10/min each, which
-    /// is what "auth 10 req/min" meant.
+    /// **Never key on `req.uri().path()`**: routes carry path parameters, so
+    /// `/files/{key}` would give a fresh allowance per file and a scraper never
+    /// hits the limit. A fixed name makes it per client, per capability — so
+    /// auth is 10/min across login, registration and reset combined.
     pub bucket: &'static str,
     /// Key in site_config table that stores the per-minute limit for this route group.
     pub config_key: &'static str,
@@ -74,19 +68,12 @@ impl RateLimitConfig {
     }
 }
 
-/// Extract the real client IP.
+/// Extracts the real client IP.
 ///
-/// When `trusted_proxy_count` is 0 (default), the raw TCP peer address is always
-/// used — `X-Forwarded-For` is ignored. This is the safe default: without a
-/// trusted proxy, an attacker can forge `X-Forwarded-For` to spoof their IP and
-/// bypass rate limiting.
-///
-/// When `trusted_proxy_count` is N > 0, the (N)th-from-last entry in
-/// `X-Forwarded-For` is used as the client IP. A correctly configured Nginx
-/// appends the real peer address, so count=1 gives the actual client.
-///
-/// `X-Real-IP` is read only when `trusted_proxy_count` > 0, as a fallback
-/// when `X-Forwarded-For` is absent (some proxy configs set only this header).
+/// At `trusted_proxy_count = 0` the TCP peer address is used and
+/// `X-Forwarded-For` is ignored — otherwise anyone can forge it to bypass rate
+/// limiting. At N > 0 the Nth-from-last XFF entry is the client, with
+/// `X-Real-IP` as a fallback.
 pub fn extract_client_ip(headers: &axum::http::HeaderMap, trusted_proxy_count: u32) -> String {
     if trusted_proxy_count > 0 {
         if let Some(xff) = headers

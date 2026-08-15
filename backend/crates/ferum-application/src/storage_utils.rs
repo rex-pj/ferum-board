@@ -1,3 +1,5 @@
+//! CAS key derivation and image validation shared by every upload path.
+
 use sha2::{Digest, Sha256};
 
 /// Generates a content-addressed storage key.

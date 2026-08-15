@@ -30,17 +30,13 @@ impl WebhookUseCase {
         }
     }
 
-    /// Rejects a URL whose hostname *resolves* to a private address. Runs only
-    /// on the admin-facing create/update path, where the point is to tell the
-    /// admin their URL is unusable rather than to let them save a row that will
-    /// be silently refused at dispatch. Delivery is still guarded independently
-    /// by `build_pinned_client`, so a DNS record flipped after this check is
-    /// caught there — this cannot and does not try to be the security boundary.
+    /// Rejects a URL resolving to a private address, on the admin save path
+    /// only — so the admin is told now rather than saving a row that fails at
+    /// dispatch. **Not the security boundary**: `build_pinned_client` guards
+    /// delivery and catches a DNS record flipped afterwards.
     ///
-    /// A resolution failure is *not* fatal: a host that is merely unreachable
-    /// right now (or resolves only from the network the app deploys into) is a
-    /// legitimate webhook target, and failing closed here would make webhooks
-    /// unconfigurable in those environments.
+    /// A resolution failure is not fatal — a host reachable only from the
+    /// deployment network is a legitimate target.
     async fn assert_hostname_not_private(&self, url: &str) -> Result<(), AppError> {
         let Some(host) = url.parse::<http::Uri>().ok().and_then(|u| {
             u.host()

@@ -1,16 +1,11 @@
-//! Integration tests for [`PgPluginDbGateway`] — the Tier-2 plugin SQL gateway.
+//! Integration tests for [`PgPluginDbGateway`], the Tier-2 plugin SQL gateway.
+//! The only file driving `sea_orm::sqlx` directly, so the only place the sqlx
+//! 0.9 API is exercised against a real server.
 //!
-//! This is the only file in the workspace that drives `sea_orm::sqlx` directly,
-//! so it is also the only place where the sqlx 0.9 upgrade (`AssertSqlSafe`,
-//! the `Arguments` lifetime removal) is exercised against a real server rather
-//! than a mock. Everything here runs actual SQL.
-//!
-//! The tests are deliberately split between the two independent layers the
-//! gateway relies on, because conflating them is how a security regression
-//! hides: `validate_plugin_sql` (a denylist, defence-in-depth) and the
-//! `SET LOCAL ROLE ferum_plugin` privilege drop (the real boundary). A gap in
-//! one is not automatically exploitable while the other holds — but a silent
-//! loss of *either* is worth failing a build over.
+//! **Split by layer on purpose**: `validate_plugin_sql` (denylist,
+//! defence-in-depth) and the `SET LOCAL ROLE` privilege drop (the real
+//! boundary). Conflating them is how a regression hides — a gap in one is not
+//! exploitable while the other holds, but losing either should fail the build.
 
 use ferum_domain::repositories::plugin_db_repository::PluginDbGateway;
 use ferum_infrastructure::repositories::PgPluginDbGateway;
@@ -219,22 +214,14 @@ async fn statement_timeout_can_be_set_through_the_connection_url() {
     );
 }
 
-/// A runaway plugin query is cancelled by Postgres rather than holding a pooled
-/// connection indefinitely.
+/// A runaway plugin query is cancelled by Postgres, not left holding a pooled
+/// connection — the only thing that actually bounds plugin SQL, since the
+/// registry's tokio timeout cannot reach a thread inside `block_on`.
 ///
-/// This is the only thing that actually bounds plugin SQL. `PluginRegistry`
-/// wraps hook dispatch in a `tokio::time::timeout`, but the plugin runs inside
-/// `block_on` on a dedicated OS thread outside the runtime, so that timeout
-/// cancels the waiting future and cannot touch the thread still holding this
-/// transaction open. The `SET LOCAL statement_timeout` in the gateway is what
-/// closes that hole.
+/// Against a real server because the gateway fails CLOSED: a syntax error in
+/// that statement breaks every `Ferum.db.query` at once.
 ///
-/// Tested against a real server because the gateway fails *closed* if the
-/// statement is rejected: a syntax error here would break every
-/// `Ferum.db.query` at once, not degrade quietly.
-///
-/// `pg_sleep` would be the natural probe but the validator's `pg_` denylist
-/// blocks it, so this burns real rows instead.
+/// Burns rows rather than `pg_sleep`, which the validator's denylist blocks.
 #[tokio::test]
 async fn a_runaway_query_is_cancelled_instead_of_holding_the_connection() {
     let db = TestDb::new("pdb_stmt_timeout").await;

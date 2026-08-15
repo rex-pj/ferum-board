@@ -397,18 +397,11 @@ impl ThreadUseCase {
             feed_ids
         };
 
-        // Product reviews are kept out of the discussion feed. They are threads and
-        // keep every thread behaviour (replies, reactions, reports, search), but they
-        // are *catalogue* content: they arrive at a rate driven by products × buyers,
-        // so left in the feed they crowd out discussion exactly as the catalogue
-        // succeeds. They stay reachable via the product page, /catalog, the reviews
-        // category itself, search, and the homepage's "latest reviews" panel.
-        //
-        // Applied after the fallbacks above so neither can reintroduce the category.
-        // Deliberately no "don't empty the feed" guard: if reviews are the only
-        // visible category then there genuinely are no discussions, and the empty
-        // state says so honestly. `list_feed` treats an empty id list as an empty
-        // result, not as "unfiltered", so this cannot widen the query.
+        // Reviews are catalogue content and arrive at products × buyers rate, so
+        // they would crowd out discussion exactly as the catalogue succeeds.
+        // Applied after the fallbacks above so neither reintroduces the category.
+        // `list_feed` treats an empty id list as an empty result, not
+        // "unfiltered", so this can never widen the query.
         let feed_ids: Vec<Uuid> = match reviews_id {
             Some(id) if !watches_reviews => {
                 feed_ids.into_iter().filter(|c| *c != id).collect()
@@ -417,17 +410,11 @@ impl ThreadUseCase {
         };
 
         let filter = ThreadFilter { sort, filter: feed_filter };
-        // Only cache the count for the guest feed, whose category set is stable. A
-        // logged-in user's feed is personalized (watched/muted), so its count is not
-        // shared and not worth caching — pass None to compute it normally.
-        //
-        // The key carries `nr` ("no reviews") because the guest feed's category set
-        // changed when reviews were excluded. Reusing the old key would serve a total
-        // that still counted review threads against a list that no longer contains
-        // them — a paginator promising pages that render empty, and it would fail
-        // silently until the 30s TTL expired on every deployed instance.
-        // Keyed on the filter for the same reason as `list_by_category` above:
-        // the total is a property of the row set, which the sort does not touch.
+        // Guest feed only — a logged-in feed is personalized, so its count is not
+        // shared. The key carries `nr` ("no reviews") because excluding reviews
+        // changed the category set: reusing the old key would serve a total
+        // counting threads the list no longer contains. Keyed on filter, not
+        // sort, since the total is a property of the row set.
         let count_key = (actor.is_none())
             .then(|| format!("threads:count:feed:guest:nr:{}", filter.filter.as_str()));
         let cached_total = match &count_key {
@@ -620,18 +607,12 @@ impl ThreadUseCase {
         Ok(thread)
     }
 
-    /// A live thread's id, from its slug. No side effects and no authorization.
+    /// A live thread's id, from its slug. No side effects, no authorization.
     ///
-    /// `/api/threads/*` identifies threads by slug throughout, but the use cases
-    /// below take ids and re-load the thread to run their own permission checks.
-    /// This is the bridge, and it is deliberately *not* `get_by_slug`: that one
-    /// enforces category visibility and records a view, which is right for
-    /// reading a thread and wrong for pinning one — a mod action would count as
-    /// a page view, and a moderator acting on a category they cannot browse
-    /// would be refused by the read rule instead of the action's own.
-    ///
-    /// Costs one indexed lookup on write paths. The alternative — threading
-    /// slugs through every use case — would move the same query, not remove it.
+    /// Deliberately NOT `get_by_slug`, which records a view and enforces
+    /// category visibility — right for reading, wrong for a mod action, where it
+    /// would count as a page view and refuse on the read rule instead of the
+    /// action's own.
     #[tracing::instrument(skip(self), fields(slug = %slug))]
     pub async fn id_for_slug(&self, slug: &str) -> Result<Uuid, AppError> {
         let thread = self.threads.find_by_slug(slug).await?.or_not_found()?;
@@ -992,16 +973,11 @@ impl ThreadUseCase {
     }
 
     /// Un-publishes every post attachment the thread's posts still reference.
+    /// Deleting a thread only flips its own status, so without this the images
+    /// stay publicly servable.
     ///
-    /// Deleting a thread only flips the thread's own status; its post rows are
-    /// left intact, so without this their images would stay publicly servable
-    /// after the thread containing them is gone.
-    ///
-    /// Reachable only once per thread — `delete_by_slug` rejects an already
-    /// deleted thread — so these decrements cannot be applied twice. As in
-    /// `PostUseCase`, a count reaching zero un-publishes the blob but never
-    /// deletes it, and bookkeeping failures are logged rather than failing the
-    /// delete the user actually asked for.
+    /// Reachable once per thread (`delete_by_slug` rejects an already-deleted
+    /// one), so decrements cannot double-apply.
     async fn release_attachment_refs(&self, thread_id: Uuid) {
         let contents = match self.posts.content_md_by_thread(thread_id).await {
             Ok(c) => c,

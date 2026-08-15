@@ -1,14 +1,10 @@
-//! Tier 2 Script Plugin Runtime — boa_engine (pure Rust JS engine)
+//! Tier 2 Script plugin runtime, on `boa_engine`.
 //!
-//! Each Script plugin runs in its own dedicated OS thread owning a boa_engine Context.
-//! Communication with the main tokio runtime uses std channels + oneshot for replies.
+//! Each plugin owns a dedicated OS thread and its own Context, reached from the
+//! tokio runtime over `std::sync::mpsc` + oneshot replies.
 //!
-//! Plugin JS API note: hooks are synchronous from the JS perspective.
-//! Cache and HTTP operations block the JS thread briefly via tokio Handle::block_on.
-//!
-//! Architecture:
-//!   Main tokio runtime  ──(std::sync::mpsc + oneshot)──►  Plugin JS thread
-//!                                                           └── boa_engine Context
+//! Hooks are synchronous to JS: cache and HTTP calls block the plugin thread via
+//! `Handle::block_on`, which is why that thread is outside the runtime.
 
 #[cfg(feature = "script_plugins")]
 mod inner {
@@ -208,7 +204,13 @@ var __ferum_rpc = {};
 
     // ─── Register native functions into boa_engine Context ────────────────────────
 
-    // Safety: all closures capture only Arc<JsThreadState> which holds no GC-managed objects.
+    /// Registers the `__ferum_*` natives backing the `Ferum.*` JS API.
+    ///
+    /// # Safety
+    /// Every closure registered here must capture only `Arc<JsThreadState>`,
+    /// which holds no GC-managed objects. Capturing a `JsValue` or `JsObject`
+    /// would hide it from boa's tracer, which can then collect it while the
+    /// closure still holds it.
     unsafe fn register_natives(ctx: &mut Context, state: Arc<JsThreadState>) {
         // __ferum_get_config() → String
         {
@@ -777,8 +779,8 @@ var __ferum_rpc = {};
     ) {
         let mut ctx = Context::default();
 
-        // Register all Ferum.* native functions
-        // Safety: see register_natives declaration
+        // SAFETY: `state` is an `Arc<JsThreadState>` and the closures inside
+        // capture nothing else, satisfying `register_natives`' contract.
         unsafe { register_natives(&mut ctx, state) };
 
         // Bootstrap Ferum.* globals

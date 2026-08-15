@@ -87,21 +87,10 @@ const SESSION_EPOCH_TTL: std::time::Duration = std::time::Duration::from_secs(30
 /// Revokes every access token issued to `user_id` before the returned epoch,
 /// which callers re-issuing a token in the same request must use as its `iat`.
 ///
-/// The epoch is `now + 1`, not `now`, and that one second is the whole
-/// correctness argument. `iat` is expressed in whole seconds, so a token minted
-/// during the same second as the revocation has `iat == now`. Against an epoch
-/// of `now` the middleware's `iat < epoch` test is false and the token survives
-/// — logging out would silently fail to revoke anything whenever the session was
-/// created and ended within the same second. Setting the epoch one second ahead
-/// makes `iat <= now < epoch` hold for every token that already exists.
-///
-/// The cost is that a token minted concurrently in that same second is also
-/// revoked. That fails safe (the holder logs in again) and is the correct
-/// direction to err.
-///
-/// Best-effort by design: a cache write failure must not turn a successful
-/// password change into an error response, so it is logged and swallowed. The
-/// refresh token is invalidated separately, through its own key.
+/// **Epoch is `now + 1`, not `now`.** `iat` has whole-second resolution, so a
+/// token minted in the same second would have `iat == now` and survive the
+/// `iat < epoch` test — logging out within a second of logging in would revoke
+/// nothing. Best-effort: a cache failure is logged, not returned.
 pub async fn invalidate_sessions(
     cache: &dyn crate::ports::CacheService,
     user_id: uuid::Uuid,
@@ -124,24 +113,12 @@ pub async fn invalidate_sessions(
     epoch
 }
 
-/// Ends **every** session for `user_id`: the refresh tokens first, then the
-/// access tokens already issued.
+/// Ends **every** session for `user_id` — refresh tokens first, then access.
 ///
-/// [`invalidate_sessions`] alone is not enough for a credential change, and the
-/// gap is not obvious. The session epoch is compared against a token's `iat`, so
-/// it withdraws access tokens that already exist — but a refresh mints a *new*
-/// one stamped with the current second, which clears the epoch by construction.
-/// Leave the refresh keys in place and whoever holds one keeps minting valid
-/// access tokens for the whole refresh lifetime (7 days by default), which is
-/// exactly the access a password reset exists to revoke.
-///
-/// Order matters: dropping the refresh keys first means a refresh racing this
-/// call either fails outright or produces a token the epoch then revokes. Doing
-/// it the other way round leaves a window where the race wins.
-///
-/// Both halves are best-effort — a cache failure must not turn a successful
-/// password change into an error — but the refresh failure is logged at WARN
-/// because, unlike the epoch, nothing else will retract those tokens.
+/// Use this, not [`invalidate_sessions`], for a credential change: the epoch
+/// only withdraws tokens that already exist, and a surviving refresh key mints
+/// fresh ones that clear it for the whole refresh lifetime. Refresh keys go
+/// first so a racing refresh either fails or yields a token the epoch revokes.
 pub async fn revoke_all_sessions(
     cache: &dyn crate::ports::CacheService,
     user_id: uuid::Uuid,

@@ -1,19 +1,10 @@
-//! Renders the admin plugin-detail page for real, against the shipped template
-//! and catalogs.
+//! Renders the admin plugin-detail page for real. `tera_templates.rs` only
+//! proves it *parses*, and the config field reference is the gap: iterating a
+//! `serde_json` value from the manifest fails at render, not at parse.
 //!
-//! `tera_templates.rs` proves the template *parses*. That is not the same thing,
-//! and the config field reference this file covers is exactly the gap: it is a
-//! `{% for key, prop in plugin.config_schema.properties %}` over a `serde_json`
-//! value the handler forwards straight from the plugin's manifest. Every way of
-//! getting that wrong — iterating a value that is not a map, `in` against an
-//! absent `required` list, a member lookup on a property that omits the field —
-//! fails at render, not at parse.
-//!
-//! The field reference is also the ONLY surface on which a plugin's own
-//! documentation of its settings reaches the operator. The config editor is a
-//! raw JSON textarea, so a constraint the server cannot enforce — `home-hero`'s
-//! image URLs must be same-origin or the Content-Security-Policy blanks the tile
-//! with nothing in the server log — is communicated here or nowhere.
+//! That reference is also the ONLY place a plugin documents its own settings to
+//! the operator — the editor is a raw JSON textarea, so any constraint the
+//! server cannot enforce is communicated there or nowhere.
 
 use std::path::PathBuf;
 

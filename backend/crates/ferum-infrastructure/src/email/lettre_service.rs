@@ -27,22 +27,12 @@ fn parse_from(from: &str) -> Result<Mailbox, AppError> {
 
 /// Rejects a malformed `FROM_EMAIL` at startup.
 ///
-/// **Why this is a boot check and not a per-send concern.** `FROM_EMAIL` was
-/// validated nowhere: it is a plain `String` in `Config`, parsed only inside
-/// `send`. So a typo produced a process that started cleanly, reported
-/// `"mail": "smtp"` on `/health/ready`, showed a green banner in the admin panel —
-/// and failed every single message with a generic `internal_error`. For a
-/// verification mail, which is dispatched from a background job, the entire
-/// evidence was one log line. Nobody finds that until a user cannot register.
+/// A boot check, not a per-send one: parsed only in `send`, a typo gives a
+/// process that starts cleanly, reports healthy, and fails every message with a
+/// generic error — found when a user cannot register.
 ///
-/// Checked whichever provider is selected, and even when none is: the address is
-/// required configuration either way, so catching it before mail is switched on is
-/// strictly better than catching it at the first send afterwards.
-///
-/// Note this applies lettre's parser to the Resend path too, where the value is
-/// only interpolated into JSON. That is intentional — one contract for
-/// `FROM_EMAIL` regardless of how it is delivered — and lettre is the stricter of
-/// the two, so nothing it accepts would be refused downstream.
+/// Runs even with no provider configured, and applies lettre's parser to the
+/// Resend path too, so `FROM_EMAIL` has one contract however it is delivered.
 pub fn validate_from_address(from: &str) -> Result<(), AppError> {
     parse_from(from).map(|_| ())
 }
@@ -64,27 +54,14 @@ pub enum SmtpSecurity {
     ImplicitTls,
 }
 
-/// Decides how to secure the connection to `host`, inferred rather than
-/// configured.
+/// Decides how to secure the connection to `host`, inferred not configured.
 ///
-/// **There is no `SMTP_TLS` setting and deliberately so:** every value an
-/// operator could set is already implied by the address they typed. A loopback
-/// host is a development mail catcher with no certificate to present; anything
-/// else is a relay reached over a network, where handing over SMTP AUTH
-/// credentials in the clear is not a mode worth offering as a choice.
+/// No `SMTP_TLS` setting: the address already implies it. **Loopback only,
+/// deliberately narrower than `is_private_ip`** — exempting a LAN relay at
+/// `10.0.0.5` is what turns a flat internal network into credential harvesting.
 ///
-/// This function exists as a named, pure function because `AsyncSmtpTransport`
-/// exposes no getter for the TLS mode it was built with. Without it the decision
-/// would be unobservable and therefore untestable.
-///
-/// **Loopback only — deliberately narrower than `is_private_ip`.** Using the
-/// domain's private-range predicate here would also exempt a LAN relay at
-/// `10.0.0.5`, and "the packet stays inside our network" is exactly the
-/// assumption that makes a flat internal network a credential-harvesting
-/// opportunity. A relay on another host is a relay, wherever it lives.
-///
-/// `pub` so the infra test suite — a separate crate — can assert the decision
-/// directly; that is the whole reason it is not inlined at the call site.
+/// A named function because `AsyncSmtpTransport` exposes no getter for its TLS
+/// mode, so the decision would otherwise be untestable.
 pub fn security_for(host: &str, port: u16) -> SmtpSecurity {
     if is_loopback_host(host) {
         return SmtpSecurity::Plaintext;

@@ -7,17 +7,12 @@ pub mod bulk_seed_service;
 pub mod cache;
 pub mod crypto;
 pub mod email;
-// `sea_orm_active_enums::PluginStatus` has a variant named `Error` (the
-// `plugin_status` DB value 'error'). sea-orm 2.0's `DeriveActiveEnum` expands to
-// a sibling `impl TryFrom<&str>` whose signature says `Self::Error`, which is
-// then ambiguous between that variant and `TryFrom::Error`. The compiler resolves
-// it to the associated type — the correct reading — but
-// `ambiguous_associated_items` is deny-by-default.
+// `PluginStatus` has an `Error` variant, and `DeriveActiveEnum` generates a
+// `TryFrom` whose `Self::Error` is then ambiguous with `TryFrom::Error`. The
+// compiler reads it correctly, but the lint is deny-by-default.
 //
-// The allow lives HERE, on the module declaration, rather than inside the
-// generated file: everything under `entities/` is overwritten wholesale by
-// `scripts/regen-entities.ps1`, so an attribute added there would vanish on the
-// next regeneration and the build would break again with no obvious cause.
+// The allow lives HERE, not in the generated file: `regen-entities.ps1`
+// overwrites everything under `entities/`, so it would vanish on the next run.
 #[allow(ambiguous_associated_items)]
 pub mod entities;
 pub mod i18n;

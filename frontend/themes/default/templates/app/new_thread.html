@@ -127,7 +127,6 @@
                  @drop.prevent="isDragging = false; onDrop($event)"
                  @click="$refs.thumbInput.click()">
 
-              {# Empty state #}
               <div x-show="!preview && !isDragging" class="h-100" style="display:none;">
                 {# text-center is load-bearing: align-items-center centres each
                    span as a flex item but does not centre the text inside it, so
@@ -141,12 +140,10 @@
                 </div>
               </div>
 
-              {# Preview image #}
               <img x-show="preview" :src="preview || ''" alt="{{ t(k='ui-thumbnail-preview') }}"
                    class="position-absolute top-0 start-0 w-100 h-100"
                    style="object-fit:cover;display:none;">
 
-              {# Drag-over overlay #}
               <div x-show="isDragging"
                    class="position-absolute top-0 start-0 w-100 h-100"
                    style="display:none;">
@@ -158,7 +155,6 @@
                 </div>
               </div>
 
-              {# Remove button #}
               <button x-show="preview"
                       type="button"
                       class="btn btn-sm position-absolute top-0 end-0 m-2"
@@ -193,7 +189,6 @@
             </noscript>
           </div>
 
-          {# Tag chip input #}
           <div class="mb-4" x-data="tagChipInput()">
             <label class="form-label">{{ t(k="ui-tags") }}</label>
             <div class="d-flex flex-wrap gap-1 align-items-center border rounded p-2 fr-tag-input-wrap"

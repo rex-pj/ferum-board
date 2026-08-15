@@ -7,7 +7,6 @@ use crate::view_models::reaction::ReactionCountResponse;
 use crate::view_models::AuthorInfo;
 use ferum_domain::models::post::Post;
 
-// ─── Requests ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreatePostRequest {
@@ -28,7 +27,6 @@ pub struct PostListQuery {
     pub per_page: Option<u64>,
 }
 
-// ─── Responses ────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct PostResponse {

@@ -140,20 +140,13 @@ struct MailState {
     describe: String,
 }
 
-/// An `EmailService` whose provider and settings can be replaced at runtime.
+/// An `EmailService` whose provider and settings swap at runtime, since both
+/// live in `site_config` and are editable from `/admin/settings`. Atomic swap,
+/// like `TeraEngine`: a send in flight keeps its provider.
 ///
-/// Mail settings live in `site_config` and are editable from `/admin/settings`,
-/// so neither the transport nor the choice of provider can be a value captured
-/// once at boot. This mirrors the atomic-swap idiom `TeraEngine` uses for theme
-/// reload: a send in flight keeps the provider it started with, and the next send
-/// picks up the new one — no restart, no dropped mail.
-///
-/// **There is exactly one active provider**, resolved at reload time rather than
-/// at send time. An earlier version kept an env-fixed provider *beside* the SMTP
-/// transport and preferred it on every send, which meant precedence was re-decided
-/// on every message and the admin panel had to explain that the SMTP settings it
-/// was showing were inert. Resolving it once, here, is what lets the settings page
-/// simply say which provider is live.
+/// **Exactly one active provider, resolved at reload time, not send time.**
+/// Deciding precedence per message is what once made the settings page show
+/// SMTP values that were inert.
 pub struct ReloadableEmailService {
     state: RwLock<MailState>,
     /// True when no provider is in place, i.e. new registrations must be

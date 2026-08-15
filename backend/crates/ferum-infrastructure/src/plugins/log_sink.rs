@@ -1,26 +1,11 @@
-//! Buffered writer for `plugin_logs`.
+//! Buffered writer for `plugin_logs` — the one database write whose volume a
+//! plugin author controls without limit.
 //!
-//! Plugin logging is the one database write whose volume a plugin author
-//! controls directly and without limit. `Ferum.log.info()` used to spawn a
-//! detached task per call, each performing its own INSERT, so a loop inside a
-//! hook — `for (var i = 0; i < 10000; i++) Ferum.log.info('x')` — queued ten
-//! thousand tasks against a pool of a few dozen connections. The hook itself
-//! timed out and failed open, so the user's request succeeded; everything
-//! *else* then failed on `acquire_timeout` while the backlog drained.
+//! Bounded channel, one writer task, batched inserts, and **dropping on
+//! overflow** (counted, not silent). A task-per-call once let a 10k-iteration
+//! logging loop exhaust the pool and fail every unrelated request.
 //!
-//! This replaces that with the standard shape for high-volume logging:
-//!
-//!   * a **bounded** channel, so a producer that outruns the writer is refused
-//!     rather than allowed to consume memory;
-//!   * a **single** writer task, so log volume costs at most one connection no
-//!     matter how many plugins are talking;
-//!   * **batched** inserts, so cost scales with batches rather than lines;
-//!   * **dropping** on overflow, counted and reported.
-//!
-//! Dropping is the deliberate part. Log lines are diagnostic; the pool is what
-//! serves readers. Given a choice between losing a plugin's debug output and
-//! stalling the site, this loses the output — and says so, so the loss is
-//! visible rather than silent.
+//! Losing diagnostic output is preferable to stalling the site.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

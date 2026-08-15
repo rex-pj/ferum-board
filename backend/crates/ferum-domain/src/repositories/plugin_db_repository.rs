@@ -2,19 +2,15 @@ use async_trait::async_trait;
 
 use crate::AppError;
 
-/// Grants a Script-tier plugin its own real Postgres schema (`plugin_{slug}`),
-/// isolated from core tables by schema boundary + a restrictive search_path
-/// set for the duration of each query (never by trusting the plugin's SQL text
-/// alone). Schema DDL only runs at install time, from the manifest's `[schema]`
-/// section reviewed alongside other capabilities — never from a runtime query.
+/// Gives a Script-tier plugin its own Postgres schema (`plugin_{slug}`),
+/// isolated by schema boundary plus a per-query `search_path` — never by
+/// trusting the plugin's SQL text. DDL runs only at install, from the reviewed
+/// manifest, never from a runtime query.
 ///
-/// NOTE: this uses the same Postgres role as the core app, not a dedicated
-/// least-privilege role per plugin. `query()` therefore layers defense-in-depth
-/// (statement validation, forced search_path) on top of schema separation, but
-/// is not a hard security boundary against a plugin author who deliberately
-/// tries to escape it. A production deployment wanting a true boundary should
-/// additionally provision a dedicated Postgres role per plugin with REVOKEd
-/// access outside its own schema — not implemented here.
+/// The hard boundary is the `ferum_plugin` role (migration 000015), which holds
+/// no grant on any application table. Statement validation is a second layer,
+/// and the only one left if the role could not be created — on a Postgres user
+/// without `CREATEROLE` the gateway warns and falls back to it.
 #[async_trait]
 pub trait PluginDbGateway: Send + Sync {
     /// Create the plugin's schema (if missing) and run each DDL statement once,

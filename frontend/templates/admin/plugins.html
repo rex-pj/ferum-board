@@ -175,7 +175,13 @@
   </div>
 </div>
 
-<!-- Upload Modal — two-step: (1) upload → capability review, (2) confirm install -->
+{# Upload modal — two-step: (1) upload → capability review, (2) confirm install.
+   The file is uploaded TWICE by design: step 1 POSTs it to
+   /admin/plugins/upload-review to read the manifest, step 2 POSTs it again to
+   /admin/plugins/install along with the capabilities the admin actually granted.
+   Nothing is persisted between the two, so abandoning the dialog leaves no
+   half-installed plugin behind. Both steps live in `pluginUpload()` in
+   ferum-admin.js. #}
 <div class="modal fade" id="uploadModal" tabindex="-1" x-data="pluginUpload()">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -185,7 +191,6 @@
       </div>
       <div class="modal-body">
 
-        <!-- Step 1: file picker (shown when step === 1) -->
         <div x-show="step === 1">
           <div class="mb-3">
             <label class="form-label fw-semibold">{{ t(k="adm-plugin-package") }} <code>{{ t(k="adm-fpkg") }}</code></label>
@@ -197,19 +202,20 @@
           </p>
         </div>
 
-        <!-- Step 2: capability review (HTMX swaps content here) -->
+        {# Filled by `uploadForReview()` in ferum-admin.js, which sets
+           innerHTML from the plugin_review_partial.html the upload-review
+           endpoint returns. Injected that way, the partial cannot carry its own
+           <script> — the checkbox handler it needs lives in ferum-admin.js as
+           the global `updatePluginGrant`. #}
         <div x-show="step === 2" id="plugin-review-container">
-          <!-- Content injected by HTMX after upload -->
         </div>
 
-        <!-- Error alert -->
         <div x-show="errorMsg" class="alert alert-danger mt-3 mb-0" x-text="errorMsg"></div>
 
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @click="reset()">{{ t(k="adm-cancel") }}</button>
 
-        <!-- Step 1 action -->
         <button x-show="step === 1" class="btn btn-primary"
                 :disabled="!selectedFile || loading"
                 @click="uploadForReview()">
@@ -217,7 +223,6 @@
           <span x-text="loading ? 'Uploading…' : 'Next: Review'"></span>
         </button>
 
-        <!-- Step 2 action: submits the hidden install form -->
         <button x-show="step === 2" class="btn btn-success"
                 :disabled="loading"
                 @click="confirmInstall()">

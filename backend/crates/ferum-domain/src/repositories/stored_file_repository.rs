@@ -85,18 +85,12 @@ pub trait StoredFileRepository: Send + Sync {
     /// Permanently delete the DB row (called by GC after ref_count hits 0).
     async fn delete_by_key(&self, key: &str) -> Result<(), AppError>;
 
-    /// Delete the row only if it is still unreferenced, reporting whether it
-    /// went. The `ref_count = 0` test lives inside the DELETE on purpose.
+    /// Deletes the row only if still unreferenced. **The `ref_count = 0` test
+    /// must stay inside the DELETE**: GC is asynchronous and CAS dedupes on
+    /// content, so an identical upload can revive the row before the job runs.
+    /// Read-then-delete cannot see that and destroys the new reference.
     ///
-    /// GC is asynchronous: a key is enqueued once its count reaches 0, but CAS
-    /// deduplicates on content, so an upload of the identical bytes in the gap
-    /// before the job runs legitimately revives the row at count 1. Reading the
-    /// count and then deleting cannot see that — the row must be re-tested in
-    /// the same statement that removes it, or GC destroys the reference the new
-    /// uploader just took.
-    ///
-    /// Returns `false` when the row was revived or already gone, in which case
-    /// the caller must leave the underlying blob alone.
+    /// `false` means revived or already gone — leave the blob alone.
     async fn delete_if_unreferenced(&self, key: &str) -> Result<bool, AppError>;
 
     /// List keys starting with `prefix` — used at plugin uninstall to find every

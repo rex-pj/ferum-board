@@ -135,15 +135,12 @@ pub struct HydratedProductHit {
 
 /// What the active tab would return if one filter were dropped.
 ///
-/// Filters are AND-combined, which is the only reading a person expects — each
-/// choice narrows. The cost of AND is that two reasonable choices can intersect
-/// to nothing, and "no results" then tells the reader their thing does not
-/// exist when really their combination does not. These counts turn that dead
-/// end into a specific, one-click way out: *which* filter to drop, and what
-/// dropping it would yield.
+/// Filters AND-combine, so two reasonable choices can intersect to nothing and
+/// "no results" reads as "your thing does not exist" rather than "your
+/// combination does not". These counts name which filter to drop.
 ///
-/// Computed only when the active tab came back empty and something was actually
-/// narrowing — one extra count query each, on the miss path only.
+/// Computed only when the tab came back empty and something was narrowing —
+/// one count query each, on the miss path only.
 #[derive(Debug, Clone, Copy, Default, serde::Serialize)]
 pub struct RelaxedCounts {
     /// Hits on the active tab with the category filter removed.

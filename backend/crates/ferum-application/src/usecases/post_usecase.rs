@@ -49,51 +49,12 @@ pub struct PostUseCase {
     /// nothing or bytes nobody can find.
     pub stored_files: Option<Arc<dyn StoredFileRepository>>,
     pub storage: Option<Arc<dyn StorageService>>,
-    /// Where a *staged* attachment's bytes go, when that differs from where
-    /// published ones are served from.
+    /// Always database-backed, so a staged attachment (`ref_count == 0`) stays
+    /// per-viewer authorized — unenforceable once bytes reach a public bucket.
     ///
-    /// `None` means no object store is configured, so staging and serving are
-    /// the same place: uploads go straight to `storage` and nothing is ever
-    /// promoted. **This is the only signal for that.** Deriving it from the
-    /// shape of a `public_url` looks equivalent and is not — see
-    /// [`PostUseCase::promote_attachment`].
-    ///
-    /// A staged attachment (`ref_count == 0`) is authorized per viewer — only
-    /// its uploader may fetch it, which is what stops "upload, never post, share
-    /// the link" from working as free file hosting. That guarantee is
-    /// unenforceable once the bytes sit in a world-readable bucket: `/files/`
-    /// can refuse to reveal the location, but the object answers anyone who has
-    /// it.
-    ///
-    /// So staging is database-backed regardless of the configured backend, and
-    /// the bytes move outward only when a post publishes them — see
-    /// [`PostUseCase::promote_attachment`].
-    ///
-    /// # Scope: this protects a file up to its first publish, and no further
-    ///
-    /// Promotion is one-way. Nothing demotes an object back into the database
-    /// when `ref_count` returns to zero, and nothing deletes it from the bucket,
-    /// so **after a post has published an attachment even once, the object stays
-    /// world-readable permanently.** Deleting the post drops `ref_count` and
-    /// makes `/files/` answer 404 again, but that only closes the route through
-    /// this application; anyone already holding the object URL keeps it.
-    ///
-    /// That is a deliberate position, not an oversight:
-    ///
-    /// * The exposure is narrow. The object name is a SHA-256 of its own bytes,
-    ///   so it cannot be guessed, and the bucket is bound to
-    ///   `roles/storage.legacyObjectReader`, which grants `objects.get` without
-    ///   `objects.list` — so it cannot be enumerated either. Only someone who
-    ///   was already handed the URL retains access.
-    /// * Deleting the object instead would be actively worse. Posts are
-    ///   soft-deleted: `content_md` survives and still references the key, so a
-    ///   moderator reopening a removed post would find the image gone — and when
-    ///   the image *is* the violation, that is the evidence for the removal.
-    ///
-    /// Reclaiming bucket space therefore needs a reconciliation pass that can
-    /// prove no post, deleted or otherwise, still references the key. There
-    /// isn't one, and the per-account upload quota in `upload_attachment` is
-    /// what bounds the residue in the meantime.
+    /// `None` = no object store configured. **This is the only valid signal for
+    /// that**; deriving it from `public_url`'s shape looks equivalent and
+    /// destroys the row. Promotion is one-way: once published, permanently public.
     pub staging_storage: Option<Arc<dyn StorageService>>,
 }
 
@@ -145,21 +106,12 @@ impl PostUseCase {
         self
     }
 
-    /// F-CTT-03: upload an image to embed in post/reply content (e.g. via
-    /// `![](url)` markdown), gated the same way as thread thumbnails —
-    /// trust_level >= Member (file.upload permission) — plus a rolling
-    /// per-account storage quota. Returns the public URL; the caller inserts it
-    /// into the post's Markdown themselves.
+    /// F-CTT-03: uploads an image for embedding in post markdown. Requires
+    /// `file.upload` (trust >= Member) plus a rolling per-account quota.
     ///
-    /// The returned file is *staged*: stored, but not publicly servable until
-    /// some post embeds its URL (see `sync_attachment_refs`). That is what stops
-    /// "upload, never post, share the link" from working as free file hosting.
-    ///
-    /// Blobs whose ref_count falls back to zero are un-published but not
-    /// deleted; the per-account quota is what bounds that residue. Under an
-    /// object store, un-publishing closes the `/files/` route but does **not**
-    /// retract the object — see [`PostUseCase::staging_storage`] for the scope
-    /// of what staging actually guarantees.
+    /// The file is *staged* — stored but not publicly servable until a post
+    /// embeds its URL, which is what stops this being free file hosting.
+    /// Un-publishing never deletes; see [`PostUseCase::staging_storage`].
     #[tracing::instrument(skip(self, actor, data), fields(user_id = %actor.id))]
     pub async fn upload_attachment(
         &self,
@@ -220,32 +172,20 @@ impl PostUseCase {
             .upsert_staged(&key, &content_type, size, Some(actor.id))
             .await?;
 
-        // `file_url`, NOT `public_url`, and this is the single most consequential
-        // instance of that choice in the codebase. What this returns is embedded
-        // by the composer into the post's markdown, sanitised into
-        // `posts.content_html`, and then never rewritten by anything. A
-        // `public_url` here would bake today's bucket and CDN into every post
-        // ever written, and from that point the deployment could not change
-        // backend, CDN or bucket without breaking its own archive.
-        //
-        // It is also what lets the staged check in `/files/` run at all: the
-        // composer previews through this application instead of fetching the
-        // object directly.
+        // `file_url`, NOT `public_url` — the most consequential instance of that
+        // choice here. This gets embedded into `posts.content_html`, which is
+        // never rewritten, so a `public_url` would bake today's bucket and CDN
+        // into every post ever written. It is also what keeps the staged check
+        // in `/files/` reachable.
         Ok(crate::ports::file_url(&key))
     }
 
-    /// Applies attachment ref-count changes for a post whose content just went
-    /// from `old` to `new` (either side may be empty for create/delete).
+    /// Applies attachment ref-count changes as a post's content goes `old` →
+    /// `new` (either side may be empty for create/delete).
     ///
-    /// Bookkeeping failures are logged, never propagated: refusing to create or
-    /// delete a post because a ref_count UPDATE failed would be a worse outcome
-    /// than a temporarily mis-counted attachment. A missed increment degrades to
-    /// "image visible only to its uploader"; a missed decrement leaks one ref.
-    ///
-    /// Deliberately does NOT delete blobs when a count reaches zero. Dropping to
-    /// zero only un-publishes the file; reclaiming it needs a reconciliation
-    /// pass that can prove no other post references it, and getting that wrong
-    /// deletes an image that is still on screen somewhere.
+    /// Failures are logged, never propagated — failing a post over a ref_count
+    /// UPDATE is worse than a miscount. Reaching zero un-publishes but never
+    /// deletes: reclaiming needs proof no other post references the key.
     async fn sync_attachment_refs(&self, old: &str, new: &str) {
         let Some(stored_files) = self.stored_files.as_ref() else {
             return;
@@ -269,32 +209,14 @@ impl PostUseCase {
         }
     }
 
-    /// Moves a just-published attachment out of database staging into the
-    /// configured object store.
+    /// Moves a just-published attachment from database staging to the object
+    /// store. Best-effort: on failure the file stays in the database and
+    /// `/files/` keeps serving it.
     ///
-    /// **Order is the whole safety argument.** Bytes are written to the object
-    /// store *first* and only then dropped from the row, because until that
-    /// write lands the row holds the sole copy. Clearing first would turn a
-    /// transient upload failure into permanent data loss — the same rule as
-    /// "bytes before row" on the way in, applied in reverse.
-    ///
-    /// Best-effort by design. If either half fails the file simply stays in the
-    /// database: `/files/` serves it from there, the post renders, and the only
-    /// cost is that one image is served by this process instead of the bucket.
-    /// Failing the post edit over it would be a far worse trade.
-    ///
-    /// A no-op when no object store is configured, which is the common case:
-    /// under database storage the bytes are already where they belong. That is
-    /// decided by `staging_storage` being `Some`, i.e. by what `startup.rs`
-    /// actually selected — **never** by inspecting a `public_url`.
-    ///
-    /// This function once tested `public_url(key).contains("://")` for that, on
-    /// the reasoning that a relative URL means same-origin. It is wrong, and
-    /// destructively so: database storage behind `CDN_BASE_URL` mints
-    /// `{cdn}/files/{key}`, which is absolute. Promotion would then `put` the
-    /// bytes back into the very row it had just read them from and `clear_data`
-    /// immediately after — deleting the only copy, and leaving `/files/` to
-    /// redirect to a CDN that fetches `/files/` right back.
+    /// **Write to the store BEFORE clearing the row** — until that write lands
+    /// the row holds the sole copy. Gate on `staging_storage.is_some()`, never
+    /// on `public_url` containing `://`: database storage behind `CDN_BASE_URL`
+    /// mints an absolute URL too, and promoting then deletes the only copy.
     async fn promote_attachment(&self, key: &str) {
         let (Some(stored_files), Some(storage), Some(_)) = (
             self.stored_files.as_ref(),
@@ -334,7 +256,7 @@ impl PostUseCase {
 
     /// The admin-configured ceiling on post-list page size.
     ///
-    /// Public for the same reason as [`ThreadUseCase::max_page_size`]: the
+    /// Public for the same reason as `ThreadUseCase::max_page_size`: the
     /// handler must build its `PaginationCtx` from the number the list is
     /// actually clamped to, or it advertises pages that do not exist and hides
     /// posts that do.
@@ -986,26 +908,13 @@ fn parse_trust_level(s: &str) -> TrustLevel {
     }
 }
 
-/// CAS keys of post attachments embedded in `content_md`, e.g. the
-/// `post-attachments/<32 hex>.png` inside `![alt](/files/post-attachments/….png)`.
+/// CAS keys of post attachments embedded in `content_md`. Deduplicated, and
+/// shared with `ThreadUseCase` so both agree what counts as a reference.
 ///
-/// The shape is pinned to exactly what `cas_key("post-attachments", …)` emits
-/// (16 bytes of SHA-256 as hex, then a whitelisted extension) so a crafted URL
-/// in post content can never widen this into a lookup for some other namespace.
-/// Deduplicated: one post embedding the same image twice holds a single ref.
-///
-/// Shared with `ThreadUseCase`, which releases these same references when a
-/// whole thread is deleted — one definition, so the two can never disagree
-/// about what counts as an attachment reference.
-///
-/// Matches on the key rather than on a particular URL prefix, because the prefix
-/// is not stable and the content is. Post HTML is written once and never
-/// rewritten, so a forum that has changed storage backend or added a CDN holds
-/// several generations of URL for the same file. Anchoring to `/files/` would
-/// have made this silently stop matching newer ones — and since this drives
-/// reference counting, "silently stop matching" means attachments never get
-/// referenced, stay staged, and are eventually collected out from under posts
-/// that still display them.
+/// Matches the KEY, never a URL prefix: post HTML is never rewritten, so one
+/// forum holds several URL generations for a file. Anchoring to `/files/` would
+/// silently stop matching newer ones — and since this drives ref counting, that
+/// means attachments get collected out from under posts still showing them.
 pub fn extract_attachment_keys(content: &str) -> HashSet<String> {
     ATTACHMENT_KEY_RE
         .captures_iter(content)

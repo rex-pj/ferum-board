@@ -8,20 +8,12 @@ use ferum_application::shared::AppError;
 
 use crate::app_state::AppState;
 
-/// Pull a single named part out of a multipart body, returning its bytes and
-/// declared content type. Size, magic-byte and type validation belong to the
-/// use case, which owns the per-feature limits.
+/// Pulls one named part from a multipart body. Size, magic-byte and type
+/// validation belong to the use case, which owns the per-feature limits.
 ///
-/// This is the one place the `next_field` loop is written. Every handler that
-/// wants exactly one uploaded part goes through here; handlers that read a
-/// *multi-field* form (a compose form with title + body + thumbnail, or an
-/// install form with a package + its capability grants) still drive the loop
-/// themselves, because there is no single field for this to return and forcing
-/// them through it would mean walking the body once per field.
-///
-/// Scanning stops at the first matching part. A body carrying two parts of the
-/// same name is malformed for these endpoints either way; taking the first is
-/// both the cheaper read and the harder one to abuse.
+/// The single place the `next_field` loop is written — multi-field forms still
+/// drive it themselves, since routing them here would walk the body per field.
+/// Stops at the first match; two parts of one name is malformed anyway.
 pub async fn read_file_field(
     multipart: &mut Multipart,
     field_name: &str,
@@ -65,20 +57,12 @@ async fn read_part(
 }
 
 /// The three checks every image upload owes, in the order that makes them
-/// meaningful: the declared type (which decides the stored file extension), the
-/// size cap (per-feature, hence a parameter), and finally the magic bytes —
-/// because a declared `image/png` proves nothing about the payload, and the CAS
-/// key is derived from that payload.
+/// meaningful: declared type (decides the stored extension), size cap
+/// (per-feature, hence a parameter), then magic bytes — a declared `image/png`
+/// proves nothing about the payload the CAS key is derived from.
 ///
-/// The predicates themselves live in `ferum-application`; this is the ordering
-/// and the error vocabulary, which is a web-layer concern.
-///
-/// `kind` selects the catalog sentence. Those per-feature keys were already
-/// written in every locale but no upload handler used them: each had inlined its
-/// own English literal (`"File exceeds 5 MB limit"`), which is both the
-/// duplication and an i18n violation, since a Vietnamese visitor got the English
-/// string. Passing the kind keeps the specific wording while there is still only
-/// one copy of the logic.
+/// `kind` selects the catalog sentence, so the wording stays per-feature while
+/// the logic exists once. Never inline an English literal here.
 pub fn validate_upload_image(
     content_type: &str,
     data: &[u8],
@@ -139,26 +123,12 @@ impl ImageKind {
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
 
-/// Normalises the `?page=` / `?per_page=` pair from an untrusted query string.
+/// Normalises `?page=` / `?per_page=` from an untrusted query string.
 ///
-/// `default_per_page` and `max_per_page` stay arguments rather than constants
-/// because they are genuinely per-endpoint policy (a user lookup caps lower
-/// than a thread feed). What is NOT per-endpoint is the pair of invariants this
-/// exists to hold: `page` is 1-based and must never reach the repository as 0
-/// (offset is computed as `(page - 1) * per_page`, so a 0 underflows on
-/// unsigned arithmetic), and `per_page` must never be 0 (a LIMIT of nothing).
-/// Both were previously re-derived by hand at 26 call sites.
-///
-/// This is an input bound, not the final say: the use cases additionally clamp
-/// to the admin's `max_threads_per_page` / `max_posts_per_page` site config,
-/// which is the layer allowed to make that decision.
-///
-/// `page` is rejected rather than clamped once it passes [`MAX_PAGE`]. Clamping
-/// would be a one-line change here and no change at all in the callers, but it
-/// answers a request for page 999999 with the contents of page 500 and calls it
-/// success — the reader is told nothing, and a crawler keeps walking. Returning
-/// an error costs the `?` at each call site and makes the ceiling visible in
-/// both the JSON envelope and the HTML error page, in the reader's language.
+/// Holds two invariants: `page` is 1-based and must never reach a repository as
+/// 0 (offset is `(page - 1) * per_page`, which underflows unsigned), and
+/// `per_page` is never 0. Past [`MAX_PAGE`] it **errors rather than clamps** —
+/// clamping answers page 999999 with page 500 and calls it success.
 pub fn paginate(
     page: Option<u64>,
     per_page: Option<u64>,
@@ -171,18 +141,11 @@ pub fn paginate(
     ))
 }
 
-/// The page half of [`paginate`], for the handlers that have no `per_page` to
-/// negotiate — a page whose page size is fixed in code.
+/// The page half of [`paginate`], for handlers whose page size is fixed in code.
 ///
-/// Those handlers wrote `q.page.unwrap_or(1).max(1)` inline, which is this
-/// function's first line and none of its second: they accepted `?page=999999`
-/// and paid for the `OFFSET` that implies. Splitting the guard out is what lets
-/// them adopt it without inventing a `per_page` they do not have.
-///
-/// HTML page handlers map the error to `PageError::NotFound` rather than
-/// letting `From<AppError>` collapse it into `Internal`. A page past the
-/// ceiling does not exist, so 404 is both the honest answer and the one that
-/// stops a crawler; a 500 would say the server broke.
+/// HTML handlers must map the error to `PageError::NotFound`, not let
+/// `From<AppError>` collapse it into `Internal` — a page past the ceiling does
+/// not exist, and a 500 would claim the server broke.
 pub fn page_number(page: Option<u64>) -> Result<u64, AppError> {
     let page = page.unwrap_or(1).max(1);
     if page > MAX_PAGE {
@@ -321,15 +284,9 @@ pub fn guest_fingerprint(headers: &HeaderMap) -> Option<String> {
 
 /// `ferum_locale=…` cookie carrying the visitor's chosen language.
 ///
-/// Deliberately **not** `HttpOnly`: unlike the auth token this is not a secret,
-/// and the client-side switcher needs to read it to show which language is
-/// active before any JS state exists.
-///
-/// For a signed-in user this cookie is a *cache* of `user_preferences.locale`,
-/// refreshed at login and whenever the preference changes. Keeping the durable
-/// copy in the database is what makes the choice follow the account to a new
-/// device; keeping the request-time copy in a cookie is what avoids a database
-/// lookup on every single page render just to know which language to draw.
+/// Deliberately **not** `HttpOnly` — not a secret, and the client-side switcher
+/// reads it. For a signed-in user it caches `user_preferences.locale`, so the
+/// choice follows the account without a database lookup per page render.
 pub fn locale_cookie(state: &AppState, locale: &str) -> String {
     let secure = if state.cookies_secure { "; Secure" } else { "" };
     // One year: a language choice is not session state, and re-picking it on
@@ -345,25 +302,12 @@ pub fn clear_locale_cookie(state: &AppState) -> String {
         crate::middleware::locale::LOCALE_COOKIE)
 }
 
-/// Resolve a `?category_id=` query value into a product listing filter.
+/// Resolves `?category_id=` into a product filter. These are **catalogue**
+/// categories, not the forum tree — separate taxonomies on purpose.
 ///
-/// The ids here are **catalogue** categories (Sofa, Ghế, Bàn …), not the
-/// forum's discussion tree. The two are separate taxonomies on purpose: no
-/// forum category is a sensible home for a sofa, which is why the column that
-/// once pointed at them could never be populated.
-///
-/// Three shapes, because a plain `Option<Uuid>` cannot express all of them:
-/// absent means no restriction, the literal `none` means *products with no
-/// category* (the curator's queue — see [`CategoryFilter::Unassigned`]), and a
-/// UUID means that category **and its children**.
-///
-/// The subtree expansion is the point of doing this here rather than in the
-/// query struct: the tree is two levels, a reader filtering by a parent expects
-/// the children's products, and resolving it per-surface is how the surfaces
-/// drift apart.
-///
-/// An unknown or unparseable id yields `Any` rather than an error — a stale
-/// link should widen, not 400.
+/// Three shapes an `Option<Uuid>` cannot express: absent = no restriction,
+/// `none` = unfiled products (the curator's queue), a UUID = that category
+/// **and its children**. An unparseable id widens to `Any` rather than 400.
 pub async fn resolve_product_category_filter(
     state: &AppState,
     raw: Option<&str>,

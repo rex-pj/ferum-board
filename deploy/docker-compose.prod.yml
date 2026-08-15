@@ -3,37 +3,22 @@
 #   cp backend/.env.example .env.prod   # then edit; see README "Deployment"
 #   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 #
-# `--env-file` is REQUIRED, not decoration. `env_file:` on a service only supplies
-# variables *inside* the container; the `${...}` substitutions below are resolved by
-# Compose itself, which reads only `--env-file` (or a `.env` beside this file).
-# Omit it and DB_PASSWORD, S3_ACCESS_KEY and S3_SECRET_KEY expand to empty strings —
-# Postgres then refuses to initialise and MinIO refuses to start.
+# `--env-file` is REQUIRED: `env_file:` only feeds variables INTO a container,
+# while the `${...}` below are resolved by Compose itself. Omit it and
+# DB_PASSWORD / S3_ACCESS_KEY / S3_SECRET_KEY expand to empty, so Postgres and
+# MinIO both refuse to start.
 #
-# .env.prod carries secrets and public configuration (JWT_SECRET, APP_URL,
-# FROM_EMAIL, SMTP_*, credentials). The addresses of the services below are set in
-# `environment:` instead, because they are facts about this file rather than choices
-# an operator makes — and `environment:` wins over `env_file:`.
-#
-# Variables this file interpolates, which must therefore be present in .env.prod:
-#   APP_IMAGE, DB_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY, and optionally S3_BUCKET.
-#
-# Nothing here names a particular domain, project or registry. Those live in
-# .env.prod (APP_IMAGE) and in nginx's own config, so this file is the same for
-# every installation and can be pulled straight from git.
+# Must be present in .env.prod: APP_IMAGE, DB_PASSWORD, S3_ACCESS_KEY,
+# S3_SECRET_KEY, optionally S3_BUCKET. Service addresses live in `environment:`
+# instead, which wins over `env_file:`. Nothing here names a domain or registry.
 
 services:
   app:
-    # Built and pushed by .github/workflows/deploy.yml — NOT built here. The
-    # e2-medium this runs on cannot complete a `lto = "fat"` + `codegen-units = 1`
-    # build: rustc peaks at 4-8 GB for the final unit against 4 GB of RAM.
+    # Built in CI, NOT here: the e2-medium cannot finish a fat-LTO build (rustc
+    # peaks at 4-8 GB against 4 GB of RAM).
     #
-    # APP_IMAGE is the registry path without a tag, and it lives in .env.prod
-    # rather than here so this file carries nothing specific to one installation:
-    #   APP_IMAGE=us-central1-docker.pkg.dev/my-project/ferum/ferum-board
-    #
-    # IMAGE_TAG is the commit SHA, exported by ferum-deploy before it calls
-    # `docker compose pull`. It defaults to `latest` so a manual `up -d` on the box
-    # still works; pin it to a SHA to roll back.
+    # APP_IMAGE is the untagged registry path, in .env.prod so this file stays
+    # installation-agnostic. IMAGE_TAG is the commit SHA — pin it to roll back.
     image: ${APP_IMAGE:?set APP_IMAGE in .env.prod}:${IMAGE_TAG:-latest}
     env_file: .env.prod
     environment:
@@ -44,24 +29,18 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       RATE_LIMIT_ENABLED: "true"
+      # MUST stay below the postgres service's max_connections (30). The code
+      # default is 40, which would exhaust it — and with no DATABASE_READ_URL the
+      # read pool is a clone of this one, so 16 is the whole application.
+      DB_MAX_CONNECTIONS: "16"
       # One proxy (nginx) sits in front. Leave this at 0 and per-IP rate limiting
       # keys on nginx's address, so every client shares one bucket.
       TRUSTED_PROXY_COUNT: "1"
     volumes:
-      # Both directories are written at runtime by admin upload.
-      #
-      # A named volume is seeded from the image ONLY when it is first created,
-      # while still empty. After that it SHADOWS the image — so the built-in
-      # theme under frontend/themes/default/ does not "survive" here, it
-      # FREEZES at whatever version created the volume, while frontend/static/
-      # and frontend/templates/ (not mounted) keep updating with each deploy.
-      # That split shipped a broken mobile sidebar once: new JS toggling a
-      # class the frozen CSS had no rule for.
-      #
-      # docker-entrypoint.sh (repo root) copies /app/builtin-themes over this volume on
-      # every start, so the built-in theme always matches the image. Uploaded
-      # themes live under their own slug and are untouched. /app/plugins holds
-      # nothing in the image, so it has no equivalent problem.
+      # Written at runtime by admin upload. A named volume is seeded from the
+      # image only at creation and SHADOWS it afterwards, so themes/default/
+      # freezes while unmounted static/ keeps updating — that split once shipped
+      # a broken mobile sidebar. docker-entrypoint.sh re-copies it every start.
       - plugins:/app/plugins
       - themes:/app/frontend/themes
     depends_on:
@@ -80,14 +59,10 @@ services:
       start_period: 60s
     restart: unless-stopped
     # ─── Memory limits ──────────────────────────────────────────────────────
-    # Every service carries one. Without them a leak in any single container
-    # takes the whole 4 GB host down, and the OOM killer picks its victim by
-    # score rather than by what matters — in practice Postgres, the one process
-    # here holding data that cannot be rebuilt.
-    #
-    # The five limits total 2.4 GB, leaving ~1 GB for the OS, the Docker daemon
-    # and the kernel page cache. That last part is not slack: it is what keeps
-    # Postgres reads off the disk.
+    # Every service carries one, else a leak anywhere takes the 4 GB host down
+    # and the OOM killer picks Postgres — the only process holding data that
+    # cannot be rebuilt. The five total 2.6 GB (768m + 1g + 192m + 384m + 256m);
+    # the ~1.4 GB left is page cache, not slack, and keeps reads off the disk.
     deploy:
       resources:
         limits:
@@ -102,14 +77,14 @@ services:
     # The image's defaults target a machine that is not this one. Sized against
     # the 1 GB limit below, not against the host's 4 GB.
     #
-    # max_connections is 30, comfortably above the app's DB_MAX_CONNECTIONS=16,
-    # with room for the read pool, psql and pg_dump. Raising it is not free:
-    # every backend costs memory whether or not it is in use.
+    # Sized against the 1 GB limit below, not the host's 4 GB. max_connections=30
+    # sits above the app's DB_MAX_CONNECTIONS=16 (set above — the code default of
+    # 40 would exhaust it), leaving room for psql and pg_dump. Raising it is not
+    # free: every backend costs memory whether or not it is in use.
     #
-    # random_page_cost is the one to notice. The default of 4.0 encodes a
-    # spinning disk, which makes the planner avoid index scans in favour of
-    # sequential ones — exactly backwards on pd-balanced, and it degrades
-    # silently as nothing errors, queries just get slower as tables grow.
+    # random_page_cost is the one to notice: the 4.0 default encodes a spinning
+    # disk and pushes the planner off index scans — backwards on pd-balanced, and
+    # it degrades silently as tables grow.
     command: >
       postgres
       -c max_connections=30

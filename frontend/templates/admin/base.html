@@ -33,10 +33,8 @@
 <body>
 <div class="adm-shell">
 
-  <!-- ── Sidebar ─────────────────────────────────────────────── -->
   <nav class="adm-sidebar" id="adminSidebar">
 
-    <!-- Brand -->
     <a href="/" class="adm-brand">
       {% if site.logo_url %}
         <img src="{{ site.logo_url }}" alt="{{ site.name }}" class="fr-brand-img">
@@ -70,13 +68,11 @@
     {% block sidebar_nav %}
     <div class="adm-nav">
 
-      <!-- Overview -->
       <span class="adm-nav-label">{{ t(k="adm-overview") }}</span>
       <a href="/admin/dashboard" class="adm-nav-link {% block nav_dashboard %}{% endblock %}">
         <i class="fa-solid fa-gauge adm-nav-icon"></i>{{ t(k="adm-dashboard") }}
       </a>
 
-      <!-- Content -->
       <span class="adm-nav-label">{{ t(k="adm-content") }}</span>
       <a href="/admin/threads" class="adm-nav-link {% block nav_threads %}{% endblock %}">
         <i class="fa-regular fa-comments adm-nav-icon"></i>{{ t(k="adm-threads") }}
@@ -88,7 +84,6 @@
         <i class="fa-solid fa-couch adm-nav-icon"></i>{{ t(k="adm-catalog") }}
       </a>
 
-      <!-- Users & Access -->
       <span class="adm-nav-label">{{ t(k="adm-users-access") }}</span>
       <a href="/admin/users" class="adm-nav-link {% block nav_users %}{% endblock %}">
         <i class="fa-solid fa-users adm-nav-icon"></i>{{ t(k="adm-users") }}
@@ -100,7 +95,6 @@
         <i class="fa-solid fa-key adm-nav-icon"></i>{{ t(k="adm-permissions") }}
       </a>
 
-      <!-- Moderation -->
       <span class="adm-nav-label">{{ t(k="adm-moderation") }}</span>
       <a href="/admin/reports" class="adm-nav-link {% block nav_reports %}{% endblock %}">
         <i class="fa-solid fa-flag adm-nav-icon"></i>{{ t(k="adm-reports") }}
@@ -109,7 +103,6 @@
         <i class="fa-solid fa-scroll adm-nav-icon"></i>{{ t(k="adm-audit-log") }}
       </a>
 
-      <!-- System -->
       <span class="adm-nav-label">{{ t(k="adm-system") }}</span>
       <a href="/admin/plugins" class="adm-nav-link {% block nav_plugins %}{% endblock %}">
         <i class="fa-solid fa-puzzle-piece adm-nav-icon"></i>{{ t(k="adm-plugins") }}
@@ -140,10 +133,8 @@
      `#adminSidebar.is-open ~ .adm-sidebar-backdrop`. #}
   <div class="adm-sidebar-backdrop d-lg-none" data-action="toggle-admin-sidebar"></div>
 
-  <!-- ── Main body ───────────────────────────────────────────── -->
   <div class="adm-body">
 
-    <!-- Top bar -->
     <header class="adm-topbar">
       <div class="d-flex align-items-center gap-3">
         <button type="button" class="btn btn-sm btn-outline-secondary d-lg-none adm-sidebar-toggle"
@@ -189,26 +180,21 @@
         </div>
         {% endif %}
 
-        <!-- Dark / light toggle -->
         <button type="button" class="fr-icon-btn" data-ferum-theme-btn title="{{ t(k='adm-toggle-theme') }}" aria-label="{{ t(k='adm-toggle-theme') }}">
           <i class="fa-solid fa-moon"></i>
         </button>
 
-        <!-- Notification bell -->
         {% include "partials/notif_bell.html" %}
 
-        <!-- Profile dropdown -->
         {% include "partials/user_dropdown.html" %}
 
       </div>
     </header>
 
-    <!-- Page content -->
     <div class="adm-content">
       {% block content %}{% endblock %}
     </div>
 
-    <!-- Footer -->
     <footer class="border-top d-flex align-items-center justify-content-between px-4 py-2 adm-footer">
       <span class="fw-medium text-body-secondary">{{ site.name }}</span>
       <span>{{ t(k="adm-powered-by") }} <strong class="text-body-secondary">{{ t(k="adm-ferum-board") }}</strong></span>

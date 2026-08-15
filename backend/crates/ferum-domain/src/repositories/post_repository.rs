@@ -7,7 +7,7 @@ use crate::AppError;
 #[async_trait]
 pub trait PostRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Post>, AppError>;
-    /// Batch counterpart to [`find_by_id`], for callers holding a page of ids.
+    /// Batch counterpart to [`Self::find_by_id`], for callers holding a page of ids.
     /// Mirrors `ThreadRepository::find_many_by_ids` / `UserRepository::find_many_by_ids`:
     /// no ordering guarantee and missing ids are simply absent, so callers must
     /// index the result by id rather than by position.
@@ -15,7 +15,7 @@ pub trait PostRepository: Send + Sync {
     /// `viewer_id`, when set, also includes that user's own `Pending` posts
     /// (so an author sees their own queued post) — `Pending` posts by anyone
     /// else are still excluded. Soft-deleted posts are always included (as
-    /// tombstones the caller renders as "[deleted]") so reply threads don't
+    /// tombstones the caller renders as `[deleted]`) so reply threads don't
     /// lose context when a parent is removed.
     async fn list_by_thread(
         &self,

@@ -1,22 +1,11 @@
-//! Integration tests for [`PgStatsRepository`].
+//! Integration tests for [`PgStatsRepository`] — the parts the compiler cannot
+//! check: `COUNT(*) FILTER`, enum casts, the `UNION ALL` upsert, the
+//! `generate_series` join, and reporting-timezone bucketing.
 //!
-//! Exercises the parts the compiler cannot check: the `COUNT(*) FILTER`
-//! activation expression, enum-literal casts, the `UNION ALL` flush upsert,
-//! the `generate_series` history join — and the reporting-timezone bucketing,
-//! which is the reason every method takes a `tz`.
-//!
-//! ## Why the timezone tests look the way they do
-//!
-//! These queries used bare `CURRENT_DATE`, which resolves against the database
-//! *session's* `TimeZone`. That made the day boundary a property of whichever
-//! host `initdb` ran on: identical code and identical rows produced different
-//! DAU figures on two machines, silently.
-//!
-//! So the interesting assertion is not "this returns the right number" — it is
-//! **"this returns the same number no matter what the session zone is"**. Each
-//! test below that cares runs against `TestDb::new_in_timezone(.., "…")` with a
-//! hostile session zone, so a query that has quietly gone back to inheriting the
-//! boundary fails here rather than in production a continent away.
+//! **The assertion is not "the right number" but "the same number whatever the
+//! session zone is".** Zone-sensitive tests run under
+//! `TestDb::new_in_timezone` with a hostile zone, so a query that has gone back
+//! to inheriting the boundary fails here rather than a continent away.
 
 use ferum_domain::repositories::stats_repository::StatsRepository;
 use ferum_infrastructure::repositories::PgStatsRepository;

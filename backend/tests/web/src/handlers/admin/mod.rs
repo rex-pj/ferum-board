@@ -75,15 +75,10 @@ fn page_query_filter_fields_deserialize() {
 
 // ─── Admin date-range filters ─────────────────────────────────────────────────
 //
-// `?date_from=2026-08-08&date_to=2026-08-08` is an admin saying "the 8th". Two
-// things have to be true for that to mean what they think:
-//
-//   * it is *their* 8th, not UTC's — these used to be parsed as UTC midnight, so
-//     the window was shifted by the site's offset and silently lost the rows at
-//     one end of the day while including the adjacent day's at the other;
-//   * consecutive days tile the timeline exactly once — the old upper bound was
-//     23:59:59 compared inclusively, which both dropped the final second and
-//     double-counted anything landing on a shared boundary.
+// `date_from=date_to=2026-08-08` means "the 8th", which requires two things:
+// it is THEIR 8th, not UTC's (parsing as UTC shifts the window by the site's
+// offset), and consecutive days tile exactly once — an inclusive 23:59:59 bound
+// both drops the final second and double-counts the boundary.
 
 mod date_filters {
     use chrono::{TimeZone, Utc};

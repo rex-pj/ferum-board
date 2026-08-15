@@ -192,9 +192,9 @@ pub async fn upload_plugin(
         wants_media,
         schema_tables,
     });
-    // Rendered in the request locale, matching `render_admin` — this partial is
-    // injected by HTMX into a page that was itself rendered that way, so pinning
-    // the default here would mix two languages on one screen.
+    // Request locale, matching `render_admin` — this partial is injected into a
+    // page already rendered that way, so pinning the default would mix two
+    // languages on one screen.
     let html = state
         .tera
         .render(&req_locale.locale, "admin/plugin_review_partial.html", ctx)

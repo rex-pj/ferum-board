@@ -248,7 +248,6 @@
   <div class="card mb-3 {% if post.is_best_answer %}fr-post-best-answer{% endif %} {% if loop.first and pagination.page == 1 %}fr-post-op{% endif %}"
        id="post-{{ post.id }}">
 
-    {# Best answer banner #}
     {% if post.is_best_answer %}
       <div class="card-header small py-1 fr-best-answer-header">
         <i class="fa-solid fa-circle-check me-1"></i>{{ t(k="ui-best-answer") }}
@@ -529,7 +528,6 @@
           </time>
         </div>
 
-        {# Tags #}
         {% if thread.tags %}
           <div class="d-flex align-items-start gap-2">
             <i class="fa-solid fa-tag fa-xs text-muted mt-1 fr-icon-col" aria-hidden="true"></i>
@@ -539,7 +537,6 @@
           </div>
         {% endif %}
 
-        {# Status badges #}
         {% if thread.is_pinned or show_solved or thread.is_locked %}
           <div class="d-flex flex-wrap gap-1 mt-1">
             {% if thread.is_pinned %}

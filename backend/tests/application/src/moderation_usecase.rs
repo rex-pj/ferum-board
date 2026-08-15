@@ -524,16 +524,11 @@ async fn nobody_can_ban_themselves() {
 
 // ─── refused moderation attempts are recorded ─────────────────────────────────
 //
-// Successful warns and bans are audited through `UserWarned` / `UserBanned`.
-// A *refused* one left no trace at all — and a moderator repeatedly trying to
-// ban an administrator is exactly the signal an audit log exists to capture,
-// whether it is a compromised account or an insider testing the boundary.
-//
-// Only the two rank refusals are logged, not every `permission_denied`. These
-// two cannot be reached by clicking: the UI never offers a moderator the option
-// of banning an admin or themselves, so reaching them means the request was
-// constructed deliberately. Logging ordinary permission failures would bury that
-// signal under noise from stale tabs.
+// Successes are audited via their events; a refusal left no trace, and a
+// moderator repeatedly trying to ban an admin is exactly what an audit log is
+// for. Only the two RANK refusals are logged — neither is reachable by
+// clicking, so one means a deliberately constructed request, and logging
+// ordinary permission failures would bury the signal under stale-tab noise.
 
 /// Same as `build_uc_with_target_perms` but hands back the audit spy too.
 fn build_uc_with_audit(

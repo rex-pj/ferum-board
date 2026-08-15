@@ -141,18 +141,13 @@ impl UserUseCase {
         let new_hash = self.hasher.hash(new_password).await?;
         self.users.set_password_hash(actor.id, new_hash).await?;
 
-        // Changing a password must end sessions opened with the old one —
-        // otherwise a token stolen before the change keeps working until it
-        // expires on its own. Refresh tokens included: the session epoch only
-        // withdraws access tokens that already exist, and a refresh mints one
-        // stamped `now`, which clears the epoch by construction. Only possible
-        // where a cache is wired; without one there is nowhere to publish the
-        // epoch and behaviour is unchanged.
+        // A password change must end sessions opened with the old one, refresh
+        // tokens included — the epoch withdraws only existing access tokens, and
+        // a refresh mints one stamped `now` that clears it.
         //
-        // Returns the epoch so the caller can mint the replacement token with a
-        // matching `iat`; anything earlier would be revoked by the very epoch
-        // this call just published, logging the user out of the session they
-        // are currently using.
+        // Returns the epoch so the caller mints the replacement with a matching
+        // `iat`; anything earlier is revoked by the epoch just published, logging
+        // the user out of the session they are using.
         let epoch = match &self.cache {
             Some(cache) => {
                 Some(crate::usecases::revoke_all_sessions(cache.as_ref(), actor.id).await)
@@ -206,18 +201,10 @@ impl UserUseCase {
 
     /// Turns every notification email off for the holder of `token`.
     ///
-    /// Backs the one-click link in each notification email. Three properties are
-    /// deliberate:
-    ///
-    /// * **No session required.** Someone clicking unsubscribe from their mail
-    ///   client is very often not logged in, and a link that bounces to a login
-    ///   form is a link that does not work — at which point the "report spam"
-    ///   button is the easier option. The signed token *is* the authorisation.
-    /// * **It only ever turns things off.** The token grants nothing else, so
-    ///   leaking one costs the holder a preference they can restore in
-    ///   `/account`, and never account access.
-    /// * **Idempotent.** Mail clients prefetch links, and a user may click twice;
-    ///   both must succeed rather than showing an error the second time.
+    /// No session required — the signed token IS the authorisation, because a
+    /// link that bounces to a login form loses to the "report spam" button. It
+    /// only ever turns things off, and must stay **idempotent**: mail clients
+    /// prefetch, and a second click must not error.
     pub async fn unsubscribe_from_emails(&self, token: &str) -> Result<(), AppError> {
         let user_id = self.tokens.verify_email_token(token, UNSUBSCRIBE_PURPOSE)?;
 

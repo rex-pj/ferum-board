@@ -45,19 +45,13 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // One review per (product, author).
+        // One review per (product, author). `review_ratings` is keyed by thread,
+        // so without this one account opens ten threads about a product and
+        // `recompute_stats` — which does not group by author — renders
+        // "5.0 (10 reviews)".
         //
-        // `review_ratings` is keyed by thread_id, so a thread can only ever
-        // carry one rating — but nothing stops one account opening ten threads
-        // about the same product. `recompute_stats` counts every rating on
-        // every non-deleted thread with that product_id and does not group by
-        // author, so ten 5★ threads from one account would render as
-        // "5.0 (10 reviews)". That is the whole rating system.
-        //
-        // Partial on `deleted_at IS NULL` so soft-deleting a review frees the
-        // slot: a user who removes their review can write a new one. Partial on
-        // `product_id IS NOT NULL` too, since ordinary (non-review) threads must
-        // stay unconstrained — an author writes as many of those as they like.
+        // Partial on `deleted_at IS NULL` so removing a review frees the slot,
+        // and on `product_id IS NOT NULL` so ordinary threads stay unconstrained.
         manager
             .get_connection()
             .execute_unprepared(

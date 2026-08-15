@@ -1,21 +1,12 @@
 //! `GET /unsubscribe/{token}` — one-click opt-out from notification email.
 //!
-//! ## Why this is a GET with no confirmation step
+//! No login wall and no confirmation step: the reader is usually signed out and
+//! already annoyed, and the button that always works is "report as spam". The
+//! signed token IS the authorisation, and it can only turn this user's mail off.
 //!
-//! Because the alternative is worse. Someone clicking unsubscribe in a mail client
-//! is usually not logged in and is already mildly annoyed; a login wall, or a
-//! "are you sure?" form, is one more obstacle between them and the outcome they
-//! asked for — and the button that always works is "report as spam". A signed,
-//! long-lived token in the URL is the authorisation, and the action it permits is
-//! narrow enough to be safe without a session: it can only ever turn this one
-//! user's mail off, never read anything, never grant access.
-//!
-//! Mail clients and security scanners do prefetch links, so a prefetch can
-//! unsubscribe someone who never clicked. That is a real cost, accepted
-//! deliberately: the outcome is one preference the user can restore in `/account`
-//! with two clicks, and the page says so. The opposite trade — a link that
-//! sometimes fails to work — is paid in domain reputation, which is not
-//! recoverable.
+//! Accepted cost: link prefetchers can unsubscribe someone who never clicked.
+//! That is one preference restorable in `/account`; the opposite failure is paid
+//! in domain reputation, which is not.
 
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;

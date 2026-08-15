@@ -1,36 +1,12 @@
-//! Startup check: can an anonymous visitor actually read what we upload?
+//! Startup check: can an anonymous visitor read what we upload?
 //!
-//! # The failure this exists to make visible
+//! A private bucket is invisible server-side — uploads succeed, rows are
+//! written, logs are clean — and surfaces only as a page of broken images.
 //!
-//! `public_url` is written straight into `users.avatar_url`, `site_config` and
-//! the stored HTML of every post, and browsers fetch it directly — no request
-//! reaches this application. If the bucket is not readable by `allUsers`, every
-//! one of those fetches is a 403 and **nothing on the server ever notices**:
-//! uploads succeed, rows are written, logs are clean, and the only evidence is a
-//! page of broken images. That is the same class of silent breakage as the
-//! `img-src` CSP bug, and it is discovered the same way — by a user, late.
-//!
-//! # Why not signed URLs instead of a public bucket
-//!
-//! Because the URL is denormalised into content that is never rewritten. A
-//! signed URL expires; the post HTML holding it does not. Serving private
-//! objects would mean minting a fresh URL at render time, which cannot work for
-//! text already stored. A publicly readable bucket is a consequence of the
-//! design, not a shortcut around it.
-//!
-//! # How the probe works
-//!
-//! An **unauthenticated** GET for an object name that cannot exist. Both GCS and
-//! S3 answer it the same way, and the two answers are what distinguish the
-//! cases:
-//!
-//! * `404` — anonymous reads are allowed, the object simply is not there. Good.
-//! * `403` — anonymous reads are refused. The store will not reveal whether the
-//!   object exists to someone who may not read it, and that is precisely the
-//!   response every `<img>` on the site is about to get.
-//!
-//! No credentials are attached on purpose: the question is what a *visitor*
-//! sees, not what this process can do.
+//! **Unauthenticated** GET for an impossible object name: `404` means anonymous
+//! reads work, `403` is what every `<img>` is about to get. Signed URLs cannot
+//! substitute for a public bucket: they expire, the post HTML holding them
+//! does not.
 
 use std::time::Duration;
 

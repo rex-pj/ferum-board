@@ -36,7 +36,6 @@
           <th>{{ t(k="adm-category") }}</th>
           {# POLICY: view policy + post policy #}
           <th style="width:22%">{{ t(k="adm-access-policies") }}</th>
-          {# STATS: thread count #}
           <th style="width:8%">{{ t(k="adm-threads") }}</th>
           {# ACTIONS #}
           <th style="width:10%"></th>
@@ -92,7 +91,6 @@
               {% endif %}
             </div>
           </td>
-          {# STATS #}
           <td class="align-middle text-muted">{{ cat.thread_count | default(value=0) }}</td>
           {# ACTIONS #}
           <td class="align-middle">
@@ -135,7 +133,6 @@
   </div>
 </div>
 
-<!-- New Category Modal -->
 <div class="modal fade" id="newCategoryModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -213,7 +210,6 @@
   </div>
 </div>
 
-<!-- Edit Category Modal -->
 <div class="modal fade" id="editCategoryModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">

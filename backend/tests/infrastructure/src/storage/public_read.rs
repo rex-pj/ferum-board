@@ -1,14 +1,9 @@
-//! Tests for the anonymous-read startup probe.
+//! Tests for the anonymous-read startup probe, whose entire value is one
+//! distinction: `404` means reads are open, `403` means they are not. Backwards,
+//! it would report "publicly readable" over a site whose every image 403s.
 //!
-//! The whole value of the probe is one distinction: an object store answers an
-//! anonymous request for a missing object with `404` when reads are open and
-//! `403` when they are not. Getting that backwards would be worse than having no
-//! probe at all — it would print "uploads are publicly readable" over a
-//! deployment whose every image is about to 403.
-//!
-//! So these run against a real socket rather than asserting on a mocked status
-//! code. The server is thirty lines of raw HTTP: no new dependency, and nothing
-//! between the assertion and the behaviour.
+//! Run against a real socket, not a mocked status: the server is thirty lines of
+//! raw HTTP, so nothing sits between assertion and behaviour.
 
 use std::sync::Arc;
 

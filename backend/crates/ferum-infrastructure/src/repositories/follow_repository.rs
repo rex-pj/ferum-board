@@ -30,8 +30,8 @@ fn follow_to_domain(m: user_follows::Model) -> Follow {
     }
 }
 
-// ─── FollowUserRow combines follow + user in a single query ──────────────────
-
+/// Follow joined to its user, so a follower list is one query rather than an
+/// N+1 over `users`.
 #[derive(Debug, FromQueryResult)]
 struct FollowUserRow {
     follow_id: Uuid,

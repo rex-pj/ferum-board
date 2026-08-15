@@ -685,18 +685,13 @@ impl ThreadRepository for PgThreadRepository {
         viewer_type: &str,
     ) -> Result<bool, AppError> {
         let now = Utc::now().fixed_offset();
-        // The single writer of `last_viewed_date`, deliberately.
+        // The single writer of `last_viewed_date`. The column has no database
+        // default on purpose — a `DEFAULT CURRENT_DATE` would add a second
+        // definition of "today" resolving against the session zone.
         //
-        // The column has no database default, so this is the only definition of
-        // "today" it ever sees. A `DEFAULT CURRENT_DATE` would add a second one
-        // that resolves against the session's `TimeZone` and agrees with this
-        // only while that session is UTC — see the note in migration 000005.
-        //
-        // UTC rather than the reporting timezone: this is a dedup window, not a
-        // reported figure. Nothing displays it, and threading the site's zone
-        // through here would couple view counting to a setting an admin can
-        // change underneath it — which would let one viewer's window silently
-        // reopen or extend on the day of the change.
+        // UTC, not the reporting timezone: this is a dedup window nothing
+        // displays, and using an admin-editable zone would let a viewer's window
+        // reopen on the day it changes.
         let today = Utc::now().date_naive();
 
         // Step 1: fresh INSERT (first-time viewer).

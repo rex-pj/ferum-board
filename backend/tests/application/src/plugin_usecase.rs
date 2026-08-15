@@ -178,15 +178,12 @@ async fn activate_registers_no_hooks_when_none_were_granted() {
 
 // ─── Config seeding from manifest defaults ───────────────────────────────────
 //
-// A plugin used to install with `config = {}` no matter what its manifest
-// declared, so `home-hero` activated cleanly and rendered nothing: no error, no
-// log line, nothing to search for. `default` in a JSON Schema means "use this
-// when the value is absent", and every manifest under examples/ was written as
-// if install honoured it.
+// Installing with `config = {}` regardless of the manifest made `home-hero`
+// activate cleanly and render nothing — no error, no log line. Every manifest
+// under examples/ is written assuming `default` is honoured.
 //
-// These drive the real `register_extracted`, so they cover the wiring (is the
-// seed written at all, before the status flips to Inactive?) and not just the
-// pure extraction step.
+// Driven through the real `register_extracted`, so the wiring is covered, not
+// just the pure extraction step.
 
 /// Wires up the create → seed → status → reload path shared by the tests below,
 /// capturing whatever config the use case decides to write.

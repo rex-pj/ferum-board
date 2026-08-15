@@ -1,22 +1,12 @@
 //! Transactional email through Resend's HTTPS API.
 //!
-//! ## Why this exists next to the SMTP adapter
+//! Not Resend's SMTP bridge: that needs a static credential in `site_config` and
+//! gives up the per-message id, the only handle on a delivery after the fact.
+//! The API key stays in the environment, so it never needs encrypting.
 //!
-//! Resend also offers an SMTP bridge, so `LettreEmailService` could reach it.
-//! That route costs a long-lived static credential in `site_config` and gives up
-//! the API's per-message id, which is the only handle on a delivery after the
-//! fact. This adapter takes the API instead and keeps its key in the environment,
-//! where it never touches the database and therefore never needs encrypting.
-//!
-//! ## Why no cargo feature
-//!
-//! `s3`, `gcs`, `meilisearch` and `script_plugins` each gate an **optional
-//! crate** — `aws-sdk-s3`, `urlencoding`, `meilisearch-sdk`, `boa_engine`. This
-//! adapter adds none: `reqwest` (with `json` and `rustls-tls`) is already an
-//! unconditional dependency of this crate. A feature would buy nothing at build
-//! time and would cost the failure mode the `gcs` gate has to warn about at
-//! startup — an env var set on a binary that cannot honour it. So it is always
-//! compiled and selected purely by the presence of `RESEND_API_KEY`.
+//! **No cargo feature**, unlike the other adapters — it adds no optional crate,
+//! `reqwest` is already unconditional. A gate would buy nothing and introduce
+//! the "env var set on a binary that cannot honour it" failure.
 
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};

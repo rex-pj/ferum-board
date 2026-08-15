@@ -42,40 +42,24 @@ impl S3Compatible {
             .region(Region::new(region.to_string()))
             .credentials_provider(credentials)
             .endpoint_url(endpoint)
-            // This client is only ever built against an operator-set endpoint,
-            // i.e. it never talks to real AWS — its entire population is MinIO,
-            // Cloudflare R2 and Google Cloud Storage's interoperability
-            // endpoint. Since aws-sdk-s3 1.x the SDK computes a CRC32 by default
-            // and folds `x-amz-checksum-*` / `x-amz-sdk-checksum-algorithm` into
-            // the SigV4 canonical string. Those endpoints do not recognise the
-            // headers, so the signature they compute differs from ours and every
-            // request — list, put, delete — fails with `SignatureDoesNotMatch`
-            // or `XAmzContentChecksumMismatch`. `WhenRequired` restores the
-            // pre-2025 behaviour, which is what all three document as supported.
+            // MANDATORY for MinIO, R2 and GCS interop — this client never talks
+            // to real AWS. Since aws-sdk-s3 1.x the SDK folds `x-amz-checksum-*`
+            // into the SigV4 canonical string, which those endpoints do not
+            // recognise, so EVERY request fails `SignatureDoesNotMatch`.
             //
-            // The integrity this gives up is already provided end-to-end and
-            // more strongly: every key is a SHA-256 of the bytes stored under it
-            // (`storage_utils::cas_key`), so corrupted content cannot masquerade
-            // under a valid key.
+            // The integrity given up is already covered more strongly: each key
+            // is a SHA-256 of its own bytes.
             .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
             .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
             .load()
             .await;
 
-        // Path-style addressing, for the same reason as the checksum settings
-        // above: this client never talks to real AWS, and none of the endpoints
-        // it does talk to are well served by the SDK's virtual-hosted default.
+        // Path-style: MinIO has no DNS for `{bucket}.{host}`, a bucket name with
+        // a dot breaks TLS under virtual-hosted, and it matches what
+        // `public_url` mints so reads and writes agree on one shape.
         //
-        // * MinIO needs DNS for `{bucket}.{host}` that a compose file does not
-        //   provide, so virtual-hosted simply fails there.
-        // * A bucket name containing a dot breaks TLS under virtual-hosted —
-        //   `*.storage.googleapis.com` does not match `my.bucket.storage.…`.
-        // * It is what `S3StorageService::public_url` already mints
-        //   (`{endpoint}/{bucket}/{key}`), so reads and writes agree on one
-        //   shape instead of two.
-        //
-        // AWS is deprecating path-style for new buckets, which does not apply
-        // here: neither adapter is constructed without an explicit endpoint.
+        // AWS's deprecation does not apply — neither adapter is constructed
+        // without an explicit endpoint.
         let s3_config = aws_sdk_s3::config::Builder::from(&config)
             .force_path_style(true)
             .build();

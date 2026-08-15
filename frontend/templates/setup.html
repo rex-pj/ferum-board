@@ -12,7 +12,8 @@
 <body>
 <div class="setup-layout">
 
-  <!-- ── Brand panel (desktop) ───────────────────────────────────── -->
+  {# Desktop only — collapsed away on narrow viewports, so nothing here may
+     carry information the form panel does not also state. #}
   <aside class="setup-brand">
     <div class="brand-logo">
       <div class="logo-icon"><i class="fa-solid fa-layer-group"></i></div>
@@ -48,11 +49,9 @@
     </ul>
   </aside>
 
-  <!-- ── Form panel ──────────────────────────────────────────────── -->
   <main class="setup-form-panel">
     <form class="setup-form-inner" id="setup-form" novalidate>
 
-      <!-- Step progress -->
       <div class="step-progress" id="step-progress" role="list" aria-label="{{ t(k='adm-setup-steps') }}">
         <div class="step-item active" id="sp-1" role="listitem">
           <div class="step-dot" aria-hidden="true">1</div>
@@ -68,7 +67,7 @@
         </div>
       </div>
 
-      <!-- ── Step 1: Admin account ────────────────────────────── -->
+      {# ── Step 1: Admin account ────────────────────────────── #}
       <div class="step-panel active" id="panel-1">
         <div class="mb-4">
           <h1 class="page-title">{{ t(k="adm-create-your-admin-account") }}</h1>
@@ -121,7 +120,7 @@
         </button>
       </div>
 
-      <!-- ── Step 2: Site details ─────────────────────────────── -->
+      {# ── Step 2: Site details ─────────────────────────────── #}
       <div class="step-panel" id="panel-2">
         <div class="mb-4">
           <button type="button" class="btn-nav-back mb-2" data-back="1">
@@ -166,7 +165,7 @@
         </button>
       </div>
 
-      <!-- ── Step 3: Review & launch ──────────────────────────── -->
+      {# ── Step 3: Review & launch ──────────────────────────── #}
       <div class="step-panel" id="panel-3">
         <div class="mb-4">
           <button type="button" class="btn-nav-back mb-2" data-back="2">
@@ -223,10 +222,10 @@
         </p>
       </div>
 
-    </form><!-- /#setup-form -->
+    </form>
   </main>
 
-</div><!-- /.setup-layout -->
+</div>
 
 <script src="/static/js/bootstrap.bundle.min.js"></script>
 <script src="/static/js/ferum-progress.js?v={{ asset_version() }}"></script>

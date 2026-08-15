@@ -1,3 +1,8 @@
+//! Security response headers. `img-src` is NOT constant — startup.rs appends
+//! the storage backend's origin, else every uploaded image is CSP-blocked.
+//! Only img-src widens: a bucket serving scripts would make an upload-validation
+//! bug into code execution.
+
 use axum::extract::{Request, State};
 use axum::http::HeaderValue;
 use axum::middleware::Next;
@@ -5,22 +10,11 @@ use axum::response::Response;
 
 /// Adds defensive security headers to every response.
 ///
-/// CSP: scripts restricted to `'self'` plus `'unsafe-eval'` (no `'unsafe-inline'`).
-/// `'unsafe-eval'` is required because Alpine.js (standard build, used for all admin/theme
-/// interactivity) compiles its `x-data` / `x-show` / `x-for` expressions at runtime via the
-/// Function constructor. Without it the browser blocks every Alpine directive and fully
-/// Alpine-driven pages (e.g. /admin/permissions) render blank. Inline `<script>` tags and
-/// `on*=` attributes remain forbidden — only Alpine's evaluator is permitted.
-/// Styles allow `'unsafe-inline'` because Bootstrap injects inline styles at runtime.
-/// `img-src` includes `data:` for base64 avatar placeholders and `blob:` for local
-/// previews of files the user has just picked (`URL.createObjectURL`), plus any
-/// object-store / CDN origin uploads are actually served from — see
-/// [`SecurityHeadersConfig::new`]. `connect-src` covers SSE
-/// (/api/notifications/stream) and `fetch()` calls.
-///
-/// State is [`SecurityHeadersConfig`] rather than the whole `AppState` because
-/// that is genuinely all this needs, and it keeps the middleware constructible
-/// in a test without standing up a database.
+/// `script-src` needs `'unsafe-eval'` for Alpine's runtime expression compiler —
+/// without it every `x-data` page renders blank. Inline `<script>` and `on*=`
+/// stay forbidden. `style-src` allows `'unsafe-inline'` for Bootstrap.
+/// `img-src` gains the storage origin at startup; see
+/// [`SecurityHeadersConfig::new`].
 pub async fn security_headers(
     State(config): State<SecurityHeadersConfig>,
     req: Request,
@@ -98,20 +92,14 @@ const BASE_CSP: &str = "default-src 'self'; \
      form-action 'self'";
 
 impl SecurityHeadersConfig {
-    /// `image_origins` are scheme+host origins (`https://cdn.example.com`) that
-    /// `StorageService::public_url` can mint. Empty for a same-origin install.
+    /// Origins `StorageService::public_url` can mint. Empty for same-origin.
     ///
-    /// **Why this is not a constant any more.** `img-src 'self' data: blob:`
-    /// silently breaks every deployment whose uploads are not same-origin — S3,
-    /// GCS, and plain database storage behind `CDN_BASE_URL` alike. The upload
-    /// succeeds, the row is written, `public_url` returns the right address, and
-    /// the browser then refuses to load it. There is no server-side error and
-    /// nothing in the logs; the only evidence is a console violation on a page
-    /// full of blank images.
+    /// NOT a constant: a fixed `img-src 'self' data: blob:` silently breaks
+    /// every non-same-origin upload config — the write succeeds, the browser
+    /// refuses to load it, and nothing appears server-side.
     ///
-    /// Only `img-src` is widened. `script-src` and `connect-src` stay `'self'`:
-    /// an object store holds user-uploaded bytes, and letting a bucket serve
-    /// scripts to this origin would make an upload bug into code execution.
+    /// **Only `img-src` widens.** A bucket serving scripts to this origin would
+    /// turn an upload-validation bug into code execution.
     pub fn new(https_enabled: bool, image_origins: &[String]) -> Self {
         let csp = if image_origins.is_empty() {
             HeaderValue::from_static(BASE_CSP)

@@ -108,19 +108,12 @@ pub mod perm {
 
 // ── System role / permission definitions ──────────────────────────────────────
 //
-// The catalogue below is the single source of truth for what a permission *is*.
-// It used to live as SQL string literals inside four separate migrations, which
-// meant a key the code checked against (`perm::` above) and the row the checker
-// resolved it from were two independent spellings that nothing kept in step.
-// The seeder (`ferum-infrastructure/src/system_seed_service.rs`) reads these
-// constants, so adding a permission is a const here plus an entry below — no
-// migration.
+// Single source of truth for what a permission is. The seeder reads these, so
+// adding one is a `perm::` const plus an entry below — no migration, and no SQL
+// literal that could drift from the key the checker uses.
 //
-// `min_trust` values are the ones the schema has always carried; they are the
-// trust gate, not the grant. Which roles receive a permission by default is
-// `SystemRoleDef::grants`, applied only when the permission row is first
-// created — see the seeder for why re-granting on every boot would undo an
-// admin's deliberate revocation.
+// `min_trust` is the trust gate, not the grant; default grants live in
+// `SystemRoleDef::grants` and apply only at first creation.
 
 /// One permission row, as the system defines it.
 pub struct PermissionDef {
@@ -149,6 +142,12 @@ pub struct SystemRoleDef {
     pub grants: RoleGrants,
 }
 
+/// Authoritative permission catalogue; `PgSystemSeedService` writes the table
+/// from it every startup, so **adding a permission needs no migration**.
+///
+/// `min_trust` is seeded but **not enforced generically** — each use case names
+/// its own floor, so where they disagree the use case wins. That is why
+/// `/admin/permissions` renders these read-only.
 pub const PERMISSIONS: &[PermissionDef] = &[
     // ── Content ──────────────────────────────────────────────────────────────
     PermissionDef { key: perm::THREAD_CREATE,     description: "Create new threads",                  group_name: "content", min_trust: TrustLevel::Basic },
@@ -207,6 +206,12 @@ const MEMBER_GRANTS: &[&str] = &[
     perm::REPORT_CREATE,
 ];
 
+/// The non-deletable roles. `grants` applies **only when a permission key is
+/// first created**, never re-asserted — re-applying each startup would silently
+/// undo an admin's revocation.
+///
+/// So adding a grant here does nothing to an install that already has that
+/// permission row; it reaches existing sites only if an admin grants it.
 pub const SYSTEM_ROLES: &[SystemRoleDef] = &[
     SystemRoleDef {
         slug: "admin",

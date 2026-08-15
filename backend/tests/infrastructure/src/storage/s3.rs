@@ -1,24 +1,11 @@
-//! Unit tests for [`S3StorageService`]'s URL handling.
+//! URL handling for [`S3StorageService`], pinned because sharing
+//! `url_shapes.rs` with GCS silently changed behaviour — presigned URLs now
+//! resolve — against an adapter that had no tests at all.
 //!
-//! # Why this file exists now
+//! The guarded failure is silent: an unrecognised URL leaks or collects a CAS
+//! reference without erroring.
 //!
-//! `key_from_url` was rewritten to share `storage/url_shapes.rs` with the GCS
-//! adapter, and that rewrite changed behaviour: a presigned URL now resolves,
-//! where before the query string prevented a match. Nothing in the suite
-//! observed either the old or the new behaviour — this adapter had no tests at
-//! all — so the change went in unwatched. These pin it.
-//!
-//! The failure mode being guarded is silent. `key_from_url` returning `None`
-//! for a URL we minted is not an error; it reports "not one of ours", so a CAS
-//! reference is never taken or never released, and files are either leaked or
-//! garbage collected out from under posts that still display them.
-//!
-//! # Scope
-//!
-//! Offline only. `put` and `delete` issue real S3 requests and are not covered
-//! here or anywhere else — same honest limitation as the GCS adapter. The
-//! constructor performs no network I/O because credentials, region and endpoint
-//! are all supplied explicitly, which is what lets these run without a bucket.
+//! Offline only — `put`/`delete` are uncovered here and everywhere.
 
 use ferum_application::ports::StorageService;
 use ferum_infrastructure::storage::S3StorageService;

@@ -13,7 +13,7 @@
   <li class="nav-item"><button type="button" class="nav-link" data-tab="brands">{{ t(k="adm-brands") }}</button></li>
 </ul>
 
-<!-- ═══ Tab: Products ══════════════════════════════════════════════ -->
+{# ═══ Tab: Products ══════════════════════════════════════════════ #}
 <div data-panel="products">
   <div class="card">
     <div class="card-header p-0">
@@ -78,15 +78,15 @@
   </div>
 </div>
 
-<!-- ═══ Tab: Product categories ════════════════════════════════════
+{# ═══ Tab: Product categories ════════════════════════════════════
      The catalogue's own taxonomy. Kept beside Products rather than under the
      forum's Categories page, because it classifies furniture, not conversation.
--->
+#}
 <div data-panel="pcats" class="d-none">
-  <!-- Auto-assign sits above the table because it is the answer to the question
-       the table raises. Filing a few hundred products by hand is the chore this
-       whole taxonomy exists to avoid, so the way out has to be the first thing
-       visible — not buried in a menu. -->
+  {# Auto-assign sits above the table because it is the answer to the question
+     the table raises. Filing a few hundred products by hand is the chore this
+     whole taxonomy exists to avoid, so the way out has to be the first thing
+     visible — not buried in a menu. #}
   <div class="card mb-3">
     <div class="card-body">
       <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
@@ -133,7 +133,7 @@
   </div>
 </div>
 
-<!-- ═══ Tab: Materials ═════════════════════════════════════════════ -->
+{# ═══ Tab: Materials ═════════════════════════════════════════════ #}
 <div data-panel="materials" class="d-none">
   <div class="card">
     <div class="card-header p-0">
@@ -168,7 +168,7 @@
   </div>
 </div>
 
-<!-- ═══ Tab: Brands ════════════════════════════════════════════════ -->
+{# ═══ Tab: Brands ════════════════════════════════════════════════ #}
 <div data-panel="brands" class="d-none">
   <div class="card">
     <div class="card-header p-0">
@@ -195,25 +195,25 @@
   </div>
 </div>
 
-<!-- ═══ Modal: Product (create / edit) ═════════════════════════════ -->
-<!-- Deliberately NOT `modal-dialog-scrollable`: the materials combobox drops an
-     absolutely positioned result list, and a scrollable modal-body would clip it
-     at its own boundary. Letting the whole dialog scroll keeps the list visible. -->
+{# ═══ Modal: Product (create / edit) ═════════════════════════════ #}
+{# Deliberately NOT `modal-dialog-scrollable`: the materials combobox drops an
+   absolutely positioned result list, and a scrollable modal-body would clip it
+   at its own boundary. Letting the whole dialog scroll keeps the list visible. #}
 <div class="modal fade" id="productModal" tabindex="-1" aria-labelledby="productModalTitle" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <!-- novalidate: field errors are rendered inline instead of through the
-           browser's native bubbles, which cannot be styled, translated, or
-           pointed at a field the admin cannot currently see. -->
+      {# novalidate: field errors are rendered inline instead of through the
+         browser's native bubbles, which cannot be styled, translated, or
+         pointed at a field the admin cannot currently see. #}
       <form id="productForm" novalidate>
         <div class="modal-header">
           <h5 class="modal-title" id="productModalTitle">{{ t(k="adm-new-product") }}</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='adm-close') }}"></button>
         </div>
         <div class="modal-body">
-          <!-- Save errors belong inside the dialog. The page-level #catalogStatus
-               alert sits behind the backdrop while the modal is open, so routing
-               a failed save there makes it invisible. -->
+          {# Save errors belong inside the dialog. The page-level #catalogStatus
+             alert sits behind the backdrop while the modal is open, so routing
+             a failed save there makes it invisible. #}
           <div class="alert alert-danger d-none" id="productFormError" role="alert"></div>
           <input type="hidden" id="productId">
 
@@ -225,8 +225,8 @@
                 <input type="text" class="form-control" id="pName" required maxlength="200" aria-describedby="pSlugLine">
                 <div class="invalid-feedback" id="pNameFeedback"></div>
 
-                <!-- Slug is a URL detail, not a peer of Name. It rides along as
-                     helper text and only becomes an editable field when asked for. -->
+                {# Slug is a URL detail, not a peer of Name. It rides along as
+                   helper text and only becomes an editable field when asked for. #}
                 <div class="form-text d-flex align-items-center gap-2 flex-wrap" id="pSlugLine">
                   <span>{{ t(k="adm-url") }}: <code id="pSlugPreview">—</code></span>
                   <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="pSlugEdit">{{ t(k="adm-edit") }}</button>
@@ -240,8 +240,8 @@
                 </div>
               </div>
 
-              <!-- Three options each: a segmented control shows the whole choice
-                   set at a glance and costs one click instead of two. -->
+              {# Three options each: a segmented control shows the whole choice
+                 set at a glance and costs one click instead of two. #}
               <div class="col-md-6">
                 <span class="form-label d-block" id="pTypeLabel">{{ t(k="adm-type") }}</span>
                 <div class="btn-group w-100" role="group" aria-labelledby="pTypeLabel">
@@ -271,10 +271,10 @@
           <fieldset class="adm-form-section">
             <legend class="adm-form-legend">{{ t(k="adm-details") }}</legend>
             <div class="row g-3">
-              <!-- One range control rather than two unrelated number fields, so
-                   the pair reads as the single value it is. Typed as text with a
-                   numeric keypad: `type=number` rejects the grouped digits
-                   ("1.500.000") that anyone entering VND actually types. -->
+              {# One range control rather than two unrelated number fields, so
+                 the pair reads as the single value it is. Typed as text with a
+                 numeric keypad: `type=number` rejects the grouped digits
+                 ("1.500.000") that anyone entering VND actually types. #}
               <div class="col-md-6">
                 <span class="form-label d-block" id="pPriceLabel">{{ t(k="adm-price-range") }}</span>
                 {# `has-validation` + the feedback nested INSIDE the group is
@@ -350,8 +350,8 @@
               </label>
               <input type="file" class="form-control" id="pImageInput"
                      accept="image/jpeg,image/png,image/webp,image/gif" multiple aria-describedby="pImagePending">
-              <!-- On create there is no product id to upload against yet, so picked
-                   files are staged here and sent once the product exists. -->
+              {# On create there is no product id to upload against yet, so picked
+                 files are staged here and sent once the product exists. #}
               <div class="form-text d-none" id="pImagePending">{{ t(k="adm-images-upload-after-save") }}</div>
               <div class="d-flex flex-wrap gap-2 mt-2" id="pGallery"></div>
             </div>
@@ -366,7 +366,7 @@
   </div>
 </div>
 
-<!-- ═══ Modal: Material (create / edit) ════════════════════════════ -->
+{# ═══ Modal: Material (create / edit) ════════════════════════════ #}
 <div class="modal fade" id="materialModal" tabindex="-1" aria-labelledby="materialModalTitle" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -419,7 +419,7 @@
   </div>
 </div>
 
-<!-- ═══ Modal: Brand (create / edit) ═══════════════════════════════ -->
+{# ═══ Modal: Product category (create / edit) ════════════════════ #}
 <div class="modal fade" id="pcatModal" tabindex="-1" aria-labelledby="pcatModalTitle" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -468,6 +468,7 @@
   </div>
 </div>
 
+{# ═══ Modal: Brand (create / edit) ═══════════════════════════════ #}
 <div class="modal fade" id="brandModal" tabindex="-1" aria-labelledby="brandModalTitle" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -518,11 +519,11 @@
   </div>
 </div>
 
-<!-- ═══ Modal: Delete product ══════════════════════════════════════ -->
-<!-- Deleting is guarded rather than blind: the dialog first reports what the
-     product would take with it. Reviews block a permanent delete outright
-     (threads.product_id is ON DELETE SET NULL, so deleting would leave reviews
-     pointing at nothing), leaving Archive as the safe way out. -->
+{# ═══ Modal: Delete product ══════════════════════════════════════ #}
+{# Deleting is guarded rather than blind: the dialog first reports what the
+   product would take with it. Reviews block a permanent delete outright
+   (threads.product_id is ON DELETE SET NULL, so deleting would leave reviews
+   pointing at nothing), leaving Archive as the safe way out. #}
 <div class="modal fade" id="deleteProductModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

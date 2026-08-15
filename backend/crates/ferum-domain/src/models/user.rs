@@ -77,45 +77,23 @@ pub struct UserPreferences {
     /// Storing an explicit `Some("en")` is a real choice and pins the user to
     /// English even if the admin later changes the site default.
     pub locale: Option<crate::Locale>,
-    /// IANA timezone for displaying timestamps to this user, e.g.
-    /// `"Europe/Lisbon"`.
+    /// IANA timezone for this user's timestamps. `None` (the default) means the
+    /// device's zone, which is the only option for a guest.
     ///
-    /// `None` — the default — means "use whatever zone the device reports",
-    /// which is right for almost everyone and is the only thing that can be
-    /// right for a guest. A value here overrides the device, for the user whose
-    /// machine is set wrong or who wants the community's zone while travelling.
-    ///
-    /// It is also the only zone a server-rendered email could use — but note
-    /// that **no email currently renders a date**: the catalog has four keys,
-    /// verify and reset, neither carrying a timestamp. Wire this up when one
-    /// does; do not assume it already is.
-    ///
-    /// Kept as a `String` rather than a parsed zone: the domain never converts
-    /// with it (the browser does), it is validated on write, and parsing it
-    /// here would pull a timezone database into a crate that has no I/O and no
-    /// framework dependencies.
+    /// A `String`, not a parsed zone: conversion happens in the browser, and
+    /// parsing here would pull a timezone database into a crate with no I/O.
+    /// **No email currently renders a date** — wire this in when one does.
     pub timezone: Option<String>,
 }
 
-/// Which notification kinds a user wants delivered by email.
+/// Which notification kinds a user wants emailed, as the
+/// `user_preferences.email_notifications` JSONB. Reactions, follows and system
+/// notices stay in-app — highest volume, lowest value.
 ///
-/// Stored as the `user_preferences.email_notifications` JSONB object, one boolean
-/// per key. Only the kinds listed here are ever emailed — reactions, follows and
-/// system notices stay in-app, because they are the highest-volume and lowest-value
-/// of the five and are the usual reason someone turns email off wholesale.
-///
-/// ## An absent key means "do not send", and that is the migration story
-///
-/// Every account created before this feature has `{}`, so every one of them is
-/// silent until the user opts in. New accounts get both keys written explicitly at
-/// registration (see `AuthUseCase::register`), so they are opted **in** by default.
-///
-/// That asymmetry is the whole design: it is the only way to have a sensible
-/// default for new members without mailing an existing community that never agreed
-/// to it. Reading a missing key as `true` would, on the first deploy, send mail to
-/// every account the forum has ever had — and a spam complaint spike is the one
-/// mistake here that cannot be undone, because it is the sending domain's
-/// reputation that pays.
+/// **An absent key means DO NOT SEND.** Pre-existing accounts hold `{}` and stay
+/// silent until they opt in; new ones are written explicitly at registration.
+/// Defaulting a missing key to `true` would mail the entire existing community
+/// on first deploy, and the sending domain's reputation pays for that.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct EmailNotificationPrefs {
     /// A reply to a thread this user started.

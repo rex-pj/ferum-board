@@ -13,22 +13,14 @@ const MAX_NON_UPLOAD_BODY_BYTES: usize = 1024 * 1024; // 1 MiB
 
 /// Applies a small body limit to everything except multipart uploads.
 ///
-/// The router disables axum's `DefaultBodyLimit` wholesale so that per-handler
-/// checks (`MAX_AVATAR_BYTES`, `MAX_FPKG_SIZE`, …) are the real enforcers for
-/// uploads. That is correct for uploads and badly wrong for everything else: it
-/// also lifted the limit on every JSON endpoint, leaving the only backstop at
-/// the global `RequestBodyLimitLayer` — sized for a 50 MB plugin package. An
-/// unauthenticated `POST /api/auth/sessions` carrying a 50 MB JSON body was
-/// enough to exhaust memory on the documented 2 vCPU / 4 GB target.
+/// The router disables `DefaultBodyLimit` so per-handler checks enforce upload
+/// sizes — which also lifted it from every JSON endpoint, leaving only the 50 MB
+/// plugin-package backstop. An unauthenticated 50 MB login body was enough to
+/// exhaust the documented 2 vCPU / 4 GB target.
 ///
-/// Discriminating on `Content-Type` rather than on the route keeps this in one
-/// place. There are 18 multipart handlers spread across the public, admin and
-/// mod routers; enumerating them here would silently 413 any upload route added
-/// later and missed. A request that claims `multipart/form-data` passes through
-/// to the per-handler byte checks exactly as before.
-///
-/// Note this cannot be expressed with `DefaultBodyLimit`, whose limit is chosen
-/// when the layer is built, not per request.
+/// Discriminates on `Content-Type`, not route: the multipart handlers are spread
+/// across the public, admin and mod routers, so an allowlist would silently 413
+/// the next upload route someone adds.
 pub async fn non_upload_body_limit(req: Request, next: Next) -> Response {
     let is_multipart = req
         .headers()

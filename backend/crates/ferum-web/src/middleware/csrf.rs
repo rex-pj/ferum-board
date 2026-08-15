@@ -1,3 +1,10 @@
+//! CSRF defence. **There is deliberately no CSRF token.**
+//!
+//! Two layers: `SameSite=Lax` on the auth cookie stops the browser attaching it
+//! to a cross-site write at all, and the `Origin` allowlist below rejects what
+//! remains. Weaken the cookie to `SameSite=None` and layer one is gone — a real
+//! token becomes mandatory. `tests/web/` asserts the attribute for that reason.
+
 use axum::extract::Request;
 use axum::http::{Method, StatusCode};
 use axum::middleware::Next;

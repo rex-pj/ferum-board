@@ -50,7 +50,6 @@
           <div class="card-body">
             <div class="row g-4">
 
-              {# Logo #}
               <div class="col-md-6">
                 <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">{{ t(k="adm-logo") }}</h6>
 
@@ -96,7 +95,6 @@
                 </div>
               </div>
 
-              {# Favicon #}
               <div class="col-md-6">
                 <h6 class="mb-3 text-body-secondary text-uppercase adm-section-label">{{ t(k="adm-favicon") }}</h6>
 
@@ -825,14 +823,12 @@
       {{ t(k="adm-webhooks-fire-an-http-post-to") }} <code>{{ t(k="adm-x-ferum-signature") }}</code> {{ t(k="adm-header-hmac-sha256-a-webhook-is") }}
     </p>
 
-    {# Loading #}
     <template x-if="loading">
       <div class="text-center text-muted py-5">
         <i class="fa-solid fa-spinner fa-spin fa-lg"></i>
       </div>
     </template>
 
-    {# Empty state #}
     <template x-if="!loading && webhooks.length === 0">
       <div class="card mb-4">
         <div class="card-body text-center text-muted py-5">
@@ -842,7 +838,6 @@
       </div>
     </template>
 
-    {# Webhook list #}
     <template x-if="!loading && webhooks.length > 0">
       <div class="card mb-4">
         <div class="table-responsive">

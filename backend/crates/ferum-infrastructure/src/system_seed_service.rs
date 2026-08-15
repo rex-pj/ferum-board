@@ -1,21 +1,12 @@
 //! System data seeding — the rows the application cannot run without.
 //!
-//! This used to live inside migrations, which made it impossible to keep a
-//! permission's definition next to the `perm::` constant the code checks
-//! against: the key was spelled once in Rust and again in a SQL string literal
-//! four files away. Migrations are now DDL only, and everything below is
-//! derived from [`ferum_domain::models::role`] and
-//! [`ferum_application::constants`].
+//! Every step is insert-if-absent and runs on **every** startup, which is what
+//! lets a permission added in a later version reach an existing install with no
+//! migration. Migrations stay DDL-only.
 //!
-//! Every step is insert-if-absent, so this runs on **every** startup, not just
-//! the first. That is what lets a permission added in a later version reach an
-//! existing install without a migration.
-//!
-//! The one deliberate asymmetry is grants: role → permission links are written
-//! only for permission keys this run actually created. Re-asserting the full
-//! default grant table on every boot would silently undo an admin's revocation
-//! through `PUT /api/admin/roles/:id/permissions` — the change would appear to
-//! work, then come back on the next restart.
+//! One asymmetry: role → permission grants are written only for keys this run
+//! created. Re-asserting them each boot would silently undo an admin's
+//! revocation on the next restart.
 
 use std::collections::{HashMap, HashSet};
 
@@ -142,28 +133,14 @@ impl PgSystemSeedService {
         Ok(())
     }
 
-    /// Encrypts any secret still stored in plaintext, and re-seals anything that
-    /// only opened under the previous key. Returns how many rows it rewrote.
+    /// Encrypts plaintext secrets and re-seals anything that only opened under
+    /// the previous key. Returns the row count. Also the rotation mechanism.
     ///
-    /// **Why an eager sweep as well as lazy-on-read.** The repositories already
-    /// read plaintext unchanged and seal on the next write, which is enough for
-    /// correctness. It is not enough for the purpose: "the next time an admin
-    /// edits the SMTP settings" may be never, and until then the plaintext sits
-    /// in every database backup — the exact exposure this feature exists to
-    /// close. So the values are converted on the first boot after the key is
-    /// configured instead of whenever someone happens to open a settings page.
+    /// Eager rather than lazy-on-write because "the next time an admin edits
+    /// SMTP" may be never, and until then the plaintext is in every backup.
+    /// Not a migration: the key is in the environment, which DDL cannot see.
     ///
-    /// **Why here and not in a migration.** `migration/` is DDL only by
-    /// convention, and it could not do this anyway: the key lives in the process
-    /// environment, and a migration that ran without it would have to either skip
-    /// silently or fail the deploy.
-    ///
-    /// Idempotent — a second run finds nothing to do and returns 0 — so it is
-    /// safe on every startup. This is also the rotation mechanism: it is the step
-    /// that acts on `needs_reseal`.
-    ///
-    /// One transaction, so a failure partway leaves no mixture of sealed and
-    /// unsealed rows to reason about.
+    /// Idempotent, and one transaction so a partial failure leaves no mixture.
     #[tracing::instrument(skip_all)]
     pub async fn seal_existing_secrets(&self, cipher: &SecretCipher) -> Result<usize, AppError> {
         let txn = self.db.begin().await?;

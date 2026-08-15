@@ -10,20 +10,10 @@ use tokio::sync::RwLock;
 
 /// One compiled template set per locale.
 ///
-/// Tera 1.x global functions receive their arguments but **cannot read the
-/// render context**, so a single shared `Tera` has no way to know which locale
-/// the current request wants. The options were:
-///
-/// * Pass the locale at every call site — `{{ t(k="x", loc=locale) }}` — which
-///   puts noise on ~960 strings and is silently wrong if one is forgotten.
-/// * Read it from a `tokio::task_local!` — clean at the call site, but breaks
-///   the moment `render` moves onto `spawn_blocking`, which it already does.
-/// * Build one `Tera` per locale, each closing over its own locale.
-///
-/// The last is chosen. Templates just write `{{ t(k="thread-reply") }}`, and the
-/// cost is one extra parse of ~10k lines of HTML per locale — a few MB for the
-/// two-to-four locales this product targets. Rebuilds already happen off-thread
-/// behind an atomic swap, so the multiplier never touches the request path.
+/// Tera 1.x global functions cannot read the render context, so a shared `Tera`
+/// cannot know the request's locale. A task-local would not survive the
+/// `spawn_blocking` hop `render` already makes, so each instance closes over its
+/// own locale instead. Costs one extra parse per locale, off the request path.
 type Instances = HashMap<Locale, Arc<Tera>>;
 
 #[derive(Clone)]
@@ -84,26 +74,13 @@ impl TeraEngine {
         Ok(instances)
     }
 
-    /// Loads every template into one `Tera`, with two different failure policies:
+    /// Loads every template, with two deliberate failure policies: first-party
+    /// templates **fail closed** (refuse to start), user-installed themes **fail
+    /// open** (logged, skipped, fall back to `default`).
     ///
-    /// * **First-party templates fail closed.** `frontend/templates/` (admin, mod,
-    ///   setup) and the built-in `default` theme ship with the binary. If one of
-    ///   them will not parse the app refuses to start, because the alternative is
-    ///   a 500 on whichever page happens to use it — silently, at first render.
-    ///
-    /// * **User-installed themes fail open.** An admin can upload an arbitrary
-    ///   `.zip`; a typo in it must not take the forum down. A broken theme is
-    ///   logged and skipped wholesale, and `render_with_theme`'s inheritance chain
-    ///   falls back to `default`.
-    ///
-    /// Each third-party theme is trial-loaded into a clone and only committed if
-    /// it parses. Tera's `add_raw_templates` is a batch that aborts on the first
-    /// bad template, so loading every theme together would let one bad upload stop
-    /// later themes — including `default` — from registering at all.
-    ///
-    /// `pub` so `tests/web` can drive both policies against a synthetic tree —
-    /// the fail-closed path cannot be reached through `TeraEngine::new` without
-    /// a broken template checked into the repository.
+    /// Each third-party theme is trial-loaded into a clone first, because
+    /// `add_raw_templates` aborts the whole batch on the first bad template —
+    /// one bad upload would otherwise stop `default` registering at all.
     pub fn build_tera(
         themes_dir: &std::path::Path,
         admin_templates_dir: &std::path::Path,
@@ -220,17 +197,9 @@ impl TeraEngine {
             },
         );
 
-        // `file_url(key="…")` — the stable identity of a stored file.
-        //
-        // Templates used to write `/files/{{ key }}` by hand in eleven places.
-        // That happened to be right, but only by coincidence: the resolver path
-        // is `ports::file_url`'s business, and a template that spells it out is
-        // a copy that cannot follow if it ever changes. Calling through keeps
-        // one definition, exactly as `key_from_url` keeps one on the way back.
-        //
-        // Not `public_url`: this value ends up in `src` attributes on pages that
-        // may be cached, and `public_url` names where the bytes live *today*.
-        // See the identity-vs-location note on `ports::file_url`.
+        // `file_url(key="…")` — never hand-write `/files/{{ key }}` in a
+        // template, and never `public_url`: this lands in `src` attributes on
+        // cacheable pages, and `public_url` names only where bytes live today.
         tera.register_function(
             "file_url",
             move |args: &std::collections::HashMap<String, tera::Value>| {
@@ -244,18 +213,10 @@ impl TeraEngine {
             },
         );
 
-        // `t(k="key", ...)` — resolves a message from the translation catalog in
-        // *this instance's* locale, which is why the engine keeps one Tera per
-        // locale rather than one shared instance.
-        //
-        // Any argument other than `k` is passed through to the catalog as a
-        // translation variable, so `{{ t(k="thread-replies", count=n) }}` selects
-        // the right plural form. Numbers must stay numbers here: handing Fluent a
-        // stringified count collapses every plural rule to its catch-all arm.
-        //
-        // Output is a plain string and is escaped by Tera like any other value.
-        // Translations must never be piped through `| safe` — catalogs are
-        // admin-editable, so that would turn a translation into an XSS vector.
+        // `t(k="key", ...)` — resolves against this instance's locale. Args other
+        // than `k` become Fluent variables; NUMBERS MUST STAY NUMBERS, or every
+        // plural rule collapses to its catch-all arm. Never pipe a translation
+        // through `| safe`: catalogs are admin-editable, so that is an XSS vector.
         let t_locale = locale.clone();
         let t_translator = Arc::clone(translator);
         tera.register_function(
@@ -425,20 +386,11 @@ impl TeraEngine {
             .cloned()
     }
 
-    /// Render a template by name, in `locale`, with the given context.
+    /// Renders a template by name, in `locale`, with the given context.
     ///
-    /// The locale selects which compiled instance runs — and therefore which
-    /// catalog `t()` resolves against. Note the render itself happens on
-    /// `spawn_blocking` below: that is precisely why the locale is carried in
-    /// the instance rather than in a task-local, which would not survive the
-    /// hop off the async task.
-    /// `ctx` is taken **by value** so it can be moved onto the blocking pool.
-    /// It used to be `&Context` and was cloned here — a `Context` is a
-    /// `HashMap<String, Value>` holding the page's entire materialised view
-    /// model (on a thread page, twenty posts' worth of `content_html`), so that
-    /// was a deep copy of the largest object in the request, on every request.
-    /// `render_with_theme_in` cloned it a second time to insert its own keys;
-    /// both copies are gone now that ownership flows through.
+    /// `ctx` is taken **by value** so it moves onto the blocking pool. Taking
+    /// `&Context` forces a deep copy of the page's whole view model — the
+    /// largest object in the request — on every render.
     pub async fn render(
         &self,
         locale: &Locale,

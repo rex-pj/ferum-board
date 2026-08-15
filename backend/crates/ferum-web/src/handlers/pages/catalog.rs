@@ -41,17 +41,12 @@ fn catalog_categories_ctx(
         .collect()
 }
 
-/// Context every catalogue surface (/catalog, /materials, /brands) needs for the
-/// shared rail in `partials/catalog_sidebar.html`.
+/// Shared rail context for /catalog, /materials and /brands — assembled once so
+/// switching tabs cannot change what sits beside the content.
 ///
-/// The rail is identical on all three tabs by design — switching tabs must not
-/// change what sits beside the content — so its data is assembled in one place
-/// rather than three times with three ideas of what belongs there. `categories`
-/// is passed in because /catalog already holds them for its filter chips; a
-/// second fetch here would be the same query twice per request.
-///
-/// The review read degrades to an empty panel rather than failing the page: the
-/// rail supports the page, it is not the page.
+/// `categories` is passed in because /catalog already holds them; fetching here
+/// would run the same query twice per request. The review read degrades to an
+/// empty panel rather than failing the page.
 async fn catalog_rail_ctx(
     state: &AppState,
     ctx: &mut Context,

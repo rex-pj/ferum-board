@@ -2,38 +2,19 @@
 {% import "default/templates/macros.html" as m %}
 
 {#
-  Ferum Review — catalog/product.html
-  ─────────────────────────────────────────────────────────────────────────────
-  The only PAGE this theme overrides (base.html is a pass-through shell).
-  Everything else — home, thread, category, profile, auth — falls through to the
-  default theme and is re-skinned purely by assets/theme.css.
+  Ferum Review — the only PAGE this theme overrides, because CSS can recolour
+  but cannot regroup: the default stacks brand/style/origin/materials as loose
+  lines, and a review board needs them as one comparable <dl> grid. No new
+  context data is used.
 
-  WHY THIS ONE NEEDS AN OVERRIDE
-  CSS can recolour and re-space, but it cannot regroup. The default template
-  prints brand, style, origin and materials as loose lines stacked above the
-  price; a review board needs them read as one comparable block. So the same
-  fields are regrouped into a <dl class="fr-spec"> key/value grid.
+  JS CONTRACT — ferum-page-product.js requires exactly #pdp-main-image (with
+  data-name), #pdp-thumbs, [data-full], [data-caption].
 
-  NO NEW DATA. Every value below already exists in the default template's
-  context (product.brand, product.product_type, product.origin, product.style,
-  product.materials, product.price_min/max). Nothing was added to the handler.
+  KEEP IN SYNC with default/templates/catalog/product.html — everything outside
+  the Details column is a verbatim copy.
 
-  JS CONTRACT — ferum-page-product.js drives the gallery and requires exactly:
-    #pdp-main-image (with data-name), #pdp-thumbs, [data-full], [data-caption]
-  These are reproduced verbatim from the default template.
-
-  KEEP IN SYNC WITH default/templates/catalog/product.html
-  Everything outside the Details column (gallery, rating panel, description,
-  review-summary highlights, reviews list/filter, curator menu/dialogs,
-  scripts) is copied verbatim from the default theme, not reinvented — a fix
-  or i18n key added there needs the same edit made here.
-
-  THIS FILE IS THE SOURCE OF TRUTH for the ferum-review theme. It is packaged
-  into examples/themes/ferum-review-1.0.0.zip and installed from there into
-  frontend/themes/ferum-review/ via the admin theme-upload flow. Editing the
-  installed copy directly is a dead end — the next reinstall of this zip
-  overwrites it back to whatever is here. Edit this file, then repackage the
-  zip and reinstall (or copy this file over the installed one) to deploy.
+  SOURCE OF TRUTH. Packaged into ferum-review-*.zip; the installed copy under
+  frontend/themes/ is overwritten by the next reinstall.
 #}
 
 {% block title %}{{ product.name }} — {{ site.name }}{% endblock %}

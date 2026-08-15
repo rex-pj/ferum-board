@@ -73,8 +73,6 @@ impl SseBroadcaster {
     }
 }
 
-// ─── NotificationSubscriber implementation ────────────────────────────────────
-
 impl NotificationSubscriber for SseBroadcaster {
     fn subscribe(&self, user_id: Uuid) -> mpsc::UnboundedReceiver<String> {
         self.subscribe(user_id)
@@ -84,8 +82,6 @@ impl NotificationSubscriber for SseBroadcaster {
         self.active_connection_count()
     }
 }
-
-// ─── NotificationBus implementation ──────────────────────────────────────────
 
 pub struct SseNotificationBus {
     broadcaster: Arc<SseBroadcaster>,

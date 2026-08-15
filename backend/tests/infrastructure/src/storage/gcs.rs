@@ -1,27 +1,13 @@
-//! Unit tests for [`GcsStorageService`].
+//! Offline unit tests for [`GcsStorageService`]: URL round-tripping, object-name
+//! prefixing and credential parsing.
 //!
-//! # Scope, stated honestly
+//! **`put`/`delete` are compile-checked only** — change their request shape and
+//! nothing here will tell you. Covered instead is the half that fails silently:
+//! an unrecognised URL leaks or collects a CAS reference without erroring, so
+//! every accepted AND refused shape gets an assertion.
 //!
-//! Everything here is **offline**. It covers `public_url`/`key_from_url`
-//! round-tripping, object-name prefixing and credential parsing — all pure
-//! functions of the constructor arguments. `put` and `delete` are **not**
-//! exercised: they are compile-checked only. There is no fake-gcs-server or
-//! testcontainers harness in this repository, and adding a Docker dependency to
-//! the test suite for two REST calls was judged out of proportion. If you change
-//! the request shape in `put`/`delete`, nothing here will tell you.
-//!
-//! What *is* covered is the half where a bug is silent. `key_from_url` failing
-//! to recognise a URL does not error — it reports "not one of ours", so a
-//! reference is never taken or never released, and files are either leaked or
-//! garbage collected out from under posts that still display them. That is why
-//! every accepted URL shape gets its own assertion, and why the shapes we must
-//! *refuse* get assertions too.
-//!
-//! Credentials below are an `authorized_user` document with obviously fake
-//! values. That type is used deliberately: it parses without an RSA key, so
-//! construction touches neither the filesystem's well-known ADC path nor the
-//! network, and the tests behave identically on a developer machine that has run
-//! `gcloud auth application-default login` and on one that has not.
+//! Credentials are a fake `authorized_user` document — it parses without an RSA
+//! key, so construction touches neither the ADC path nor the network.
 
 use ferum_application::ports::StorageService;
 use ferum_application::shared::AppError;

@@ -5,7 +5,6 @@ use validator::Validate;
 
 use ferum_domain::models::category::{Category, PostPolicy, ViewPolicy};
 
-// ─── Requests ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateCategoryRequest {
@@ -78,7 +77,6 @@ pub fn parse_post_policy(s: &str) -> Option<PostPolicy> {
     }
 }
 
-// ─── Responses ────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct CategoryResponse {

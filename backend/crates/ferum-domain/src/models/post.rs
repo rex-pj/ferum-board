@@ -48,20 +48,12 @@ pub struct Post {
 impl Post {
     /// The `(markdown, html)` a **reader** may see — empty for a deleted post.
     ///
-    /// Deleting a post is a soft delete, so the row survives and still carries
-    /// its text: a moderator has to be able to review what was removed, and
-    /// `sync_attachment_refs` reads `content_md` back to release the
-    /// attachments the post referenced. Redaction is therefore a read-time
-    /// rule, and it has to be applied by *every* reader path.
+    /// Deletion is soft, so the row keeps its text for moderator review and for
+    /// `sync_attachment_refs`. Redaction is therefore a read-time rule that
+    /// **every reader path must apply** — the JSON API once lacked it and served
+    /// the full text of every deleted post to anyone.
     ///
-    /// It was not. The SSR thread handler blanked the content inline; the JSON
-    /// API had no equivalent, so `PostResponse` copied both fields straight out
-    /// of the row and `GET /api/threads/{id}/posts` returned the full text of
-    /// every deleted post to anyone, signed in or not. "Delete my post" hid it
-    /// from the page and from nothing else.
-    ///
-    /// One definition here so a third reader cannot repeat the omission. The
-    /// row itself is never mutated.
+    /// One definition here so a third reader cannot repeat the omission.
     pub fn readable_content(&self) -> (&str, &str) {
         if self.is_deleted {
             ("", "")

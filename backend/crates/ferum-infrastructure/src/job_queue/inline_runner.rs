@@ -251,19 +251,12 @@ pub fn hmac_sha256(secret: &str, payload: &str) -> String {
     hex::encode(mac.finalize().into_bytes())
 }
 
-// ─── InlineJobRunner ──────────────────────────────────────────────────────────
-
 /// How many *outbound-network* jobs may run at once.
 ///
-/// Webhook delivery is the only job that fans out: `EventBus` enqueues one per
-/// subscribed webhook, so a single reply can produce hundreds. Bounding them
-/// keeps a burst from opening hundreds of simultaneous sockets — and, since a
-/// plugin can register webhooks, from turning one post into an outbound
-/// request storm.
+/// Webhooks are the only fan-out job — one per subscriber, and a plugin can
+/// register them — so a single reply could otherwise open hundreds of sockets.
 ///
-/// Larger than the local budget below because these jobs are almost entirely
-/// I/O wait: each spends up to the 10s HTTP timeout in the network and touches
-/// the database only once, briefly, at the very end.
+/// Larger than the local budget because these are almost pure I/O wait.
 const MAX_CONCURRENT_NETWORK_JOBS: usize = 16;
 
 /// How many jobs that mainly touch *local* resources may run at once.
@@ -292,24 +285,23 @@ impl InlineJobRunner {
         }
     }
 
-    /// Which budget a job draws from — by where it actually spends its time,
-    /// not by what it is called.
+    /// Which budget a job draws from, by where it spends time.
     ///
-    /// **A new job that calls out to the network must be added here.** Left out,
-    /// it silently draws from the local budget and reintroduces exactly the
-    /// head-of-line blocking the split exists to remove; nothing about that
-    /// failure is visible except signup mail getting slow. `job_classification`
-    /// in the infrastructure tests enumerates the variants to make the omission
-    /// fail a build instead.
+    /// **Exhaustive on purpose — no catch-all arm.** A new `ForumJob` variant
+    /// must fail to compile here rather than defaulting to the local budget,
+    /// which would restore the head-of-line blocking this split removes and show
+    /// up only as slow signup mail.
     ///
-    /// Email is deliberately *not* here despite talking to an SMTP server or an
-    /// HTTPS mail API: mail is enqueued one job at a time by a user action, never
-    /// fanned out, so it cannot produce the burst this bounds — and putting it in
-    /// the network budget would let a webhook storm delay it again. The
-    /// classification is about **fan-out**, not about whether a socket is opened,
-    /// which is why adding an HTTP-based mail provider did not change it.
+    /// Email is excluded despite opening a socket: it is enqueued one at a time,
+    /// never fanned out. The axis is fan-out, not I/O.
     pub fn is_network_bound(job: &ForumJob) -> bool {
-        matches!(job, ForumJob::SendWebhook { .. })
+        match job {
+            ForumJob::SendWebhook { .. } => true,
+            ForumJob::SendEmailVerification { .. }
+            | ForumJob::SendPasswordResetEmail { .. }
+            | ForumJob::SendNotificationEmail { .. }
+            | ForumJob::GcStorageKey { .. } => false,
+        }
     }
 }
 

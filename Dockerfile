@@ -8,24 +8,12 @@
 
 # ─── Stage 1: build ───────────────────────────────────────────────────────────
 #
-# Split into chef/planner/builder so that COMPILING THE 393 DEPENDENCY CRATES IS
-# ITS OWN LAYER. The single-stage version copied all of backend/ and ran one
-# `cargo build`, so editing one line of one handler invalidated the layer and
-# recompiled every dependency from scratch — ~27 minutes on a GitHub runner, of
-# which roughly 12 was work already done on the previous run.
+# chef/planner/builder split so the ~400 dependency crates are their own layer,
+# keyed on Cargo.toml/Cargo.lock alone. A single stage recompiled everything on
+# any source edit: ~27 minutes.
 #
-# cargo-chef gets there by reducing the workspace to a "recipe": the manifests
-# and a stub for every crate's source. `cook` builds the dependency graph from
-# that recipe alone, so the layer's cache key changes only when Cargo.toml or
-# Cargo.lock does. Real sources arrive afterwards.
-#
-# This only pays off if the layer cache SURVIVES BETWEEN RUNS, which on hosted
-# runners means the `cache-from`/`cache-to` in .github/workflows/ci.yml. Removing
-# those puts the build straight back to 27 minutes with extra stages to read.
-#
-# The floor is about 15 minutes regardless: the `release` profile uses fat LTO in
-# one codegen unit, and the final unit alone measured 859s. That is a deliberate
-# trade (see CLAUDE.md, "Build profiles") and not something to fix here.
+# ONLY PAYS OFF IF THE LAYER CACHE SURVIVES BETWEEN RUNS — that is the
+# cache-from/cache-to in ci.yml. Remove those and it is 27 minutes again.
 FROM rust:1-slim-bookworm AS chef
 
 # clang + mold are a hard requirement, not an optimisation: backend/.cargo/config.toml
@@ -51,11 +39,10 @@ RUN cargo chef prepare --recipe-path /recipe.json
 
 FROM chef AS builder
 
-# Cargo features are opt-in for anything needing external infrastructure. `s3` is
-# the default here because deploy/docker-compose.prod.yml ships MinIO; without the
-# feature the S3_* variables are ignored and uploads silently land in Postgres.
-# Use `gcs` for Google Cloud Storage, `r2` for Cloudflare R2, or an empty string
-# for database storage. Add `,meilisearch` when running a Meilisearch instance.
+# Storage features are opt-in; without the flag the S3_*/GCS_*/R2_* variables are
+# ignored and uploads silently land in Postgres. `s3` by default because
+# docker-compose.prod.yml ships MinIO. Use gcs / r2 / "" as appropriate, and add
+# `,meilisearch` when running one.
 ARG FEATURES=s3
 
 # .cargo/config.toml MUST be in place before `cook`. It sets `rustflags` for the
@@ -98,15 +85,12 @@ COPY --from=builder /src/backend/target/release/ferum-board /usr/local/bin/ferum
 COPY frontend ./frontend
 COPY locales  ./locales
 
-# A pristine copy of the built-in themes, kept OUTSIDE /app/frontend/themes.
+# Pristine built-in themes, kept OUTSIDE /app/frontend/themes.
 #
-# That directory carries a named volume in production so admin-uploaded themes
-# survive a container replacement — but Docker seeds a named volume from the
-# image only once, when the volume is first created. Every deploy after that,
-# the volume shadows the image, and frontend/themes/default/ (build output, not
-# user data) freezes at whatever version created the volume while static/ and
-# templates/ keep updating. docker-entrypoint.sh copies this back over the
-# volume on every start so the two halves cannot drift apart.
+# Docker seeds a named volume from the image only when the volume is first
+# created, so after the first deploy the volume shadows the image and
+# themes/default/ freezes while static/ keeps updating. docker-entrypoint.sh
+# copies this back over the volume on every start.
 RUN cp -a /app/frontend/themes /app/builtin-themes
 
 # At the repository root, not under deploy/: .dockerignore excludes deploy/

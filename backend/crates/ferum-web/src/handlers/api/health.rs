@@ -1,19 +1,9 @@
-//! Liveness and readiness probes.
+//! Liveness and readiness probes, split because they answer different questions.
 //!
-//! Split because an orchestrator asks two different questions and a single
-//! endpoint can only answer one of them well:
-//!
-//!   * *Should I restart this container?* — liveness. Answered by the process
-//!     being able to reply at all. It must not depend on the database, or a
-//!     database outage turns into every instance being killed and restarted
-//!     into the same outage.
-//!   * *Should I send it traffic?* — readiness. This one must check
-//!     dependencies, so an instance that cannot reach Postgres is taken out of
-//!     rotation instead of serving errors.
-//!
-//! The previous single `/health` answered `{"status":"ok"}` unconditionally,
-//! which is the correct liveness answer and a wrong readiness one: it reported
-//! healthy while the database was down and every request was failing.
+//! Liveness ("restart me?") must NOT touch the database, or an outage becomes
+//! every instance being killed and restarted into the same outage. Readiness
+//! ("send me traffic?") must, so an instance that cannot reach Postgres leaves
+//! rotation instead of serving errors.
 
 use std::time::Duration;
 
@@ -87,17 +77,12 @@ pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
         .map(|probe| probe.label())
         .unwrap_or("checking");
 
-    // Which provider mail would go through. An in-process read of two Options —
-    // no probe, and deliberately so. The reasoning above about outbound requests
-    // is stronger here than for uploads: a test send costs money and consumes the
-    // sending domain's reputation, so a readiness endpoint that performed one
-    // would be a billing amplifier as well as a traffic one. `POST
-    // /api/admin/email/test` exists for the case where someone actually wants to
-    // know whether delivery works, behind an admin permission and a cooldown.
+    // An in-process read, never a test send: that costs money and burns the
+    // sending domain's reputation, so a readiness endpoint doing one is a
+    // billing amplifier. Use POST /api/admin/email/test to check delivery.
     //
-    // Like `uploads`, reported but NOT part of `db_ok`: a forum that cannot send
-    // mail still serves every page, and `disabled` is a configuration state that
-    // an operator may have chosen.
+    // Reported but NOT part of `db_ok` — a forum that cannot mail still serves
+    // every page, and `disabled` may be deliberate.
     let mail = state.email.provider().await.label();
 
     let status = if db_ok {

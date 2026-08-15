@@ -1,3 +1,9 @@
+//! Optional example data for the setup wizard checkbox — demo users, threads,
+//! posts, catalogue. Behind the `bulk_seed` feature.
+//!
+//! Distinct from `system_seed_service`, which seeds what the app CANNOT run
+//! without and runs on every startup. Nothing here is required.
+
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use sea_orm::{

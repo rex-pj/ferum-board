@@ -1,21 +1,13 @@
-//! Provider selection and the `auto_verify` invariant.
-//!
-//! `auto_verify` is shared by `Arc` with `AuthUseCase`, and when it is true
-//! `register()` marks the new account email-verified and promotes it to Basic
-//! trust without sending anything. So a wrong value here does not fail loudly —
-//! it means **nobody's email address is ever checked**, on a forum where mail is
-//! working. This file exists for that one bug.
-//!
-//! The invariant, stated once in `reload` and asserted here:
+//! Provider selection and the `auto_verify` invariant:
 //!
 //! ```text
 //! auto_verify == the selected provider could not be put in place
 //! ```
 //!
-//! Note what that is *not*: it is not "SMTP is absent". Selection is now a stored
-//! setting rather than a race between environment variables, so the interesting
-//! cases are the ones where a choice cannot be honoured — Resend selected with no
-//! API key, or `Off` chosen while a perfectly good relay is still stored.
+//! A wrong value fails silently — `register()` then marks accounts verified
+//! without sending anything, so **nobody's address is ever checked** on a forum
+//! where mail works. Note it is NOT "SMTP is absent": the interesting cases are
+//! Resend selected without a key, or `Off` chosen over a working relay.
 
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -163,20 +155,14 @@ async fn off_disables_mail_without_discarding_the_stored_relay() {
     assert!(!svc.auto_verify_flag().load(Ordering::Relaxed));
 }
 
-/// The invariant across every transition that is reachable.
+/// The invariant across every reachable transition.
 ///
-/// The error arm of `reload` is deliberately not driven here, and the reason is
-/// worth recording: it needs `LettreEmailService::new` to fail, and it does not —
-/// lettre's `starttls_relay` returns `Result` but only stores the domain, leaving
-/// hostname validation to connect time (see
-/// `lettre_service::a_malformed_hostname_still_builds_because_tls_validates_at_connect_time`).
-/// The only build-time failure is loading the root certificate store, which a test
-/// cannot provoke.
+/// `reload`'s error arm is not driven here because it cannot be: lettre's
+/// `starttls_relay` only stores the domain and validates at connect time, so the
+/// sole build-time failure is loading the root certificate store.
 ///
-/// That arm is now also structurally safe rather than defensively patched: `reload`
-/// writes state exactly once, at the end, so an early return cannot leave the flag
-/// describing a configuration that was never applied. The previous implementation
-/// wrote in several steps and had to resync on the error path.
+/// It is structurally safe anyway — `reload` writes state once, at the end, so
+/// an early return cannot leave the flag describing an unapplied config.
 #[tokio::test]
 async fn auto_verify_is_always_a_function_of_what_is_in_place() {
     let svc = ReloadableEmailService::new(FROM);

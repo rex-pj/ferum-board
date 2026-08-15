@@ -1,16 +1,9 @@
-//! Tests for the `/files/{key}` key guard.
+//! Tests for the `/files/{key}` key guard — `serve()` needs a full `AppState`
+//! and is not constructible here, so only its pure decision function is covered.
 //!
-//! `serve()` itself needs a full `AppState` (database, every use case) and is
-//! not constructible here, so its routing is not covered. What *is* covered is
-//! the one pure function in it whose failure would be a security bug rather than
-//! a broken image.
-//!
-//! The guard exists because `public_url` builds `{base}/{key}` by string
-//! concatenation. Under the path-style URLs both S3 and GCS use, a key
-//! containing `..` normalises in the browser to a different path under the same
-//! host — which is a **different bucket**. Before the object-store fast path
-//! existed the key only ever reached a parameterised `find_by_id`, so nothing
-//! could come of it; now it can reach a `Location` header.
+//! The guard matters because `public_url` concatenates `{base}/{key}`, and under
+//! the path-style URLs S3 and GCS use, a key containing `..` normalises to a
+//! **different bucket**. Harmless until the key could reach a `Location` header.
 
 use ferum_web::handlers::api::uploads::{
     is_safe_key, may_be_staged, resolve_stored_file, FileDisposition,

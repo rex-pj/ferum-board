@@ -4,14 +4,12 @@ use validator::{Validate, ValidationError};
 use crate::view_models::auth::UserResponse;
 use ferum_domain::models::user::User;
 
-// ─── Status ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct SetupStatusResponse {
     pub needs_setup: bool,
 }
 
-// ─── Run Setup Request ────────────────────────────────────────────────────────
 
 fn validate_primary_color(val: &str) -> Result<(), ValidationError> {
     crate::view_models::validators::hex_color(val)
@@ -52,7 +50,6 @@ pub struct SetupConfigRequest {
     pub smtp_pass: Option<String>,
 }
 
-// ─── Run Setup Response ───────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct SetupRunResponse {

@@ -47,7 +47,6 @@
                  @drop.prevent="isDragging = false; onDrop($event)"
                  @click="!uploading && $refs.thumbInput.click()">
 
-              {# Empty state #}
               <div x-show="!preview && !isDragging && !uploading" class="h-100" style="display:none;">
                 <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
                   <i class="fa-solid fa-image fa-2x mb-2 opacity-50" aria-hidden="true"></i>
@@ -57,12 +56,10 @@
                 </div>
               </div>
 
-              {# Preview image #}
               <img x-show="preview" :src="preview || ''" alt="{{ t(k='ui-thumbnail-preview') }}"
                    class="position-absolute top-0 start-0 w-100 h-100"
                    style="object-fit:cover;display:none;">
 
-              {# Drag-over overlay #}
               <div x-show="isDragging"
                    class="position-absolute top-0 start-0 w-100 h-100"
                    style="display:none;">
@@ -74,7 +71,6 @@
                 </div>
               </div>
 
-              {# Uploading overlay #}
               <div x-show="uploading"
                    class="position-absolute top-0 start-0 w-100 h-100"
                    style="background:rgba(0,0,0,0.45);display:none;">
@@ -86,7 +82,6 @@
                 </div>
               </div>
 
-              {# Remove button #}
               <button x-show="preview && !uploading"
                       type="button"
                       class="btn btn-sm position-absolute top-0 end-0 m-2"

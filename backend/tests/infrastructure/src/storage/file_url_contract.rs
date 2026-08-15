@@ -1,35 +1,16 @@
-//! The contract that makes storing `file_url` instead of `public_url` safe.
-//!
-//! `ports::file_url` is what this application *persists* — into `site_config`,
-//! `themes.preview_url`, and the stored HTML of every post. `public_url` is only
-//! where the bytes happen to live today. That split is what lets a deployment
-//! change bucket, CDN or backend without rewriting its own archive.
-//!
-//! It rests on two invariants, checked here for every adapter under every
-//! configuration that adapter supports:
+//! The contract that makes persisting `file_url` instead of `public_url` safe,
+//! checked for every adapter under every configuration it supports:
 //!
 //! ```text
-//! key_from_url(file_url(key))    == Some(key)     // the persisted form
-//! key_from_url(public_url(key))  == Some(key)     // the served form
+//! key_from_url(file_url(key))   == Some(key)   // persisted form
+//! key_from_url(public_url(key)) == Some(key)   // served form
+//! key_from_url(<a foreign host>) == None
 //! ```
 //!
-//! **Both directions, and the second is not redundant.** The first was once the
-//! only one checked, and it passed while GCS configured with `GCS_PREFIX` behind
-//! a CDN mounted at a path ending in `/files` returned a key still carrying the
-//! prefix — because the resolver-path rule matched inside the *base*. Nothing
-//! errored: `public_url` is handed to clients by `handlers/api/uploads.rs`, so a
-//! key that names nothing simply left the reference uncounted.
-//!
-//! The third invariant has no round trip, because it is about what must **not**
-//! be recognised:
-//!
-//! ```text
-//! key_from_url(<a URL on somebody else's host>) == None
-//! ```
-//!
-//! `key_from_url` feeds `decrement_ref` and `delete_by_key` (thread thumbnail
-//! replacement, avatar and cover replacement), so claiming a foreign URL
-//! releases a CAS reference that has nothing to do with it.
+//! The second is not redundant — checking only the first passed while GCS behind
+//! a CDN returned a key still carrying `GCS_PREFIX`. The third matters because
+//! `key_from_url` feeds `decrement_ref`, so claiming a foreign URL releases
+//! somebody else's CAS reference.
 
 #![allow(unused_imports)]
 

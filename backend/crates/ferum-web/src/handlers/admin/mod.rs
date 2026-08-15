@@ -59,15 +59,9 @@ pub fn require_admin(auth_user: &AuthUser) -> Result<(), PageError> {
 #[tracing::instrument(skip(state, ctx), fields(template))]
 /// Renders an admin or moderator page in the request's locale.
 ///
-/// This used to pin the default locale, on the reasoning that admin copy ships
-/// English-only. But that made the panels the one place where a user's chosen
-/// language was ignored, and it would have made a language switcher in the admin
-/// header a dead control.
-///
-/// Rendering in the request locale costs nothing while `adm-*` strings are
-/// untranslated — they resolve through the fallback chain to English exactly as
-/// before — and the panels start speaking the user's language the moment someone
-/// adds those translations, with no further code change.
+/// Not the default locale: that would make the panels the one place a user's
+/// language is ignored. Costs nothing while `adm-*` is English-only — those keys
+/// fall back — and the panels translate themselves the moment anyone adds them.
 pub async fn render_admin(
     state: &AppState,
     req_locale: &crate::middleware::locale::RequestLocale,
@@ -121,22 +115,14 @@ pub fn parse_opt_uuid(s: Option<&str>) -> Option<Uuid> {
     s.filter(|v| !v.is_empty()).and_then(|v| v.parse().ok())
 }
 
-/// Resolves the instant at which a calendar day starts in `tz`.
+/// Resolves the instant a calendar day starts in `tz`, for both date filters.
 ///
-/// Both date-filter parsers go through this. Two things it gets right that the
-/// previous `from_naive_utc_and_offset(.., Utc)` did not:
+/// Uses the site's `reporting_timezone`, so a filtered list and the dashboard
+/// chart agree on what a day is — reading the input as UTC shifts the window by
+/// the site's offset and silently returns a plausible-looking wrong set.
 ///
-/// * **The zone.** An admin filtering "Aug 8" means their own Aug 8. Treating
-///   the input as UTC shifted the window by the site's offset, so rows from one
-///   end of the chosen day were missing while rows from the adjacent day were
-///   included — silently, since the list still looked plausible. The zone used
-///   is the site's `reporting_timezone`, so a filtered list and the dashboard
-///   chart agree on what a day is.
-/// * **Days where local midnight does not exist.** A handful of zones shift
-///   their clock *at* midnight (America/Santiago, Asia/Beirut), so on one night
-///   a year 00:00 is skipped. `LocalResult::None` there would silently drop the
-///   filter; `.earliest()` on the following hour gives the first instant that
-///   day actually contains.
+/// Handles zones where local midnight does not exist (America/Santiago shifts
+/// *at* 00:00): `LocalResult::None` would drop the filter entirely.
 fn day_start_in(date: chrono::NaiveDate, tz: chrono_tz::Tz) -> Option<chrono::DateTime<chrono::Utc>> {
     use chrono::TimeZone;
 

@@ -96,19 +96,12 @@ async fn error_page_layer(
     }
 }
 
-/// Allows only `{slug}/assets/**` through to the themes `ServeDir`.
+/// Allows only `{slug}/assets/**` through to the themes `ServeDir` — a package
+/// also holds templates and a manifest, which must not be public.
 ///
-/// A theme package contains templates and a manifest alongside its assets, and
-/// only the assets are meant to be public. Rather than replace `ServeDir` (and
-/// lose its ETag/Last-Modified/304 handling, which matters for CSS), this gates
-/// what reaches it.
-///
-/// `nest_service` strips the `/themes` prefix, so the path seen here is
-/// `/{slug}/assets/...`. Both forms are accepted so the guard stays correct if
-/// the mount point ever changes.
-/// `pub` so the test crate can drive it directly: it is a plain middleware with
-/// no state, and asserting the allow/deny set on it is far more precise than
-/// standing up a whole router with a database behind it.
+/// Gates rather than replaces `ServeDir`, keeping its ETag/304 handling. Both
+/// prefixed and stripped forms are accepted, since `nest_service` removes
+/// `/themes`. `pub` so the test crate can drive it without a router.
 pub async fn theme_asset_guard(req: Request<axum::body::Body>, next: Next) -> Response {
     let path = req.uri().path();
     let rest = path.strip_prefix("/themes").unwrap_or(path);
@@ -325,36 +318,13 @@ pub fn build_router(
         .layer(body_limit)
         .with_state(state.clone());
 
-    // The locale layers wrap the *routed* router rather than being added to it.
+    // These wrap the ROUTED router, not `Router::layer`, which runs after route
+    // matching — `negotiate_locale` strips a `/vi` prefix, so post-match it is
+    // useless: `/vi/forum` 404s before the prefix is removed.
     //
-    // `Router::layer` attaches middleware to each endpoint, which means route
-    // matching has already happened by the time it runs. `negotiate_locale`
-    // rewrites the URI to strip a `/vi` prefix, so running it after matching is
-    // useless — `/vi/forum` matches nothing and 404s before the prefix is ever
-    // removed. Nesting the whole router behind a fallback_service puts these two
-    // ahead of matching, which is where they have to be.
-    //
-    // Order: `negotiate_locale` outermost (it sets the `Locale` extension), then
-    // `translate_errors`, which reads that extension and rewrites error bodies on
-    // the way out — including errors from layers that never reach a handler.
-    // Compression is the OUTERMOST layer, and that placement is load-bearing in
-    // one direction: `translate_errors` (below) collects the response body with
-    // `to_bytes` to rewrite the error message inside it. Anything that reads a
-    // body must see it uncompressed, so the encoder has to sit outside — it runs
-    // first on the request and last on the response, encoding whatever the stack
-    // finally produced.
-    //
-    // Applies to `/static` and `/themes` too, which is the point: those are
-    // served by `ServeDir` from disk uncompressed, and they are the bulk of the
-    // bytes a first-time visitor downloads (~520 KB of CSS/JS, dominated by
-    // Bootstrap and FontAwesome). `ServeDir`'s ETag and 304 handling is
-    // unaffected — a conditional request that matches never reaches the encoder,
-    // because there is no body to encode.
-    //
-    // Both encoders are offered and the client's `Accept-Encoding` picks; br
-    // compresses text better, gzip is the universal fallback. Responses without a
-    // compressible `Content-Type` (images, fonts, already-compressed archives)
-    // are passed through untouched by `CompressionLayer` itself.
+    // Order: `negotiate_locale` sets the `Locale` extension, `translate_errors`
+    // reads it. Compression must stay OUTERMOST — `translate_errors` collects
+    // the body with `to_bytes`, so it has to see it uncompressed.
     let compression = tower_http::compression::CompressionLayer::new()
         .gzip(true)
         .br(true);

@@ -1,16 +1,9 @@
 //! Locale negotiation and error-message translation.
 //!
-//! Two middlewares that together make a request locale-aware:
-//!
-//! * [`negotiate_locale`] runs on the way *in*, resolving the request's locale
-//!   and inserting it as a request extension.
-//! * [`translate_errors`] runs on the way *out*, rewriting the `message` field
-//!   of an error response into that locale.
-//!
-//! They are separate because they act at opposite ends of the request. The
-//! error translator has to be outermost so it sees responses produced by every
-//! inner layer — including rejections from the auth and rate-limit middlewares,
-//! which never reach a handler.
+//! [`negotiate_locale`] resolves the locale on the way in; [`translate_errors`]
+//! rewrites error messages on the way out. Separate because the translator must
+//! be OUTERMOST to catch rejections from auth and rate-limit, which never reach
+//! a handler.
 
 use axum::body::Body;
 use axum::extract::{Request, State};
@@ -54,21 +47,12 @@ impl Default for RequestLocale {
 
 /// Resolves the request's locale and attaches it as an extension.
 ///
-/// Precedence, highest first:
+/// Precedence: path prefix > `?lang=` > cookie > `Accept-Language` > site
+/// default. A signed-in user's stored preference is applied later by the auth
+/// layer and overrides only the last three, so a `/vi/` link always wins.
 ///
-/// 1. **Path prefix** (`/vi/forum/...`) — an explicit, shareable choice.
-/// 2. **`?lang=` query** — the switcher's entry point before the cookie is set.
-/// 3. **Cookie** — a returning guest's previous choice.
-/// 4. **`Accept-Language`** — the browser's stated preference.
-/// 5. **Site default.**
-///
-/// A signed-in user's stored preference is applied by the auth layer, which runs
-/// later and knows who the user is; it overrides 3–5 but not 1–2, so following a
-/// `/vi/` link always shows Vietnamese regardless of your account setting.
-///
-/// Unrecognized values are ignored rather than rejected. A stale cookie naming a
-/// locale the admin has since disabled should quietly fall through to the
-/// default, not 400 the request and lock the visitor out of the site.
+/// Unrecognised values fall through rather than 400 — a stale cookie naming a
+/// disabled locale must not lock the visitor out.
 pub async fn negotiate_locale(
     State(state): State<AppState>,
     mut req: Request,

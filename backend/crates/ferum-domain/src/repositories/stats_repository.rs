@@ -26,24 +26,15 @@ pub struct StatHistoryPoint {
     pub value: i64,
 }
 
-/// Persistence boundary for analytics queries. Concrete implementation lives in
-/// `ferum-infrastructure` and is built against generated Sea-ORM entities, so a
-/// table/column rename surfaces as a compile error rather than a runtime failure.
 /// Persistence boundary for analytics queries.
 ///
-/// ## Why every method takes `tz`
+/// **Every method takes `tz`** because a daily metric needs to say whose day.
+/// Bare `CURRENT_DATE` resolves against the session zone, which `initdb` copies
+/// from the host — the same rows then give different DAU on two machines, with
+/// nothing surfacing the difference.
 ///
-/// A daily metric is only meaningful once you say *whose* day. These queries
-/// used bare `CURRENT_DATE`, which resolves against the database session's
-/// `TimeZone` — a value `initdb` copies from whatever host the cluster was
-/// created on. The day boundary was therefore an accident of deployment: the
-/// same code and the same rows produced different DAU figures on two machines,
-/// and nothing surfaced the difference.
-///
-/// Passing the zone in makes the boundary an explicit, testable argument. `tz`
-/// is an IANA name (`"UTC"`, `"America/Sao_Paulo"`, …) from the
-/// `reporting_timezone` site-config key, and it is always sent to Postgres as a
-/// **bind parameter**, never interpolated.
+/// `tz` is an IANA name from `reporting_timezone`, always sent as a **bind
+/// parameter**, never interpolated.
 #[async_trait]
 pub trait StatsRepository: Send + Sync {
     /// Aggregate counts for the dashboard (single round-trip).

@@ -11,41 +11,17 @@ impl MigrationName for Migration {
 
 // Full-text search over products.
 //
-// The catalogue's `?q=` used to be an ILIKE on `name` — no ranking, no prefix
-// match, and blind to brand, style and description. On a review platform the
-// product *is* the primary entity, so a global search that cannot find one is
-// the wrong shape.
+// Indexed through `f_unaccent` (migration 000001); the query side must do the
+// same, or unaccenting one side alone silently returns nothing.
 //
-// Everything indexed here goes through `f_unaccent` (defined in migration
-// 000001), and the query side does the same: unaccenting only one side silently
-// returns nothing.
+// `GENERATED ALWAYS AS … STORED`, not a trigger: no write path can bypass it,
+// and adding the column backfills every existing row. The cost is that the
+// expression may read only its own row, so the brand name is NOT folded in —
+// which also removes the rename fan-out a denormalised copy required.
 //
-// ── Why a generated column and not a trigger ─────────────────────────────────
-//
-// `search_vector` is `GENERATED ALWAYS AS … STORED`: declarative schema rather
-// than procedural code. It buys three things a BEFORE-INSERT trigger does not.
-// It is visible in `\d products`, so the next person to read the schema learns
-// how the vector is built without going hunting for a plpgsql function. No
-// write path can bypass or forget it — including the ones that insert through
-// Sea-ORM ActiveModels. And adding the column computes it for every existing
-// row, so there is no backfill statement whose absence would leave rows
-// invisible to search until someone happened to edit them.
-//
-// The constraint a generated column imposes is that the expression may only
-// read its own row. That is the whole reason the brand name is no longer folded
-// in here — and losing it is a gain, not a compromise. Denormalising the brand
-// meant a rename had to fan back out: a second trigger rewrote every product
-// row that brand owned, purely to re-fire the first trigger. One UPDATE on one
-// tiny table amplified into an UPDATE per product, and any row it missed stayed
-// indexed under a name that no longer existed. Nothing is copied now, so there
-// is nothing to keep in sync and nothing to go stale.
-//
-// A search for a brand name still finds that brand's products: `brands` carries
-// its own GIN index and the query reaches it through a semi-join
-// (`p.brand_id IN (SELECT …)`). The semi-join shape is deliberate — it keeps the
-// two conditions on separate tables so the planner can BitmapOr the products
-// GIN scan with a brand_id lookup. Written as `OR b.name @@ q` over a join, the
-// OR spans two tables and Postgres falls back to a sequential scan of products.
+// Brand search still works via a semi-join (`p.brand_id IN (SELECT …)`) against
+// the `brands` GIN index. Written as `OR b.name @@ q` over a join the OR spans
+// two tables and Postgres sequentially scans products.
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {

@@ -421,18 +421,12 @@ impl ProductUseCase {
         self.products.set_materials(product_id, material_ids).await
     }
 
-    /// Who may edit a product at all.
+    /// Who may edit a product. Curators anything; a contributor only their own
+    /// submission, and only while it is still `draft` — once published, other
+    /// people's reviews hang off it and it is shared catalogue content.
     ///
-    /// Curators (`product.manage`) may edit anything. A contributor may edit only
-    /// a product they submitted, and only while it is still an unapproved
-    /// `draft`. The moment a curator publishes it, other people's reviews start
-    /// hanging off it and it becomes shared catalogue content — no longer the
-    /// submitter's to change.
-    ///
-    /// One predicate for details, materials and images alike, so the three can
-    /// never disagree about who owns an entry. Note this decides *whether* the
-    /// actor may edit; `reject_curator_only_fields` decides *what* they may
-    /// change once allowed.
+    /// One predicate for details, materials and images, so the three cannot
+    /// disagree. Decides *whether*; `reject_curator_only_fields` decides *what*.
     fn authorize_product_edit(actor: &AuthUser, product: &Product) -> Result<(), AppError> {
         if PermissionChecker::can_manage_products(actor).is_ok() {
             return Ok(());

@@ -1,22 +1,11 @@
-//! Integration-test harness for repository tests.
+//! Integration-test harness: each [`TestDb`] provisions a throwaway database.
 //!
-//! Each [`TestDb`] provisions an isolated, throwaway PostgreSQL database and
-//! exposes a `DatabaseConnection`. Migrations run **once** against a shared
-//! template database (`ferum_test_template`); each per-test database is then
-//! created with `CREATE DATABASE … TEMPLATE ferum_test_template`, which lets
-//! PostgreSQL copy pages at the file-system level instead of re-running the
-//! migration chain for every test. This cuts setup time from O(migrations × N)
-//! to O(migrations + N × template-copy).
+//! Migrations run once into a template database and each test copies it with
+//! `CREATE DATABASE … TEMPLATE`, so setup is O(migrations + N) rather than
+//! O(migrations × N).
 //!
-//! ## Requirements
-//! A reachable PostgreSQL whose superuser can `CREATE DATABASE`. The base URL is
-//! read from `TEST_DATABASE_URL`, falling back to `DATABASE_URL` (loaded from
-//! `backend/.env`).
-//!
-//! ## Running
-//! ```text
-//! cargo test -p ferum-infrastructure-tests
-//! ```
+//! Needs a reachable PostgreSQL whose superuser can `CREATE DATABASE`, from
+//! `TEST_DATABASE_URL` or `DATABASE_URL`.
 
 use std::sync::{Once, OnceLock};
 
@@ -114,29 +103,12 @@ impl TestDb {
 
     /// Same, but with the session `TimeZone` forced to `tz`.
     ///
-    /// ## What this is for
+    /// Asserts that the SQL names its own day boundary rather than inheriting
+    /// the session's — the property that survives a driver change or a pooler.
+    /// A non-whole-hour zone (`Asia/Kathmandu`, +05:45) is the useful value: it
+    /// catches code that truncates instead of converting.
     ///
-    /// Analytics queries used bare `CURRENT_DATE`, which resolves against the
-    /// session timezone. Two claims follow, and only one of them is worth
-    /// resting on:
-    ///
-    /// * *"the session is UTC"* — true today, and true for a reason nothing in
-    ///   this codebase controls: `sqlx-postgres` hardcodes it. That is an
-    ///   implementation detail of a dependency, discovered by writing this
-    ///   helper and watching it fail to change the zone.
-    /// * *"the SQL names its own day boundary"* — true because the queries take
-    ///   a reporting timezone and apply `AT TIME ZONE` explicitly.
-    ///
-    /// Passing a hostile zone here asserts the second, which is the one that
-    /// survives a driver change, a connection pooler that resets settings, or a
-    /// future migration to a different client. A zone whose offset is not a whole
-    /// number of hours (`Asia/Kathmandu`, +05:45) is the most useful value: it
-    /// breaks code that truncates rather than converts, which a whole-hour zone
-    /// would let pass.
-    ///
-    /// **Constraint:** the returned `TestDb` holds a single-connection pool (see
-    /// the comment at the `SET`), so a test using it must issue its queries
-    /// sequentially.
+    /// **Single-connection pool**, so queries must be issued sequentially.
     pub async fn new_in_timezone(label: &str, tz: &str) -> Self {
         Self::connect(label, Some(tz)).await
     }
@@ -185,25 +157,10 @@ impl TestDb {
                 .await
                 .expect("connect to per-test database"),
 
-            // ── Why forcing a zone means a one-connection pool ───────────────
-            //
-            // The two obvious approaches both fail, for the same reason.
-            //
-            // `?options=-c TimeZone=…` in the URL does nothing: `sqlx-postgres`
-            // hardcodes `("TimeZone", "UTC")` into the startup packet
-            // (`connection/establish.rs`) and that beats the `options` parameter
-            // it appends afterwards. No connection string can move it.
-            //
-            // A plain `SET` against a normal pool is worse than useless: it
-            // lands on whichever connection served it, so the test would pass or
-            // fail depending on where the next query happened to go — the exact
-            // flakiness a timezone test must not have.
-            //
-            // One connection makes the `SET` cover everything this `TestDb` will
-            // ever run. The cost is real and is why `new()` does not take this
-            // path: a test using it must issue queries **sequentially**, since a
-            // concurrent second query would wait on the connection the first is
-            // holding.
+            // One connection, because neither alternative works: `?options=-c
+            // TimeZone=…` is beaten by the `("TimeZone", "UTC")` sqlx hardcodes
+            // into every startup packet, and a plain `SET` on a normal pool
+            // lands on one arbitrary connection — flaky by construction.
             Some(tz) => {
                 let mut opts = sea_orm::ConnectOptions::new(format!("{server_url}/{db_name}"));
                 opts.max_connections(1).min_connections(1).sqlx_logging(false);

@@ -18,9 +18,20 @@ use crate::shared::AppError;
 
 // ─── PasswordHasher ───────────────────────────────────────────────────────────
 
+/// Hashes passwords and checks them.
+///
+/// Async because bcrypt is CPU-bound for hundreds of ms: implementations must
+/// move it off the runtime (`spawn_blocking`) or it stalls a tokio worker.
 #[async_trait]
 pub trait PasswordHasher: Send + Sync {
+    /// # Errors
+    /// [`AppError::Internal`] if the hash cannot be produced.
     async fn hash(&self, password: &str) -> Result<String, AppError>;
+    /// A wrong password is `Ok(false)`. `Err` means the check could not run —
+    /// never treat it as a failed login, or a storage fault locks out accounts.
+    ///
+    /// # Errors
+    /// [`AppError::Internal`] if the stored hash is unparseable.
     async fn verify<'a>(&self, password: &'a str, hash: &'a str) -> Result<bool, AppError>;
 }
 
@@ -35,11 +46,27 @@ pub trait PasswordHasher: Send + Sync {
 /// broken, with the error message pointing at expiry rather than at the typo.
 pub const UNSUBSCRIBE_PURPOSE: &str = "unsubscribe";
 
+/// Mints and verifies access, refresh, and single-purpose email tokens.
+///
+/// Verification errors are deliberately opaque: never report "expired" and
+/// "signature invalid" differently, or an attacker learns which half was right.
 #[async_trait]
 pub trait TokenService: Send + Sync {
+    /// # Errors
+    /// [`AppError::Internal`] if signing fails.
     fn mint_access_token(&self, claims: &AccessTokenClaims) -> Result<String, AppError>;
+    /// Checks signature and expiry only — **not revocation**. The
+    /// `iat`-vs-session-epoch check in the auth middleware is what makes logout
+    /// and password change take effect before `exp`.
+    ///
+    /// # Errors
+    /// [`AppError::Unauthorized`] for any invalid token.
     fn verify_access_token(&self, token: &str) -> Result<AccessTokenClaims, AppError>;
+    /// # Errors
+    /// [`AppError::Internal`] if signing fails.
     fn mint_refresh_token(&self, user_id: Uuid) -> Result<String, AppError>;
+    /// # Errors
+    /// [`AppError::Unauthorized`] for any invalid token.
     fn verify_refresh_token(&self, token: &str) -> Result<Uuid, AppError>;
     /// Mints a single-purpose token for a link sent by email.
     ///
@@ -72,6 +99,11 @@ pub trait TokenService: Send + Sync {
     }
 }
 
+/// The JWT payload carried by the auth cookie.
+///
+/// A snapshot taken at sign-in, not live state — a ban applied now is invisible
+/// in a token minted a minute ago, which is why use cases re-check it. Signed,
+/// not encrypted: never add a field the token's bearer should not read.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessTokenClaims {
     pub sub: Uuid,
@@ -83,42 +115,70 @@ pub struct AccessTokenClaims {
     /// Unix timestamp of ban expiry; None means permanent ban.
     pub banned_until: Option<i64>,
     pub exp: i64,
-    /// Unix timestamp the token was issued at.
+    /// Issued-at. Compared against a per-user session epoch (bumped on logout
+    /// and password change) to revoke stateless tokens without a session table.
     ///
-    /// Access tokens are stateless, so there is otherwise no way to stop one:
-    /// logging out or changing a password left every already-issued token valid
-    /// until `exp`. Comparing this against a per-user "session epoch" (bumped on
-    /// logout and password change) gives revocation without adding a session
-    /// table. See `session_epoch_key` and the check in the auth middleware.
-    ///
-    /// Defaulted so tokens minted before this field existed still deserialize;
-    /// such a token reads as `iat = 0` and is therefore treated as predating any
-    /// epoch that gets set — it is revoked the first time a user actually
-    /// invalidates their sessions, which is the correct, fail-safe direction.
+    /// Defaulted, so a token predating this field reads `iat = 0` and is
+    /// revoked by the first invalidation — the fail-safe direction.
     #[serde(default)]
     pub iat: i64,
 }
 
 // ─── CacheService ─────────────────────────────────────────────────────────────
 
+/// Best-effort key/value store with TTLs (Redis, or an in-process map).
+///
+/// Any key may vanish at any time, so nothing may depend on one being present.
+/// The in-process fallback is per-process: with two instances, entries are not
+/// shared and an invalidation on one never reaches the other.
 #[async_trait]
 pub trait CacheService: Send + Sync {
+    /// `None` also means "cache unreachable" — Redis errors degrade to a miss,
+    /// so this cannot detect an outage. Callers needing that must not use it.
     async fn get(&self, key: &str) -> Option<String>;
+    /// # Errors
+    /// [`AppError::Internal`] if the backend rejected the write.
     async fn set<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<(), AppError>;
     /// Atomically set the key only if it does not already exist (SET NX EX).
-    /// Returns `true` if the key was newly set, `false` if it already existed.
+    /// Returns `true` if newly set. The atomicity is the point — a
+    /// `get`-then-`set` pair lets two concurrent requests both see the miss.
+    ///
+    /// # Errors
+    /// [`AppError::Internal`] on backend failure; unlike `get` this does not
+    /// degrade to a default.
     async fn set_nx<'a>(&self, key: &'a str, value: &'a str, ttl: Duration) -> Result<bool, AppError>;
+    /// # Errors
+    /// [`AppError::Internal`] if the backend rejected the delete.
     async fn del(&self, key: &str) -> Result<(), AppError>;
-    /// Delete all keys whose name starts with `prefix`.
+    /// Delete all keys starting with `prefix`. **Not atomic**: Redis walks the
+    /// keyspace with SCAN, so a key written during the walk can survive.
+    ///
+    /// # Errors
+    /// [`AppError::Internal`] if the scan or any delete failed.
     async fn del_prefix(&self, prefix: &str) -> Result<(), AppError>;
+    /// TTL is set on creation and never extended — a fixed window, not sliding.
+    ///
+    /// # Errors
+    /// [`AppError::Internal`] if the backend rejected the increment.
     async fn incr_with_ttl(&self, key: &str, ttl: Duration) -> Result<u64, AppError>;
+    /// Same ambiguity as [`get`](CacheService::get): `false` may mean unreachable.
     async fn exists(&self, key: &str) -> bool;
 }
 
 // ─── RateLimiter ──────────────────────────────────────────────────────────────
 
+/// Fixed-window request counter.
+///
+/// Fixed, not sliding: a burst straddling a window boundary can pass up to
+/// twice `limit`. Accepted — this is spam control, not quota enforcement.
 #[async_trait]
 pub trait RateLimiter: Send + Sync {
+    /// This call *is* the increment, so calling it twice per request spends two.
+    ///
+    /// # Errors
+    /// [`AppError::Internal`] when the backend is unreachable. The middleware
+    /// **fails closed** (503), so a Redis outage makes rate-limited endpoints
+    /// unavailable rather than unlimited.
     async fn check(
         &self,
         key: &str,
@@ -127,16 +187,28 @@ pub trait RateLimiter: Send + Sync {
     ) -> Result<RateLimitResult, AppError>;
 }
 
+/// Outcome of a [`RateLimiter::check`].
 #[derive(Debug)]
 pub enum RateLimitResult {
     Allowed { remaining: u32 },
+    /// `retry_after` reaches the client as the `Retry-After` header.
     Denied { retry_after: Duration },
 }
 
 // ─── JobQueue ─────────────────────────────────────────────────────────────────
 
+/// Hands work off so it does not block the response.
+///
+/// **Not durable.** `InlineJobRunner` is `tokio::spawn`, so a restart drops
+/// everything pending and nothing is retried. Only for work whose loss is an
+/// inconvenience — never for what the request's correctness depends on.
 #[async_trait]
 pub trait JobQueue: Send + Sync {
+    /// `Ok` means accepted, not done — later failure appears only in the log.
+    ///
+    /// # Errors
+    /// [`AppError::Internal`] if the job could not be accepted; callers should
+    /// log and continue rather than fail the request.
     async fn enqueue(&self, job: ForumJob) -> Result<(), AppError>;
 }
 
@@ -236,24 +308,13 @@ pub trait StorageService: Send + Sync {
     /// Use it to *serve* a request — see [`file_url`] for what to persist.
     fn public_url(&self, key: &str) -> String;
 
-    /// Recovers the CAS key from a URL this application previously produced.
+    /// Inverse of [`StorageService::public_url`]. `None` when the URL is not
+    /// ours — an author may paste any external image into a post.
     ///
-    /// The inverse of [`public_url`], and it has to exist as a port method
-    /// rather than a `strip_prefix` at each call site because the URL shape is
-    /// the *backend's* business and there are several: same-origin
-    /// `/files/{key}`, a CDN-prefixed variant, S3's `{cdn}/{key}`, and every
-    /// Google-owned host GCS objects can appear under.
-    ///
-    /// **Every implementation must also accept the `/files/{key}` form,
-    /// whatever shape it currently emits** — that is the form this application
-    /// persists, and older rows may additionally hold absolute URLs minted
-    /// before [`file_url`] existed. An implementation that only recognised its
-    /// own current output would silently stop finding them, and since these
-    /// lookups drive reference counting, the failure surfaces as files quietly
-    /// being garbage-collected while posts still point at them.
-    ///
-    /// Returns `None` when the URL is not one of ours — an author may paste any
-    /// external image URL into a post.
+    /// **Every implementation must ALSO accept `/files/{key}`**, whatever shape
+    /// it emits: that is what gets persisted. Recognising only its own output
+    /// silently stops matching, and since this drives ref counting, files get
+    /// collected while posts still point at them.
     fn key_from_url(&self, url: &str) -> Option<String>;
 }
 
@@ -261,23 +322,12 @@ pub trait StorageService: Send + Sync {
 /// [`file_url`] is the only thing that should build it.
 pub const FILES_PREFIX: &str = "/files/";
 
-/// The **stable identity** of a stored file: `/files/{key}`.
+/// The stable **identity** of a stored file: `/files/{key}`.
 ///
-/// This — never [`StorageService::public_url`] — is what gets written into
-/// `site_config`, `themes.preview_url` and the stored HTML of every post.
-///
-/// The distinction is the whole reason this function exists. `public_url`
-/// answers "where do the bytes live *today*", and today is not how long a post
-/// lives. Persisting that answer bakes the current bucket, CDN and backend into
-/// content that is never rewritten, and from then on none of the three can be
-/// changed without breaking every link ever written. This form names the file
-/// and lets `/files/` resolve it at request time, so switching backends, adding
-/// a CDN or moving buckets stays a configuration change.
-///
-/// It is the same shape large photo systems settle on: Facebook's Haystack
-/// Directory exists purely to turn a photo id into a delivery URL at read time,
-/// which is what lets warm blobs migrate to f4 behind the same URLs. Storing
-/// the delivery URL instead is the thing that forecloses those options.
+/// PERSIST THIS, never [`StorageService::public_url`], which says only where
+/// bytes live *today*. Anything written into `site_config`, `themes.preview_url`
+/// or post HTML is never rewritten, so storing a delivery URL bakes in the
+/// current bucket/CDN/backend and none of the three can change afterwards.
 pub fn file_url(key: &str) -> String {
     format!("{FILES_PREFIX}{key}")
 }
@@ -682,17 +732,9 @@ pub trait NotificationSubscriber: Send + Sync {
 
 /// Resolves a message key to text in a given locale.
 ///
-/// DIP: abstracts the Fluent catalog behind an application-layer port, so use
-/// cases and the web layer never name a `fluent-bundle` type. The argument type
-/// is deliberately `TransArg` rather than Fluent's own `FluentArgs` — leaking
-/// that type upward would make `ferum-application` depend on the very crate the
-/// port exists to hide.
-///
-/// `translate` is **synchronous by contract**. It is called from inside Tera's
-/// `register_function` closure, which is sync, so an async lookup here would be
-/// unimplementable without blocking. Implementations must therefore keep the
-/// catalog in memory and never perform I/O on this path — refreshing from disk
-/// belongs in `reload`.
+/// `translate` is **synchronous by contract** — it runs inside Tera's sync
+/// `register_function` closure, so implementations must hold the catalog in
+/// memory and never do I/O here. Reloading from disk belongs in `reload`.
 #[async_trait]
 pub trait Translator: Send + Sync {
     /// Resolves `key` in `locale`, interpolating `args`.
@@ -717,19 +759,15 @@ pub trait Translator: Send + Sync {
     /// coverage percentages are computed against.
     fn default_locale_keys(&self) -> Vec<String>;
 
-    /// The `js-` dictionary the browser reads out of `<meta name="ferum-i18n">`,
-    /// resolved in `locale`.
+    /// The `js-` dictionary served in `<meta name="ferum-i18n">`.
     ///
-    /// Returned as an `Arc` because it is **built once per catalog load, not per
-    /// render**. Every page called `default_locale_keys()` (cloning the whole
-    /// key vector — every `ui-`, `js-`, `adm-` and `error-` key), filtered it to
-    /// the `js-` prefix, and then ran a Fluent format per surviving key, on
-    /// every single request. The result is a pure function of (catalogs, locale)
-    /// and both only change on `reload`, so it belongs there.
+    /// An `Arc` because it must be built **once per catalog load, not per
+    /// render** — it is a pure function of (catalogs, locale), and both change
+    /// only on `reload`. Building it per request meant cloning every key and
+    /// running a Fluent format per `js-` key on every page.
     ///
-    /// Keyed on the *default* locale's key set so the dictionary has the same
-    /// shape in every language; a key the requested locale has not translated
-    /// resolves through the fallback chain exactly as it would server-side.
+    /// Keyed on the default locale's key set, so the shape is the same in every
+    /// language and untranslated keys use the normal fallback chain.
     fn js_strings(&self, locale: &Locale) -> Arc<BTreeMap<String, String>>;
 
     /// Re-reads catalogs from disk and atomically swaps them in. Called after a

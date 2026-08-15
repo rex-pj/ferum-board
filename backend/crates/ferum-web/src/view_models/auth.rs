@@ -7,7 +7,6 @@ use ferum_domain::models::user::User;
 
 use super::role::UserRoleResponse;
 
-// ─── Requests ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -51,7 +50,6 @@ pub struct ResetPasswordRequest {
     pub new_password: String,
 }
 
-// ─── Responses ────────────────────────────────────────────────────────────────
 
 /// Returned by GET /api/users/me and auth flows.
 /// `roles` is populated separately by the handler after fetching user_roles.

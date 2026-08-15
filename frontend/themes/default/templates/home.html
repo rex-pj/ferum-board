@@ -176,7 +176,6 @@
     {{ m::feed_controls(controls=feed_controls) }}
   {% endif %}
 
-  {# Thread list or empty state #}
   {% if threads %}
     {% for thread in threads %}
       {% include "default/templates/partials/thread_card.html" %}

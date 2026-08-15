@@ -1,35 +1,13 @@
-//! Cloudflare R2 backend, over the S3 API.
+//! Cloudflare R2, over the S3 API. Uploads share `S3Compatible`; only the URL
+//! policy differs, and that is why this is a separate adapter.
 //!
-//! # Why this is not just `S3StorageService` with a different endpoint
+//! **R2's S3 endpoint serves signed requests only**, so its URL is useless in an
+//! `<img>` tag and no public origin can be derived from the account or bucket.
+//! Hence `R2_PUBLIC_BASE_URL` is mandatory and its absence FAILS STARTUP: a
+//! minted URL is written into post HTML that is never rewritten, so degrading
+//! would bake in links that can never load.
 //!
-//! It is, for uploads — `S3Compatible` is shared, and pointing `S3_ENDPOINT` at
-//! R2 has always worked. What it is not is *readable*.
-//!
-//! **R2's S3 API endpoint serves signed requests only.** An anonymous `GET` of
-//! `https://{account}.r2.cloudflarestorage.com/{bucket}/{key}` is refused, so
-//! that URL is useless in an `<img>` tag. Public reads come from a
-//! Cloudflare-managed `r2.dev` subdomain or from a custom domain bound to the
-//! bucket, and **neither can be derived** from the account id or the bucket
-//! name. Every other backend in this module computes a working public origin
-//! from configuration it already has; this one cannot, which is why
-//! `R2_PUBLIC_BASE_URL` is mandatory and its absence is a startup failure rather
-//! than a warning.
-//!
-//! That is a harsher reaction than anything else here, and deliberately so.
-//! `public_url` is written into `users.avatar_url`, `site_config` and the stored
-//! HTML of every post, and those strings are never rewritten. A backend that
-//! mints signed-only URLs does not degrade — it writes links that can never load
-//! into content that cannot be repaired without a data migration. Refusing to
-//! start is the only response that cannot corrupt anything.
-//!
-//! # What is NOT covered by an automated test
-//!
-//! `public_url` / `key_from_url` and every constructor rule are unit-tested in
-//! `backend/tests/infrastructure/src/storage/r2.rs`, and both URL round trips
-//! are pinned across the configuration matrix in `storage/file_url_contract.rs`.
-//! `put` and `delete` issue real requests and are compile-checked only — the
-//! same position `S3StorageService` is in, and for the same reason: there is no
-//! R2 emulator in this repository.
+//! `put`/`delete` are compile-checked only — there is no R2 emulator here.
 
 use async_trait::async_trait;
 use bytes::Bytes;

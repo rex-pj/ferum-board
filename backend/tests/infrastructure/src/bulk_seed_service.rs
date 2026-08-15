@@ -1,17 +1,14 @@
 //! Integration test for [`PgBulkSeedService`] — the opt-in example data.
 //!
-//! `#[ignore]` on purpose: a full run writes 1,000 users, 5,000 threads and
-//! ~90,000 posts, which is the right size for demoing a forum and the wrong size
-//! for a suite that runs on every commit. Run it explicitly when the seeder
+//! `#[ignore]` because a full run writes ~90,000 posts. Run it when the seeder
 //! changes:
 //!
 //! ```text
 //! cargo test -p ferum-infrastructure-tests bulk_seed -- --ignored --nocapture
 //! ```
 //!
-//! What it guards is the class of bug that made the demo data misleading rather
-//! than absent: rows written in an order that leaves a foreign key unfilled, and
-//! counters asserted by hand instead of derived.
+//! Guards demo data that is misleading rather than absent: rows written in an
+//! order that leaves a foreign key unfilled, counters asserted by hand.
 
 use sea_orm::{DatabaseConnection, FromQueryResult, Statement};
 

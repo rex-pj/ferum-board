@@ -125,14 +125,9 @@ async fn main() -> anyhow::Result<()> {
 /// Resolves when the process is asked to stop, so `axum::serve` can drain
 /// in-flight requests (NF-OP-03).
 ///
-/// **SIGTERM is the one that matters in production, and it used to be missing.**
-/// `docker stop`, a Compose restart, and a Kubernetes pod eviction all send
-/// SIGTERM and only escalate to SIGKILL after a grace period; nothing in a
-/// container ever sends SIGINT. So while this listened for Ctrl-C alone, the
-/// documented deployment profiles (B and C, both `restart: unless-stopped`)
-/// terminated the process outright on every deploy and every restart, cutting
-/// whatever requests were in flight. Ctrl-C stays because it is what a developer
-/// presses locally.
+/// **SIGTERM is the one that matters**: `docker stop`, Compose restarts and pod
+/// evictions all send it, and nothing in a container ever sends SIGINT. Watching
+/// Ctrl-C alone cut in-flight requests on every deploy.
 async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()

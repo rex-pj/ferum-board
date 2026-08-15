@@ -23,7 +23,7 @@ impl PgSiteConfigRepository {
         Self { db, cipher: None }
     }
 
-    /// Encrypts [`ENCRYPTED_KEYS`] at rest.
+    /// Encrypts `ENCRYPTED_KEYS` at rest.
     ///
     /// Builder-style so no existing construction site changes signature, matching
     /// `AuthUseCase::with_auto_verify_flag` and `JobExecutor::with_translator`.

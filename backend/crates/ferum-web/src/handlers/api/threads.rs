@@ -21,20 +21,10 @@ use ferum_domain::repositories::thread_repository::parse_feed_query;
 
 /// Thumbnail rules = the shared image rules, under the thumbnail limit.
 ///
-/// `ThreadUseCase::set_thumbnail` enforces exactly this and is the authority.
-/// The check is repeated here anyway — but only because `create_thread` and
-/// `update_thread` reach `set_thumbnail` *after* the thread and its first post
-/// are already written. Letting a bad thumbnail fail there would leave a thread
-/// behind and force a compensating delete; failing before the first write is
-/// what keeps the operation atomic. It is a guard on ordering, not a second
-/// opinion on the rules.
-///
-/// It used to be a hand-rolled copy carrying its own `MAX_SIZE = 2 MB`, which
-/// contradicted `MAX_THUMBNAIL_BYTES` (10 MB) — the value the use case enforces
-/// and the value `error-thumbnail-too-large` quotes back to the user. Uploads
-/// between 2 and 10 MB were refused with a hardcoded English sentence that
-/// disagreed with the catalog. They are now accepted, as the constant always
-/// said they would be.
+/// `ThreadUseCase::set_thumbnail` is the authority; this repeats the check only
+/// because create/update reach it *after* the thread is written, so a late
+/// failure would need a compensating delete. A guard on ordering, not a second
+/// opinion — never give it its own size constant.
 fn validate_image_field(content_type: &str, data: &bytes::Bytes) -> Result<(), AppError> {
     validate_upload_image(content_type, data, MAX_THUMBNAIL_BYTES, ImageKind::THUMBNAIL)
 }
@@ -244,18 +234,13 @@ pub async fn create_thread(
     let content_md = content_md
         .ok_or_else(|| AppError::UnprocessableEntity("content_md is required".to_string()))?;
 
-    // Title length is `ThreadUseCase::create`'s to enforce, and it does so
-    // before any write, so there is no orphan to avoid by checking here first.
-    // The copy that used to live here counted `title.len()` — *bytes* — against
-    // the same 5–255 bounds the validator applies to *characters*. On a
-    // Vietnamese board that is roughly a 1.5–3× difference, so titles the
-    // validator accepts were refused by the handler that never reached it, with
-    // a hardcoded English sentence that also contradicted the catalog.
+    // Title length belongs to `ThreadUseCase::create`, which checks before any
+    // write — do NOT re-check it here. A copy once counted `title.len()` in
+    // bytes against character bounds, refusing Vietnamese titles the validator
+    // accepts.
     //
-    // Content is different: `PostUseCase::create` only sees it after the thread
-    // row exists, so an empty body there costs a compensating delete. Checked
-    // here to keep the operation atomic, trimmed to match what the use case
-    // actually rejects, and through the catalog so the message is translated.
+    // Content is different: `PostUseCase::create` sees it only after the thread
+    // row exists, so an empty body there would cost a compensating delete.
     if content_md.trim().is_empty() {
         return Err(AppError::invalid("post_content_empty").into());
     }

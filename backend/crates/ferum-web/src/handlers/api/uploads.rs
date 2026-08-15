@@ -1,3 +1,8 @@
+//! `/files/` blob serving and upload endpoints.
+//!
+//! See [`resolve_stored_file`] for the ordering rule that keeps staged
+//! attachments private under an object store.
+
 use std::path::PathBuf;
 
 use axum::extract::{Extension, Path, State};
@@ -11,16 +16,11 @@ use ferum_infrastructure::entities::stored_files;
 
 /// GET /plugins/:slug/assets/*path — serve a plugin UI asset.
 ///
-/// `/assets/` is a URL-only namespace, not a required on-disk subfolder: a
-/// plugin's `.fpkg` is a flat archive (`plugin.toml` + `bundle.js` at the
-/// package root — see every example under examples/plugins/), and the SAME
-/// bundle.js is what `[script].bundle_file` in the manifest points
-/// boa_engine at via `{install_path}/{bundle_file}` (also flat, no `assets/`
-/// prefix — see ScriptPluginRuntime::load_bundle). This route resolves
-/// against the same flat install root so both consumers agree on where the
-/// file actually lives, and blocks serving plugin.toml so the manifest
-/// itself isn't reachable through the same public path.
-/// Path traversal attempts (`..`) in either segment return 404.
+/// `/assets/` is a URL namespace only: `.fpkg` archives are flat, and the same
+/// bundle.js is what boa_engine loads via `{install_path}/{bundle_file}`. Both
+/// consumers therefore resolve against the same flat root.
+///
+/// `plugin.toml` is blocked, and `..` in either segment returns 404.
 pub async fn serve_plugin_asset(
     State(state): State<AppState>,
     Path((slug, asset_path)): Path<(String, String)>,
@@ -203,52 +203,28 @@ pub fn resolve_stored_file(
     }
 }
 
-/// GET /files/:key — resolve a stored file to its bytes or its location.
+/// GET /files/:key — resolves a stored file to its bytes or its location.
 ///
-/// **This endpoint is on the hot path under every backend, not just database
-/// storage.** `ports::file_url` is what gets persisted, so avatars, covers,
-/// thumbnails, product images, post attachments and site config all point here
-/// whatever the bytes are stored in. Under an object store it acts as the
-/// indirection that keeps those stored strings valid across a change of bucket
-/// or CDN — the same job Facebook's Haystack Directory does.
+/// **Hot path under every backend**, since `ports::file_url` is what gets
+/// persisted. Two paths: keys outside the attachment namespace cannot be staged,
+/// so they redirect with no database work; attachments always hit the database,
+/// because a staged one (`ref_count == 0`) is visible only to its uploader.
 ///
-/// Two paths, and the split is deliberate:
-///
-/// * **Anything outside the attachment namespace** cannot be staged, so its
-///   location is a pure function of the key. Under an object store it is
-///   redirected with no database work at all.
-/// * **Attachments** always go through the database, because a staged one
-///   (`ref_count == 0`) is visible only to whoever uploaded it. That lets the
-///   composer preview an image before the post exists, while an image that is
-///   never posted — or whose post was rejected — is not reachable by anyone
-///   else. It cannot be used as anonymous file hosting and it cannot outlive
-///   moderation.
-///
-/// The honest limit on that second guarantee: when the bytes are in a public
-/// bucket, this handler can refuse to *tell* a stranger where they are, but it
-/// cannot stop someone who already knows the URL. Protection there rests on the
-/// key being unguessable and the bucket not being listable.
+/// Once bytes are in a public bucket that second guarantee rests on the key
+/// being unguessable and the bucket not listable — not on this handler.
 pub async fn serve(
     State(state): State<AppState>,
     Extension(auth_user): Extension<Option<AuthUser>>,
     headers: HeaderMap,
     Path(key): Path<String>,
 ) -> Response {
-    // Answer revalidation before touching the database.
+    // Revalidate before touching the database: a CAS key is a digest of its own
+    // bytes, so it IS a strong ETag and matching `If-None-Match` needs no row.
+    // Otherwise every cold client costs a full `bytea` read on the pool that
+    // renders pages.
     //
-    // A CAS key is a digest of the bytes it names, so it *is* a strong ETag:
-    // the content behind a key can never change, which is what makes matching
-    // the key against `If-None-Match` sound without reading the row first. That
-    // is the entire point — this handler otherwise loads the whole blob into
-    // memory through the write pool, so every cold client and every CDN miss
-    // costs a full `bytea` read on the same 20 connections that render pages.
-    //
-    // Staged attachments are excluded, and must stay excluded: they are
-    // authorized per viewer below, so a 304 here would answer a request that
-    // the owner check should have refused. A key outside that namespace can
-    // never be staged, so the exclusion is exact rather than conservative.
-    // A key that could not have come from `cas_key` is refused before it is
-    // allowed anywhere near a redirect target.
+    // Staged attachments MUST stay excluded — they are authorized per viewer
+    // below, so a 304 here would answer what the owner check must refuse.
     if !is_safe_key(&key) {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -263,18 +239,11 @@ pub async fn serve(
 
     // ── Object-store fast path: no database work at all ──────────────────────
     //
-    // `public_url` is a pure function of the key, so for a key that cannot be
-    // staged there is nothing to look up: whether the row exists changes only
-    // *who* answers the 404, and the object store answers it perfectly well.
-    //
-    // This is the difference between an image costing a connection and costing
-    // nothing. Avatars appear once per post and product images once per card, so
-    // a listing page was issuing dozens of `stored_files` queries and taking a
-    // blob-read permit for each — on a deployment whose entire reason for
-    // configuring an object store was to stop serving bytes from this process.
-    //
-    // A HEAD against the bucket to confirm existence first would undo the point:
-    // it trades a local query for an outbound round trip.
+    // `public_url` is a pure function of the key, so a key that cannot be staged
+    // needs no lookup — the row's existence only changes who answers the 404.
+    // Without this a listing page issues dozens of `stored_files` queries and
+    // takes a blob-read permit each, on a deployment configured precisely to
+    // stop serving bytes here. A HEAD to confirm existence would undo the point.
     if !may_be_staged {
         let location = state.storage.public_url(&key);
         // Relative means database storage, where `public_url` returns this very

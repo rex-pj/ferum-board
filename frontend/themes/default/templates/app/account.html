@@ -65,7 +65,6 @@
     <div class="card mb-0">
       <div class="card-body">
 
-        {# Cover image #}
         <div class="mb-4 pb-4 border-bottom">
           <label class="form-label fw-semibold">{{ t(k="ui-cover-image") }}</label>
           <div class="fr-cover-preview mb-3 rounded overflow-hidden">
@@ -127,7 +126,6 @@
           </div>
         </div>
 
-        {# Profile form #}
         <form id="profile-form" method="post">
           <div class="mb-3">
             <label for="display_name" class="form-label d-flex justify-content-between">
@@ -234,7 +232,6 @@
       <div class="card-body">
         <form id="prefs-form" method="post">
 
-          {# Theme #}
           <div class="mb-4">
             <label class="form-label fw-semibold d-block mb-2">{{ t(k="ui-theme") }}</label>
             <div class="d-flex gap-2 flex-wrap" id="theme-btns">
@@ -257,7 +254,6 @@
             <input type="hidden" id="theme-val" value="{% if preferences and preferences.theme %}{{ preferences.theme }}{% else %}auto{% endif %}">
           </div>
 
-          {# Font size #}
           <div class="mb-4">
             <label class="form-label fw-semibold d-block mb-2">{{ t(k="ui-font-size") }}</label>
             <div class="btn-group" id="font-btns" role="group">
@@ -274,7 +270,6 @@
             <input type="hidden" id="font-size-val" value="{% if preferences and preferences.font_size %}{{ preferences.font_size }}{% else %}medium{% endif %}">
           </div>
 
-          {# Layout #}
           <div class="mb-4">
             <label class="form-label fw-semibold d-block mb-2">{{ t(k="ui-post-layout") }}</label>
             <div class="d-flex gap-2 flex-wrap" id="layout-btns">
@@ -377,7 +372,6 @@
       </div>
     </div>
 
-    {# Watching & Muted #}
     <div class="card" x-data="watchedMuted()">
       <div class="card-body">
         <h2 class="h6 fw-semibold mb-3">{{ t(k="ui-watching-muted") }}</h2>

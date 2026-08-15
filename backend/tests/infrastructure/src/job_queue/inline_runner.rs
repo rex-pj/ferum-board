@@ -288,13 +288,11 @@ async fn gc_continues_when_storage_delete_errors() {
 
 // ─── Job budget classification ────────────────────────────────────────────────
 
-/// Every `ForumJob` variant, so adding one forces a decision here.
+/// Every `ForumJob` variant, with the budget it should draw from.
 ///
-/// Deliberately a hand-written list rather than a `matches!` on the enum: Rust
-/// cannot make `is_network_bound` exhaustive (it has a catch-all `false` arm),
-/// so a new network-calling job would compile fine and quietly draw from the
-/// local budget. Enumerating the variants in a test is what turns that omission
-/// into a build failure instead of slow signup mail nobody traces back.
+/// Hand-written, so this list alone does not force completeness — what does is
+/// `is_network_bound` being an exhaustive `match`, which fails to compile on a
+/// new variant. These assert the classification it then makes.
 fn all_job_variants() -> Vec<(&'static str, ForumJob, bool)> {
     let uuid = uuid::Uuid::nil();
     vec![

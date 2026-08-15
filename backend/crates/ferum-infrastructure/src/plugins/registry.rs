@@ -1,3 +1,10 @@
+//! Plugin dispatch table: resolves a hook or RPC name to the active plugins
+//! that registered it, and runs them.
+//!
+//! `before_*` hooks FAIL OPEN — a timeout, panic or open circuit lets the
+//! request through, because a broken plugin must not take the forum down.
+//! `dispatch_rpc` is the deliberate exception and returns a real error.
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "script_plugins")]
@@ -35,7 +42,7 @@ struct HookEntry {
 /// Maintains an in-memory dispatch table and per-plugin Script runtimes.
 pub struct PluginRegistry {
     plugin_repo: Arc<dyn PluginRepository>,
-    /// hook_name → ordered Vec<HookEntry> (by priority ASC)
+    /// hook_name → ordered `Vec<HookEntry>` (by priority ASC)
     dispatch_table: Mutex<HashMap<String, Vec<HookEntry>>>,
     circuit_threshold: u32,
     /// Max ms allowed for a before-hook (enforced for Tier 2 Script plugins)

@@ -2,26 +2,13 @@
 #
 # Roll the `app` container onto a new image tag and wait for it to answer.
 #
-# Installed at /usr/local/sbin/ferum-deploy, owned by root, and named in
-# /etc/sudoers.d/ferum-deploy as the ONLY thing the CI service account may run
-# through sudo. That is the whole point of the file existing: the deploy job used
-# to run `sudo docker compose …` directly, which is indistinguishable from
-# granting it root — `docker compose` will happily bring up a container that
-# bind-mounts / and runs as root, so any allowlist naming `docker` is decoration.
+# The ONLY command the CI account may run through sudo. Allowlisting `docker
+# compose` instead is equivalent to granting root — it will happily start a
+# container that bind-mounts / — so everything choosable is fixed here and only
+# the image tag comes from the caller, validated below.
 #
-# Everything the CI account could otherwise choose is fixed here instead: the
-# compose file, the env file, the working directory, and which service is
-# touched. The only thing it supplies is the image tag, and that is validated
-# below rather than trusted.
-#
-# Consequently this script and /opt/ferum must be root-owned and not writable by
-# the deploy account. If the account can edit docker-compose.prod.yml it can
-# declare its own mounts, and the restriction is worth nothing again.
-#
-# The readiness wait lives here rather than in the workflow because it needs the
-# log dump on failure, the log dump needs root, and a second sudo-able entry
-# point is a second thing to get wrong. Keeping it in one script also means the
-# deploy job opens ONE ssh session instead of two.
+# THIS SCRIPT AND /opt/ferum MUST BE ROOT-OWNED and unwritable by the deploy
+# account: if it can edit docker-compose.prod.yml it can declare its own mounts.
 set -euo pipefail
 
 TAG="${1:?usage: ferum-deploy <40-hex-commit-sha>}"
@@ -47,30 +34,19 @@ compose() {
 export IMAGE_TAG="$TAG"
 compose pull app
 
-# `up -d` with NO service name — every service, not just `app`.
+# NO service name — Compose starts the named service plus what it DEPENDS ON,
+# and nginx depends on app, not the reverse. Naming `app` leaves port 443 with
+# no listener on a fresh box while the deploy reports success.
 #
-# Naming `app` looks tighter and silently leaves nginx down forever on a fresh
-# box: Compose starts the named service plus what it DEPENDS ON, and the arrow
-# points the other way (nginx depends_on app, not the reverse). Postgres, Redis
-# and MinIO came up only because `app` depends on them; nothing pulled nginx in,
-# so port 443 had no listener and every request to the site timed out while the
-# deploy reported success.
-#
-# The full form is still safe on every subsequent deploy: Compose recreates only
-# containers whose configuration or image actually changed, so a routine app
-# rollout does not restart Postgres. It also means an edited compose file takes
-# effect on the next deploy instead of waiting for someone to remember.
+# Safe on later deploys: only containers whose config or image changed are
+# recreated, so a routine rollout does not restart Postgres.
 compose up -d
 
-# 30 × 5s. The first boot of a new image runs migrations before it will answer,
-# and an index build on a mature table is legitimately slow, so this is a
-# generous ceiling rather than a latency expectation.
+# 30 × 5s — a generous ceiling, not a latency expectation: first boot runs
+# migrations, and an index build on a mature table is legitimately slow.
 #
-# The probe runs INSIDE the container. `app` publishes no ports — only nginx
-# does — so 5173 exists on the compose network and nowhere else, and curling it
-# from the host connects to nothing whatever the application is doing. That was
-# the original shape of this check, and it failed every deploy for 150s while
-# the container beside it answered its own healthcheck 200 on the same URL.
+# The probe runs INSIDE the container. `app` publishes no ports, so 5173 exists
+# only on the compose network and curling it from the host reaches nothing.
 #
 # Probing through nginx instead would test TLS and the proxy as well, which
 # sounds better and is worse here: this loop exists to decide whether the new

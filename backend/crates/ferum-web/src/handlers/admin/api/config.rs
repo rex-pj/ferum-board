@@ -39,26 +39,13 @@ pub const REPORTING_TIMEZONE_KEY: &str = "reporting_timezone";
 
 /// Rejects a `reporting_timezone` that either consumer cannot use.
 ///
-/// **There are two consumers, and they do not accept the same set of names.**
-/// That is the whole reason this function is more than one line:
+/// **Both checks are required because they accept different name sets.**
+/// Postgres accepts `+07` and `posix/…`, `chrono-tz` parses neither — and
+/// `chrono-tz` falls back to UTC silently rather than erroring. Validating only
+/// Postgres lets the dashboard bucket at UTC+7 while date filters use UTC.
 ///
-/// * **PostgreSQL** interpolates it into `AT TIME ZONE` on every stats query. An
-///   unknown zone there is a hard SQL error, so a typo takes out the entire
-///   dashboard with nothing on the settings page explaining why.
-/// * **`chrono-tz`** parses it in `handlers::admin::reporting_tz` to turn the
-///   admin date-range filters into instants. An unknown zone there does **not**
-///   error — it falls back to UTC.
-///
-/// The second failure mode is the dangerous one, and checking only Postgres
-/// permits it. Postgres accepts `+07` and `posix/America/New_York`; `chrono-tz`
-/// parses neither. Save `+07` and the dashboard chart buckets at UTC+7 while the
-/// thread-list date filter buckets at UTC — two parts of the same admin panel
-/// silently disagreeing about what a day is, which is precisely the class of bug
-/// the reporting timezone exists to remove.
-///
-/// So both are required, and the Postgres probe *is* the operation rather than a
-/// lookup in `pg_timezone_names` — it accepts exactly what the stats queries
-/// will accept.
+/// The Postgres probe IS the operation, not a `pg_timezone_names` lookup, so it
+/// accepts exactly what the stats queries will.
 async fn validate_reporting_timezone(
     db: &sea_orm::DatabaseConnection,
     tz: &str,
@@ -88,7 +75,7 @@ async fn validate_reporting_timezone(
 
 /// Keys the config API will accept on write.
 ///
-/// Deliberately a superset of [`CONFIG_READABLE_KEYS`]: `smtp_pass` is writable
+/// Deliberately a superset of `CONFIG_READABLE_KEYS`: `smtp_pass` is writable
 /// but must never be echoed back. Anything absent here is silently dropped by
 /// `update_config`, so a field rendered on the settings page and missing from
 /// this list is a save that appears to succeed and does nothing.
@@ -156,25 +143,18 @@ const CONFIG_READABLE_KEYS: &[&str] = &[
 
 /// Keys whose **value** must never reach a template context or an API response.
 ///
-/// [`CONFIG_READABLE_KEYS`] already keeps them out of `GET /api/admin/config`.
+/// `CONFIG_READABLE_KEYS` already keeps them out of `GET /api/admin/config`.
 /// This list closes the other door: the settings *page* renders from
 /// `site_config_cache` directly, which is the whole table — so the allowlist that
 /// guards the JSON endpoint does not apply there at all.
 pub const CONFIG_SECRET_KEYS: &[&str] = &[SMTP_PASS_KEY];
 
-/// Splits a site_config map into the part safe to render and a per-secret
-/// "is it set" flag.
+/// Splits a site_config map into the renderable part plus a per-secret "is set"
+/// flag — the UI needs only whether a secret exists, and handing it the value
+/// makes every future template a place it can leak.
 ///
-/// Same shape as `WebhookResponse::has_secret` (`view_models/webhook.rs`): the UI
-/// needs to know *whether* a secret exists so it can say "(set — enter a new
-/// value to change)", and that is all it needs. Handing it the value and trusting
-/// every present and future template not to print it is not a guarantee, it is a
-/// convention — and this codebase already has one page whose author got it right
-/// by luck rather than by construction.
-///
-/// "Set" means **non-blank**, not merely present: `PgSystemSeedService` seeds the
-/// SMTP keys as `""`, so a presence test alone would report a password that was
-/// never entered.
+/// "Set" means **non-blank**: the seeder writes SMTP keys as `""`, so a presence
+/// test alone reports a password nobody entered.
 pub fn split_secrets(
     all: HashMap<String, String>,
 ) -> (HashMap<String, String>, HashMap<&'static str, bool>) {
@@ -191,7 +171,7 @@ pub fn split_secrets(
     (safe, flags)
 }
 
-/// Pulls the SMTP block out of a site_config map for [`ReloadableEmailService`].
+/// Pulls the SMTP block out of a site_config map for `ReloadableEmailService`.
 ///
 /// `Ok(None)` means "not configured" (no host). `Err` means the stored values are
 /// unusable, and the caller must not swap the live transport.
@@ -228,18 +208,14 @@ pub fn smtp_settings_from_config(
     }))
 }
 
-/// Builds a whole [`MailReload`] from stored settings plus the env-only Resend key.
+/// Builds a [`MailReload`] from stored settings plus the env-only Resend key.
 ///
-/// The Resend provider is constructed **here** rather than inside
-/// `ReloadableEmailService` because its two inputs come from different places: the
-/// API key is env-only and immutable for the process lifetime, while `from` is a
-/// site_config value an admin can edit. Only this layer holds both — and the
-/// consequence worth stating is that editing `from_email` rebuilds the Resend
-/// client too, because `from` is captured at construction.
+/// Resend is constructed here because only this layer holds both inputs — an
+/// env-only key and an admin-editable `from`. So editing `from_email` rebuilds
+/// the client, since `from` is captured at construction.
 ///
-/// `resend_api_key` being `None` does not fail a Resend selection: it resolves to
-/// `MailProvider::Disabled`, which is a state the settings page can render and the
-/// operator can fix. Failing here would reject the save that was fixing it.
+/// A missing key resolves to `Disabled`, not an error: failing would reject the
+/// very save that was fixing it.
 pub fn mail_reload_from_config(
     cfg: &HashMap<String, String>,
     resend_api_key: Option<&str>,
@@ -515,12 +491,8 @@ pub async fn delete_logo(
 
 // ── Homepage hero ───────────────────────────────────────────────────────────
 //
-// The curated hero-tile endpoints that used to live here (POST/PUT
-// …/config/hero-tiles, backed by the `home_hero_tiles` site_config key) are gone.
-// The homepage masthead is now the `home-hero` plugin, which keeps its content —
-// copy and image URLs alike — in its own plugin config.
+// The hero-tile endpoints and the `home_hero_tiles` key are gone — the masthead
+// is now the `home-hero` plugin, holding its own config.
 //
-// One consequence worth knowing: the plugin's image URLs are plain strings and do
-// NOT take a CAS reference the way tiles did. Nothing here reference-counts them,
-// so a key whose last other reference disappears is collectable while the plugin
-// still points at it. See examples/plugins/home-hero/README.md.
+// CONSEQUENCE: the plugin's image URLs are plain strings taking no CAS
+// reference, so a key can be collected while the plugin still points at it.

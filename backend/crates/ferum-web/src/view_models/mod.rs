@@ -26,18 +26,15 @@ pub mod page_context;
 
 // ─── Shared query-param deserializers ─────────────────────────────────────────
 
-/// Deserializes an optional UUID query param, treating a blank value as absent
-/// but a malformed one as an error.
+/// Optional UUID query param: blank is absent, malformed is an error.
 ///
-/// The blank case is not optional politeness: an HTML `<select>`'s "All" option
-/// submits `field=`, and a bare `Option<Uuid>` fails the *whole* extractor on
-/// that, so one cleared dropdown 400s the entire request.
+/// Blank matters because a `<select>`'s "All" submits `field=`, and a bare
+/// `Option<Uuid>` fails the whole extractor on it — one cleared dropdown 400s
+/// the request.
 ///
-/// Contrast [`product::empty_string_as_none_uuid`], which additionally swallows
-/// unparseable values. That leniency is deliberate for the catalogue's SSR
-/// filters (a hand-mangled URL should degrade, not error) but wrong for a JSON
-/// API, where silently ignoring a filter returns results the caller did not ask
-/// for. Prefer this one unless you specifically want the SSR behaviour.
+/// **Prefer this over [`product::empty_string_as_none_uuid`]**, which also
+/// swallows unparseable values: right for SSR filters, wrong for a JSON API
+/// where a silently dropped filter returns results nobody asked for.
 pub fn blank_as_none_uuid<'de, D>(deserializer: D) -> Result<Option<uuid::Uuid>, D::Error>
 where
     D: serde::Deserializer<'de>,

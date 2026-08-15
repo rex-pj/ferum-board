@@ -1,3 +1,8 @@
+//! JWT cookie → `Option<AuthUser>`. Resolves identity ONLY.
+//!
+//! Permission enforcement belongs in the use case layer, never here: a route
+//! added without its middleware would otherwise silently lose its checks.
+
 
 use std::time::Duration;
 

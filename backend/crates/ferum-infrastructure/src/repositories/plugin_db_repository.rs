@@ -98,20 +98,13 @@ fn strip_comments_and_literals(sql: &str) -> String {
     out
 }
 
-/// Defense-in-depth check on plugin-authored SQL. This is the **second** layer,
-/// not the primary one.
+/// **Second** layer on plugin SQL, not the primary one — the real boundary is
+/// the privilege drop in `query()`, where `ferum_plugin` holds no grant on any
+/// application table.
 ///
-/// The real boundary is the privilege drop in `query()`: plugin SQL executes as
-/// `ferum_plugin`, a role holding no grant on any application table, so Postgres
-/// refuses `FROM public.users` no matter how the statement is spelled. This
-/// denylist survives because it is independent of that — it still applies when
-/// the role could not be created (a Postgres user without `CREATEROLE`), and it
-/// rejects whole classes of statement (DDL, multiple statements) earlier and
-/// with a clearer error than a privilege failure would give.
-///
-/// Do not reason about it as though it were the only defence, and do not treat
-/// a gap in it as automatically exploitable — check whether the role blocks it
-/// first.
+/// Kept because it is independent: it still applies when the role could not be
+/// created, and rejects DDL and multi-statement input with a clearer error.
+/// A gap here is not automatically exploitable — check the role first.
 fn validate_plugin_sql(sql: &str) -> Result<(), AppError> {
     let trimmed_end = sql.trim_end().trim_end_matches(';');
     if trimmed_end.contains(';') {
@@ -152,17 +145,13 @@ fn validate_plugin_sql(sql: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Opens `schema` to the shared plugin role, and arranges for tables the plugin
-/// creates later to be reachable too.
+/// Opens `schema` to the shared plugin role, now and for tables added later.
 ///
-/// `ALTER DEFAULT PRIVILEGES` is the load-bearing half: a plugin that adds a
-/// table in a later schema migration would otherwise be unable to read its own
-/// new table, because `GRANT ... ON ALL TABLES` only covers tables that exist at
-/// the moment it runs.
+/// `ALTER DEFAULT PRIVILEGES` is the load-bearing half — `GRANT ON ALL TABLES`
+/// covers only what exists when it runs, so without it a plugin cannot read a
+/// table its own later migration creates.
 ///
-/// Best-effort. When the role is absent (migration could not create it on a
-/// restricted Postgres user) every statement here fails harmlessly and
-/// [`set_plugin_role`] detects the same condition at query time.
+/// Best-effort: with no role every statement fails harmlessly.
 async fn grant_schema_to_plugin_role(pool: &sqlx::PgPool, schema: &str) {
     let role = migration::PLUGIN_DB_ROLE;
     let stmts = [
@@ -286,19 +275,13 @@ impl PluginDbGateway for PgPluginDbGateway {
             .await
             .map_err(|e| AppError::internal(format!("Failed to scope query tx: {e}")))?;
 
-        // Bound how long plugin SQL may hold this connection.
+        // THE ONLY thing bounding how long plugin SQL holds this connection.
+        // `PluginRegistry`'s tokio timeout cannot help: the plugin runs in
+        // `block_on` on a thread outside the runtime, so cancelling the future
+        // leaves that thread holding a pooled connection. Postgres abandoning
+        // the statement is what closes it.
         //
-        // This is the only thing that actually bounds it. `PluginRegistry` wraps
-        // hook dispatch in a `tokio::time::timeout`, but the plugin is running
-        // inside `block_on` on a dedicated OS thread outside the runtime — the
-        // timeout cancels the future waiting on the tokio side and cannot touch
-        // that thread, which keeps holding a pooled connection with this
-        // transaction open. Postgres abandoning the statement itself is what
-        // closes that hole, so a runaway `generate_series` or recursive CTE
-        // costs one connection for two seconds instead of indefinitely.
-        //
-        // `SET LOCAL`, like the two statements around it, unwinds at COMMIT, so
-        // the timeout never leaks onto an unrelated caller of this pool.
+        // `SET LOCAL` unwinds at COMMIT, so it never leaks to another caller.
         if let Err(e) = sqlx::query(AssertSqlSafe(format!(
             "SET LOCAL statement_timeout = '{PLUGIN_STATEMENT_TIMEOUT_MS}ms'"
         )))

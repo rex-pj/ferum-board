@@ -31,23 +31,13 @@ impl InMemoryCacheService {
     pub fn new() -> Self {
         let store: Arc<DashMap<String, CacheEntry>> = Arc::new(DashMap::new());
 
-        // Sweep expired entries periodically.
+        // Sweep expired entries. Without it the map only shrinks when the same
+        // key is read again, and these keys are per-user — every visitor who
+        // ever authenticates leaves an entry nothing revisits, so it grows for
+        // the life of the process.
         //
-        // Without this the map only ever shrinks when the *same key* is read
-        // again after expiring — and most keys here are never read again. They
-        // are per-user and per-session: `user:roles:{uuid}`, `user:banned:{uuid}`,
-        // the session-epoch key, cached preferences. Every visitor who ever
-        // authenticates leaves entries behind that nothing revisits once their
-        // TTL passes, so the map grew for the life of the process.
-        //
-        // This is the fallback cache — it is what runs whenever `REDIS_URL` is
-        // unset, which is the documented dev profile and every single-instance
-        // install. Redis expires its own keys, so this concerns only the
-        // in-process path.
-        //
-        // `Weak` + `break`: the task must not keep the map alive by holding a
-        // strong `Arc`, or the eviction loop becomes its own leak. Same shape as
-        // `InMemoryRateLimiter::new`, which already did this correctly.
+        // `Weak` + `break`, or the eviction task holds the map alive and becomes
+        // its own leak.
         let store_weak = Arc::downgrade(&store);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(EVICT_INTERVAL);

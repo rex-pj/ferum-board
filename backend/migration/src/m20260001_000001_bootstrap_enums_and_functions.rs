@@ -208,23 +208,16 @@ impl MigrationTrait for Migration {
 }
 
 impl Migration {
-    /// `f_unaccent` — accent-folding for every full-text surface in the schema.
+    /// `f_unaccent` — accent folding for every full-text surface, so "ghe an"
+    /// matches "ghế ăn" on a largely Vietnamese forum.
     ///
-    /// This forum is largely Vietnamese and typing without tone marks is the
-    /// norm, not an edge case: `to_tsvector('simple', …)` alone means "ghe an"
-    /// never matches "ghế ăn". Every FTS index and every query goes through
-    /// this function, and it has to be one function — unaccenting only the
-    /// query side or only the indexed side silently returns nothing.
+    /// **One function for both sides**: unaccenting only the query or only the
+    /// index silently returns nothing. A wrapper because `unaccent()` is merely
+    /// STABLE while an expression index demands IMMUTABLE; pinning the
+    /// dictionary argument makes that honest.
     ///
-    /// It exists as a wrapper because `unaccent()` is only STABLE (it reads a
-    /// dictionary at call time) and an expression index requires IMMUTABLE.
-    /// Pinning the dictionary argument lets us honestly declare it immutable.
-    ///
-    /// Where the extension is unavailable — a managed Postgres that withholds
-    /// it, no superuser — it degrades to the identity function: search keeps
-    /// working exactly as it would have, minus the diacritic folding. That is a
-    /// quality difference, not a broken deploy. It is defined here, in the very
-    /// first migration, because every later index depends on it existing.
+    /// Degrades to the identity function where the extension is unavailable.
+    /// Defined in the first migration because every later index needs it.
     async fn create_unaccent_function(&self, manager: &SchemaManager<'_>) -> Result<(), DbErr> {
         let conn = manager.get_connection();
 

@@ -21,32 +21,17 @@ impl MigrationName for Migration {
 /// `search_path` to the calling plugin's own schema.
 pub const PLUGIN_DB_ROLE: &str = "ferum_plugin";
 
-/// Creates the role plugin SQL executes as. Lives with the plugin tables it
-/// exists to protect rather than in a migration of its own.
+/// Creates the role plugin SQL executes as, so Postgres owns the boundary
+/// rather than a substring denylist — which `FROM "public".users` walked
+/// straight through.
 ///
-/// Plugin queries used to run with the application's own database privileges,
-/// held back only by a substring denylist over the SQL text — which
-/// `FROM "public".users` walked straight through, since the quoted form does not
-/// contain the blocked substring `public.`. A denylist over SQL text cannot be
-/// made airtight; letting Postgres own the boundary can.
+/// **No grants at all**, which is sufficient: table privileges are never given
+/// to `PUBLIC` by default, so only schemas `provision_schema` grants become
+/// reachable, and no `REVOKE` is needed.
 ///
-/// The role is created with **no grants at all**, and that is sufficient on its
-/// own: `PUBLIC` holds `USAGE` on schema `public`, but table privileges are
-/// never granted to `PUBLIC` by default, so this role can read and write nothing.
-/// Only the plugin schemas explicitly granted by
-/// `PgPluginDbGateway::provision_schema` become reachable. No `REVOKE` on
-/// `PUBLIC` is needed, which keeps this from disturbing anything else in the
-/// database.
-///
-/// No backfill of pre-existing `plugin_*` schemas is needed here: this runs
-/// while the plugin tables are still being created, so no plugin can yet have
-/// provisioned one.
-///
-/// Both statements tolerate failure. `CREATE ROLE` needs `CREATEROLE`, which a
-/// locked-down managed-Postgres user may not have, and a hard failure here would
-/// leave the application unable to start — strictly worse than the status quo.
-/// When the role is absent the gateway logs loudly and falls back to
-/// denylist-only enforcement.
+/// Tolerates failure — `CREATE ROLE` needs `CREATEROLE`, which a managed
+/// Postgres user may lack, and blocking startup would be worse. The gateway then
+/// logs loudly and falls back to denylist-only enforcement.
 async fn create_plugin_db_role(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     let conn = manager.get_connection();
 

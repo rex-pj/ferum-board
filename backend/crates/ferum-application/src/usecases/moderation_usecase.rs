@@ -97,28 +97,12 @@ impl ModerationUseCase {
         self
     }
 
-    /// Whether `actor` may take a moderation action against `target_id`.
+    /// Whether `actor` may moderate `target_id`. Nobody moderates themselves,
+    /// and only an admin may act on staff.
     ///
-    /// Two rules, and the second is the one that was missing entirely:
-    ///
-    /// 1. **Nobody moderates themselves.** A self-ban locks the actor out of
-    ///    their own account, and for the last remaining admin that is
-    ///    unrecoverable through the UI.
-    /// 2. **Only an admin may act on staff.** A plain moderator cannot warn or
-    ///    ban another moderator or an admin. Previously nothing checked this, so
-    ///    any moderator could ban the site owner — and combined with the
-    ///    unbounded `until` that used to be accepted, permanently.
-    ///
-    /// "Staff" is decided by resolved *permissions*, not by role slug. A custom
-    /// role named anything at all still counts if it carries `admin.users` or
-    /// any `moderation.*`, which a slug comparison would miss — and missing it
-    /// is the whole failure this guards against. Category-scoped grants count
-    /// too: a moderator of one category is still staff when standing in
-    /// another.
-    ///
-    /// `attempted` names the action for the audit trail (`"user.warn"`,
-    /// `"user.ban_temp"`), matching the vocabulary of the entries the successful
-    /// path writes.
+    /// "Staff" is decided by resolved **permissions**, not role slug — a custom
+    /// role carrying `admin.users` or any `moderation.*` counts, which a slug
+    /// comparison would miss. Category-scoped grants count too.
     async fn require_may_moderate(
         &self,
         actor: &AuthUser,
@@ -163,27 +147,12 @@ impl ModerationUseCase {
         Ok(())
     }
 
-    /// Record a refused moderation attempt, and return the error to raise.
+    /// Audits a refused moderation attempt and returns the error to raise.
     ///
-    /// Successful warns and bans are audited through their `ForumEvent`s. A
-    /// refusal produced no event and therefore no trace — yet a moderator
-    /// repeatedly trying to ban an administrator is precisely what an audit log
-    /// is for, whether that is a compromised account or someone testing where
-    /// the fence is.
-    ///
-    /// **Only the two rank refusals reach here, not every `permission_denied`.**
-    /// Neither can be arrived at by clicking: the UI never offers a moderator
-    /// the option of banning an admin or themselves, so reaching one means the
-    /// request was constructed by hand. Logging ordinary permission failures
-    /// too would bury that signal under stale-tab noise.
-    ///
-    /// Returning the `AppError` rather than just writing the row keeps the two
-    /// inseparable at the call site — a future branch cannot refuse without
-    /// recording, which is the failure mode this is fixing.
-    ///
-    /// The write is best-effort: an audit outage must not convert a correct
-    /// refusal into a 500, which would tell the caller their attempt failed for
-    /// the wrong reason.
+    /// Only the two RANK refusals reach here, not every `permission_denied` —
+    /// neither is reachable by clicking, so one means a hand-built request.
+    /// Returning the error keeps refusing and recording inseparable. The write
+    /// is best-effort: an audit outage must not turn a refusal into a 500.
     async fn record_refusal(
         &self,
         actor: &AuthUser,
@@ -311,17 +280,11 @@ impl ModerationUseCase {
 
     /// Attaches reporter username and target-thread slug/title to a page of reports.
     ///
-    /// Batched on purpose. The obvious per-row shape — `threads.find_by_id` for a
-    /// thread report, `posts.find_by_id` then `threads.find_by_id` for a post
-    /// report — costs up to two round trips per row, so a full page at the
-    /// endpoint's `MAX_LIST_PAGE_SIZE` ceiling was up to 100 sequential queries to
-    /// render one moderator screen. This does it in at most four, regardless of
-    /// page size: reporters, directly-reported threads, reported posts, then the
-    /// threads those posts belong to.
+    /// Batched on purpose: at most four queries regardless of page size, where
+    /// the per-row shape cost up to 100 for one moderator screen.
     ///
-    /// Lookup misses stay misses: a report whose target was deleted still yields
-    /// `(None, None)`, and an unresolvable reporter still falls back to the raw
-    /// id, exactly as the per-row version did.
+    /// Lookup misses stay misses — a report whose target was deleted still
+    /// yields `(None, None)`.
     async fn enrich_reports(
         &self,
         reports: Vec<Report>,
@@ -505,18 +468,11 @@ impl ModerationUseCase {
         }
         PermissionChecker::can_ban_temp(actor)?;
 
-        // What actually separates `moderation.ban_temp` from
-        // `admin.ban_permanent`. Without it a moderator could pass a date
-        // centuries out and end an account permanently — including an admin's —
-        // while holding neither the permission nor, on the audit trail, the
-        // appearance of having done so. Checked here rather than only in the
-        // handler so the rule holds for every caller of this use case.
-        //
-        // A ban already in the past is the handler's business (it is a bad
-        // request, not an over-reach); this is only the upper bound.
-        // `chrono::Duration`, spelled out: `Duration` in this module is
-        // `std::time::Duration`, which has no `days` and does not add to a
-        // `DateTime`.
+        // The only thing separating `moderation.ban_temp` from
+        // `admin.ban_permanent`: without it a moderator passes a date centuries
+        // out and bans permanently without holding the permission. In the use
+        // case, not the handler, so it holds for every caller.
+        // `chrono::Duration` spelled out — `Duration` here is `std::time`'s.
         if until > Utc::now() + chrono::Duration::days(MAX_TEMP_BAN_DAYS) {
             return Err(AppError::invalid_with(
                 "ban_duration_too_long",

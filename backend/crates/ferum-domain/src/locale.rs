@@ -1,18 +1,12 @@
-//! Locale value type.
+//! A shape-validated BCP-47 language tag.
 //!
-//! A `Locale` is a *shape-validated* BCP-47 language tag. Construction is
-//! fallible, which is what lets the rest of the system treat a locale as safe
-//! to interpolate into a filesystem path (`locales/{locale}/errors.ftl`) or a
-//! URL prefix without re-checking it. An attacker-controlled path segment can
-//! never reach a bundle lookup, because `parse` rejects anything containing a
-//! separator, a dot, or a non-ASCII byte.
+//! Fallible construction is what makes a `Locale` safe to interpolate into a
+//! path or URL prefix unchecked — `parse` rejects separators, dots and non-ASCII,
+//! so no attacker-controlled segment reaches a bundle lookup.
 //!
-//! Shape validity is deliberately *not* the same thing as being enabled on this
-//! site. `Locale::parse("ja")` succeeds even on a site that only ships English —
-//! whether a locale is actually available is runtime configuration owned by the
-//! admin (`site_config.enabled_locales`), resolved above the domain layer. Keeping
-//! the roster out of the type is what allows a language pack to be uploaded at
-//! runtime without a recompile, if that is ever built (see docs/i18n.md).
+//! Shape validity is NOT availability: `parse("ja")` succeeds on an
+//! English-only site. The enabled roster is runtime config, resolved above this
+//! layer, which is what would let a language pack be uploaded without a rebuild.
 
 use std::fmt;
 

@@ -107,7 +107,6 @@
       {% include "default/templates/partials/sidebar_left.html" %}
     </aside>
 
-    {# Main page area #}
     <div class="fr-page">
       <div class="fr-page-inner {% block page_inner_class %}{% endblock %}">
 
@@ -133,7 +132,6 @@
 
   {% include "default/templates/partials/footer.html" %}
 
-  {# Mobile bottom navigation #}
   {% block bottom_nav %}
   <nav class="fr-bottom-nav d-lg-none" aria-label="{{ t(k='ui-mobile-navigation') }}">
     <a href="/" class="fr-bn-item" aria-label="{{ t(k='ui-home') }}">

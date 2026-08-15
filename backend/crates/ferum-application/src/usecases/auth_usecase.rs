@@ -161,20 +161,13 @@ impl AuthUseCase {
                 .await;
         }
 
-        // Opt this account in to notification email, explicitly.
+        // Writing the keys EXPLICITLY here is what separates new members from
+        // existing ones: an absent key reads as "off", and pre-existing accounts
+        // hold `{}`. Defaulting a missing key to "on" instead would mail the
+        // whole existing membership on first deploy.
         //
-        // **Writing the row here is the entire mechanism that separates new members
-        // from existing ones.** `EmailNotificationPrefs::from_json` reads an absent
-        // key as "off", and every account that predates this feature has `{}` — so
-        // they stay silent until they choose otherwise, while anyone signing up from
-        // now on gets the behaviour a forum is expected to have. The alternative,
-        // reading a missing key as "on", would mail the entire existing membership on
-        // the first deploy over something none of them agreed to; a spam-complaint
-        // spike is the one mistake in this feature that cannot be taken back.
-        //
-        // Best-effort: a failure here must not fail a registration that has already
-        // created the account and assigned its roles. The cost of losing it is that
-        // the member sees the toggles off in /account, which they can fix.
+        // Best-effort — the account and its roles already exist, and the only
+        // cost of losing this is toggles the member can set themselves.
         let prefs = ferum_domain::models::UserPreferences {
             user_id: user.id,
             email_notifications: ferum_domain::models::EmailNotificationPrefs::OPTED_IN.to_json(),

@@ -79,8 +79,8 @@ impl RateLimiter for InMemoryRateLimiter {
     }
 }
 
-// ─── NullRateLimiter — disabled for dev ───────────────────────────────────────
-
+/// Allows everything. Selected when `RATE_LIMIT_ENABLED=false`, which is the
+/// dev profile — never a production one.
 pub struct NullRateLimiter;
 
 #[async_trait]

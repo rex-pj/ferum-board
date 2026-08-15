@@ -5,7 +5,6 @@ use validator::Validate;
 
 use ferum_domain::models::plugin::{Plugin, PluginLog};
 
-// ─── Response types ───────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct PluginListItem {
@@ -125,7 +124,6 @@ impl From<PluginLog> for PluginLogResponse {
     }
 }
 
-// ─── Request types ────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct ConfigurePluginRequest {
@@ -177,7 +175,7 @@ pub struct DebugHookResponse {
 
 #[derive(Serialize)]
 pub struct ActiveSlotsResponse {
-    /// Map of slot_name → Vec<slot entries>
+    /// Map of slot_name → `Vec<slot entries>`
     pub slots: std::collections::HashMap<String, Vec<SlotEntry>>,
 }
 

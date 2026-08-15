@@ -224,7 +224,7 @@ impl PluginUseCase {
     ///   - Sets status = Active
     ///   - Registers hooks from manifest into plugin_hooks table
     ///   - Registers UI slots from manifest into plugin_ui_slots table (Tier 3)
-    ///   - Registers webhooks from manifest [[webhooks]] sections (Tier 1)
+    ///   - Registers webhooks from manifest `[[webhooks]]` sections (Tier 1)
     ///   - Calls plugin_runtime.reload_plugin() to refresh in-memory dispatch table
     pub async fn activate(&self, actor: &AuthUser, slug: &str) -> Result<Plugin, AppError> {
         PermissionChecker::can_manage_plugins(actor)?;
@@ -249,7 +249,7 @@ impl PluginUseCase {
         // tier — in practice Script plugins are the ones that declare them.
         self.register_ui_slots_from_manifest(&plugin).await?;
 
-        // Tier 1: register webhooks from manifest [[webhooks]] sections
+        // Tier 1: register webhooks from manifest `[[webhooks]]` sections
         if plugin.tier == PluginTier::Manifest {
             self.register_manifest_webhooks(&plugin).await?;
         }
@@ -748,17 +748,14 @@ fn manifest_ui_slots(
         .collect()
 }
 
-/// Build the starting config from `config_schema.properties.*.default`.
+/// Builds the starting config from `config_schema.properties.*.default`.
 ///
-/// One level deep, deliberately: a `default` on a nested property inside an
-/// object-typed field would have to be merged into whatever the parent's own
-/// `default` already contains, and two sources writing the same path is how a
-/// seeded config ends up disagreeing with itself. A field that wants a
-/// structured starting value declares it whole, on that field.
+/// **One level deep**: a nested `default` would have to merge into the parent's
+/// own, and two sources writing one path is how a seeded config disagrees with
+/// itself. A structured starting value is declared whole, on its field.
 ///
-/// Only what the manifest actually declares is written — a property with no
-/// `default` stays absent rather than becoming `null`, which for a plugin
-/// reading `Ferum.config.x` are two different answers.
+/// A property without a `default` stays ABSENT, not `null` — to a plugin
+/// reading `Ferum.config.x` those are different answers.
 fn config_defaults_from_schema(manifest: &serde_json::Value) -> serde_json::Value {
     let properties = manifest
         .get("config_schema")

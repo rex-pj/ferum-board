@@ -12,6 +12,19 @@ members = [
     "tests/web",
 ]
 resolver = "2"
+# So a bare `cargo run` / `cargo build` produces the server rather than all ten
+# members.
+#
+# IT ALSO NARROWS WHAT `cargo test` AND `cargo clippy` SELECT, and that failure
+# is silent because it looks like success. Every real suite lives in a separate
+# member under `tests/`, so a bare `cargo test` runs ferum-web's single unit
+# test and prints `ok`; a bare `cargo clippy -- -D warnings` lints that one
+# crate and exits 0. That is how roughly 60 warnings once accumulated across the
+# other nine crates while the command in everyone's terminal said the workspace
+# was clean.
+#
+# ALWAYS PASS `--workspace` for tests and lints. CI does — see the two comments
+# saying so in .github/workflows/ci.yml.
 default-members = ["crates/ferum-web"]
 
 # Single source of truth for every third-party version in the workspace. Member
@@ -201,6 +214,12 @@ opt-level = 1
 # code still carry file/line.
 debug = false
 
+# This is what ships. It is also, deliberately, the slowest thing in the repo to
+# build: `lto = "fat"` with one codegen unit serialises codegen for the whole
+# program, measured at 859s of a 27m29s build. That trade is justified in full
+# under [profile.release-fast] below — read it before changing either key here.
+# When you want optimised behaviour now, build `release-fast` instead of
+# weakening this.
 [profile.release]
 opt-level = 3
 lto = "fat"          # whole-program inlining across crates; built rarely, run for weeks
@@ -226,7 +245,7 @@ strip = true         # strip symbols — smaller binary, faster page-in
 # WHY THIS IS THE SLOW PART: `cargo build --timings` on the fat-LTO build put
 # the final `ferum-web` binary unit at 859s — over half of a 27m29s build —
 # because `lto = "fat"` + `codegen-units = 1` deliberately serialises codegen
-# for the whole 393-crate program into one unit. Thin LTO keeps most
+# for the whole ~400-crate program into one unit. Thin LTO keeps most
 # cross-crate inlining while letting those units run in parallel.
 #
 # TRADE-OFF: expect a few percent off peak throughput versus the `release`

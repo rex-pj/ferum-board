@@ -1,40 +1,14 @@
 {% extends "default/templates/base.html" %}
 {#
-  Ferum Sumi — base.html
-  ─────────────────────────────────────────────────────────────────────────────
-  Japanese-inspired skin: washi paper background, sumi ink type, a vermillion
-  hanko accent.
-  (`{% extends %}` is kept on line 1: Tera requires it to be the first tag.)
+  Ferum Sumi — Japanese-inspired skin (washi paper, sumi ink, hanko accent).
 
-  WHY THIS EXTENDS INSTEAD OF CLONING
-  ─────────────────────────────────────────────────────────────────────────────
-  This file used to be a full copy of the default <head>/<body> — the drift the
-  ferum-review base.html comment warns about, and it had indeed drifted,
-  silently losing:
+  EXTENDS the default base rather than cloning it. A previous full copy drifted
+  and silently lost the i18n meta tag, Open Graph tags, hreflang, asset
+  versioning and member font/density preferences. Keep only sumi-specific
+  overrides here.
 
-    * <meta name="ferum-i18n">, which is the ONLY way `Ferum.t()` reaches the
-      client. Without it every `js-*` string rendered as its raw key.
-    * the meta_social block, so Open Graph and Twitter Card tags were absent
-      entirely (NF-SE-04).
-    * hreflang alternates, so a multi-language forum lost its SEO pairing.
-    * ?v={{ asset_version() }} on the theme stylesheets, so CSS fixes could sit
-      behind a stale cache for a day.
-    * the `t()` calls in the mobile bottom nav — it was hardcoded English.
-    * data-prefs-ssr / data-font-size / data-layout on <html>, so a logged-in
-      member's font-size and density preferences were ignored.
-    * ferum-api.js loaded blocking in <head>. This theme deferred it to the end
-      of <body>, which breaks the ordering plugin slot elements rely on (see the
-      comment on that script tag in the default base).
-
-  Inheriting means those cannot drift again. Only the genuinely sumi-specific
-  pieces live here.
-
-  `data-bs-theme` is NOT set here: theme.json declares "color_scheme": "light",
-  which the server reads into `theme_bs_theme`, and the default base applies it
-  — while still letting a member's own light/dark preference win.
-
-  Blocks available from the default base: title, description, meta_social,
-  head_extra, topbar, layout_class, page_inner_class, main_class, content,
+  Blocks from the default base: title, description, meta_social, head_extra,
+  topbar, layout_class, page_inner_class, main_class, content,
   right_sidebar_wrap, bottom_nav, scripts.
 #}
 

@@ -1,59 +1,13 @@
-//! Google Cloud Storage backend, spoken natively over the XML API.
+//! Google Cloud Storage over the XML API, hand-rolled.
 //!
-//! # Why this is hand-rolled rather than a client library
+//! Published clients pull 148-178 crates and force `reqwest` 0.13 against our
+//! 0.12 — the duplicate-major failure the workspace dependency table exists to
+//! prevent — for a port that is one PUT and one DELETE. XML over JSON because
+//! its object endpoint *is* the public URL and it stores metadata from request
+//! headers. OAuth over HMAC keys because it enables keyless Workload Identity.
 //!
-//! The `StorageService` port is four methods, two of which are pure string
-//! manipulation. The remaining two are one `PUT` and one `DELETE` against a
-//! documented REST endpoint. Measured against that, every published client was
-//! disproportionate — `cargo tree` on 2026-08-03, compared name-by-name against
-//! this workspace's `Cargo.lock`:
-//!
-//! | Crate                          | Crates in tree | Names absent from this workspace | Duplicate majors forced |
-//! | ------------------------------ | -------------- | -------------------------------- | ----------------------- |
-//! | `google-cloud-storage` 1.17    | 178            | 27 (incl. tonic, prost, OpenTelemetry) | `reqwest` 0.13 vs our 0.12 |
-//! | `gcloud-storage` 1.3           | 148            | 8                                | `reqwest` 0.13 vs 0.12, `jsonwebtoken` 10 vs 9 |
-//! | this module                    | 0              | 0                                | none                    |
-//!
-//! A duplicate major of `reqwest` is precisely the failure the workspace
-//! dependency table in `backend/Cargo.toml` exists to prevent: two builds of one
-//! library in one binary, no warning. Both clients also carry a gRPC or
-//! middleware stack for API surface this application will never call.
-//!
-//! Everything below is built from crates `ferum-infrastructure` already links:
-//! `reqwest` for HTTP, `jsonwebtoken` for the RS256 assertion (its
-//! `EncodingKey::from_rsa_pem` accepts the PKCS#8 `-----BEGIN PRIVATE KEY-----`
-//! body of a service-account JSON), `serde_json`, `chrono`, `tokio`. The only
-//! addition is `urlencoding`, already in `[workspace.dependencies]` and already
-//! compiled for `ferum-web`.
-//!
-//! # Why the XML API and not the JSON API
-//!
-//! The XML API accepts an OAuth 2.0 bearer token exactly like the JSON API, but
-//! its object endpoint *is* the public path-style URL, and it stores
-//! `Content-Type` and `Cache-Control` request headers as object metadata
-//! directly. The JSON API's `uploadType=media` would need a second
-//! `multipart/related` body just to attach the same metadata.
-//!
-//! HMAC interoperability keys are deliberately not used here. They work — see
-//! `S3StorageService`, which can be pointed at `https://storage.googleapis.com`
-//! — but they are long-lived static secrets. Going through OAuth is what makes
-//! keyless Workload Identity on GKE and Cloud Run possible.
-//!
-//! # What is NOT covered by an automated test
-//!
-//! `public_url`/`key_from_url`, credential parsing and object-name mapping are
-//! unit-tested in `backend/tests/infrastructure/src/storage/gcs.rs`, and both
-//! URL round trips are pinned across the whole configuration matrix in
-//! `storage/file_url_contract.rs`.
-//!
-//! Everything that makes a request is **compile-checked only**: `put`, `delete`,
-//! token acquisition for all three credential types, and the `401` refresh-and-
-//! retry in [`GcsStorageService::send_authorized`]. There is no fake-gcs-server
-//! or testcontainers harness in this repository, so no test observes a real
-//! request or response. Covering the retry specifically would need
-//! [`XML_API_ROOT`] to be injectable — test-only plumbing in a production
-//! constructor — which is a worse trade than saying plainly that it is
-//! unverified.
+//! **Anything issuing a request is compile-checked only** — `put`, `delete`,
+//! token acquisition and the 401 retry have no test harness in this repository.
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -241,6 +195,9 @@ struct TokenResponse {
 
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
+/// `StorageService` over the GCS XML API. See the module header for why this is
+/// hand-rolled rather than a published client, and for the `allUsers` binding
+/// the bucket needs.
 pub struct GcsStorageService {
     http: Client,
     bucket: String,
@@ -440,25 +397,14 @@ impl GcsStorageService {
         }
     }
 
-    /// Sends an authorized request, retrying **once** with a fresh token if the
-    /// first attempt comes back `401`.
+    /// Sends an authorized request, retrying **once** on `401` with a fresh
+    /// token — a cached token can die early (service account disabled, clock
+    /// skew), and without this uploads fail for up to an hour, then heal for no
+    /// visible reason.
     ///
-    /// A cached token is trusted until its stated expiry, which is normally
-    /// right and occasionally not: deleting or disabling the service account
-    /// kills the token immediately, and clock skew can put us on the wrong side
-    /// of an expiry we thought we had a minute of slack on. Without this, the
-    /// process keeps presenting a token it has every reason to believe is valid
-    /// and every upload fails until the clock says it expired — up to an hour of
-    /// broken uploads that heal themselves for no visible reason.
-    ///
-    /// Only `401`. A `403` is an authorization decision about a token the
-    /// endpoint accepted — the bucket IAM is wrong, or the scope is too narrow —
-    /// and retrying with an identical fresh token would just double the request
-    /// count on every genuine permission failure.
-    ///
-    /// `build` is called per attempt rather than the request being cloned, so
-    /// the second attempt carries the new bearer token rather than re-sending
-    /// the dead one.
+    /// `401` only: a `403` means the token was accepted and the IAM is wrong, so
+    /// retrying would double the request count on every permission failure.
+    /// `build` runs per attempt so the retry carries the new token.
     async fn send_authorized<F>(&self, op: &str, build: F) -> Result<reqwest::Response, AppError>
     where
         F: Fn(&Client, &str) -> reqwest::RequestBuilder,
@@ -560,17 +506,10 @@ impl GcsStorageService {
 
 /// Is this `CDN_BASE_URL` a Google Storage host carrying no bucket?
 ///
-/// That one shape cannot work, and fails in the worst available way. `public_url`
-/// is `{base}/{object name}`, so a base of `https://storage.googleapis.com`
-/// yields `https://storage.googleapis.com/{prefix}/{key}` — and in a path-style
-/// GCS URL the **first path segment is the bucket**. The result is not a broken
-/// link to our bucket; it is a working link to a *different* bucket, named after
-/// our `GCS_PREFIX`, belonging to whoever registered it.
-///
-/// Every other Google-host shape is fine and must not be flagged:
-/// `https://storage.googleapis.com/our-bucket` (path-style with the bucket) and
-/// `https://our-bucket.storage.googleapis.com` (virtual-hosted) both already
-/// name the bucket, so `{base}/{object name}` is exactly right.
+/// The one shape that fails dangerously: `public_url` is `{base}/{object name}`,
+/// and the first path segment of a path-style GCS URL **is the bucket** — so a
+/// bucket-less base yields a working link to somebody else's bucket named after
+/// our `GCS_PREFIX`. Bases that already name the bucket are fine.
 fn is_bucketless_gcs_host(base: &str) -> bool {
     let authority = base
         .strip_prefix("https://")
@@ -663,29 +602,14 @@ impl StorageService for GcsStorageService {
     fn key_from_url(&self, url: &str) -> Option<String> {
         let url = without_query_or_fragment(url);
 
-        // 1. Google-owned shapes for *this* bucket: path-style, virtual-hosted,
-        //    the console's storage.cloud.google.com links, the mTLS endpoints and
-        //    the custom-domain CNAME target. Anchoring each on the bucket name is
-        //    what stops a URL pointing at somebody else's bucket from being
-        //    claimed as ours. Signed URLs land here too — their signature lives
-        //    in the query string, already removed above.
+        // 1. Google-owned shapes for *this* bucket, each anchored on the bucket
+        //    name so another tenant's URL is never claimed as ours. Signed URLs
+        //    land here too, their query string already stripped.
         //
-        //    BEFORE the CDN, because these are the more specific bases: each one
-        //    names the bucket, while a CDN base names only a host. A
-        //    `CDN_BASE_URL` of `https://storage.googleapis.com` is a strict
-        //    prefix of every path-style entry here, so consulting the CDN first
-        //    made the genuine
-        //    `https://storage.googleapis.com/{bucket}/{prefix}/{key}` resolve to
-        //    an object name beginning with the *bucket*, fail the prefix strip,
-        //    and come back `None` — the same family as the longest-base-first
-        //    rule in `S3StorageService`, and just as quiet.
-        //
-        //    HONEST NOTE ON WHAT GUARDS WHAT: that base no longer survives
-        //    construction (`is_bucketless_gcs_host` drops it), so this ordering
-        //    is defence in depth rather than the primary fix, and reversing it
-        //    on its own does not fail any test — verified, not assumed. It stays
-        //    because "most specific base first" is the rule that is true
-        //    independently of which bases the constructor happens to admit.
+        //    BEFORE the CDN: these name the bucket, a CDN base names only a
+        //    host, and "most specific base first" holds regardless of which
+        //    bases the constructor admits. Defence in depth — the dangerous
+        //    bucket-less base is already rejected at construction.
         if let Some(object_name) = self
             .native_prefixes
             .iter()

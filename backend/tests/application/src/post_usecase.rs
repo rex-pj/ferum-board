@@ -562,15 +562,12 @@ mod attachment_keys {
 
 // ─── Attachment promotion ─────────────────────────────────────────────────────
 //
-// A staged attachment's bytes live in the database, never in the object store:
-// while `ref_count == 0` it is authorized per viewer, and that is unenforceable
-// once the object is world-readable. They move outward only when a post
-// publishes them, via `promote_attachment`.
+// Staged bytes stay in the database: at `ref_count == 0` the file is authorized
+// per viewer, which is unenforceable once the object is world-readable.
 //
-// Driven through `create` rather than by calling the method directly, so these
-// also pin that promotion happens on the real publish path and only after
-// `increment_ref` succeeds. `promote_attachment` stays private, which is what it
-// should be — it is not something a handler may call.
+// Driven through `create`, not by calling `promote_attachment` directly, so
+// these also pin that promotion happens on the real publish path after
+// `increment_ref` — and it stays private, as a handler must not call it.
 
 use std::sync::Mutex;
 
@@ -773,17 +770,14 @@ async fn database_storage_promotes_nothing() {
     );
 }
 
-/// The case that made "is `public_url` absolute?" an unsafe way to ask "is there
-/// an object store?".
+/// Why "is `public_url` absolute?" is an unsafe way to ask "is there an object
+/// store?".
 ///
-/// `DatabaseStorageService` behind `CDN_BASE_URL` mints
-/// `https://cdn.example.com/files/{key}` — absolute, while the bytes are still
-/// in the row. Promoting on that basis writes them back into the row they were
-/// just read from and then clears it, **destroying the only copy**, and leaves
-/// `/files/` redirecting to a CDN that fetches `/files/` straight back.
+/// Database storage behind `CDN_BASE_URL` mints an absolute URL while the bytes
+/// are still in the row, so promoting on that basis writes them back into the
+/// row it just read and clears it — **destroying the only copy**.
 ///
-/// Presence of staging is now the only signal, so an absolute URL alone must not
-/// trigger anything.
+/// `staging_storage` is the only valid signal.
 #[tokio::test]
 async fn database_storage_with_a_cdn_promotes_nothing() {
     let journal = publish_post_with(
