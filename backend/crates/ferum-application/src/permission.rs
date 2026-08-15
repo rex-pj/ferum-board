@@ -230,6 +230,7 @@ impl PermissionChecker {
     // ─── Moderation (cross-category) ─────────────────────────────────────────
 
     pub fn can_view_reports(user: &AuthUser, category_id: Option<Uuid>) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         let ok = match category_id {
             Some(cat_id) => user.has_perm_in(perm::MOD_VIEW_REPORTS, cat_id),
             // No specific category — allow if the user holds this permission
@@ -244,6 +245,7 @@ impl PermissionChecker {
     }
 
     pub fn can_resolve_report(user: &AuthUser, category_id: Option<Uuid>) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         let ok = match category_id {
             Some(cat_id) => user.has_perm_in(perm::MOD_RESOLVE, cat_id),
             None => user.has_perm_any_category(perm::MOD_RESOLVE),
@@ -256,6 +258,7 @@ impl PermissionChecker {
     }
 
     pub fn can_warn(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::MOD_WARN) {
             Ok(())
         } else {
@@ -264,6 +267,7 @@ impl PermissionChecker {
     }
 
     pub fn can_ban_temp(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::MOD_BAN_TEMP) {
             Ok(())
         } else {
@@ -272,6 +276,7 @@ impl PermissionChecker {
     }
 
     pub fn can_ban_permanent(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_BAN_PERMANENT) {
             Ok(())
         } else {
@@ -305,8 +310,19 @@ impl PermissionChecker {
     }
 
     // ─── Admin ────────────────────────────────────────────────────────────────
+    //
+    // These eleven checks (six here, five above) once omitted `require_not_banned`,
+    // inverting the module rule at the top of this file: ordinary posting was
+    // refused for a banned user while every administrative action stayed open, so a
+    // banned admin could unban themselves. Middleware resolves the flag but does not
+    // reject, and neither `require_admin` nor `require_moderator` looks at it, so
+    // there was no second line.
+    //
+    // The session deliberately stays alive — /account is where a banned user reads
+    // why. It is the capability that is withdrawn, not the login.
 
     pub fn can_manage_users(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_USERS) {
             Ok(())
         } else {
@@ -315,6 +331,7 @@ impl PermissionChecker {
     }
 
     pub fn can_manage_categories(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_CATEGORIES) {
             Ok(())
         } else {
@@ -323,6 +340,7 @@ impl PermissionChecker {
     }
 
     pub fn can_manage_roles(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_ROLES) {
             Ok(())
         } else {
@@ -331,6 +349,7 @@ impl PermissionChecker {
     }
 
     pub fn can_manage_config(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_CONFIG) {
             Ok(())
         } else {
@@ -339,6 +358,7 @@ impl PermissionChecker {
     }
 
     pub fn can_manage_webhooks(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_WEBHOOKS) {
             Ok(())
         } else {
@@ -347,6 +367,7 @@ impl PermissionChecker {
     }
 
     pub fn can_manage_plugins(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_PLUGINS) {
             Ok(())
         } else {

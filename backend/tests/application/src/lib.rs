@@ -8,6 +8,7 @@ mod follow_usecase;
 mod moderation_enrichment;
 mod moderation_usecase;
 mod notification_usecase;
+mod permission;
 mod plugin_usecase;
 mod post_usecase;
 mod product_usecase;

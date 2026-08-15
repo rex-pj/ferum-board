@@ -378,6 +378,14 @@ impl AdminUseCase {
         banned_until: Option<DateTime<Utc>>,
     ) -> Result<(), AppError> {
         PermissionChecker::can_ban_permanent(actor)?;
+
+        // `ModerationUseCase` refuses this for temp bans; the permanent path had no
+        // equivalent. Now that a ban withdraws administrative capability, a sole
+        // admin banning themselves cannot get back in — login refuses banned users.
+        if id == actor.id {
+            return Err(AppError::forbidden("cannot_moderate_self"));
+        }
+
         self.users.find_by_id(id).await?.or_not_found()?;
 
         let hook_ctx = HookContext {
