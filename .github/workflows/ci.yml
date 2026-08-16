@@ -248,7 +248,7 @@ jobs:
           file: ./Dockerfile
           push: true
           build-args: |
-            FEATURES=s3
+            FEATURES=r2
           # Two tags: the SHA is what the VM actually pulls (immutable, so a
           # rollback is just re-deploying an older tag), and `latest` is a
           # convenience pointer for manual work on the box.

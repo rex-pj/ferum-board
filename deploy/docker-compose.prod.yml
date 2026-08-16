@@ -5,12 +5,11 @@
 #
 # `--env-file` is REQUIRED: `env_file:` only feeds variables INTO a container,
 # while the `${...}` below are resolved by Compose itself. Omit it and
-# DB_PASSWORD / S3_ACCESS_KEY / S3_SECRET_KEY expand to empty, so Postgres and
-# MinIO both refuse to start.
+# DB_PASSWORD expands to empty, so Postgres refuses to start.
 #
-# Must be present in .env.prod: APP_IMAGE, DB_PASSWORD, S3_ACCESS_KEY,
-# S3_SECRET_KEY, optionally S3_BUCKET. Service addresses live in `environment:`
-# instead, which wins over `env_file:`. Nothing here names a domain or registry.
+# Must be present in .env.prod: APP_IMAGE, DB_PASSWORD, and the R2_* set (see
+# `app.environment` below). Service addresses live in `environment:` instead,
+# which wins over `env_file:`. Nothing here names a domain or registry.
 
 services:
   app:
@@ -24,10 +23,19 @@ services:
     environment:
       DATABASE_URL: postgresql://forum:${DB_PASSWORD}@postgres:5432/forum
       REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_BUCKET: ${S3_BUCKET:-forum-uploads}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # Object storage is Cloudflare R2, configured entirely from .env.prod
+      # (R2_ACCOUNT_ID / R2_BUCKET / R2_ACCESS_KEY / R2_SECRET_KEY /
+      # R2_PUBLIC_BASE_URL) — nothing here, because none of it is a service
+      # address. The image MUST be built with `--features r2`, else those
+      # variables are ignored and every upload lands in PostgreSQL instead.
+      #
+      # To go back to the self-hosted MinIO below, uncomment these four AND the
+      # minio/minio-init services — R2 wins the precedence (R2 > GCS > S3 > db),
+      # so leaving both configured silently ignores these.
+      # S3_ENDPOINT: http://minio:9000
+      # S3_BUCKET: ${S3_BUCKET:-forum-uploads}
+      # S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      # S3_SECRET_KEY: ${S3_SECRET_KEY}
       RATE_LIMIT_ENABLED: "true"
       # MUST stay below the postgres service's max_connections (30). The code
       # default is 40, which would exhaust it — and with no DATABASE_READ_URL the
@@ -46,9 +54,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      # Waiting on minio-init rather than minio: the app never creates a bucket,
-      # so starting once MinIO is merely *healthy* races the bucket's creation.
-      minio-init: { condition: service_completed_successfully }
+      # With MinIO: wait on minio-init rather than minio — the app never creates
+      # a bucket, so starting once MinIO is merely *healthy* races its creation.
+      # minio-init: { condition: service_completed_successfully }
     healthcheck:
       # /health/ready, not /health: this decides whether the container is usable,
       # and /health answers 200 as long as the process is alive.
@@ -61,8 +69,8 @@ services:
     # ─── Memory limits ──────────────────────────────────────────────────────
     # Every service carries one, else a leak anywhere takes the 4 GB host down
     # and the OOM killer picks Postgres — the only process holding data that
-    # cannot be rebuilt. The five total 2.6 GB (768m + 1g + 192m + 384m + 256m);
-    # the ~1.4 GB left is page cache, not slack, and keeps reads off the disk.
+    # cannot be rebuilt. The four total 2.2 GB (768m + 1g + 192m + 256m); the
+    # rest is page cache, not slack, and keeps reads off the disk.
     deploy:
       resources:
         limits:
@@ -138,44 +146,55 @@ services:
         limits:
           memory: 192m
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
-    volumes:
-      - miniodata:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 384m
-
-  # One-shot: create the bucket and make it anonymously readable.
+  # No object-store service runs by default: uploads go to Cloudflare R2, which
+  # is external. The bucket must serve anonymous reads — upload URLs are written
+  # into users.avatar_url, site_config and stored post HTML, and the browser
+  # fetches them directly, so no request reaches the app and stored HTML cannot
+  # be re-signed at render time. Bind a custom domain to the bucket and point
+  # R2_PUBLIC_BASE_URL at it; /health/ready reports "uploads": "readable" once
+  # that works.
   #
-  # Public read is required, not a shortcut. Upload URLs are written into
-  # users.avatar_url, site_config and stored post HTML, and the browser fetches
-  # them directly — no request reaches the app, and stored HTML cannot be
-  # re-signed at render time. Only the uploads bucket should be public.
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio: { condition: service_healthy }
-    environment:
-      S3_BUCKET: ${S3_BUCKET:-forum-uploads}
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
-      mc mb --ignore-existing local/$${S3_BUCKET} &&
-      mc anonymous set download local/$${S3_BUCKET}
-      "
-    restart: "no"
+  # The self-hosted alternative, kept for a deployment that wants no external
+  # dependency. To use it: uncomment both services, the `miniodata` volume, the
+  # `minio-init` line under app.depends_on, the four S3_* variables under
+  # app.environment, and rebuild the image with `--features s3` instead of `r2`.
+  # Budget 384m for it — the memory-limit comment on `app` counts four services.
+  #
+  # minio:
+  #   image: minio/minio:latest
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+  #     MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+  #   volumes:
+  #     - miniodata:/data
+  #   healthcheck:
+  #     test: ["CMD", "mc", "ready", "local"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 384m
+  #
+  # One-shot: create the bucket and make it anonymously readable, for the same
+  # reason R2's bucket must be — the browser fetches upload URLs directly.
+  #
+  # minio-init:
+  #   image: minio/mc:latest
+  #   depends_on:
+  #     minio: { condition: service_healthy }
+  #   environment:
+  #     S3_BUCKET: ${S3_BUCKET:-forum-uploads}
+  #   entrypoint: >
+  #     /bin/sh -c "
+  #     mc alias set local http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
+  #     mc mb --ignore-existing local/$${S3_BUCKET} &&
+  #     mc anonymous set download local/$${S3_BUCKET}
+  #     "
+  #   restart: "no"
 
   nginx:
     image: nginx:alpine
@@ -207,7 +226,7 @@ services:
 volumes:
   pgdata:
   redisdata:
-  miniodata:
+  # miniodata:
   plugins:
   themes:
   certbot-conf:
