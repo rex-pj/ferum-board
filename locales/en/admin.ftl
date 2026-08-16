@@ -228,6 +228,22 @@ adm-filter-by-name-or-slug = Filter by name or slug…
 adm-forum = Forum
 adm-forum-index = Forum Index
 
+# Image processing (Content Policy tab)
+adm-image-processing = Image Processing
+adm-compress-uploaded-images = Compress uploaded images
+adm-image-processing-help =
+    Uploads are re-encoded, downscaled, and stripped of metadata — including GPS
+    coordinates from phone photos. Avatars, covers and thumbnails are also cropped
+    to their display frame. Turning this off stores uploads exactly as received.
+adm-max-image-long-edge = Maximum long edge
+adm-max-image-long-edge-help =
+    Applies to post attachments and catalogue images, which are never cropped.
+    Smaller saves space; below about 1600 px, text in screenshots stops being legible.
+adm-jpeg-quality = JPEG quality
+adm-jpeg-quality-help =
+    82 is a good default. Above 90 the files grow quickly for little visible gain;
+    below 70 photographs start to show artefacts.
+
 adm-localization = Localization
 adm-reporting-timezone = Reporting timezone
 adm-reporting-timezone-help =

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
-use crate::utils::{read_image_field, validate_upload_image, ImageKind};
+use crate::utils::{validate_upload_image, ImageKind};
 use crate::view_models::thread::{
     MarkSolvedRequest, MoveThreadRequest, ThreadListQuery, ThreadResponse,
 };
@@ -314,7 +314,9 @@ pub async fn create_thread(
     if let Some((data, content_type)) = thumbnail {
         let url = state
             .thread
-            .set_thumbnail(actor, thread.id, data, content_type)
+            // No crop: this arrives inside the compose form, which has no
+            // cropper. The dedicated /thumbnail endpoint is the one that does.
+            .set_thumbnail(actor, thread.id, data, content_type, None)
             .await?;
         thread.thumbnail_url = Some(url);
     }
@@ -433,7 +435,7 @@ pub async fn update_thread(
     if let Some((data, content_type)) = thumbnail {
         let url = state
             .thread
-            .set_thumbnail(actor, id, data, content_type)
+            .set_thumbnail(actor, id, data, content_type, None)
             .await?;
         thread.thumbnail_url = Some(url);
     }
@@ -519,10 +521,11 @@ pub async fn upload_thumbnail(
     // No pre-check here: unlike create/update this endpoint's very next call is
     // `set_thumbnail`, so the use case rejects a bad file before anything is
     // written and a second copy of the rules would buy nothing.
-    let (data, content_type) = read_image_field(&mut multipart, "file").await?;
+    let (data, content_type, crop) =
+        crate::utils::read_image_field_with_crop(&mut multipart, "file").await?;
     let url = state
         .thread
-        .set_thumbnail(actor, id, data, content_type)
+        .set_thumbnail(actor, id, data, content_type, crop)
         .await?;
     Ok(Json(
         serde_json::json!({ "data": { "thumbnail_url": url } }),

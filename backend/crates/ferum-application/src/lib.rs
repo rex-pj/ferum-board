@@ -2,6 +2,7 @@ pub mod constants;
 pub mod dto;
 pub mod event_bus;
 pub use event_bus::EventPublisher;
+pub mod image_pipeline;
 pub mod permission;
 pub mod ports;
 pub mod shared;

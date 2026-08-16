@@ -1,4 +1,5 @@
 import { api } from './api';
+import { shrinkForUpload } from './downscale';
 import { t } from './i18n';
 
 export async function previewMarkdown(content: string): Promise<string> {
@@ -9,8 +10,12 @@ export async function previewMarkdown(content: string): Promise<string> {
 }
 
 export async function uploadAttachment(file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  // Best-effort and never fatal — see `shrinkForUpload`. A phone photo goes out
+  // at roughly a quarter the bytes; anything it cannot handle is uploaded as
+  // picked, which is what happened before this call existed.
+  const payload = await shrinkForUpload(file);
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', payload);
   const res = await api.postForm('/api/posts/attachments', formData);
   if (res.ok) {
     const data = await res.json().catch(() => ({})) as { data?: { url?: string } };

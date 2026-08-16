@@ -203,6 +203,14 @@ error-thumbnail-invalid-type = Thumbnails must be JPEG, PNG, WebP, or GIF images
 error-thumbnail-too-large = Thumbnails must be { $limit_mb } MB or smaller.
 error-media-invalid-type = Media must be a JPEG, PNG, WebP, or GIF image.
 
+# Raised by the upload image pipeline. `image-too-many-pixels` is deliberately
+# phrased in megapixels rather than MB: it fires on files well under every size
+# limit, so repeating a size here would read as a contradiction.
+error-image-too-many-pixels =
+    That image is too large to process — it must be under { $max_mp } megapixels.
+error-image-decode-failed = That image couldn't be read. It may be damaged or in an unsupported format.
+error-image-crop-invalid = That crop selection doesn't cover any part of the image.
+
 ## ─── Webhooks (validation) ───────────────────────────────────────────────────
 
 error-webhook-events-required = Choose at least one event to send.

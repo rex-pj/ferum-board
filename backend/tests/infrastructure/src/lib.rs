@@ -12,6 +12,7 @@ mod cache;
 mod crypto;
 mod email;
 mod i18n;
+mod image;
 mod job_queue;
 mod notification;
 mod plugins;

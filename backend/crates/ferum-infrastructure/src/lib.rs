@@ -16,6 +16,8 @@ pub mod email;
 #[allow(ambiguous_associated_items)]
 pub mod entities;
 pub mod i18n;
+#[cfg(feature = "image_processing")]
+pub mod image;
 pub mod job_queue;
 pub mod jwt_token_service;
 pub mod notification;

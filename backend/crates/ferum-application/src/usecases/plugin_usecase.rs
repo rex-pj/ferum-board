@@ -29,6 +29,8 @@ pub struct PluginUseCase {
     pub storage: Arc<dyn StorageService>,
     pub jobs: Arc<dyn JobQueue>,
     plugins_dir: std::path::PathBuf,
+    /// `None` stores the uploaded bytes untouched — see `UserUseCase::images`.
+    pub images: Option<Arc<crate::image_pipeline::ImagePipeline>>,
 }
 
 impl PluginUseCase {
@@ -52,7 +54,13 @@ impl PluginUseCase {
             storage,
             jobs,
             plugins_dir,
+            images: None,
         }
+    }
+
+    pub fn with_images(mut self, images: Arc<crate::image_pipeline::ImagePipeline>) -> Self {
+        self.images = Some(images);
+        self
     }
 
     // ─── List / Get ───────────────────────────────────────────────────────────
@@ -435,6 +443,17 @@ impl PluginUseCase {
                 MAX_PLUGIN_MEDIA_BYTES / (1024 * 1024)
             )));
         }
+
+        // No crop: a plugin's markup decides its own layout, and this API
+        // carries no way for it to say what framing it wanted.
+        let (data, content_type) = crate::image_pipeline::apply(
+            self.images.as_ref(),
+            data,
+            content_type,
+            crate::image_pipeline::ImageTarget::PluginMedia,
+            None,
+        )
+        .await?;
 
         let size = data.len() as i64;
         let key = cas_key(&format!("plugin_{slug}"), &data, &content_type);

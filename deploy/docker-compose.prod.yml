@@ -23,19 +23,12 @@ services:
     environment:
       DATABASE_URL: postgresql://forum:${DB_PASSWORD}@postgres:5432/forum
       REDIS_URL: redis://redis:6379
-      # Object storage is Cloudflare R2, configured entirely from .env.prod
-      # (R2_ACCOUNT_ID / R2_BUCKET / R2_ACCESS_KEY / R2_SECRET_KEY /
-      # R2_PUBLIC_BASE_URL) — nothing here, because none of it is a service
-      # address. The image MUST be built with `--features r2`, else those
+      # No storage variables here: every backend's endpoint is an external host,
+      # so .env.prod carries the whole set (R2_*, or S3_*/GCS_*). Only addresses
+      # that depend on this compose network belong in `environment:`, which wins
+      # over `env_file:` and would silently shadow what .env.prod says.
+      # The image must be built with the matching cargo feature — without it the
       # variables are ignored and every upload lands in PostgreSQL instead.
-      #
-      # To go back to the self-hosted MinIO below, uncomment these four AND the
-      # minio/minio-init services — R2 wins the precedence (R2 > GCS > S3 > db),
-      # so leaving both configured silently ignores these.
-      # S3_ENDPOINT: http://minio:9000
-      # S3_BUCKET: ${S3_BUCKET:-forum-uploads}
-      # S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      # S3_SECRET_KEY: ${S3_SECRET_KEY}
       RATE_LIMIT_ENABLED: "true"
       # MUST stay below the postgres service's max_connections (30). The code
       # default is 40, which would exhaust it — and with no DATABASE_READ_URL the
@@ -54,9 +47,6 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      # With MinIO: wait on minio-init rather than minio — the app never creates
-      # a bucket, so starting once MinIO is merely *healthy* races its creation.
-      # minio-init: { condition: service_completed_successfully }
     healthcheck:
       # /health/ready, not /health: this decides whether the container is usable,
       # and /health answers 200 as long as the process is alive.
@@ -146,55 +136,12 @@ services:
         limits:
           memory: 192m
 
-  # No object-store service runs by default: uploads go to Cloudflare R2, which
-  # is external. The bucket must serve anonymous reads — upload URLs are written
-  # into users.avatar_url, site_config and stored post HTML, and the browser
-  # fetches them directly, so no request reaches the app and stored HTML cannot
-  # be re-signed at render time. Bind a custom domain to the bucket and point
-  # R2_PUBLIC_BASE_URL at it; /health/ready reports "uploads": "readable" once
-  # that works.
-  #
-  # The self-hosted alternative, kept for a deployment that wants no external
-  # dependency. To use it: uncomment both services, the `miniodata` volume, the
-  # `minio-init` line under app.depends_on, the four S3_* variables under
-  # app.environment, and rebuild the image with `--features s3` instead of `r2`.
-  # Budget 384m for it — the memory-limit comment on `app` counts four services.
-  #
-  # minio:
-  #   image: minio/minio:latest
-  #   command: server /data --console-address ":9001"
-  #   environment:
-  #     MINIO_ROOT_USER: ${S3_ACCESS_KEY}
-  #     MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
-  #   volumes:
-  #     - miniodata:/data
-  #   healthcheck:
-  #     test: ["CMD", "mc", "ready", "local"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 10
-  #   restart: unless-stopped
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 384m
-  #
-  # One-shot: create the bucket and make it anonymously readable, for the same
-  # reason R2's bucket must be — the browser fetches upload URLs directly.
-  #
-  # minio-init:
-  #   image: minio/mc:latest
-  #   depends_on:
-  #     minio: { condition: service_healthy }
-  #   environment:
-  #     S3_BUCKET: ${S3_BUCKET:-forum-uploads}
-  #   entrypoint: >
-  #     /bin/sh -c "
-  #     mc alias set local http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
-  #     mc mb --ignore-existing local/$${S3_BUCKET} &&
-  #     mc anonymous set download local/$${S3_BUCKET}
-  #     "
-  #   restart: "no"
+  # No object-store service here — uploads go to an external bucket (Cloudflare
+  # R2 today). It must serve ANONYMOUS reads: upload URLs are written into
+  # users.avatar_url, site_config and stored post HTML, and the browser fetches
+  # them directly, so no request reaches the app and stored HTML cannot be
+  # re-signed at render time. `/health/ready` reports "uploads": "readable" once
+  # that holds.
 
   nginx:
     image: nginx:alpine
@@ -226,7 +173,6 @@ services:
 volumes:
   pgdata:
   redisdata:
-  # miniodata:
   plugins:
   themes:
   certbot-conf:

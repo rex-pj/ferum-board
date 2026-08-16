@@ -209,6 +209,105 @@ unsetting it is not.
 
 ---
 
+## Image processing
+
+Uploads are decoded, EXIF-rotated, cropped where the layout fixes an aspect,
+downscaled and re-encoded before they are stored. Unlike everything else on this
+page these are **site_config keys, not environment variables** — they live at
+`/admin/settings` → Content Policy, and take effect on the next upload with no
+restart.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `image_processing_enabled` | `true` | Master switch. Off stores uploads exactly as received. |
+| `image_max_long_edge` | `2048` | Long-edge cap for images that are never cropped — post attachments, catalogue and plugin media. |
+| `image_jpeg_quality` | `82` | Quality for every lossy re-encode. Clamped to 40–100. |
+
+An **absent** row means enabled, not disabled: the seeder writes `true`, and an
+install predating these keys should not be silently opted out.
+
+Three sizes are **not** configurable, because they are frames the templates
+depend on rather than preferences: avatar 512×512, cover 1600×400, thumbnail
+1280×720 (`AVATAR_FRAME` / `COVER_FRAME` / `THUMBNAIL_FRAME` in
+`constants.rs`). The cropper widget's `aspect` attribute is written to match
+them; changing one without the other previews a framing the server does not
+store.
+
+`MAX_UPLOAD_MEGAPIXELS` (40) is likewise fixed, and deliberately: the
+`MAX_*_BYTES` limits bound the *file*, which says nothing about what it decodes
+to — a valid 400 KB PNG can declare 50000×50000 and ask for roughly 10 GB.
+Exposing that as a setting would be exposing a denial-of-service switch.
+
+### Uploads that are already small
+
+**An upload is never replaced by something larger.** Re-encoding a source that
+was already compressed harder than `image_jpeg_quality` makes it bigger, not
+smaller — measured, a 1.48 MB q55 photo becomes 2.21 MB, and a 19 KB flat-colour
+PNG becomes a 39 KB JPEG. When nothing about the image had to change — no crop,
+no EXIF rotation, no downscale — and the re-encode would grow it, the original
+bytes are stored instead.
+
+Two consequences worth expecting:
+
+* **The saving is concentrated on camera photos.** A forum whose uploads are
+  mostly wallpapers or already-squeezed web images will see much of its traffic
+  pass through untouched, and that is the correct outcome rather than a
+  misconfiguration.
+* **A file carrying EXIF is re-encoded even when that grows it**, because a
+  re-encode is the only thing that strips it, and EXIF is where a phone writes
+  GPS coordinates that `/files/` would then serve publicly. Privacy is chosen
+  over bytes on that one branch, deliberately.
+
+### Choosing a quality
+
+82 is a reasonable default, not a researched one for your forum. The right
+answer depends on subject matter: a photography board wants more, a support
+board full of screenshots wants less. Measure it against your own images:
+
+```powershell
+$env:FERUM_IMAGE_CORPUS = "D:\a-folder-of-real-uploads"
+cd backend
+cargo test -p ferum-infrastructure-tests --profile release-fast -- --ignored --nocapture quality_sweep
+```
+
+It prints bytes out per quality per file plus the aggregate saving. Take the
+**highest** quality whose saving is still acceptable — the size curve flattens
+well before the image visibly improves.
+
+Use `release-fast`, not `release`: the latter's fat LTO is the slowest step in
+the build and buys nothing for a measurement. A plain debug build reports times
+several times worse than production and is useless for the latency figures.
+
+### Latency
+
+Encoding is CPU-bound, so upload endpoints carry their own budget — **p95 <
+1200 ms** — carved out of NF-PF-04's 200 ms, which they cannot meet. Work runs
+on `spawn_blocking` behind a semaphore sized `available_parallelism() - 1`, so
+peak memory is bounded at `permits × 256 MB` and page renders never queue behind
+an avatar upload.
+
+```powershell
+cargo test -p ferum-infrastructure-tests --profile release-fast -- --ignored --nocapture throughput
+```
+
+Needs no corpus — decode and encode cost scales with pixel count, not content.
+If your hardware misses the budget, lower `image_max_long_edge` rather than
+raising the budget: the number bounds how long one request may hold a permit.
+
+### Turning it off
+
+`image_processing_enabled = false` is a runtime switch. There is also a
+compile-time one, `--no-default-features` or dropping the `image_processing`
+cargo feature, which removes the codecs from the binary entirely and selects
+`PassthroughImageProcessor`. Both degrade to the same behaviour: uploads stored
+as received, which is what every path did before this existed.
+
+**Neither is retroactive.** Originals are discarded at upload time, so turning
+processing off changes what happens next and nothing about what is already
+stored.
+
+---
+
 ## Logging
 
 `RUST_LOG` and `LOG_LEVEL` are the **same filter from two sources, and

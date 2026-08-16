@@ -115,6 +115,31 @@ hmac = "0.12"
 # ^ stays on 0.12 for the same reason sha2 stays on 0.10 — see that note.
 http = "1"
 http-body-util = "0.1"
+# Upload image pipeline. `default-features = false` is doing real work: the
+# default set adds TIFF, DDS, OpenEXR, HDR, farbfeld, PNM, QOI and more, none of
+# which any upload path accepts — and every one is another decoder exposed to
+# guest-supplied bytes. The four named here are exactly `validate_image_magic`'s
+# allowlist, so the decoder surface equals the accepted surface.
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+] }
+# SIMD downscaling. `image`'s own resize is correct but scalar; Lanczos3 over a
+# 12 MP photo is the single hottest step in the pipeline.
+fast_image_resize = { version = "5", features = ["image"] }
+# Reads dimensions from the header alone. The point is that it allocates
+# nothing: a byte-size cap says nothing about decoded pixel count, so this is
+# what stands between a 400 KB PNG and a 10 GB allocation.
+imagesize = "0.13"
+# EXIF orientation only. Re-encoding drops metadata, so without reading this
+# first every portrait photo from a phone comes out sideways.
+kamadak-exif = "0.5"
+# Lossless PNG optimisation for the site logo, which is the one image where
+# lossy compression is visibly wrong — alpha edges and thin text both halo.
+# `parallel` uses the rayon already in the tree.
+oxipng = { version = "9", default-features = false, features = ["parallel"] }
 intl-memoizer = "0.5.3"
 jsonwebtoken = "9"
 lettre = { version = "0.11", default-features = false, features = [

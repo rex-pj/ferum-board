@@ -9,6 +9,7 @@ use crate::middleware::{AuthUser, AuthUserExt};
 use crate::utils::{read_image_field, validate_upload_image, ImageKind};
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::constants::{MAX_FAVICON_BYTES, MAX_LOGO_BYTES};
+use ferum_application::image_pipeline::ImageTarget;
 use ferum_application::permission::PermissionChecker;
 use ferum_application::shared::AppError;
 use ferum_application::storage_utils::{cas_key, validate_favicon_content_type};
@@ -99,6 +100,9 @@ pub const CONFIG_WRITABLE_KEYS: &[&str] = &[
     "post_approval_enabled",
     "post_approval_min_trust",
     "post_edit_window_hours",
+    "image_processing_enabled",
+    "image_max_long_edge",
+    "image_jpeg_quality",
     "forum_index_threads_per_category",
     "reporting_timezone",
     "max_posts_per_page",
@@ -130,6 +134,9 @@ const CONFIG_READABLE_KEYS: &[&str] = &[
     "post_approval_enabled",
     "post_approval_min_trust",
     "post_edit_window_hours",
+    "image_processing_enabled",
+    "image_max_long_edge",
+    "image_jpeg_quality",
     "forum_index_threads_per_category",
     "reporting_timezone",
     "max_posts_per_page",
@@ -430,6 +437,15 @@ pub async fn upload_logo(
 
     let (data, content_type) = read_image_field(&mut multipart, "file").await?;
     validate_upload_image(&content_type, &data, MAX_LOGO_BYTES, ImageKind::LOGO)?;
+
+    // Lossless, and the only upload path that is. A logo is alpha, flat colour
+    // and thin text; JPEG haloes all three, and flattening alpha onto white
+    // makes it unusable on a dark theme.
+    let processed = state
+        .images
+        .process(data, &content_type, ImageTarget::Logo, None)
+        .await?;
+    let (data, content_type) = (processed.data, processed.content_type);
 
     let key = cas_key("logos", &data, &content_type);
 

@@ -408,12 +408,26 @@ pub async fn upload_theme_preview(
         }
     };
 
+    // A theme preview is a screenshot: downscaled, never cropped — cropping one
+    // would hide the part of the layout the admin was trying to show.
+    let processed = state
+        .images
+        .process(
+            data.into(),
+            &content_type,
+            ferum_application::image_pipeline::ImageTarget::ThemePreview,
+            None,
+        )
+        .await
+        .map_err(|e| PageError::Internal(anyhow::anyhow!("image: {:?}", e)))?;
+    let (data, content_type) = (processed.data, processed.content_type);
+
     let key = cas_key("theme-previews", &data, &content_type);
     let size = data.len() as i64;
 
     state
         .storage
-        .put(&key, data.into(), &content_type)
+        .put(&key, data, &content_type)
         .await
         .map_err(|e| PageError::Internal(anyhow::anyhow!("storage: {:?}", e)))?;
     state

@@ -21,7 +21,8 @@ use uuid::{uuid, Uuid};
 use ferum_application::constants::{
     DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS, DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES,
     DEFAULT_AUTH_RATE_LIMIT_PER_MIN, DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY,
-    DEFAULT_MAX_POSTS_PER_PAGE, DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS,
+    DEFAULT_IMAGE_JPEG_QUALITY, DEFAULT_IMAGE_MAX_LONG_EDGE, DEFAULT_MAX_POSTS_PER_PAGE,
+    DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS,
     DEFAULT_PUBLIC_WRITE_RATE_LIMIT_PER_MIN, DEFAULT_REPORTING_TIMEZONE, DEFAULT_SITE_NAME,
     DEFAULT_THEME_SLUG,
 };
@@ -90,6 +91,13 @@ fn config_defaults() -> Vec<(&'static str, String)> {
         ("account_lockout_attempts", DEFAULT_ACCOUNT_LOCKOUT_ATTEMPTS.to_string()),
         ("account_lockout_duration_minutes", DEFAULT_ACCOUNT_LOCKOUT_DURATION_MINUTES.to_string()),
         ("post_edit_window_hours", DEFAULT_POST_EDIT_WINDOW_HOURS.to_string()),
+        // Seeded as "true": a fresh install gets compression, and an existing
+        // one gets it on the next boot. The pipeline treats an *absent* row as
+        // enabled too, so an install that predates this key is not silently
+        // opted out by having no row.
+        ("image_processing_enabled", "true".to_string()),
+        ("image_max_long_edge", DEFAULT_IMAGE_MAX_LONG_EDGE.to_string()),
+        ("image_jpeg_quality", DEFAULT_IMAGE_JPEG_QUALITY.to_string()),
         ("max_threads_per_page", DEFAULT_MAX_THREADS_PER_PAGE.to_string()),
         ("max_posts_per_page", DEFAULT_MAX_POSTS_PER_PAGE.to_string()),
         ("forum_index_threads_per_category", DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY.to_string()),

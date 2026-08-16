@@ -77,9 +77,32 @@
     fd.append('content_md', content_md);
     if (tags.length > 0) fd.append('tags', tags.join(','));
 
+    // A category change is a separate, more privileged endpoint. The select is
+    // only enabled when the server said `thread.move` holds here.
+    var catSelect = document.getElementById('category');
+    var movedTo = (catSelect && !catSelect.disabled && catSelect.value !== catSelect.dataset.originalCategory)
+      ? catSelect.value
+      : null;
+
     try {
       var res = await FerumApi.threads.update(threadSlug, fd);
       if (res.ok) {
+        // Ordered after the edit on purpose: both calls are idempotent, so a
+        // failed move leaves the title/content saved and a retry re-runs only
+        // what is still outstanding.
+        if (movedTo) {
+          var moveRes = await FerumApi.threads.move(threadSlug, movedTo);
+          if (!moveRes.ok) {
+            var moveBody = await moveRes.json().catch(function () { return {}; });
+            errorEl.textContent = Ferum.errorMessage(moveBody) || Ferum.t('js-failed-move-thread');
+            errorEl.classList.remove('d-none');
+            btn.disabled = false;
+            spinner.classList.add('d-none');
+            _editThreadSubmitting = false;
+            return;
+          }
+          catSelect.dataset.originalCategory = movedTo;
+        }
         window.location.href = '/forum/t/' + threadSlug;
       } else {
         var body = await res.json().catch(function () { return {}; });

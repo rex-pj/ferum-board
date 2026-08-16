@@ -14,7 +14,12 @@
 
           <div class="mb-3">
             <label for="category" class="form-label">{{ t(k="ui-category") }} <span class="text-danger">*</span></label>
-            <select class="form-select" id="category" disabled>
+            {# Enabled only for `thread.move` in THIS category — the same check
+               PATCH /api/threads/:slug/move applies, so an enabled control can
+               never lead to a submit-time 403. #}
+            <select class="form-select" id="category"
+                    data-original-category="{{ thread_category_id }}"
+                    {% if not can_move %}disabled{% endif %}>
               {% for cat in categories %}
                 <option value="{{ cat.id }}" {% if cat.id == thread_category_id %}selected{% endif %}>
                   {% if cat.parent_id %}-- {% endif %}{{ cat.name }}
@@ -23,7 +28,11 @@
             </select>
             <div class="form-text text-muted">
               <i class="fa-solid fa-shield-halved me-1 opacity-50"></i>
-              {{ t(k="ui-moving-a-thread-to-a-different") }}
+              {% if can_move %}
+                {{ t(k="ui-changing-the-category-moves-this") }}
+              {% else %}
+                {{ t(k="ui-moving-a-thread-to-a-different") }}
+              {% endif %}
             </div>
           </div>
 
@@ -95,6 +104,22 @@
                    accept="image/jpeg,image/png,image/webp,image/gif"
                    @change="onFileChange($event)">
             <div x-show="uploadError" x-text="uploadError" class="text-danger small mt-1"></div>
+            {# A second way in, not a replacement: the drop zone above is the
+               fast path and lets the server centre-crop, this one lets the
+               author choose the framing. Same endpoint either way. `aspect`
+               must match THUMBNAIL_FRAME in constants.rs — the server crops to
+               16:9 regardless, so a different ratio here would preview a
+               framing that is not what gets stored. #}
+            <div class="mt-2">
+              <ferum-image-cropper
+                endpoint="/api/threads/{{ thread_slug }}/thumbnail"
+                field="file"
+                aspect="1.7778"
+                max-bytes="10485760"
+                label="{{ t(k='ui-crop-thumbnail') }}"
+                button-class="btn btn-outline-secondary btn-sm"
+              ></ferum-image-cropper>
+            </div>
           </div>
           {% else %}
           <div class="mb-3">

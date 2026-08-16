@@ -36,6 +36,43 @@ pub const DEFAULT_FILE_READ_RATE_LIMIT_PER_MIN: u32 = 300;
 
 pub const DEFAULT_FORUM_INDEX_THREADS_PER_CATEGORY: u64 = 5;
 
+// ── Upload image pipeline ────────────────────────────────────────────────────
+
+/// Long-edge ceiling for images that are downscaled but never cropped — post
+/// attachments, product and plugin media. Chosen so a full-width screenshot
+/// stays legible; below ~1600 small UI text in a screenshot turns to mush.
+pub const DEFAULT_IMAGE_MAX_LONG_EDGE: u32 = 2048;
+
+/// JPEG quality for every lossy re-encode. 82 sits just under the point where
+/// artefacts become visible on photographs while cutting a phone photo by
+/// roughly 90%. Admin-tunable because the right answer depends on the forum's
+/// subject matter — a photography board wants more than a support board.
+pub const DEFAULT_IMAGE_JPEG_QUALITY: u32 = 82;
+
+/// Hard pixel ceiling for any decoded upload, ~6300×6300.
+///
+/// **Not admin-configurable, and that is the point.** The `MAX_*_BYTES` limits
+/// below bound the *file*, which says nothing about decoded size: a valid 400 KB
+/// PNG can declare 50000×50000 and ask for ~10 GB. Raising this from the admin
+/// panel would be handing out a denial-of-service switch.
+pub const MAX_UPLOAD_MEGAPIXELS: u32 = 40;
+
+/// Allocation ceiling handed to the decoder, as a second line behind
+/// [`MAX_UPLOAD_MEGAPIXELS`]. The pixel check reads the header, which a crafted
+/// file can lie about; this one binds the decoder itself.
+pub const IMAGE_MAX_ALLOC_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Output frames for the paths whose layout fixes the aspect ratio.
+/// Avatars render at 32–96px but are stored at 2× the largest use so a retina
+/// display has pixels to work with.
+pub const AVATAR_FRAME: (u32, u32) = (512, 512);
+pub const COVER_FRAME: (u32, u32) = (1600, 400);
+pub const THUMBNAIL_FRAME: (u32, u32) = (1280, 720);
+
+/// Long-edge ceilings for the two lossless/admin paths.
+pub const LOGO_MAX_LONG_EDGE: u32 = 512;
+pub const THEME_PREVIEW_MAX_LONG_EDGE: u32 = 1200;
+
 /// IANA name defining the day boundary for daily aggregations. Never a fixed
 /// offset — it cannot express DST. Changing it re-buckets future rows only, so a
 /// chart spanning the change mixes two conventions.

@@ -67,6 +67,8 @@ pub struct ProductUseCase {
     /// Blob bytes and the authority on file URL shape.
     pub storage: Arc<dyn StorageService>,
     pub jobs: Arc<dyn JobQueue>,
+    /// `None` stores the uploaded bytes untouched — see `UserUseCase::images`.
+    pub images: Option<Arc<crate::image_pipeline::ImagePipeline>>,
 }
 
 impl ProductUseCase {
@@ -80,7 +82,12 @@ impl ProductUseCase {
         storage: Arc<dyn StorageService>,
         jobs: Arc<dyn JobQueue>,
     ) -> Self {
-        Self { products, categories, materials, brands, stored_files, storage, jobs }
+        Self { products, categories, materials, brands, stored_files, storage, jobs, images: None }
+    }
+
+    pub fn with_images(mut self, images: Arc<crate::image_pipeline::ImagePipeline>) -> Self {
+        self.images = Some(images);
+        self
     }
 
     // ─── Product categories ───────────────────────────────────────────────────
@@ -481,6 +488,7 @@ impl ProductUseCase {
         product_id: Uuid,
         data: Bytes,
         content_type: String,
+        crop: Option<crate::ports::CropRect>,
     ) -> Result<ProductMedia, AppError> {
         let product = self
             .products
@@ -503,6 +511,18 @@ impl ProductUseCase {
                 [("limit", MAX_PRODUCT_MEDIA.into())],
             ));
         }
+
+        // A curator may crop deliberately; nothing crops on their behalf. The
+        // catalogue grid is uniform by CSS, not by discarding pixels that might
+        // be the leg of a chair somebody is trying to evaluate.
+        let (data, content_type) = crate::image_pipeline::apply(
+            self.images.as_ref(),
+            data,
+            content_type,
+            crate::image_pipeline::ImageTarget::ProductMedia,
+            crop,
+        )
+        .await?;
 
         let size = data.len() as i64;
         let key = cas_key("products", &data, &content_type);

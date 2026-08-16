@@ -4,6 +4,7 @@ use std::sync::Arc;
 use sea_orm::DatabaseConnection;
 
 use crate::tera_engine::TeraEngine;
+use ferum_application::image_pipeline::ImagePipeline;
 use ferum_application::ports::{
     CacheService, NotificationSubscriber, PermissionResolver, PluginHookRuntime, PluginRpcRuntime,
     PluginUiRuntime, RateLimiter, StorageService, TokenService, Translator,
@@ -55,6 +56,14 @@ pub struct AppState {
     /// use cases do: to write bytes, and because it is the only thing that knows
     /// what a file URL looks like under the current configuration.
     pub storage: Arc<dyn StorageService>,
+    /// Decodes and re-encodes uploads. Held here as well as in the use cases
+    /// because the two admin image handlers (logo, theme preview) upload from
+    /// the web layer directly, without a use case to route through.
+    ///
+    /// The pipeline rather than the bare `ImageProcessor` port: it is what reads
+    /// `image_processing_enabled`, and a second path around it would keep
+    /// re-encoding after an admin turned processing off.
+    pub images: Arc<ImagePipeline>,
     pub setup: Arc<SetupUseCase>,
     pub auth: Arc<AuthUseCase>,
     pub admin: Arc<AdminUseCase>,

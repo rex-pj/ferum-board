@@ -15,6 +15,7 @@ use crate::event_bus::EventPublisher;
 use crate::permission::PermissionChecker;
 use crate::ports::{HookContext, HookDecision, PluginHookRuntime, StorageService};
 use crate::shared::{AppError, OptionExt};
+use crate::image_pipeline::ImageTarget;
 use crate::storage_utils::{cas_key, validate_image_content_type};
 use ferum_domain::events::ForumEvent;
 use ferum_domain::models::category::PostPolicy;
@@ -56,6 +57,8 @@ pub struct PostUseCase {
     /// that**; deriving it from `public_url`'s shape looks equivalent and
     /// destroys the row. Promotion is one-way: once published, permanently public.
     pub staging_storage: Option<Arc<dyn StorageService>>,
+    /// `None` stores the uploaded bytes untouched — see `UserUseCase::images`.
+    pub images: Option<Arc<crate::image_pipeline::ImagePipeline>>,
 }
 
 impl PostUseCase {
@@ -79,6 +82,7 @@ impl PostUseCase {
             plugin_runtime: Arc::new(crate::ports::NullPluginRuntime),
             stored_files: None,
             storage: None,
+            images: None,
             staging_storage: None,
         }
     }
@@ -103,6 +107,11 @@ impl PostUseCase {
         self.stored_files = Some(stored_files);
         self.storage = Some(storage);
         self.staging_storage = staging_storage;
+        self
+    }
+
+    pub fn with_images(mut self, images: Arc<crate::image_pipeline::ImagePipeline>) -> Self {
+        self.images = Some(images);
         self
     }
 
@@ -161,6 +170,23 @@ impl PostUseCase {
                 return Err(AppError::forbidden("upload_quota_exceeded"));
             }
         }
+
+        // Downscaled but never cropped: an attachment is what its author chose
+        // to show. `ImageTarget::Attachment` refuses a crop rectangle even if
+        // one is somehow supplied, so that rule lives in one place.
+        //
+        // Deliberately after the quota check, which therefore charges the
+        // account for what it uploaded rather than what survived compression —
+        // otherwise the quota stops bounding what an abuser can push through
+        // the decoder.
+        let (data, content_type) = crate::image_pipeline::apply(
+            self.images.as_ref(),
+            data,
+            content_type,
+            ImageTarget::Attachment,
+            None,
+        )
+        .await?;
 
         // Staged (ref_count = 0): stored, but not publicly servable until a post
         // actually embeds this URL. Until then only the uploader can fetch it,

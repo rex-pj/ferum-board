@@ -4,6 +4,7 @@ use std::collections::hash_map::DefaultHasher;
 use axum::extract::Multipart;
 use axum::http::HeaderMap;
 use ferum_application::constants::MAX_PAGE;
+use ferum_application::ports::CropRect;
 use ferum_application::shared::AppError;
 
 use crate::app_state::AppState;
@@ -29,6 +30,71 @@ pub async fn read_image_field(
     field_name: &str,
 ) -> Result<(bytes::Bytes, String), AppError> {
     read_part(multipart, field_name, "image_field_missing").await
+}
+
+/// `read_image_field` plus the optional `crop_x/y/w/h` parts.
+///
+/// Unlike [`read_image_field`] this walks the **whole** body rather than
+/// stopping at the image: the crop parts may follow it, and a form field the
+/// browser happens to serialise second is not a reason to ignore it.
+///
+/// The rectangle is a *request*, not an instruction — `ImagePipeline` discards
+/// it for targets that may not be cropped, and the processor clamps whatever
+/// survives. Nothing here needs to validate the numbers.
+pub async fn read_image_field_with_crop(
+    multipart: &mut Multipart,
+    field_name: &str,
+) -> Result<(bytes::Bytes, String, Option<CropRect>), AppError> {
+    let mut image: Option<(bytes::Bytes, String)> = None;
+    let mut parts: [Option<u32>; 4] = [None; 4];
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?
+    {
+        // Owned up front: `name()` borrows the field, and reading the body
+        // consumes it.
+        let name = field.name().unwrap_or_default().to_string();
+        if name == field_name {
+            let content_type = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            let data = field
+                .bytes()
+                .await
+                .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
+            image = Some((data, content_type));
+            continue;
+        }
+        if let Some(slot) = match name.as_str() {
+            "crop_x" => Some(0),
+            "crop_y" => Some(1),
+            "crop_w" => Some(2),
+            "crop_h" => Some(3),
+            _ => None,
+        } {
+            // A malformed number is treated as absent, which drops the whole
+            // rectangle below. Failing the upload instead would turn a stale
+            // client into an outage for everyone using it.
+            parts[slot] = field
+                .text()
+                .await
+                .ok()
+                .and_then(|raw| raw.trim().parse::<u32>().ok());
+        }
+    }
+
+    let (data, content_type) = image.ok_or_else(|| AppError::invalid("image_field_missing"))?;
+    // All four or nothing. Three of four is a client bug, and inventing the
+    // fourth would crop to a region the user never selected — which looks like
+    // a working feature, not a failure.
+    let crop = match parts {
+        [Some(x), Some(y), Some(w), Some(h)] => Some(CropRect { x, y, w, h }),
+        _ => None,
+    };
+    Ok((data, content_type, crop))
 }
 
 async fn read_part(

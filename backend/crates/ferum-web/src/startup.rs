@@ -8,8 +8,9 @@ use crate::handlers::admin::api::config::{
 use crate::middleware::security_headers::{csp_origin_of, SecurityHeadersConfig};
 use crate::tera_engine::TeraEngine;
 use ferum_application::event_bus::{EventBus, EventPublisher};
+use ferum_application::image_pipeline::ImagePipeline;
 use ferum_application::ports::{
-    CacheService, JobQueue, NotificationBus, PermissionResolver, PluginHookRuntime,
+    CacheService, ImageProcessor, JobQueue, NotificationBus, PermissionResolver, PluginHookRuntime,
     PluginLifecycle, PluginRpcRuntime, PluginUiRuntime, RateLimiter, SearchService, StorageService,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
@@ -792,6 +793,28 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         }),
     ));
 
+    // ─── Image processing ────────────────────────────────────────────────────
+    // Same adapter/fallback shape as storage, with one difference worth stating:
+    // passthrough is not a degraded mode to apologise for. It is exactly what
+    // every upload path did before this pipeline existed, so falling back to it
+    // costs bytes and never correctness — hence INFO rather than WARN.
+    //
+    // Built here rather than beside storage because it needs `site_config`: the
+    // admin toggle and the quality/scale settings are read per upload, so a
+    // change on the settings page takes effect on the next request with no
+    // restart.
+    #[cfg(feature = "image_processing")]
+    let image_processor: Arc<dyn ImageProcessor> =
+        Arc::new(ferum_infrastructure::image::RealImageProcessor::new());
+    #[cfg(not(feature = "image_processing"))]
+    let image_processor: Arc<dyn ImageProcessor> = {
+        tracing::info!(
+            "built without the `image_processing` feature — uploads are stored as received"
+        );
+        Arc::new(ferum_application::ports::PassthroughImageProcessor)
+    };
+    let images = Arc::new(ImagePipeline::new(image_processor, site_config.clone()));
+
     // ─── Mail transport ─────────────────────────────────────────────────────
     // Loaded from site_config (seeded from env above), so an operator who changed
     // SMTP through the admin UI keeps those settings across restarts. A bad stored
@@ -875,6 +898,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         )
         .with_dedup_view_counts(config.dedup_view_counts)
         .with_site_config(site_config.clone())
+        .with_images(images.clone())
         .with_plugin_runtime(plugin_hooks.clone()),
     );
 
@@ -898,6 +922,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             event_bus.clone(),
         )
         .with_plugin_runtime(plugin_hooks.clone())
+        .with_images(images.clone())
         // Third argument is staging: database-backed, and present ONLY when an
         // object store is actually configured. A staged attachment is authorized
         // per viewer, which cannot be enforced once its bytes are in a public
@@ -933,7 +958,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         stored_file_repo.clone(),
         storage.clone(),
         job_queue.clone(),
-    ));
+    ).with_images(images.clone()));
     let review = Arc::new(ReviewUseCase::new(review_rating_repo));
 
     let moderation = Arc::new(
@@ -978,7 +1003,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
             job_queue.clone(),
             token_service.clone(),
         )
-        .with_cache(cache.clone()),
+        .with_cache(cache.clone())
+        .with_images(images.clone()),
     );
 
     let bookmark = Arc::new(BookmarkUseCase::new(
@@ -1011,7 +1037,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         storage.clone(),
         job_queue.clone(),
         std::path::PathBuf::from(&config.plugins_dir),
-    ));
+    ).with_images(images.clone()));
 
     let hasher3 = Arc::new(BcryptPasswordHasher);
     // Same adapter/fallback shape as storage, search and the plugin runtime: the
@@ -1210,6 +1236,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         db_read: pg_read.clone(),
         blob_read_permits: Arc::new(tokio::sync::Semaphore::new(BLOB_READ_CONCURRENCY)),
         storage: storage.clone(),
+        images: images.clone(),
         setup,
         auth,
         admin,

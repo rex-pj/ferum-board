@@ -285,6 +285,7 @@ ui-move = Move
 ui-move-thread = Move thread
 ui-move-thread-2 = Move Thread
 ui-moving-a-thread-to-a-different = Moving a thread to a different category is a moderator action.
+ui-changing-the-category-moves-this = Changing the category moves this thread. The action is recorded in the audit log.
 ui-must-include-a-digit-and-a = Must include a digit and a special character.
 ui-muted = Muted
 ui-my-bookmarks = My Bookmarks
@@ -378,6 +379,7 @@ ui-registration-is-currently-closed-please-contact = Registration is currently c
 ui-remove = Remove
 ui-remove-tag = Remove tag
 ui-remove-thumbnail = Remove thumbnail
+ui-crop-thumbnail = Upload & crop
 ui-replies = Replies
 ui-reply = Reply
 ui-reply-to-thread = Reply to thread
@@ -790,6 +792,7 @@ js-reset-failed = Reset failed. The link may have expired.
 js-thumbnail-invalid-type = Thumbnail must be a JPEG, PNG, GIF, or WebP image.
 js-thumbnail-too-large = Thumbnail must be under 10 MB.
 js-failed-save-changes = Failed to save changes.
+js-failed-move-thread = The edit was saved, but the thread could not be moved.
 js-could-not-load-materials = Could not load the material list.
 js-no-materials-in-catalog = No materials in the catalog yet.
 js-could-not-add-product = Could not add the product.
@@ -903,6 +906,16 @@ js-scroll-for-more = Scroll for more…
 js-cannot-react-own-post = You can't react to your own post.
 js-react-trust-insufficient = Your account needs to be verified to react.
 js-account-suspended = Your account is suspended.
+
+## Image cropper (<ferum-image-cropper>)
+js-choose-image = Choose image
+js-crop-image = Crop image
+js-zoom = Zoom
+js-cropper-hint = Drag to reposition, scroll or pinch to zoom. Arrow keys pan.
+js-image-invalid-type = Images must be JPEG, PNG, WebP, or GIF.
+js-image-too-large = That image is too large.
+js-cancel = Cancel
+js-save = Save
 
 ## ─── Search filters ──────────────────────────────────────────────────────────
 # Each facet control's default option is its own NAME, not "All …". Four

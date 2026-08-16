@@ -7,7 +7,7 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
-use crate::utils::{read_image_field, validate_upload_image, ImageKind};
+use crate::utils::{validate_upload_image, ImageKind};
 use crate::view_models::auth::UserResponse;
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
@@ -277,10 +277,11 @@ pub async fn upload_avatar(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let (data, content_type) = read_image_field(&mut multipart, "file").await?;
+    let (data, content_type, crop) =
+        crate::utils::read_image_field_with_crop(&mut multipart, "file").await?;
     validate_upload_image(&content_type, &data, MAX_AVATAR_BYTES, ImageKind::AVATAR)?;
 
-    let url = state.user.set_avatar(actor, data, content_type).await?;
+    let url = state.user.set_avatar(actor, data, content_type, crop).await?;
     let cookie_headers = refreshed_token_cookie(&state, actor, Some(url.clone()))?;
     Ok((
         cookie_headers,
@@ -307,10 +308,11 @@ pub async fn upload_cover(
 ) -> HandlerResult<impl IntoResponse> {
     let actor = auth_user.require_auth()?;
 
-    let (data, content_type) = read_image_field(&mut multipart, "file").await?;
+    let (data, content_type, crop) =
+        crate::utils::read_image_field_with_crop(&mut multipart, "file").await?;
     validate_upload_image(&content_type, &data, MAX_COVER_BYTES, ImageKind::COVER)?;
 
-    let url = state.user.set_cover(actor, data, content_type).await?;
+    let url = state.user.set_cover(actor, data, content_type, crop).await?;
     Ok(Json(serde_json::json!({ "data": { "cover_url": url } })))
 }
 

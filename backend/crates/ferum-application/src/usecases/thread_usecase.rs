@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::constants::{DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS, MAX_TAGS_PER_THREAD, MAX_THUMBNAIL_BYTES};
 use crate::event_bus::EventPublisher;
+use crate::image_pipeline::{ImagePipeline, ImageTarget};
 use crate::permission::PermissionChecker;
 use crate::ports::{CacheService, ForumJob, HookContext, HookDecision, JobQueue, NullPluginRuntime, PluginHookRuntime, StorageService};
 use crate::shared::{AppError, OptionExt};
@@ -46,6 +47,8 @@ pub struct ThreadUseCase {
     pub users: Arc<dyn UserRepository>,
     pub plugin_runtime: Arc<dyn PluginHookRuntime>,
     pub site_config: Option<Arc<dyn SiteConfigRepository>>,
+    /// `None` stores the uploaded bytes untouched — see `UserUseCase::images`.
+    pub images: Option<Arc<ImagePipeline>>,
     /// When true: dedup views via the thread_view_dedup table (each viewer counts once per thread per day).
     /// When false: every request counts as a view.
     pub dedup_view_counts: bool,
@@ -81,6 +84,7 @@ impl ThreadUseCase {
             users,
             plugin_runtime: Arc::new(NullPluginRuntime),
             site_config: None,
+            images: None,
             dedup_view_counts: false,
             view_count_buffer: Arc::new(DashMap::new()),
         }
@@ -125,6 +129,11 @@ impl ThreadUseCase {
 
     pub fn with_site_config(mut self, site_config: Arc<dyn SiteConfigRepository>) -> Self {
         self.site_config = Some(site_config);
+        self
+    }
+
+    pub fn with_images(mut self, images: Arc<ImagePipeline>) -> Self {
+        self.images = Some(images);
         self
     }
 
@@ -1178,6 +1187,7 @@ impl ThreadUseCase {
         thread_id: Uuid,
         data: bytes::Bytes,
         content_type: String,
+        crop: Option<crate::ports::CropRect>,
     ) -> Result<String, AppError> {
         PermissionChecker::can_upload(actor)?;
 
@@ -1190,6 +1200,17 @@ impl ThreadUseCase {
 
         let thread = self.find_live_thread(thread_id).await?;
         Self::require_author_or_mod(actor, &thread)?;
+
+        // After the ownership check, so a stranger cannot spend the server's
+        // image-processing permits on a thread that is not theirs.
+        let (data, content_type) = crate::image_pipeline::apply(
+            self.images.as_ref(),
+            data,
+            content_type,
+            ImageTarget::Thumbnail,
+            crop,
+        )
+        .await?;
 
         let size = data.len() as i64;
         let key = cas_key("thumbnails", &data, &content_type);

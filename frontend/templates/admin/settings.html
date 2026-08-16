@@ -678,6 +678,52 @@
         </div>
       </div>
 
+      {# Every id here must also appear in CONFIG_WRITABLE_KEYS — see the note
+         on that constant. `settings_template_contract.rs` fails the build if it
+         does not, because the failure mode otherwise is a save that reports
+         success and changes nothing. #}
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">{{ t(k="adm-image-processing") }}</div>
+          <div class="card-body">
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="cfg-image_processing_enabled"
+                     {% if config.image_processing_enabled != "false" %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="cfg-image_processing_enabled">
+                {{ t(k="adm-compress-uploaded-images") }}
+              </label>
+            </div>
+            <p class="text-muted small mb-3">{{ t(k="adm-image-processing-help") }}</p>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label small" for="cfg-image_max_long_edge">
+                  {{ t(k="adm-max-image-long-edge") }}
+                </label>
+                <div class="input-group" style="max-width:220px">
+                  <input type="number" id="cfg-image_max_long_edge" class="form-control"
+                         value="{{ config.image_max_long_edge | default(value='2048') }}"
+                         min="320" max="8192" step="16">
+                  <span class="input-group-text">px</span>
+                </div>
+                <div class="form-text">{{ t(k="adm-max-image-long-edge-help") }}</div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small" for="cfg-image_jpeg_quality">
+                  {{ t(k="adm-jpeg-quality") }}
+                </label>
+                <div class="input-group" style="max-width:220px">
+                  <input type="number" id="cfg-image_jpeg_quality" class="form-control"
+                         value="{{ config.image_jpeg_quality | default(value='82') }}"
+                         min="40" max="100">
+                </div>
+                <div class="form-text">{{ t(k="adm-jpeg-quality-help") }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="col-12">
         <div class="card">
           <div class="card-header fw-semibold">{{ t(k="adm-pagination") }}</div>

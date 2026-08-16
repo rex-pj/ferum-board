@@ -76,12 +76,20 @@
               </div>
             {% endif %}
           </div>
+          {# The widget owns pick → frame → upload end to end, so there is no
+             file input here and nothing in ferum-page-account.js to run. Its
+             `aspect` must match COVER_FRAME in constants.rs: the server crops
+             to that ratio regardless, and a mismatch would show the user one
+             framing and store another. #}
           <div class="d-flex align-items-center gap-2 flex-wrap">
-            <label class="btn btn-outline-secondary btn-sm" style="min-height:44px;display:inline-flex;align-items:center">
-              <i class="fa-solid fa-image me-1"></i>{% if profile and profile.cover_url %}{{ t(k="ui-change-cover") }}{% else %}{{ t(k="ui-upload-cover") }}{% endif %}
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="d-none" id="cover-upload">
-            </label>
-            <span id="cover-upload-status" class="small text-muted"></span>
+            <ferum-image-cropper
+              endpoint="/api/users/me/cover"
+              field="file"
+              aspect="4"
+              max-bytes="8388608"
+              label="{% if profile and profile.cover_url %}{{ t(k='ui-change-cover') }}{% else %}{{ t(k='ui-upload-cover') }}{% endif %}"
+              button-class="btn btn-outline-secondary btn-sm"
+            ></ferum-image-cropper>
             {% if profile and profile.cover_url %}
               <button type="button" class="btn btn-outline-danger btn-sm" style="min-height:44px" data-account-action="remove-cover">
                 <i class="fa-solid fa-trash me-1"></i>{{ t(k="ui-remove") }}
@@ -111,12 +119,18 @@
               <i class="fa-solid fa-arrow-up-right-from-square fa-xs me-1"></i>{{ t(k="ui-view-public-profile") }}
             </a>
             {% endif %}
+            {# `shape="circle"` only masks the preview — the stored file is a
+               square, which is what every other surface crops with CSS. #}
             <div class="d-flex align-items-center gap-2 flex-wrap">
-              <label class="btn btn-outline-secondary btn-sm" style="min-height:44px;display:inline-flex;align-items:center">
-                <i class="fa-solid fa-camera me-1"></i>{% if profile and profile.avatar_url %}{{ t(k="ui-change-photo") }}{% else %}{{ t(k="ui-upload-photo") }}{% endif %}
-                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="d-none" id="avatar-upload">
-              </label>
-              <span id="avatar-upload-status" class="small text-muted"></span>
+              <ferum-image-cropper
+                endpoint="/api/users/me/avatar"
+                field="file"
+                aspect="1"
+                shape="circle"
+                max-bytes="5242880"
+                label="{% if profile and profile.avatar_url %}{{ t(k='ui-change-photo') }}{% else %}{{ t(k='ui-upload-photo') }}{% endif %}"
+                button-class="btn btn-outline-secondary btn-sm"
+              ></ferum-image-cropper>
               {% if profile and profile.avatar_url %}
                 <button type="button" class="btn btn-outline-danger btn-sm" style="min-height:44px" data-account-action="remove-avatar">
                   <i class="fa-solid fa-trash me-1"></i>{{ t(k="ui-remove") }}

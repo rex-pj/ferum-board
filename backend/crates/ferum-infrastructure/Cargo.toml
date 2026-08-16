@@ -7,6 +7,12 @@ edition = "2021"
 [lib]
 test = false
 
+# `kamadak-exif` publishes its library as `exif`, so the source says `use exif::`
+# and cargo-machete — which matches on the package name — reports it unused.
+# Removing it on that advice breaks the build, so it is pinned here instead.
+[package.metadata.cargo-machete]
+ignored = ["kamadak-exif"]
+
 [features]
 s3 = ["dep:aws-sdk-s3", "dep:aws-config"]
 # Cloudflare R2. Turns on the SAME two crates as `s3` and adds none of its own:
@@ -41,7 +47,19 @@ script_plugins = ["dep:boa_engine"]
 # gets `NullBulkSeedService`, which reports `seed_data_unavailable` rather than
 # pretending to seed.
 bulk_seed = []
-default = ["bulk_seed"]
+# Decode/crop/resize/re-encode on upload. Opt-OUT, unlike `s3`/`gcs`/`r2`: those
+# are useless without external infrastructure, this one needs nothing but CPU and
+# is part of the documented out-of-the-box behaviour. Compiled out, startup
+# selects `PassthroughImageProcessor` and uploads are stored exactly as they
+# arrive — which is what every path did before this existed.
+image_processing = [
+    "dep:image",
+    "dep:fast_image_resize",
+    "dep:imagesize",
+    "dep:kamadak-exif",
+    "dep:oxipng",
+]
+default = ["bulk_seed", "image_processing"]
 
 [dependencies]
 # `sea-orm` feature = the `From<DbErr> for AppError` impl every repository here
@@ -102,3 +120,10 @@ aws-sdk-s3 = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
 meilisearch-sdk = { workspace = true, optional = true }
 boa_engine = { workspace = true, optional = true }
+
+# The `image_processing` set. See that feature for why it is opt-out.
+image = { workspace = true, optional = true }
+fast_image_resize = { workspace = true, optional = true }
+imagesize = { workspace = true, optional = true }
+kamadak-exif = { workspace = true, optional = true }
+oxipng = { workspace = true, optional = true }

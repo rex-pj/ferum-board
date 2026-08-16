@@ -4,5 +4,6 @@ import './bookmark-btn.svelte';
 import './post-composer.svelte';
 import './notification-bell.svelte';
 import './remote-select.svelte';
+import './image-cropper.svelte';
 import './admin-stats-chart.svelte';
 import './admin-permission-matrix.svelte';

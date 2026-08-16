@@ -31,6 +31,10 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 dotenvy = { workspace = true }
 zip = { workspace = true }
+# Builds the image fixtures the pipeline tests feed in, and re-decodes the
+# output to assert on dimensions. Encoding a real PNG/JPEG here rather than
+# checking in binary blobs keeps the "what went in" visible in the test.
+image = { workspace = true }
 # For `StatusCode` only — the Resend adapter's error mapping takes one, and no
 # request is ever made.
 reqwest = { workspace = true }

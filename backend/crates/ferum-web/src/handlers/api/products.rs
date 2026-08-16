@@ -105,8 +105,12 @@ pub async fn upload_media(
     mut multipart: Multipart,
 ) -> HandlerResult<impl IntoResponse> {
     let user = auth_user.require_auth()?;
-    let (data, content_type) = crate::utils::read_image_field(&mut multipart, "image").await?;
-    let media = state.product.upload_media(user, id, data, content_type).await?;
+    let (data, content_type, crop) =
+        crate::utils::read_image_field_with_crop(&mut multipart, "image").await?;
+    let media = state
+        .product
+        .upload_media(user, id, data, content_type, crop)
+        .await?;
     Ok((
         StatusCode::CREATED,
         Json(DataResponse::new(ProductMediaResponse::from(media))),

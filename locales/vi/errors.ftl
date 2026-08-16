@@ -147,6 +147,14 @@ error-thumbnail-too-large = Ảnh đại diện chủ đề phải nhỏ hơn ho
 error-media-invalid-type = Ảnh phải ở định dạng JPEG, PNG, WebP hoặc GIF.
 error-logo-too-large = Logo phải nhỏ hơn hoặc bằng { $limit_mb } MB.
 error-logo-invalid-type = Logo phải là ảnh JPEG, PNG, WebP hoặc GIF.
+
+# Từ pipeline xử lý ảnh khi tải lên. `image-too-many-pixels` cố ý dùng đơn vị
+# megapixel chứ không phải MB: lỗi này xảy ra với cả tệp nhỏ hơn mọi giới hạn
+# dung lượng, nên nhắc lại dung lượng ở đây sẽ mâu thuẫn với chính nó.
+error-image-too-many-pixels =
+    Ảnh này có độ phân giải quá lớn để xử lý — phải dưới { $max_mp } megapixel.
+error-image-decode-failed = Không đọc được ảnh này. Tệp có thể đã hỏng hoặc ở định dạng không được hỗ trợ.
+error-image-crop-invalid = Vùng cắt bạn chọn không nằm trong ảnh.
 error-favicon-too-large = Favicon phải nhỏ hơn hoặc bằng { $limit_kb } KB.
 error-favicon-invalid-type = Favicon phải là ảnh ICO, PNG, GIF hoặc JPEG. Không chấp nhận SVG.
 

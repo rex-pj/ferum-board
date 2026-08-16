@@ -5,9 +5,10 @@ use bytes::Bytes;
 use std::time::Duration;
 
 use crate::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
+use crate::image_pipeline::{apply as apply_image, ImagePipeline, ImageTarget};
 use crate::permission::PermissionChecker;
 use crate::ports::{
-    CacheService, ForumJob, JobQueue, PasswordHasher, StorageService, TokenService,
+    CacheService, CropRect, ForumJob, JobQueue, PasswordHasher, StorageService, TokenService,
     UNSUBSCRIBE_PURPOSE,
 };
 use crate::shared::{AppError, OptionExt};
@@ -46,6 +47,10 @@ pub struct UserUseCase {
     /// followed without a session, so this token is the only authorisation the
     /// request carries.
     pub tokens: Arc<dyn TokenService>,
+    /// Optional so the existing test builders, which have no site_config
+    /// repository, keep compiling. `None` stores the uploaded bytes exactly as
+    /// they arrived — the behaviour every path had before the pipeline existed.
+    pub images: Option<Arc<ImagePipeline>>,
 }
 
 impl UserUseCase {
@@ -65,11 +70,17 @@ impl UserUseCase {
             jobs,
             cache: None,
             tokens,
+            images: None,
         }
     }
 
     pub fn with_cache(mut self, cache: Arc<dyn CacheService>) -> Self {
         self.cache = Some(cache);
+        self
+    }
+
+    pub fn with_images(mut self, images: Arc<ImagePipeline>) -> Self {
+        self.images = Some(images);
         self
     }
 
@@ -230,6 +241,7 @@ impl UserUseCase {
         actor: &AuthUser,
         data: Bytes,
         content_type: String,
+        crop: Option<CropRect>,
     ) -> Result<String, AppError> {
         PermissionChecker::can_upload_profile_image(actor)?;
 
@@ -239,6 +251,11 @@ impl UserUseCase {
         if data.len() > MAX_AVATAR_BYTES {
             return Err(AppError::invalid_with("avatar_too_large", [("limit_mb", (MAX_AVATAR_BYTES / (1024 * 1024)).into())]));
         }
+
+        // Before the key is derived, and before the size is measured: both
+        // describe the bytes that get stored, which are these, not the upload.
+        let (data, content_type) =
+            apply_image(self.images.as_ref(), data, content_type, ImageTarget::Avatar, crop).await?;
 
         let size = data.len() as i64;
         let key = cas_key("avatars", &data, &content_type);
@@ -287,6 +304,7 @@ impl UserUseCase {
         actor: &AuthUser,
         data: Bytes,
         content_type: String,
+        crop: Option<CropRect>,
     ) -> Result<String, AppError> {
         PermissionChecker::can_upload_profile_image(actor)?;
 
@@ -296,6 +314,9 @@ impl UserUseCase {
         if data.len() > MAX_COVER_BYTES {
             return Err(AppError::invalid_with("cover_too_large", [("limit_mb", (MAX_COVER_BYTES / (1024 * 1024)).into())]));
         }
+
+        let (data, content_type) =
+            apply_image(self.images.as_ref(), data, content_type, ImageTarget::Cover, crop).await?;
 
         let size = data.len() as i64;
         let key = cas_key("covers", &data, &content_type);

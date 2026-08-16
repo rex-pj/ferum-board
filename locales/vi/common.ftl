@@ -454,6 +454,7 @@ ui-unanswered = Chưa trả lời
 
 ui-thumbnail-preview = Xem trước ảnh đại diện
 ui-remove-thumbnail = Xóa ảnh đại diện
+ui-crop-thumbnail = Tải lên & cắt
 ui-drop-to-set-thumbnail = Thả để đặt làm ảnh đại diện
 ui-close = Đóng
 ui-jpeg-png-webp-gif-max-10 = JPEG · PNG · WebP · GIF · tối đa 10 MB
@@ -471,6 +472,7 @@ ui-moderator-actions = Thao tác kiểm duyệt
 ui-move = Chuyển
 ui-move-thread-2 = Chuyển chủ đề
 ui-moving-a-thread-to-a-different = Chuyển chủ đề sang chuyên mục khác là thao tác của kiểm duyệt viên.
+ui-changing-the-category-moves-this = Đổi chuyên mục sẽ chuyển chủ đề này. Thao tác được ghi vào nhật ký kiểm duyệt.
 ui-select-the-target-category-for-this = Chọn chuyên mục đích cho chủ đề này.
 ui-report = Báo cáo
 ui-reporting-post-by = Báo cáo bài viết của
@@ -774,6 +776,7 @@ js-reset-failed = Đặt lại mật khẩu không thành công. Liên kết có
 js-thumbnail-invalid-type = Ảnh đại diện chủ đề phải là ảnh JPEG, PNG, GIF hoặc WebP.
 js-thumbnail-too-large = Ảnh đại diện chủ đề phải nhỏ hơn 10 MB.
 js-failed-save-changes = Không lưu được thay đổi.
+js-failed-move-thread = Đã lưu nội dung chỉnh sửa, nhưng không chuyển được chuyên mục.
 js-could-not-load-materials = Không tải được danh sách chất liệu.
 js-no-materials-in-catalog = Danh mục chưa có chất liệu nào.
 js-could-not-add-product = Không thêm được sản phẩm.
@@ -887,6 +890,16 @@ js-scroll-for-more = Cuộn để xem thêm…
 js-cannot-react-own-post = Bạn không thể bày tỏ cảm xúc với bài viết của chính mình.
 js-react-trust-insufficient = Tài khoản của bạn cần được xác minh để bày tỏ cảm xúc.
 js-account-suspended = Tài khoản của bạn đã bị đình chỉ.
+
+## Image cropper (<ferum-image-cropper>)
+js-choose-image = Chọn ảnh
+js-crop-image = Cắt ảnh
+js-zoom = Thu phóng
+js-cropper-hint = Kéo để di chuyển, lăn chuột hoặc chụm hai ngón để thu phóng. Phím mũi tên để dịch chuyển.
+js-image-invalid-type = Ảnh phải ở định dạng JPEG, PNG, WebP hoặc GIF.
+js-image-too-large = Ảnh này quá lớn.
+js-cancel = Huỷ
+js-save = Lưu
 
 ## ─── Bộ lọc tìm kiếm ─────────────────────────────────────────────────────────
 # Tùy chọn mặc định của mỗi ô lọc là TÊN của chính nó, không phải "Tất cả …".

@@ -332,6 +332,111 @@ pub fn file_url(key: &str) -> String {
     format!("{FILES_PREFIX}{key}")
 }
 
+// ─── ImageProcessor ───────────────────────────────────────────────────────────
+
+/// What an upload path wants done to an image.
+///
+/// Chosen per *feature*, never per file: whether cropping is legitimate is a
+/// property of the layout the image lands in, not of the image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImagePolicy {
+    /// The layout dictates the frame — crop to exactly `width`×`height`.
+    /// A card grid is uniform only if every image in it is.
+    FixedFrame {
+        width: u32,
+        height: u32,
+        quality: u8,
+    },
+    /// The image *is* the content: never cropped, downscaled only past
+    /// `max_long_edge`. A post attachment is what its author meant to show, so
+    /// choosing a different framing for them destroys the point of it.
+    Preserve { max_long_edge: u32, quality: u8 },
+    /// Re-encoded without discarding a pixel. Logos carry alpha, flat colour
+    /// and thin text — the three things lossy compression visibly ruins.
+    LosslessOnly { max_long_edge: u32 },
+}
+
+/// A crop chosen by the user, in source-image pixels.
+///
+/// **A hint, never a command.** Implementations clamp it to the decoded
+/// dimensions and reject a zero-area result, and must add with `checked_add`:
+/// an `x + w` that overflows otherwise wraps into a plausible-looking rect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CropRect {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+/// Bytes plus the content type that now describes them.
+///
+/// **Carry both to `cas_key`.** The key's extension comes from the content
+/// type, so re-encoding to a new format while reusing the old one yields a
+/// `.png` key holding JPEG bytes — a mismatch `key_from_url` still matches, so
+/// nothing in this process detects it and only the browser refuses the image.
+pub struct ProcessedImage {
+    pub data: Bytes,
+    pub content_type: String,
+}
+
+/// Hand-written so a failed assertion prints a size and a type rather than
+/// several megabytes of escaped image data — `Bytes`' own `Debug` would dump
+/// the whole buffer into the test output.
+impl std::fmt::Debug for ProcessedImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProcessedImage")
+            .field("bytes", &self.data.len())
+            .field("content_type", &self.content_type)
+            .finish()
+    }
+}
+
+/// Decodes, re-frames and re-encodes an uploaded image.
+///
+/// Async although the work is pure CPU: the implementation owns `spawn_blocking`
+/// and the concurrency limit, so that resource policy exists once rather than at
+/// every upload call site.
+#[async_trait]
+pub trait ImageProcessor: Send + Sync {
+    /// # Errors
+    /// `image_too_many_pixels` when the header declares more pixels than the
+    /// ceiling — checked before allocating, since a byte-size cap says nothing
+    /// about decoded size. `image_decode_failed` on malformed input or a decoder
+    /// panic. `image_crop_invalid` on a rect that clamps to nothing.
+    async fn process(
+        &self,
+        data: Bytes,
+        content_type: &str,
+        policy: ImagePolicy,
+        crop: Option<CropRect>,
+    ) -> Result<ProcessedImage, AppError>;
+}
+
+/// Hands every image back exactly as it arrived.
+///
+/// Selected when the `image_processing` feature is compiled out or an admin has
+/// turned `image_processing_enabled` off. Degrading to the pre-pipeline
+/// behaviour is the right failure mode — refusing uploads outright over a
+/// storage optimisation would be worse than storing the bytes as they came.
+pub struct PassthroughImageProcessor;
+
+#[async_trait]
+impl ImageProcessor for PassthroughImageProcessor {
+    async fn process(
+        &self,
+        data: Bytes,
+        content_type: &str,
+        _policy: ImagePolicy,
+        _crop: Option<CropRect>,
+    ) -> Result<ProcessedImage, AppError> {
+        Ok(ProcessedImage {
+            data,
+            content_type: content_type.to_string(),
+        })
+    }
+}
+
 // ─── SearchService ────────────────────────────────────────────────────────────
 
 #[async_trait]

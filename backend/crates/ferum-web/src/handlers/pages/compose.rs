@@ -145,6 +145,9 @@ pub async fn edit_thread(
         .collect();
 
     let can_upload_thumbnail = PermissionChecker::can_upload(&auth_user).is_ok();
+    // Scoped to the thread's CURRENT category, matching what `move_to` enforces —
+    // a category-scoped moderator may move threads out of their own categories only.
+    let can_move = PermissionChecker::can_move(&auth_user, thread.category_id).is_ok();
 
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
@@ -164,6 +167,7 @@ pub async fn edit_thread(
     ctx.insert("categories", &categories_ctx);
     ctx.insert("nav_categories", &nav_categories);
     ctx.insert("can_upload_thumbnail", &can_upload_thumbnail);
+    ctx.insert("can_move", &can_move);
 
     render_with_theme_in(&state, &req_locale, &active, "app/edit_thread.html", ctx)
         .await

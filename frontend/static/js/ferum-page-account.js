@@ -66,47 +66,11 @@
     setSpinner('profile-submit-btn', 'profile-spinner', false);
   });
 
-  // ── Avatar / Cover uploads ────────────────────────────────────────
-
-  function setUploadStatus(statusId, html) {
-    var el = document.getElementById(statusId);
-    if (el) el.innerHTML = html;
-  }
-
-  var ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
-  async function uploadAvatar(input) {
-    var file = input.files && input.files[0];
-    if (!file) return;
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      showFeedback('profile-feedback', 'danger', Ferum.t('js-avatar-invalid-type'));
-      input.value = '';
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      showFeedback('profile-feedback', 'danger', Ferum.t('js-avatar-too-large'));
-      input.value = '';
-      return;
-    }
-    setUploadStatus('avatar-upload-status', '<i class="fa-solid fa-spinner fa-spin me-1"></i>Uploading…');
-    var fd = new FormData();
-    fd.append('file', file);
-    try {
-      var res = await FerumApi.users.uploadAvatar(fd);
-      if (res.ok) {
-        showFeedback('profile-feedback', 'success', Ferum.t('js-avatar-updated'));
-        setTimeout(function () { location.reload(); }, 1200);
-      } else {
-        var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', Ferum.errorMessage(b) || Ferum.t('js-upload-failed'));
-        setUploadStatus('avatar-upload-status', '');
-      }
-    } catch (_) {
-      showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error'));
-      setUploadStatus('avatar-upload-status', '');
-    }
-    input.value = '';
-  }
+  // ── Avatar / Cover removal ────────────────────────────────────────
+  //
+  // Uploading lives in <ferum-image-cropper>, which owns pick → frame → POST.
+  // Only removal is left here: it needs no image handling, and routing it
+  // through the widget would give the widget a second, unrelated job.
 
   async function removeAvatar() {
     try {
@@ -116,39 +80,6 @@
         setTimeout(function () { location.reload(); }, 1200);
       } else showFeedback('profile-feedback', 'danger', Ferum.t('js-failed-remove-avatar'));
     } catch (_) { showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error')); }
-  }
-
-  async function uploadCover(input) {
-    var file = input.files && input.files[0];
-    if (!file) return;
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      showFeedback('profile-feedback', 'danger', Ferum.t('js-cover-invalid-type'));
-      input.value = '';
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      showFeedback('profile-feedback', 'danger', Ferum.t('js-cover-too-large'));
-      input.value = '';
-      return;
-    }
-    setUploadStatus('cover-upload-status', '<i class="fa-solid fa-spinner fa-spin me-1"></i>Uploading…');
-    var fd = new FormData();
-    fd.append('file', file);
-    try {
-      var res = await FerumApi.users.uploadCover(fd);
-      if (res.ok) {
-        showFeedback('profile-feedback', 'success', Ferum.t('js-cover-updated'));
-        setTimeout(function () { location.reload(); }, 1200);
-      } else {
-        var b = await res.json().catch(function () { return {}; });
-        showFeedback('profile-feedback', 'danger', Ferum.errorMessage(b) || Ferum.t('js-upload-failed'));
-        setUploadStatus('cover-upload-status', '');
-      }
-    } catch (_) {
-      showFeedback('profile-feedback', 'danger', Ferum.t('js-network-error'));
-      setUploadStatus('cover-upload-status', '');
-    }
-    input.value = '';
   }
 
   async function removeCover() {
@@ -404,6 +335,4 @@
     }
   });
 
-  document.getElementById('cover-upload')?.addEventListener('change', function () { uploadCover(this); });
-  document.getElementById('avatar-upload')?.addEventListener('change', function () { uploadAvatar(this); });
 }());
