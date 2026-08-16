@@ -238,6 +238,31 @@ store.
 to — a valid 400 KB PNG can declare 50000×50000 and ask for roughly 10 GB.
 Exposing that as a setting would be exposing a denial-of-service switch.
 
+### Uploads that are already correct are never decoded
+
+Before anything else, the pipeline answers four questions from the file's
+**header** — costing microseconds, against the hundreds of milliseconds a decode
+costs:
+
+* is it already the format this policy emits (JPEG for the lossy paths, PNG for
+  the logo)?
+* is it already within `image_max_long_edge`?
+* is it under 300 KB?
+* does it carry **no** EXIF?
+
+All four yes, and no crop was requested, and the upload is stored exactly as
+received. This matters most on the hardware this ships on — a shared-core VM,
+where sustained image work exhausts burst capacity long before it costs money.
+
+Two things it deliberately gives up. A 299 KB photo that *would* have compressed
+to 150 KB is stored at 299 KB, and the loss is bounded by that threshold by
+construction. And a file carrying EXIF is **never** fast-pathed however small,
+because a re-encode is the only thing that strips the GPS coordinates a phone
+writes there.
+
+`FixedFrame` uploads — avatars, covers, thumbnails — are excluded outright:
+the frame is the whole point, so no input is ever already correct.
+
 ### Uploads that are already small
 
 **An upload is never replaced by something larger.** Re-encoding a source that

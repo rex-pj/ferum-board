@@ -127,6 +127,60 @@ impl ImageProcessor for RealImageProcessor {
     }
 }
 
+/// Size below which an already-conforming image is stored without decoding.
+///
+/// The trade this makes, stated plainly: a 299 KB photo that *would* have
+/// compressed to 150 KB is stored at 299 KB, buying back the ~200 ms of CPU the
+/// decode-and-encode would have cost. That is the right way round on the
+/// hardware this runs on — a shared-core VM where sustained image work exhausts
+/// burst capacity — and the loss is bounded by this constant by construction.
+const SKIP_BELOW_BYTES: usize = 300 * 1024;
+
+/// Whether the upload can be stored exactly as received, without decoding it.
+///
+/// Every condition here is answered from the file's **header**, so the check
+/// costs microseconds against the hundreds of milliseconds a decode does. It is
+/// deliberately conservative: any doubt returns `false` and the full pipeline
+/// runs.
+fn can_store_unchanged(data: &[u8], policy: ImagePolicy, crop: Option<CropRect>) -> bool {
+    // A crop rectangle is a request to change the image; there is no version of
+    // honouring it that skips the work.
+    if crop.is_some() || data.len() >= SKIP_BELOW_BYTES {
+        return false;
+    }
+
+    // The source must already be the format this policy emits. Skipping a PNG
+    // under `Preserve` would store a PNG where every other upload on that path
+    // is a JPEG — not wrong, but it makes the stored format depend on what the
+    // user happened to pick, which is the kind of inconsistency that surfaces
+    // much later as "why is this one file different".
+    //
+    // `FixedFrame` is absent on purpose: it crops to an exact size, so no input
+    // is ever already correct.
+    let max_long_edge = match (policy, imagesize::image_type(data)) {
+        (ImagePolicy::Preserve { max_long_edge, .. }, Ok(imagesize::ImageType::Jpeg)) => {
+            max_long_edge
+        }
+        (ImagePolicy::LosslessOnly { max_long_edge }, Ok(imagesize::ImageType::Png)) => {
+            max_long_edge
+        }
+        _ => return false,
+    };
+
+    let Ok(size) = imagesize::blob_size(data) else {
+        return false;
+    };
+    if size.width.max(size.height) as u32 > max_long_edge {
+        return false;
+    }
+
+    // The last condition, and the one that must not be dropped: EXIF is where a
+    // phone writes GPS coordinates, `/files/` is public, and a re-encode is the
+    // only thing that removes them. A file carrying one is never fast-pathed,
+    // however small.
+    !decode::has_exif(data)
+}
+
 /// The synchronous pipeline. Runs inside `spawn_blocking`.
 fn run(
     data: Bytes,
@@ -134,6 +188,18 @@ fn run(
     policy: ImagePolicy,
     crop: Option<CropRect>,
 ) -> Result<ProcessedImage, AppError> {
+    // Cheapest exit first. On a forum whose uploads are mostly small,
+    // already-optimised images this is the common case, and taking it turns
+    // ~200 ms of decode-and-encode into a header read.
+    if can_store_unchanged(&data, policy, crop) {
+        tracing::debug!(
+            bytes = data.len(),
+            "already within policy — stored without decoding"
+        );
+        let content_type = content_type_of(content_type, &data);
+        return Ok(ProcessedImage { data, content_type });
+    }
+
     // Nothing here can encode an animation, so processing a multi-frame GIF
     // would return a single still — a valid image, silently missing the whole
     // point of the upload. Hand it back exactly as it arrived instead.
@@ -185,6 +251,11 @@ fn run(
     // Only applies when nothing about the image actually had to change. A crop,
     // a rotation or a resize alters what the file depicts, and correctness
     // there outranks size — the output is the point, whatever it costs.
+    //
+    // Note this can fire under `FixedFrame` too, when the source already *is*
+    // the frame: the dimensions match, so keeping the smaller original is both
+    // correct and better. That is why the comparison is against the decoded
+    // dimensions rather than the policy.
     let geometry_unchanged = crop.is_none()
         && orientation == 1
         && dimensions_of(&bytes).is_some_and(|(w, h)| w == source_w && h == source_h);
