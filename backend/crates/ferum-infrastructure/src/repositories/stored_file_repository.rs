@@ -6,7 +6,9 @@ use uuid::Uuid;
 
 use crate::entities::stored_files;
 use ferum_application::shared::AppError;
-use ferum_domain::repositories::stored_file_repository::{StoredFileRepository, UploadUsage};
+use ferum_domain::repositories::stored_file_repository::{
+    StoredFileRef, StoredFileRepository, UploadUsage,
+};
 
 pub struct PgStoredFileRepository {
     db: DatabaseConnection,
@@ -295,22 +297,37 @@ impl StoredFileRepository for PgStoredFileRepository {
         Ok(keys)
     }
 
-    async fn ref_counts_for(&self, keys: &[String]) -> Result<Vec<(String, i32)>, AppError> {
+    async fn refs_for(&self, keys: &[String]) -> Result<Vec<StoredFileRef>, AppError> {
         if keys.is_empty() {
             return Ok(Vec::new());
         }
         // `select_only` for the same reason as `list_keys_with_prefix`: the full
         // model carries `data`, so hydrating it would pull every blob in the
-        // batch across the wire to read two scalar columns.
+        // batch across the wire to read three scalar columns.
         let rows = stored_files::Entity::find()
             .select_only()
             .column(stored_files::Column::Key)
             .column(stored_files::Column::RefCount)
+            .column(stored_files::Column::CreatedAt)
             .filter(stored_files::Column::Key.is_in(keys.iter().map(String::as_str)))
-            .into_tuple::<(String, i32)>()
+            // Leading `::`, and both halves spelled out. `sea_orm::prelude::*`
+            // binds `DateTime` to chrono's *naive* type, so the bare name drops
+            // the offset — and `sea_orm::*` also brings its own `chrono` into
+            // scope, so even `chrono::DateTime` resolves to the naive one. Only
+            // an absolute path reaches the real crate.
+            .into_tuple::<(String, i32, ::chrono::DateTime<::chrono::FixedOffset>)>()
             .all(&self.db)
             .await?;
-        Ok(rows)
+        Ok(rows
+            .into_iter()
+            .map(|(key, ref_count, created_at)| StoredFileRef {
+                key,
+                ref_count,
+                // Normalised here rather than passed on: `FixedOffset` must not
+                // leave a repository.
+                created_at: created_at.with_timezone(&::chrono::Utc),
+            })
+            .collect())
     }
 
     async fn delete_if_unreferenced(&self, key: &str) -> Result<bool, AppError> {

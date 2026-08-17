@@ -10,6 +10,20 @@ pub struct UploadUsage {
     pub total_bytes: i64,
 }
 
+/// One row's reference bookkeeping, without its bytes.
+///
+/// `data` is deliberately absent: every caller wants to reason about references,
+/// and hydrating the full model would pull each blob across the wire to read two
+/// scalars.
+pub struct StoredFileRef {
+    pub key: String,
+    pub ref_count: i32,
+    /// When these **bytes** first landed — not when this key was last staged.
+    /// CAS dedupes on content, so re-uploading an identical image keeps the
+    /// original timestamp. Treat it as a floor on age, never as "last touched".
+    pub created_at: DateTime<Utc>,
+}
+
 #[async_trait]
 pub trait StoredFileRepository: Send + Sync {
     /// Files this user uploaded at or after `since`. Counts every CAS namespace
@@ -97,16 +111,18 @@ pub trait StoredFileRepository: Send + Sync {
     /// `false` means revived or already gone — leave the blob alone.
     async fn delete_if_unreferenced(&self, key: &str) -> Result<bool, AppError>;
 
-    /// Reference counts for whichever of `keys` have a row.
+    /// Reference bookkeeping for whichever of `keys` have a row.
     ///
-    /// Answers both halves of the orphan sweep in one query: a key the store
-    /// holds but this omits has no row at all (an orphaned object), and one it
-    /// returns at `<= 0` has a row whose collection never happened. Asking per
-    /// key instead would be a round trip per object in the bucket.
+    /// Answers every half of the orphan sweep in one query: a key the store holds
+    /// but this omits has no row at all (an orphaned object), one it returns at
+    /// `<= 0` has a row whose collection never happened, and `created_at`
+    /// separates an attachment nobody will ever publish from one a composer is
+    /// still holding open. Asking per key instead would be a round trip per
+    /// object in the bucket.
     ///
     /// Absent keys are simply missing from the result — the caller compares
     /// against what it asked for rather than expecting a placeholder.
-    async fn ref_counts_for(&self, keys: &[String]) -> Result<Vec<(String, i32)>, AppError>;
+    async fn refs_for(&self, keys: &[String]) -> Result<Vec<StoredFileRef>, AppError>;
 
     /// Every value that currently points at a stored file, across the columns
     /// that hold one.

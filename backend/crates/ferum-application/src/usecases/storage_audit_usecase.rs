@@ -32,7 +32,7 @@ use crate::ports::{ForumJob, JobQueue, StorageService};
 use crate::shared::AppError;
 use ferum_domain::repositories::plugin_repository::PluginRepository;
 use ferum_domain::repositories::post_repository::PostRepository;
-use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
+use ferum_domain::repositories::stored_file_repository::{StoredFileRef, StoredFileRepository};
 use ferum_domain::AuthUser;
 
 /// Keys examined per call.
@@ -67,7 +67,23 @@ pub struct SweepReport {
     /// Reported anyway because "cannot be cleaned automatically" is not the same
     /// as "must stay invisible": an operator who knows a specific post is long
     /// settled can act on one by hand.
+    ///
+    /// Only ones past [`ABANDONED_ATTACHMENT_GRACE_HOURS`] — see
+    /// `active_attachments`.
     pub retained_attachments: Vec<String>,
+    /// Attachments at `ref_count <= 0` that are **too recent to judge**, counted
+    /// rather than listed.
+    ///
+    /// A staged attachment is unreferenced for as long as its author keeps the
+    /// composer open, so a brand new one is indistinguishable by count alone from
+    /// one abandoned forever. Listing it under a heading that says "delete by hand
+    /// only" invites deleting an image out of a live draft — the exact outcome
+    /// `abandoned_attachments` already uses the same grace window to avoid, and
+    /// the sweep had no equivalent.
+    ///
+    /// A count and not a list on purpose: the number keeps the report honest
+    /// about what it saw, while giving nothing for an operator to act on.
+    pub active_attachments: usize,
     /// Bytes freed, counted only when `apply` was set.
     pub deleted: usize,
     /// Resume point. `None` means the sweep reached the end of the store.
@@ -203,24 +219,35 @@ impl StorageAuditUseCase {
             return Ok(report);
         }
 
-        let counts: HashMap<String, i32> = self
+        let rows: HashMap<String, StoredFileRef> = self
             .stored_files
-            .ref_counts_for(&keys)
+            .refs_for(&keys)
             .await?
             .into_iter()
+            .map(|row| (row.key.clone(), row))
             .collect();
 
+        // Same window `abandoned_attachments` uses, and deliberately the same
+        // constant: two different definitions of "old enough to act on" is how
+        // one tool ends up naming a file the other is still protecting.
+        let attachment_cutoff =
+            chrono::Utc::now() - chrono::Duration::hours(ABANDONED_ATTACHMENT_GRACE_HOURS);
+
         for key in &keys {
-            match counts.get(key) {
+            match rows.get(key) {
                 None => report.orphaned_objects.push(key.clone()),
                 // A post attachment at zero is un-published, not garbage — see
                 // `retained_attachments`. Routing it into `uncollected` would
                 // have this tool delete moderation evidence on `?apply=1`, which
                 // is what it did before this branch existed.
-                Some(&count) if count <= 0 && key.starts_with(ATTACHMENT_NAMESPACE) => {
-                    report.retained_attachments.push(key.clone())
+                Some(row) if row.ref_count <= 0 && key.starts_with(ATTACHMENT_NAMESPACE) => {
+                    if row.created_at < attachment_cutoff {
+                        report.retained_attachments.push(key.clone());
+                    } else {
+                        report.active_attachments += 1;
+                    }
                 }
-                Some(&count) if count <= 0 => report.uncollected.push(key.clone()),
+                Some(row) if row.ref_count <= 0 => report.uncollected.push(key.clone()),
                 Some(_) => {}
             }
         }

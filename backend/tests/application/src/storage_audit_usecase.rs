@@ -11,8 +11,12 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use bytes::Bytes;
 use ferum_application::ports::{ForumJob, JobQueue, StorageService};
-use ferum_application::usecases::storage_audit_usecase::StorageAuditUseCase;
-use ferum_domain::repositories::stored_file_repository::{StoredFileRepository, UploadUsage};
+use ferum_application::usecases::storage_audit_usecase::{
+    StorageAuditUseCase, ABANDONED_ATTACHMENT_GRACE_HOURS,
+};
+use ferum_domain::repositories::stored_file_repository::{
+    StoredFileRef, StoredFileRepository, UploadUsage,
+};
 use ferum_domain::{AppError, AuthUser};
 use ferum_test_support::fixtures::AuthUserBuilder;
 use ferum_test_support::mocks::plugin_repository::MockPluginRepository;
@@ -97,14 +101,23 @@ impl StorageService for FakeStore {
 /// the difference is the behaviour under test.
 struct FakeRows {
     counts: HashMap<String, i32>,
+    /// Per-key `created_at`. Absent means [`FakeRows::AGED`] — every fixture that
+    /// is not specifically about age wants a row old enough to be actionable, and
+    /// defaulting to "new" would silently move most of these tests into the grace
+    /// window instead.
+    ages: HashMap<String, chrono::DateTime<chrono::Utc>>,
     pointers: Vec<String>,
     released: Mutex<Vec<String>>,
 }
 
 impl FakeRows {
+    /// Comfortably past `ABANDONED_ATTACHMENT_GRACE_HOURS`.
+    const AGED: chrono::TimeDelta = chrono::TimeDelta::days(30);
+
     fn with(entries: &[(&str, i32)]) -> Arc<Self> {
         Arc::new(Self {
             counts: entries.iter().map(|(k, c)| (k.to_string(), *c)).collect(),
+            ages: HashMap::new(),
             pointers: Vec::new(),
             released: Mutex::new(Vec::new()),
         })
@@ -114,7 +127,22 @@ impl FakeRows {
     fn with_pointers(entries: &[(&str, i32)], pointers: &[&str]) -> Arc<Self> {
         Arc::new(Self {
             counts: entries.iter().map(|(k, c)| (k.to_string(), *c)).collect(),
+            ages: HashMap::new(),
             pointers: pointers.iter().map(|p| p.to_string()).collect(),
+            released: Mutex::new(Vec::new()),
+        })
+    }
+
+    /// Rows where some keys carry an explicit age, for the grace-window tests.
+    fn with_ages(entries: &[(&str, i32, chrono::TimeDelta)]) -> Arc<Self> {
+        let now = chrono::Utc::now();
+        Arc::new(Self {
+            counts: entries.iter().map(|(k, c, _)| (k.to_string(), *c)).collect(),
+            ages: entries
+                .iter()
+                .map(|(k, _, age)| (k.to_string(), now - *age))
+                .collect(),
+            pointers: Vec::new(),
             released: Mutex::new(Vec::new()),
         })
     }
@@ -122,18 +150,28 @@ impl FakeRows {
 
 #[async_trait]
 impl StoredFileRepository for FakeRows {
-    async fn ref_counts_for(&self, keys: &[String]) -> Result<Vec<(String, i32)>, AppError> {
+    async fn refs_for(&self, keys: &[String]) -> Result<Vec<StoredFileRef>, AppError> {
+        let aged = chrono::Utc::now() - Self::AGED;
         Ok(keys
             .iter()
-            .filter_map(|k| self.counts.get(k).map(|c| (k.clone(), *c)))
+            .filter_map(|k| {
+                self.counts.get(k).map(|c| StoredFileRef {
+                    key: k.clone(),
+                    ref_count: *c,
+                    created_at: self.ages.get(k).copied().unwrap_or(aged),
+                })
+            })
             .collect())
     }
     async fn referencing_pointers(&self) -> Result<Vec<String>, AppError> {
         Ok(self.pointers.clone())
     }
-    /// Ignores the cutoff: the fixtures here are about *whether a post mentions
-    /// the key*, and the age floor is exercised separately in
-    /// `a_freshly_staged_attachment_is_not_reported`.
+    /// Ignores the cutoff, so nothing here can vouch for the age floor — the
+    /// fixtures are about *whether a post mentions the key*. That floor is a SQL
+    /// predicate and is covered where it can actually be exercised, in
+    /// `tests/infrastructure`'s `the_age_floor_excludes_a_recently_staged_row`.
+    /// The sweep's own grace window is a different mechanism, covered by
+    /// `a_freshly_staged_attachment_is_counted_but_not_listed` below.
     async fn attachment_keys_before(
         &self,
         _cutoff: chrono::DateTime<chrono::Utc>,
@@ -329,6 +367,66 @@ async fn a_post_attachment_at_zero_is_reported_but_never_collected() {
         store.deleted.lock().unwrap().is_empty() && jobs.0.lock().unwrap().is_empty(),
         "and nothing may act on it, even with apply set"
     );
+    assert_eq!(report.active_attachments, 0, "30 days old is not active");
+}
+
+#[tokio::test]
+async fn a_freshly_staged_attachment_is_counted_but_not_listed() {
+    // An attachment is unreferenced for as long as its author keeps the composer
+    // open, so by count alone a draft in progress is indistinguishable from one
+    // abandoned forever. `abandoned_attachments` already refuses to name one
+    // inside the grace window; the sweep had no equivalent, so it listed a live
+    // draft's image under a heading reading "delete by hand only".
+    let store = FakeStore::holding(&[
+        "post-attachments/being-typed.jpg",
+        "post-attachments/long-gone.jpg",
+    ]);
+    let rows = FakeRows::with_ages(&[
+        ("post-attachments/being-typed.jpg", 0, chrono::TimeDelta::minutes(5)),
+        ("post-attachments/long-gone.jpg", 0, chrono::TimeDelta::days(9)),
+    ]);
+
+    let report = sweep_uc(rows, store, SpyJobs::new())
+        .sweep(&admin(), None, 100, false)
+        .await
+        .expect("sweep runs");
+
+    assert_eq!(
+        report.retained_attachments,
+        ["post-attachments/long-gone.jpg"],
+        "only the one past the grace window may be offered for manual deletion"
+    );
+    assert_eq!(
+        report.active_attachments, 1,
+        "the recent one is still counted — the report must not under-report what it saw"
+    );
+    // Neither is collectable either way; the split is about what gets shown.
+    assert!(report.uncollected.is_empty());
+}
+
+#[tokio::test]
+async fn the_two_tools_share_one_definition_of_old_enough() {
+    // Right at the boundary from both sides. Two different cutoffs is how one tool
+    // ends up naming a file the other is still protecting, which is why both read
+    // `ABANDONED_ATTACHMENT_GRACE_HOURS` rather than each carrying a literal.
+    let grace = chrono::TimeDelta::hours(ABANDONED_ATTACHMENT_GRACE_HOURS);
+    let store = FakeStore::holding(&["post-attachments/just-inside.jpg", "post-attachments/just-outside.jpg"]);
+    let rows = FakeRows::with_ages(&[
+        // A minute short of the window: still protected.
+        ("post-attachments/just-inside.jpg", 0, grace - chrono::TimeDelta::minutes(1)),
+        ("post-attachments/just-outside.jpg", 0, grace + chrono::TimeDelta::minutes(1)),
+    ]);
+
+    let report = sweep_uc(rows, store, SpyJobs::new())
+        .sweep(&admin(), None, 100, false)
+        .await
+        .expect("sweep runs");
+
+    assert_eq!(
+        report.retained_attachments,
+        ["post-attachments/just-outside.jpg"]
+    );
+    assert_eq!(report.active_attachments, 1);
 }
 
 #[tokio::test]

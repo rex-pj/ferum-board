@@ -35,9 +35,14 @@
   /// Renders a namespace group with a thumbnail per key.
   ///
   /// The thumbnail is the point of the page. `logos/a1b2c3d4.png` tells an admin
-  /// nothing about whether losing it matters; the image does. `/files/{key}`
-  /// still serves an orphaned object right up until it is deleted, so the
-  /// preview is available exactly when the decision is being made.
+  /// nothing about whether losing it matters; the image does.
+  ///
+  /// It resolves for every group except one. A row still exists for anything at
+  /// `ref_count <= 0`, so `/files/` serves those right up until collection —
+  /// including staged post attachments, which `resolve_stored_file` admits for
+  /// staff precisely so this page can show them. The exception is a true orphan
+  /// under database storage: no row means no bytes, so those fall back to the
+  /// placeholder and always will.
   function renderGroup(container, label, keys) {
     var group = el('div', 'mb-3');
     group.appendChild(el('div', 'fw-semibold small mb-2', label + ' — ' + keys.length));
@@ -101,6 +106,7 @@
     var orphans = [];
     var uncollected = [];
     var retained = [];
+    var active = 0;
     var deleted = 0;
 
     try {
@@ -122,6 +128,7 @@
         orphans = orphans.concat(data.orphaned_objects);
         uncollected = uncollected.concat(data.uncollected);
         retained = retained.concat(data.retained_attachments || []);
+        active += data.active_attachments || 0;
         deleted += data.deleted;
         status('sweep-status', 'text-muted', 'Scanned ' + scanned + ' objects…');
 
@@ -147,11 +154,30 @@
       renderGroup(out, 'Un-published post attachments — kept as moderation evidence, ' +
         'delete by hand only', retained);
     }
+    // Counted, never listed. These are inside the grace window, so each one is
+    // most likely an image in a composer somebody still has open — see
+    // `active_attachments` in storage_audit_usecase.rs. Naming the keys would
+    // invite deleting a live draft's picture.
+    if (active) {
+      // "more" only when something was actually listed above it, or the sentence
+      // points at nothing. The first wording said "3 more" under an empty list.
+      var note = el('div', 'text-muted small',
+        active + (retained.length ? ' more' : '') +
+        ' post attachment(s) uploaded in the last 24h are not listed: until then ' +
+        'an unreferenced attachment is indistinguishable from one in a composer ' +
+        'somebody still has open. They appear above once they age past that.');
+      out.appendChild(note);
+    }
 
     if (sweepFindings === 0) {
+      // "Nothing to clean" is about what this button would act on. Retained
+      // attachments are deliberately not that, so they are named separately
+      // rather than folded into a count that reads as zero work outstanding.
       status('sweep-status', 'text-success',
-        'Scanned ' + scanned + ' objects — nothing to clean' +
-        (retained.length ? ' (' + retained.length + ' attachments retained).' : '.'));
+        'Scanned ' + scanned + ' objects — nothing to clean automatically' +
+        (retained.length
+          ? '. ' + retained.length + ' post attachment(s) listed below for manual review.'
+          : '.'));
       return;
     }
 

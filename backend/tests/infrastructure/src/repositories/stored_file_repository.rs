@@ -582,3 +582,131 @@ async fn publish_then_unpublish_round_trip() {
 
     db.teardown().await;
 }
+
+#[tokio::test]
+async fn the_age_floor_excludes_a_recently_staged_row() {
+    // `attachment_keys_before` is the ONLY thing standing between the audit's
+    // release pass and an image inside a composer somebody still has open: a
+    // staged attachment is referenced by nothing, and will stay that way until
+    // its author hits post. The floor is a SQL predicate on `created_at`, so
+    // nothing in the application suite can vouch for it — the double there
+    // ignores the cutoff it is handed.
+    //
+    // Both rows are attachments at `ref_count = 0`, differing only in age.
+    let db = TestDb::new("sfile_age_floor").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+
+    let fresh = "post-attachments/still-typing.png";
+    let stale = "post-attachments/abandoned.png";
+    for key in [fresh, stale] {
+        repo.upsert_staged(key, "image/png", 4, None).await.expect("stage");
+    }
+    // `created_at` defaults to now(), so the old one is aged by hand — this is
+    // the one thing a test cannot do by waiting.
+    // `execute_raw`, not `execute` — in Sea-ORM 2.0 the un-suffixed one takes a
+    // sea-query statement and builds the SQL itself.
+    db.conn
+        .execute_raw(Statement::from_sql_and_values(
+            db.conn.get_database_backend(),
+            "UPDATE stored_files SET created_at = now() - interval '48 hours' WHERE key = $1",
+            [stale.into()],
+        ))
+        .await
+        .expect("age the abandoned row");
+
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(24);
+    let found = repo
+        .attachment_keys_before(cutoff)
+        .await
+        .expect("attachment_keys_before");
+
+    assert!(
+        found.contains(&stale.to_string()),
+        "a 48h-old unreferenced attachment must be reported; got {found:?}"
+    );
+    assert!(
+        !found.contains(&fresh.to_string()),
+        "a just-staged attachment must NOT be reported — that is somebody's open draft"
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn refs_for_reports_count_and_age_and_omits_absent_keys() {
+    // The sweep reads all three facts from this one query, and each drives a
+    // different branch: a missing row is an orphan, `ref_count <= 0` is
+    // uncollected, and `created_at` decides whether an attachment at zero is
+    // offered for manual deletion or merely counted.
+    let db = TestDb::new("sfile_refs_for").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+
+    repo.upsert_and_ref("avatars/live.png", "image/png", 7, None)
+        .await
+        .expect("referenced row");
+    repo.upsert_staged("post-attachments/staged.png", "image/png", 8, None)
+        .await
+        .expect("staged row");
+
+    let before = chrono::Utc::now();
+    let rows = repo
+        .refs_for(&[
+            "avatars/live.png".to_string(),
+            "post-attachments/staged.png".to_string(),
+            "avatars/no-such-row.png".to_string(),
+        ])
+        .await
+        .expect("refs_for");
+
+    assert_eq!(
+        rows.len(),
+        2,
+        "a key with no row must be absent, not returned as a zero — that is how \
+         the sweep tells an orphan from an uncollected row"
+    );
+    let by_key: std::collections::HashMap<_, _> =
+        rows.into_iter().map(|r| (r.key.clone(), r)).collect();
+    assert_eq!(by_key["avatars/live.png"].ref_count, 1);
+    assert_eq!(by_key["post-attachments/staged.png"].ref_count, 0);
+    for row in by_key.values() {
+        // Both were written moments ago. A timezone mishandled on the way out
+        // would land this hours away in either direction.
+        let age = before - row.created_at;
+        assert!(
+            age < chrono::Duration::minutes(5) && age > chrono::Duration::minutes(-5),
+            "created_at came back as {} against a now of {before}",
+            row.created_at
+        );
+    }
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn refs_for_reports_an_aged_row_as_aged() {
+    // The companion to the test above, and the one that matters for the sweep's
+    // grace window: that one only proves a *fresh* row comes back as fresh, which
+    // a sign error or a dropped offset would also satisfy. This one writes a row
+    // two days into the past and checks `refs_for` says so — the difference
+    // between "listed for manual review" and "silently counted as a live draft".
+    let db = TestDb::new("sfile_refs_for_aged").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+    let key = "post-attachments/two-days-old.png";
+
+    repo.upsert_staged(key, "image/png", 5, None).await.expect("stage");
+    db.conn
+        .execute_raw(Statement::from_sql_and_values(
+            db.conn.get_database_backend(),
+            "UPDATE stored_files SET created_at = now() - interval '48 hours' WHERE key = $1",
+            [key.into()],
+        ))
+        .await
+        .expect("age the row");
+
+    let rows = repo.refs_for(&[key.to_string()]).await.expect("refs_for");
+    let age = chrono::Utc::now() - rows[0].created_at;
+    assert!(
+        age > chrono::Duration::hours(47) && age < chrono::Duration::hours(49),
+        "a row aged 48h in SQL came back {age} old — the sweep would treat it as a live draft"
+    );
+}

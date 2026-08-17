@@ -33,50 +33,79 @@ use ferum_infrastructure::system_seed_service::PgSystemSeedService;
 const TEMPLATE_NAME: &str = "ferum_test_template";
 
 static INIT_ENV: Once = Once::new();
-/// Ensures the template DB is created exactly once per process, even when
-/// many tests race to call `TestDb::new` in parallel. `OnceLock` blocks
-/// concurrent callers until the winning thread finishes the init closure.
-static TEMPLATE: OnceLock<()> = OnceLock::new();
+/// The outcome of building the template DB, computed once per process.
+///
+/// **It stores a `Result` rather than `()`, and that is the whole point.**
+/// `OnceLock::get_or_init` leaves the cell *uninitialised* when its closure
+/// panics, so an `expect` anywhere inside meant the next of ~500 parallel tests
+/// re-entered and ran `DROP DATABASE … WITH (FORCE)` a second time — against the
+/// template that the tests already running were cloning from. One transient
+/// failure to reach Postgres therefore turned into a whole suite reporting
+/// `template database "ferum_test_template" does not exist`, with the real cause
+/// scrolled off the top and thirty unrelated repository tests named as failures.
+///
+/// Returning the error instead means the destructive step happens at most once
+/// per process no matter what, and every caller reports the same true cause.
+static TEMPLATE: OnceLock<Result<(), String>> = OnceLock::new();
 
 /// Build the shared template database on first call, then return immediately
 /// on all subsequent calls. Uses a plain OS thread so there is no nested-
 /// tokio-runtime problem (each `#[tokio::test]` has its own runtime).
+///
+/// # Panics
+/// With the recorded reason if the build failed — identically for every test, so
+/// the failure is attributable to the bootstrap rather than to whichever test
+/// happened to run next.
 fn ensure_template(server_url: &str) {
-    TEMPLATE.get_or_init(|| {
+    let outcome = TEMPLATE.get_or_init(|| {
         let url = server_url.to_string();
-        std::thread::spawn(move || {
+        // Nothing inside may panic: see the note on `TEMPLATE`. `?` on a
+        // `Result<_, String>` throughout, and the `join` below converts a panic
+        // that slips through anyway into the same stored error.
+        let built = std::thread::spawn(move || -> Result<(), String> {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .expect("build runtime for template-db init")
+                .map_err(|e| format!("build runtime for template-db init: {e}"))?
                 .block_on(async move {
                     let admin = Database::connect(format!("{url}/postgres"))
                         .await
-                        .expect("connect to postgres for template creation");
-                    // Drop stale template from a previous run (if any).
-                    exec(&admin, &format!("DROP DATABASE IF EXISTS \"{TEMPLATE_NAME}\" WITH (FORCE)")).await;
-                    exec(&admin, &format!("CREATE DATABASE \"{TEMPLATE_NAME}\"")).await;
+                        .map_err(|e| format!("connect to postgres for template creation: {e}"))?;
+                    // Drop stale template from a previous run (if any). Reached
+                    // at most once per process, which is what makes it safe to
+                    // do while other tests hold clones of it.
+                    try_exec(&admin, &format!("DROP DATABASE IF EXISTS \"{TEMPLATE_NAME}\" WITH (FORCE)")).await?;
+                    try_exec(&admin, &format!("CREATE DATABASE \"{TEMPLATE_NAME}\"")).await?;
                     admin.close().await.ok();
 
                     let conn = Database::connect(format!("{url}/{TEMPLATE_NAME}"))
                         .await
-                        .expect("connect to template database");
+                        .map_err(|e| format!("connect to template database: {e}"))?;
                     migration::Migrator::up(&conn, None)
                         .await
-                        .expect("run migrations on template database");
+                        .map_err(|e| format!("run migrations on template database: {e}"))?;
                     // Migrations are DDL only; the system roles and permissions
                     // these tests assert on are written here, exactly as they
                     // are at startup.
                     PgSystemSeedService::new(conn.clone())
                         .seed_system()
                         .await
-                        .expect("seed system data on template database");
+                        .map_err(|e| format!("seed system data on template database: {e}"))?;
                     conn.close().await.ok();
-                });
+                    Ok(())
+                })
         })
-        .join()
-        .expect("template-db initialisation thread panicked");
+        .join();
+
+        match built {
+            Ok(result) => result,
+            Err(_) => Err("template-db initialisation thread panicked".to_string()),
+        }
     });
+
+    if let Err(reason) = outcome {
+        panic!("template database unavailable: {reason}");
+    }
 }
 
 /// A per-test database cloned from `ferum_test_template`.
@@ -191,6 +220,14 @@ async fn exec(conn: &DatabaseConnection, sql: &str) {
     conn.execute_raw(Statement::from_string(DbBackend::Postgres, sql.to_owned()))
         .await
         .unwrap_or_else(|e| panic!("admin statement failed ({sql}): {e}"));
+}
+
+/// [`exec`] for the template bootstrap, which must not panic — see [`TEMPLATE`].
+async fn try_exec(conn: &DatabaseConnection, sql: &str) -> Result<(), String> {
+    conn.execute_raw(Statement::from_string(DbBackend::Postgres, sql.to_owned()))
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("admin statement failed ({sql}): {e}"))
 }
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────────

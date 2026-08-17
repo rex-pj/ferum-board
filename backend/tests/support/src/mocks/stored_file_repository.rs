@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use ferum_domain::repositories::stored_file_repository::{StoredFileRepository, UploadUsage};
+use ferum_domain::repositories::stored_file_repository::{
+    StoredFileRef, StoredFileRepository, UploadUsage,
+};
 use ferum_domain::AppError;
 
 /// No-op StoredFileRepository — use when file storage is not the focus of the test.
@@ -27,6 +29,6 @@ impl StoredFileRepository for NoopStoredFileRepository {
     /// Empty = "no row for any of these", which reads as *every* key being an
     /// orphan. Correct for a repository that stores nothing, and the sweep tests
     /// bring their own double rather than relying on it.
-    async fn ref_counts_for(&self, _keys: &[String]) -> Result<Vec<(String, i32)>, AppError> { Ok(vec![]) }
+    async fn refs_for(&self, _: &[String]) -> Result<Vec<StoredFileRef>, AppError> { Ok(vec![]) }
     async fn list_keys_with_prefix(&self, _prefix: &str) -> Result<Vec<String>, AppError> { Ok(vec![]) }
 }

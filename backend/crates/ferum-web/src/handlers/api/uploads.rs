@@ -1,7 +1,8 @@
 //! `/files/` blob serving and upload endpoints.
 //!
 //! See [`resolve_stored_file`] for the ordering rule that keeps staged
-//! attachments private under an object store.
+//! attachments private under an object store, and [`Viewer`] for who counts as
+//! staff — the one category of viewer besides the uploader that may read one.
 
 use std::path::PathBuf;
 
@@ -12,6 +13,7 @@ use sea_orm::EntityTrait;
 
 use crate::app_state::AppState;
 use crate::middleware::AuthUser;
+use ferum_domain::models::role::perm;
 use ferum_infrastructure::entities::stored_files;
 
 /// GET /plugins/:slug/assets/*path — serve a plugin UI asset.
@@ -148,15 +150,72 @@ pub fn may_be_staged(key: &str) -> bool {
     key.starts_with(ATTACHMENT_PREFIX)
 }
 
+/// Who is asking, reduced to the two things a staged row's disposition turns on.
+///
+/// A struct rather than two positional arguments because `resolve_stored_file`
+/// already takes an `Option<Uuid>` and a `bool`, and a second pair of those in a
+/// six-argument call is a transposition waiting to happen — on the one function
+/// here where a transposition publishes a private file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Viewer {
+    pub id: Option<uuid::Uuid>,
+    /// Cleared for guests, so an unauthenticated request can never be staff.
+    /// See [`Viewer::from_auth`] for which permissions set it.
+    pub is_staff: bool,
+}
+
+impl Viewer {
+    /// Nobody signed in.
+    pub fn guest() -> Self {
+        Self::default()
+    }
+
+    /// A signed-in member with no moderation powers.
+    pub fn member(id: uuid::Uuid) -> Self {
+        Self {
+            id: Some(id),
+            is_staff: false,
+        }
+    }
+
+    /// Reads staff-ness off the resolved permission set.
+    ///
+    /// `moderation.view_reports` **in any category** — not the global-only
+    /// `has_perm` — because a category-scoped moderator is the normal shape of
+    /// the role, and this endpoint holds only a CAS key: nothing in
+    /// `post-attachments/{hash}.jpg` names the category the post lived in, and
+    /// recovering it would mean a `content_md LIKE` scan on the hot path.
+    ///
+    /// Widening from "this moderator's categories" to "any" is acceptable
+    /// because the key is itself the capability — 128 bits of digest, not
+    /// enumerable, and only ever handed out by surfaces that are already
+    /// permission-gated (the report queue, the mod log, `/admin/storage`).
+    ///
+    /// `admin.config` is accepted too, so whoever can open `/admin/storage` can
+    /// see the thumbnails on it. Stock `admin` holds both; a custom role need
+    /// only hold one.
+    pub fn from_auth(auth: Option<&AuthUser>) -> Self {
+        let Some(user) = auth else {
+            return Self::guest();
+        };
+        Self {
+            id: Some(user.id),
+            is_staff: user.has_perm_any_category(perm::MOD_VIEW_REPORTS)
+                || user.has_perm(perm::ADMIN_CONFIG),
+        }
+    }
+}
+
 /// What `/files/` should do with a row, decided before any of it becomes HTTP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileDisposition {
-    /// Staged, and the caller is not its uploader. 404 rather than 403: whether
-    /// a staged attachment exists is not something to confirm to a stranger.
+    /// Staged, and the caller is neither its uploader nor staff. 404 rather than
+    /// 403: whether a staged attachment exists is not something to confirm to a
+    /// stranger.
     NotFound,
-    /// Staged, caller owns it, bytes are here. Never cacheable.
+    /// Staged, caller may see it, bytes are here. Never cacheable.
     StagedBytes,
-    /// Staged, caller owns it, bytes are in the object store. Never cacheable.
+    /// Staged, caller may see it, bytes are in the object store. Never cacheable.
     StagedRedirect,
     /// Published, bytes are here. Immutable + ETag.
     PublishedBytes,
@@ -174,19 +233,28 @@ pub enum FileDisposition {
 ///
 /// A handler needing an `AppState` cannot be exercised in this repository's test
 /// suite; this function can, exhaustively, which is the point of it existing.
+///
+/// **Staff see staged attachments, and that is the point rather than a
+/// loosening.** `ref_count` reaching zero is also what soft-deleting a post does
+/// to its images, and those objects are deliberately kept as the evidence for the
+/// removal — when the image *is* the violation, it is the whole case. While the
+/// only accepted viewer was the uploader, that evidence was readable by the
+/// account that posted it and by nobody else, including the moderator who removed
+/// the post.
 pub fn resolve_stored_file(
     key: &str,
     ref_count: i32,
     uploaded_by: Option<uuid::Uuid>,
     has_bytes: bool,
-    viewer: Option<uuid::Uuid>,
+    viewer: Viewer,
 ) -> FileDisposition {
     // Staged first. Always.
     if may_be_staged(key) && ref_count <= 0 {
         // `uploaded_by_id` is nullable (ON DELETE SET NULL); a staged row whose
-        // owner was deleted is reachable by nobody.
-        let is_uploader = matches!((viewer, uploaded_by), (Some(v), Some(o)) if v == o);
-        if !is_uploader {
+        // owner was deleted is reachable by no member — but staff still reach it,
+        // which is exactly the case a deleted account's abandoned upload creates.
+        let is_uploader = matches!((viewer.id, uploaded_by), (Some(v), Some(o)) if v == o);
+        if !is_uploader && !viewer.is_staff {
             return FileDisposition::NotFound;
         }
         return if has_bytes {
@@ -201,6 +269,58 @@ pub fn resolve_stored_file(
     } else {
         FileDisposition::PublishedRedirect
     }
+}
+
+/// How long a response for a given disposition may be kept, and by whom.
+///
+/// Split out for the same reason as [`resolve_stored_file`]: `serve` needs an
+/// `AppState` and cannot be constructed in this repository's test suite, so while
+/// these strings were literals inside its match arms the rule that a *staged*
+/// response is never cacheable had nothing guarding it. That rule is what stops a
+/// shared cache handing a removed post's image to the next person through it, and
+/// it now matters to more viewers than it used to — [`Viewer`] admits staff.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CachePolicy {
+    pub cache_control: String,
+    /// Whether the response may carry an ETag.
+    ///
+    /// Only ever true where `cache_control` permits storing the response: an ETag
+    /// invites the revalidation that the 304 short-circuit at the top of [`serve`]
+    /// answers from the key alone, and that short-circuit deliberately never runs
+    /// for a staged key.
+    pub etag: bool,
+}
+
+/// The caching each disposition is allowed. `None` for [`FileDisposition::NotFound`]
+/// — there is no body, so there is nothing to cache.
+///
+/// One authority for all three places that answer a `/files/` request: both
+/// redirect arms, the byte-serving arm, and the object-store fast path that skips
+/// the database entirely.
+pub fn cache_policy(disposition: FileDisposition) -> Option<CachePolicy> {
+    let policy = match disposition {
+        FileDisposition::NotFound => return None,
+        // Authorized per viewer, so the answer is not shared. `no-store` rather
+        // than `private`+`max-age=0`: a staged attachment must not sit in a disk
+        // cache either.
+        FileDisposition::StagedBytes | FileDisposition::StagedRedirect => CachePolicy {
+            cache_control: "private, no-store".to_string(),
+            etag: false,
+        },
+        // A location moves when the backend, bucket or CDN changes, so this is
+        // bounded rather than `immutable` — see `REDIRECT_MAX_AGE_SECS`.
+        FileDisposition::PublishedRedirect => CachePolicy {
+            cache_control: redirect_cache_control(),
+            etag: false,
+        },
+        // Content-addressed and public: the bytes behind this key can never
+        // change, so it may be cached forever and revalidated by ETag.
+        FileDisposition::PublishedBytes => CachePolicy {
+            cache_control: "public, max-age=31536000, immutable".to_string(),
+            etag: true,
+        },
+    };
+    Some(policy)
 }
 
 /// GET /files/:key — resolves a stored file to its bytes or its location.
@@ -249,11 +369,17 @@ pub async fn serve(
         // Relative means database storage, where `public_url` returns this very
         // path — redirecting to it would loop.
         if location.contains("://") {
+            // A key that cannot be staged is by definition published, so this
+            // reads the same policy the database path would have reached. Sharing
+            // it is the point: a second literal here is how the fast path and the
+            // slow path come to disagree about caching for the same key.
+            let cache = cache_policy(FileDisposition::PublishedRedirect)
+                .expect("PublishedRedirect always has a policy");
             return (
                 StatusCode::TEMPORARY_REDIRECT,
                 [
                     (header::LOCATION, location),
-                    (header::CACHE_CONTROL, redirect_cache_control()),
+                    (header::CACHE_CONTROL, cache.cache_control),
                 ],
             )
                 .into_response();
@@ -283,7 +409,7 @@ pub async fn serve(
                 file.ref_count,
                 file.uploaded_by_id,
                 file.data.is_some(),
-                auth_user.as_ref().map(|u| u.id),
+                Viewer::from_auth(auth_user.as_ref()),
             );
 
             // Moved out once, so the two byte-serving arms below bind it rather
@@ -291,32 +417,33 @@ pub async fn serve(
             // have to unwrap.
             let data = file.data;
 
+            // Every arm below reads its caching from here rather than spelling it
+            // out, so the "staged is never cacheable" rule lives in one testable
+            // place. `None` is exactly the 404 arm.
+            let Some(cache) = cache_policy(disposition) else {
+                return StatusCode::NOT_FOUND.into_response();
+            };
+
             match disposition {
+                // Unreachable: `cache_policy` returned `None` for it above.
                 FileDisposition::NotFound => StatusCode::NOT_FOUND.into_response(),
 
                 // Bytes are in the object store. This endpoint can decline to
                 // tell a stranger where they are; it cannot stop anyone who
-                // already has the URL, because the object is world-readable.
-                // `private, no-store` because the answer is per viewer — a
-                // cacheable redirect would let a shared cache reveal the
-                // location to the next person through it.
-                FileDisposition::StagedRedirect => (
+                // already has the URL, because the object is world-readable. The
+                // redirect is uncacheable because the answer is per viewer — a
+                // shared cache would otherwise reveal the location to the next
+                // person through it.
+                //
+                // A row whose bytes are not here belongs to an external backend:
+                // not an error and not a 404, the file exists and this endpoint
+                // simply is not where it lives. The two differ only in caching,
+                // which `cache_policy` already decided.
+                FileDisposition::StagedRedirect | FileDisposition::PublishedRedirect => (
                     StatusCode::TEMPORARY_REDIRECT,
                     [
                         (header::LOCATION, state.storage.public_url(&file.key)),
-                        (header::CACHE_CONTROL, "private, no-store".to_string()),
-                    ],
-                )
-                    .into_response(),
-
-                // A row whose bytes are not here belongs to an external backend.
-                // Not an error and not a 404 — the file exists, this endpoint
-                // simply is not where it lives.
-                FileDisposition::PublishedRedirect => (
-                    StatusCode::TEMPORARY_REDIRECT,
-                    [
-                        (header::LOCATION, state.storage.public_url(&file.key)),
-                        (header::CACHE_CONTROL, redirect_cache_control()),
+                        (header::CACHE_CONTROL, cache.cache_control),
                     ],
                 )
                     .into_response(),
@@ -337,21 +464,12 @@ pub async fn serve(
                         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                     };
 
-                    let staged = disposition == FileDisposition::StagedBytes;
-                    // Published files are content-addressed and immutable, so
-                    // they may be cached forever and revalidated by ETag. A
-                    // staged one is authorized per viewer and gets neither.
-                    let cache_control = if staged {
-                        "private, no-store".to_string()
-                    } else {
-                        "public, max-age=31536000, immutable".to_string()
-                    };
                     let mut headers = vec![
                         (header::CONTENT_TYPE, file.content_type.clone()),
-                        (header::CACHE_CONTROL, cache_control),
+                        (header::CACHE_CONTROL, cache.cache_control),
                         (header::CONTENT_DISPOSITION, "attachment".to_string()),
                     ];
-                    if !staged {
+                    if cache.etag {
                         // Without this the 304 short-circuit above can never
                         // fire: a client only sends `If-None-Match` for an ETag
                         // it was given. `immutable` already suppresses
@@ -359,6 +477,9 @@ pub async fn serve(
                         // caches, `no-cache` reloads and non-browser clients all
                         // revalidate anyway, and those are exactly the requests
                         // worth answering without a database round trip.
+                        //
+                        // Never for a staged row: `cache_policy` clears this flag
+                        // there, so the two decisions cannot drift apart.
                         headers.push((header::ETAG, crate::utils::etag_for(&file.key)));
                     }
 

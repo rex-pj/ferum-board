@@ -18,7 +18,9 @@ use chrono::Utc;
 use ferum_application::ports::{ForumJob, JobQueue};
 use ferum_application::usecases::theme_usecase::ThemeUseCase;
 use ferum_domain::models::theme::{NewTheme, Theme};
-use ferum_domain::repositories::stored_file_repository::{StoredFileRepository, UploadUsage};
+use ferum_domain::repositories::stored_file_repository::{
+    StoredFileRef, StoredFileRepository, UploadUsage,
+};
 use ferum_domain::repositories::theme_repository::ThemeRepository;
 use ferum_domain::AppError;
 use ferum_test_support::mocks::storage_service::NoopStorageService;
@@ -100,7 +102,7 @@ impl RecordingFiles {
 impl StoredFileRepository for RecordingFiles {
     async fn attachment_keys_before(&self, _: chrono::DateTime<chrono::Utc>) -> Result<Vec<String>, AppError> { Ok(vec![]) }
     async fn referencing_pointers(&self) -> Result<Vec<String>, AppError> { Ok(vec![]) }
-    async fn ref_counts_for(&self, _: &[String]) -> Result<Vec<(String, i32)>, AppError> { Ok(vec![]) }
+    async fn refs_for(&self, _: &[String]) -> Result<Vec<StoredFileRef>, AppError> { Ok(vec![]) }
     async fn usage_since(
         &self,
         _by: Uuid,

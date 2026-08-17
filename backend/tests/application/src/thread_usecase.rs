@@ -3,7 +3,9 @@ use std::sync::Arc;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_domain::AppError;
 use ferum_domain::models::thread::ThreadStatus;
-use ferum_domain::repositories::stored_file_repository::{StoredFileRepository, UploadUsage};
+use ferum_domain::repositories::stored_file_repository::{
+    StoredFileRef, StoredFileRepository, UploadUsage,
+};
 use ferum_test_support::fixtures::{ids, make_category, make_post, make_thread, AuthUserBuilder};
 use ferum_test_support::mocks::{
     cache_service::NoopCacheService,
@@ -39,7 +41,7 @@ impl SpyStoredFiles {
 impl StoredFileRepository for SpyStoredFiles {
     async fn attachment_keys_before(&self, _: chrono::DateTime<chrono::Utc>) -> Result<Vec<String>, AppError> { Ok(vec![]) }
     async fn referencing_pointers(&self) -> Result<Vec<String>, AppError> { Ok(vec![]) }
-    async fn ref_counts_for(&self, _: &[String]) -> Result<Vec<(String, i32)>, AppError> { Ok(vec![]) }
+    async fn refs_for(&self, _: &[String]) -> Result<Vec<StoredFileRef>, AppError> { Ok(vec![]) }
     async fn usage_since(&self, _: uuid::Uuid, _: chrono::DateTime<chrono::Utc>) -> Result<UploadUsage, AppError> {
         Ok(UploadUsage { file_count: 0, total_bytes: 0 })
     }

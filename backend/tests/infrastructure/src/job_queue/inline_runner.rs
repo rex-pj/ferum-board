@@ -17,7 +17,7 @@ use ferum_application::shared::AppError;
 use ferum_domain::models::webhook::Webhook;
 use ferum_domain::Locale;
 use ferum_domain::repositories::{
-    stored_file_repository::StoredFileRepository,
+    stored_file_repository::{StoredFileRef, StoredFileRepository},
     webhook_repository::{NewWebhook, UpdateWebhook, WebhookRepository},
 };
 use ferum_domain::models::email_template::EmailTemplate;
@@ -101,7 +101,7 @@ impl SpyStoredFiles {
 impl StoredFileRepository for SpyStoredFiles {
     async fn attachment_keys_before(&self, _: chrono::DateTime<chrono::Utc>) -> Result<Vec<String>, AppError> { Ok(vec![]) }
     async fn referencing_pointers(&self) -> Result<Vec<String>, AppError> { Ok(vec![]) }
-    async fn ref_counts_for(&self, _: &[String]) -> Result<Vec<(String, i32)>, AppError> { Ok(vec![]) }
+    async fn refs_for(&self, _: &[String]) -> Result<Vec<StoredFileRef>, AppError> { Ok(vec![]) }
     async fn usage_since(
         &self,
         _: uuid::Uuid,

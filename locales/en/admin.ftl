@@ -271,18 +271,29 @@ adm-storage-intro =
     Uploaded files are reference-counted, and that only holds while every write
     path plays along. These two tools search in opposite directions for files
     nothing points at any more. Both report first; deleting is a separate click.
-adm-sweep-title = Objects with no database row
+# Both help strings describe what the code actually does — keep them in step with
+# storage_audit_usecase.rs, which is the authority. They are the only description
+# an operator gets before clicking a button that deletes files.
+adm-sweep-title = Objects in storage nothing is using
 adm-sweep-help =
-    Lists what is in storage and compares it against the file table. Finds
-    objects stranded by a failed cleanup — nothing can serve or find these again.
-    Paged, so a large bucket takes several passes.
+    Walks storage itself and compares it against the file table, reporting three
+    things: objects with no row at all, which nothing can serve or find again;
+    rows whose last reference is gone but which were never collected; and
+    un-published post attachments older than a day, which are listed but never
+    touched. Newer ones are only counted — inside that window an unreferenced
+    attachment is most likely an image in a composer somebody still has open.
+    Needs a backend that can list itself, and is paged, so a large bucket takes
+    several passes. On database storage the first group cannot occur — the file
+    table is the store.
 adm-audit-title = Files nothing references
 adm-audit-help =
-    The opposite direction: rows that still hold a reference, where no avatar,
-    cover, thumbnail, product image, theme preview or site setting actually
-    points at them. Pure database work, so it runs on every storage backend.
-    Post attachments and plugin media are excluded — they are referenced from
-    inside post and plugin markup, which there is no column to check.
+    The opposite direction: rows that still hold a reference where nothing
+    actually points at them — no avatar, cover, thumbnail, product image, theme
+    preview, logo or favicon. Pure database work, so it runs on every storage
+    backend. It also covers the two namespaces referenced from markup rather than
+    a column: post attachments that appear in no post body at all and are more
+    than a day old, and media belonging to a plugin that is no longer installed.
+    Releasing acts on all of those.
 adm-delete-found = Delete found files
 adm-release-found = Release found files
 

@@ -573,7 +573,9 @@ use std::sync::Mutex;
 
 use bytes::Bytes;
 use ferum_application::ports::StorageService;
-use ferum_domain::repositories::stored_file_repository::{StoredFileRepository, UploadUsage};
+use ferum_domain::repositories::stored_file_repository::{
+    StoredFileRef, StoredFileRepository, UploadUsage,
+};
 
 const ATTACHMENT_KEY: &str = "post-attachments/0123456789abcdef0123456789abcdef.jpg";
 
@@ -595,7 +597,7 @@ struct SpyStoredFiles {
 impl StoredFileRepository for SpyStoredFiles {
     async fn attachment_keys_before(&self, _: chrono::DateTime<chrono::Utc>) -> Result<Vec<String>, AppError> { Ok(vec![]) }
     async fn referencing_pointers(&self) -> Result<Vec<String>, AppError> { Ok(vec![]) }
-    async fn ref_counts_for(&self, _: &[String]) -> Result<Vec<(String, i32)>, AppError> { Ok(vec![]) }
+    async fn refs_for(&self, _: &[String]) -> Result<Vec<StoredFileRef>, AppError> { Ok(vec![]) }
     async fn usage_since(
         &self,
         _: Uuid,
