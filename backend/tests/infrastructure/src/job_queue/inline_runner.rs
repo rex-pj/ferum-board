@@ -20,7 +20,10 @@ use ferum_domain::repositories::{
     stored_file_repository::StoredFileRepository,
     webhook_repository::{NewWebhook, UpdateWebhook, WebhookRepository},
 };
+use ferum_infrastructure::i18n::FluentTranslator;
 use ferum_infrastructure::job_queue::inline_runner::{hmac_sha256, InlineJobRunner, JobExecutor};
+use ferum_test_support::mocks::email_service::{RecordingEmailService, SentEmail};
+use ferum_test_support::mocks::token_service::MockTokenService;
 
 // ─── Test doubles ─────────────────────────────────────────────────────────────
 
@@ -371,4 +374,99 @@ fn email_is_never_classified_with_webhooks() {
             "{name} must not share the webhook budget"
         );
     }
+}
+
+// ─── HTML escaping in notification bodies ─────────────────────────────────────
+
+/// Runs one `SendNotificationEmail` against the real catalogs and returns what
+/// the provider was handed.
+///
+/// Deliberately uses the real `FluentTranslator` over the repo's own `locales/`
+/// rather than a stub: the thing under test is that a value survives the catalog
+/// interpolation escaped, and a stub translator would prove nothing about it.
+async fn send_notification(thread_title: &str, actor: &str) -> SentEmail {
+    let mail = Arc::new(RecordingEmailService::new());
+    let locales = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("..")
+        .join("locales");
+    let translator = Arc::new(FluentTranslator::new(vec![locales]).await);
+
+    let mut tokens = MockTokenService::new();
+    tokens
+        .expect_mint_email_token()
+        .returning(|_, _, _| Ok("unsub-token".to_string()));
+
+    let executor = JobExecutor::new(
+        mail.clone(),
+        "http://localhost:5173".to_string(),
+        Arc::new(SpyStorage::default()),
+        Arc::new(SpyStoredFiles::new(false)),
+        Arc::new(NullWebhooks),
+    )
+    .with_translator(translator, "Ferum Board".to_string())
+    .with_tokens(Arc::new(tokens));
+
+    executor
+        .run(ForumJob::SendNotificationEmail {
+            user_id: uuid::Uuid::nil(),
+            email: "member@example.com".into(),
+            kind: NotificationEmailKind::Reply,
+            thread_slug: "a-thread".into(),
+            thread_title: thread_title.into(),
+            actor_username: actor.into(),
+            locale: Locale::default(),
+        })
+        .await
+        .expect("the notification job should send");
+
+    mail.sent().pop().expect("exactly one message should be sent")
+}
+
+/// The bug this guards: Fluent performs no escaping and `set_use_isolating(false)`
+/// is set, so a thread title reached the HTML body verbatim. Titles are checked
+/// for length only (`validate_thread_title`) and never pass through ammonia, so
+/// an author could put a working `<a href>` in a stranger's inbox — sent from the
+/// forum's own verified sending domain, which is what makes it a phishing vector
+/// rather than cosmetic breakage.
+#[tokio::test]
+async fn an_author_controlled_title_cannot_inject_markup_into_the_body() {
+    let sent = send_notification(r#"<a href="https://evil.example">Click</a>"#, "someone").await;
+
+    assert!(
+        !sent.html_body.contains("<a href=\"https://evil.example\""),
+        "the title's anchor must not survive as markup:\n{}",
+        sent.html_body
+    );
+    assert!(
+        sent.html_body.contains("&lt;a href=&quot;https://evil.example&quot;&gt;"),
+        "the title should appear escaped instead:\n{}",
+        sent.html_body
+    );
+}
+
+#[tokio::test]
+async fn an_author_controlled_username_cannot_inject_markup_into_the_body() {
+    let sent = send_notification("A thread", "<script>alert(1)</script>").await;
+
+    assert!(
+        !sent.html_body.contains("<script>"),
+        "the username's script tag must not survive as markup:\n{}",
+        sent.html_body
+    );
+}
+
+/// The other half of the fix, and the reason the two arg sets exist. A subject
+/// line is plain text, so escaping it there would show a literal `&amp;` in the
+/// recipient's inbox list — a regression that is invisible to the body tests.
+#[tokio::test]
+async fn the_subject_keeps_its_punctuation_unescaped() {
+    let sent = send_notification("Bells & Whistles", "someone").await;
+
+    assert!(
+        sent.subject.contains("Bells & Whistles"),
+        "the subject is plain text and must not be HTML-escaped: {}",
+        sent.subject
+    );
 }

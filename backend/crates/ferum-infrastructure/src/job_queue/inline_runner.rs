@@ -14,6 +14,22 @@ use ferum_domain::Locale;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::webhook_repository::WebhookRepository;
 
+/// Escapes a value for interpolation into an email's HTML body.
+///
+/// Fluent does not escape, so without this an author-controlled string reaches
+/// the recipient's inbox as markup. `&#39;` rather than XML's `&apos;`, which
+/// predates HTML5 and is not defined in HTML 4.
+///
+/// **Body only.** A subject line is plain text, so escaping it would show a
+/// literal `&amp;` in the inbox list.
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
 pub struct JobExecutor {
     pub email: Arc<dyn EmailService>,
     pub app_url: String,
@@ -72,6 +88,10 @@ impl JobExecutor {
 
     /// Resolves an email string in the recipient's language.
     ///
+    /// **Interpolates raw — every `-body` caller must pass values through
+    /// [`escape_html`] first.** Fluent performs no escaping of its own, so an
+    /// argument reaches the HTML body exactly as given.
+    ///
     /// Degrades to the raw key when no translator is wired rather than refusing
     /// to send — a verification link the user can still click beats a silent
     /// failure that locks them out of their new account.
@@ -93,7 +113,7 @@ impl JobExecutor {
                 let url = format!("{}/verify-email/{}", self.app_url, token);
                 let args: &[(&str, TransArg)] = &[
                     ("url", TransArg::Str(url)),
-                    ("site_name", TransArg::Str(self.site_name.clone())),
+                    ("site_name", TransArg::Str(escape_html(&self.site_name))),
                 ];
                 let subject = self.t(&locale, "email-verify-subject", &[]);
                 let body = self.t(&locale, "email-verify-body", args);
@@ -137,16 +157,32 @@ impl JobExecutor {
                 let settings_url = format!("{}/account", self.app_url);
 
                 let stem = kind.key_stem();
-                let args: &[(&str, TransArg)] = &[
+
+                // Two arg sets because the subject is plain text and the body is
+                // HTML. `thread_title` and `actor` are author-controlled —
+                // `validate_thread_title` checks length only and a title never
+                // passes through ammonia — so unescaped they put arbitrary markup,
+                // including an `<a href>`, in someone else's inbox over the forum's
+                // own verified domain. The URLs are built here from an app_url, a
+                // slugified slug and a minted token, so they carry no user input.
+                let subject_args: &[(&str, TransArg)] = &[
                     ("site_name", TransArg::Str(self.site_name.clone())),
-                    ("actor", TransArg::Str(actor_username)),
-                    ("thread_title", TransArg::Str(thread_title)),
+                    ("actor", TransArg::Str(actor_username.clone())),
+                    ("thread_title", TransArg::Str(thread_title.clone())),
+                    ("url", TransArg::Str(thread_url.clone())),
+                    ("unsubscribe_url", TransArg::Str(unsubscribe_url.clone())),
+                    ("settings_url", TransArg::Str(settings_url.clone())),
+                ];
+                let body_args: &[(&str, TransArg)] = &[
+                    ("site_name", TransArg::Str(escape_html(&self.site_name))),
+                    ("actor", TransArg::Str(escape_html(&actor_username))),
+                    ("thread_title", TransArg::Str(escape_html(&thread_title))),
                     ("url", TransArg::Str(thread_url)),
                     ("unsubscribe_url", TransArg::Str(unsubscribe_url)),
                     ("settings_url", TransArg::Str(settings_url)),
                 ];
-                let subject = self.t(&locale, &format!("{stem}-subject"), args);
-                let body = self.t(&locale, &format!("{stem}-body"), args);
+                let subject = self.t(&locale, &format!("{stem}-subject"), subject_args);
+                let body = self.t(&locale, &format!("{stem}-body"), body_args);
                 self.email.send(&email, &subject, &body).await
             }
             ForumJob::GcStorageKey { key } => self.run_gc_storage_key(&key).await,
