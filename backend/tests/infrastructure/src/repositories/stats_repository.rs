@@ -184,13 +184,20 @@ async fn two_reporting_zones_a_day_apart_bucket_differently() {
     let far_east = date_in("Pacific/Kiritimati").await;
     let far_west = date_in("Pacific/Niue").await;
 
-    // They are either equal (for the one hour a day the calendars align) or
-    // exactly one day apart. Anything else means the expression is not doing
-    // what it claims.
+    // 1 or 2 — never 0, and the old `0..=1` was wrong in both directions.
+    //
+    // The zones are 25 hours apart, so Kiritimati's wall clock is always more
+    // than a full day ahead of Niue's: the calendars can never agree. And when
+    // Niue is at or past 23:00 local, adding 25 hours crosses *two* midnights,
+    // so the dates differ by 2. That window is about an hour long, which is why
+    // this test passed for months and then failed once — a flaky assertion, not
+    // a flaky expression.
+    //
+    // Neither zone observes DST, so the 25-hour spread is constant.
     let delta = (far_east - far_west).num_days();
     assert!(
-        (0..=1).contains(&delta),
-        "UTC+14 and UTC-11 should differ by 0 or 1 calendar days, got {delta}"
+        (1..=2).contains(&delta),
+        "UTC+14 and UTC-11 should differ by 1 or 2 calendar days, got {delta}"
     );
 
     db.teardown().await;
