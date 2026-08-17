@@ -14,6 +14,7 @@ use ferum_domain::Locale;
 /// the domain cannot depend on this crate.
 pub use ferum_domain::TransArg;
 
+use crate::email_template::RenderedEmail;
 use crate::shared::AppError;
 
 // ─── PasswordHasher ───────────────────────────────────────────────────────────
@@ -652,6 +653,35 @@ pub trait NotificationBus: Send + Sync {
 #[async_trait]
 pub trait EmailService: Send + Sync {
     async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError>;
+}
+
+// ─── EmailTemplateRenderer ────────────────────────────────────────────────────
+
+/// Turns a template key plus values into a message ready to send.
+///
+/// A port rather than a repository call, because the work is rendering —
+/// substitution, per-variable escaping, layout wrapping, deriving the plain-text
+/// alternative — and only the first step of it reads a row. `JobExecutor` holds
+/// one of these the same way it holds a `Translator`.
+#[async_trait]
+pub trait EmailTemplateRenderer: Send + Sync {
+    /// Renders `key` in the recipient's language.
+    ///
+    /// **Resolution order is stored row → compiled-in default, both walked over
+    /// `locale.fallback_chain()`.** The second half is not a nicety: it is what
+    /// lets a template added in a release send correctly on a database whose
+    /// seeder has not run yet, and what makes "restore default" a plain DELETE
+    /// rather than a copy of pristine text nobody can be sure is pristine.
+    ///
+    /// # Errors
+    /// Only when the key is in neither source — which means the catalogue and
+    /// the call site disagree, i.e. a programming error rather than a data one.
+    async fn render(
+        &self,
+        key: &str,
+        locale: &Locale,
+        values: &[(&str, String)],
+    ) -> Result<RenderedEmail, AppError>;
 }
 
 // ─── WebhookDeliveryService ───────────────────────────────────────────────────

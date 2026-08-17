@@ -6,9 +6,11 @@ use sea_orm::DatabaseConnection;
 use crate::tera_engine::TeraEngine;
 use ferum_application::image_pipeline::ImagePipeline;
 use ferum_application::ports::{
-    CacheService, JobQueue, NotificationSubscriber, PermissionResolver, PluginHookRuntime,
-    PluginRpcRuntime, PluginUiRuntime, RateLimiter, StorageService, TokenService, Translator,
+    CacheService, EmailTemplateRenderer, JobQueue, NotificationSubscriber, PermissionResolver,
+    PluginHookRuntime, PluginRpcRuntime, PluginUiRuntime, RateLimiter, StorageService, TokenService,
+    Translator,
 };
+use ferum_domain::repositories::email_template_repository::EmailTemplateRepository;
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
 use ferum_application::usecases::auth_usecase::AuthUseCase;
@@ -74,6 +76,13 @@ pub struct AppState {
     /// Finds stored objects the database has stopped pointing at. Maintenance
     /// only — nothing on a request path uses it.
     pub storage_audit: Arc<StorageAuditUseCase>,
+    /// Renders transactional email. Shared with the job runner on purpose: what
+    /// the admin previews and test-sends must come from the same code that
+    /// sends for real, or the preview stops being evidence.
+    pub email_renderer: Arc<dyn EmailTemplateRenderer>,
+    /// Read and written directly by the admin editor, which has no business
+    /// logic beyond the save-time validation in `email_template`.
+    pub email_templates: Arc<dyn EmailTemplateRepository>,
     pub setup: Arc<SetupUseCase>,
     pub auth: Arc<AuthUseCase>,
     pub admin: Arc<AdminUseCase>,

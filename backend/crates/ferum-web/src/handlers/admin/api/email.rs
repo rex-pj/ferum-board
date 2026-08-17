@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use ferum_application::constants::DEFAULT_SITE_NAME;
 use ferum_application::permission::PermissionChecker;
-use ferum_application::ports::{EmailService, TransArg};
+use ferum_application::ports::EmailService;
 use ferum_application::shared::AppError;
 
 use crate::app_state::AppState;
@@ -71,16 +71,17 @@ pub async fn test_email(
         .filter(|v| !v.trim().is_empty())
         .cloned()
         .unwrap_or_else(|| DEFAULT_SITE_NAME.to_string());
-    let args: &[(&str, TransArg)] = &[
-        ("site_name", TransArg::Str(site_name)),
-        ("provider", TransArg::Str(provider.label().to_string())),
-    ];
-    let subject = state
-        .translator
-        .translate(&req_locale.locale, "email-test-subject", &[]);
-    let body = state
-        .translator
-        .translate(&req_locale.locale, "email-test-body", args);
+    let message = state
+        .email_renderer
+        .render(
+            "email-test",
+            &req_locale.locale,
+            &[
+                ("site_name", site_name),
+                ("provider", provider.label().to_string()),
+            ],
+        )
+        .await?;
 
     // `AppError::internal`'s message is normally invisible to clients —
     // `status_and_code` collapses every `Internal` to `internal_error`. It is
@@ -91,7 +92,11 @@ pub async fn test_email(
     // That makes "no adapter's error message contains a credential" a hard
     // invariant rather than a nicety. `resend_service::error_from_status` has a
     // test for exactly this, and the SMTP adapter never formats its password.
-    let outcome = match state.email.send(&user.email, &subject, &body).await {
+    let outcome = match state
+        .email
+        .send(&user.email, &message.subject, &message.html)
+        .await
+    {
         Ok(()) => serde_json::json!({
             "success": true,
             "provider": provider.label(),

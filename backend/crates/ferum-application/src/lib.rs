@@ -1,5 +1,6 @@
 pub mod constants;
 pub mod dto;
+pub mod email_template;
 pub mod event_bus;
 pub use event_bus::EventPublisher;
 pub mod image_pipeline;

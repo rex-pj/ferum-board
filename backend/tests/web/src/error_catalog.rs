@@ -171,31 +171,11 @@ async fn plural_forms_select_on_a_numeric_argument() {
     assert!(many.contains("30 seconds"), "got: {many}");
 }
 
-#[tokio::test]
-async fn email_catalog_resolves_subject_and_body() {
-    // Emails are composed by a detached worker with no request context, so a
-    // missing key here would silently ship a message whose subject is a raw
-    // catalog id to a real inbox.
-    let t = translator().await;
-    let en = Locale::default_locale();
-
-    let subject = t.translate(&en, "email-verify-subject", &[]);
-    assert_eq!(subject, "Verify your email");
-
-    let body = t.translate(
-        &en,
-        "email-verify-body",
-        &[
-            ("url", "https://example.test/verify-email/tok".into()),
-            ("site_name", "Ferum".into()),
-        ],
-    );
-    assert!(body.contains("https://example.test/verify-email/tok"), "got: {body}");
-    assert!(body.contains("Ferum"), "site name not interpolated: {body}");
-
-    let reset = t.translate(&en, "email-reset-body", &[("url", "https://x.test/r".into())]);
-    assert!(reset.contains("https://x.test/r"), "got: {reset}");
-}
+// Email copy is no longer a Fluent catalog — it lives in `email_templates`,
+// seeded from `ferum_domain::models::email_template`. The guarantee this file
+// used to carry (never ship a message whose subject is a raw key) now lives in
+// `ferum-application-tests/email_template.rs`, which renders every declared
+// template, and in the renderer's own tests.
 
 #[tokio::test]
 async fn every_installed_locale_names_itself() {

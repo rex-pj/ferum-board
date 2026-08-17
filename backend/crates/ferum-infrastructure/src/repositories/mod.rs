@@ -30,6 +30,7 @@ pub mod theme_repository;
 pub use audit_log_repository::PgAuditLogRepository;
 pub use bookmark_repository::PgBookmarkRepository;
 pub use brand_repository::PgBrandRepository;
+pub use email_template_repository::PgEmailTemplateRepository;
 pub use follow_repository::PgFollowRepository;
 pub use category_repository::PgCategoryRepository;
 pub use material_repository::PgMaterialRepository;

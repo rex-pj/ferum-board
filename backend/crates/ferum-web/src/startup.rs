@@ -50,7 +50,10 @@ use ferum_infrastructure::{
     bcrypt_password_hasher::BcryptPasswordHasher,
     cache::{InMemoryCacheService, RedisCacheService},
     crypto::SecretCipher,
-    email::{validate_from_address, MailProvider, ReloadableEmailService, SelectedProvider},
+    email::{
+        validate_from_address, DbEmailTemplateRenderer, MailProvider, ReloadableEmailService,
+        SelectedProvider,
+    },
     job_queue::{InlineJobRunner, JobExecutor},
     jwt_token_service::JwtTokenService,
     notification::{SseBroadcaster, SseNotificationBus},
@@ -63,6 +66,7 @@ use ferum_infrastructure::{
         PgPluginRepository, PgPluginStorageRepository, PgPostRepository,
         PgProductCategoryRepository, PgProductRepository,
         PgReactionRepository, PgReportRepository, PgReviewRatingRepository, PgRoleRepository,
+        PgEmailTemplateRepository,
         PgSiteConfigRepository, PgStatsRepository, PgStoredFileRepository, PgTagRepository,
         PgThreadRepository, PgUserRepository,
         PgUserRoleRepository, PgWebhookRepository,
@@ -467,6 +471,13 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     });
     let stored_file_repo: Arc<dyn ferum_domain::repositories::StoredFileRepository> =
         Arc::new(PgStoredFileRepository::new(pg_write.clone()));
+    let email_template_repo: Arc<
+        dyn ferum_domain::repositories::email_template_repository::EmailTemplateRepository,
+    > = Arc::new(PgEmailTemplateRepository::new(pg_write.clone()));
+    // Shared by the job runner and by the admin preview/test-send endpoints, so
+    // what an admin previews is rendered by the same code that sends.
+    let email_renderer: Arc<dyn ferum_application::ports::EmailTemplateRenderer> =
+        Arc::new(DbEmailTemplateRenderer::new(email_template_repo.clone()));
     let tag_repo: Arc<dyn ferum_domain::repositories::TagRepository> =
         Arc::new(PgTagRepository::new(pg_write.clone()));
     let product_repo: Arc<dyn ferum_domain::repositories::product_repository::ProductRepository> =
@@ -614,7 +625,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 stored_file_repo.clone(),
                 webhook_repo.clone(),
             )
-            .with_translator(Arc::clone(&translator), site_name.clone())
+            .with_email_templates(email_renderer.clone(), site_name.clone())
             .with_tokens(token_service.clone()));
             let cache = RedisCacheService::new(url)
                 .await
@@ -641,7 +652,7 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
                 stored_file_repo.clone(),
                 webhook_repo.clone(),
             )
-            .with_translator(Arc::clone(&translator), site_name.clone())
+            .with_email_templates(email_renderer.clone(), site_name.clone())
             .with_tokens(token_service.clone()));
             (
                 Arc::new(InMemoryCacheService::new()),
@@ -1242,6 +1253,8 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         storage: storage.clone(),
         images: images.clone(),
         jobs: job_queue.clone(),
+        email_renderer: email_renderer.clone(),
+        email_templates: email_template_repo.clone(),
         storage_audit: Arc::new(
             ferum_application::usecases::storage_audit_usecase::StorageAuditUseCase::new(
                 stored_file_repo.clone(),

@@ -20,7 +20,9 @@ use ferum_domain::repositories::{
     stored_file_repository::StoredFileRepository,
     webhook_repository::{NewWebhook, UpdateWebhook, WebhookRepository},
 };
-use ferum_infrastructure::i18n::FluentTranslator;
+use ferum_domain::models::email_template::EmailTemplate;
+use ferum_domain::repositories::email_template_repository::EmailTemplateRepository;
+use ferum_infrastructure::email::DbEmailTemplateRenderer;
 use ferum_infrastructure::job_queue::inline_runner::{hmac_sha256, InlineJobRunner, JobExecutor};
 use ferum_test_support::mocks::email_service::{RecordingEmailService, SentEmail};
 use ferum_test_support::mocks::token_service::MockTokenService;
@@ -378,20 +380,43 @@ fn email_is_never_classified_with_webhooks() {
 
 // ─── HTML escaping in notification bodies ─────────────────────────────────────
 
-/// Runs one `SendNotificationEmail` against the real catalogs and returns what
-/// the provider was handed.
-///
-/// Deliberately uses the real `FluentTranslator` over the repo's own `locales/`
-/// rather than a stub: the thing under test is that a value survives the catalog
-/// interpolation escaped, and a stub translator would prove nothing about it.
+/// A store with nothing in it, so the renderer falls back to the compiled-in
+/// catalogue. That keeps this suite free of a database while still exercising
+/// the real copy, the real substitution and the real escaping — a stubbed
+/// renderer would prove nothing about any of them.
+struct NoStoredTemplates;
+#[async_trait]
+impl EmailTemplateRepository for NoStoredTemplates {
+    async fn list(&self) -> Result<Vec<EmailTemplate>, AppError> {
+        Ok(vec![])
+    }
+    async fn find(&self, _: &str, _: &str) -> Result<Option<EmailTemplate>, AppError> {
+        Ok(None)
+    }
+    async fn resolve(&self, _: &str, _: &[String]) -> Result<Option<EmailTemplate>, AppError> {
+        Ok(None)
+    }
+    async fn upsert(&self, _: &str, _: &str, _: &str, _: &str) -> Result<(), AppError> {
+        Ok(())
+    }
+    async fn insert_if_absent(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<bool, AppError> {
+        Ok(true)
+    }
+    async fn delete(&self, _: &str, _: &str) -> Result<(), AppError> {
+        Ok(())
+    }
+}
+
+/// Runs one `SendNotificationEmail` and returns what the provider was handed.
 async fn send_notification(thread_title: &str, actor: &str) -> SentEmail {
     let mail = Arc::new(RecordingEmailService::new());
-    let locales = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("..")
-        .join("locales");
-    let translator = Arc::new(FluentTranslator::new(vec![locales]).await);
+    let renderer = Arc::new(DbEmailTemplateRenderer::new(Arc::new(NoStoredTemplates)));
 
     let mut tokens = MockTokenService::new();
     tokens
@@ -405,7 +430,7 @@ async fn send_notification(thread_title: &str, actor: &str) -> SentEmail {
         Arc::new(SpyStoredFiles::new(false)),
         Arc::new(NullWebhooks),
     )
-    .with_translator(translator, "Ferum Board".to_string())
+    .with_email_templates(renderer, "Ferum Board".to_string())
     .with_tokens(Arc::new(tokens));
 
     executor

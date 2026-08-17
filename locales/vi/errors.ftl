@@ -91,6 +91,16 @@ error-invalid-reaction-kind = Đây không phải là cảm xúc bạn có thể
 error-invalid-status = Đây không phải là trạng thái hợp lệ.
 error-invalid-smtp-port = Cổng SMTP phải là số nguyên từ 1 đến 65535.
 
+## ─── Mẫu email ───────────────────────────────────────────────────────────────
+
+error-unknown-email-template = Mẫu email đó không tồn tại.
+error-email-template-logic-unsupported =
+    Mẫu email chỉ thay giá trị — không hỗ trợ thẻ { "{% … %}" }.
+error-email-template-unknown-variable =
+    { "{{" } { $name } { "}}" } không dùng được trong email này.
+error-email-template-missing-variable =
+    Phần nội dung bắt buộc phải có { "{{" } { $name } { "}}" }.
+
 ## ─── Báo cáo ─────────────────────────────────────────────────────────────────
 
 error-report-target-required = Báo cáo phải tham chiếu tới một bài viết hoặc một chủ đề.

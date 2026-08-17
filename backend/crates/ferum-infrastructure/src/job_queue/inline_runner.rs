@@ -6,29 +6,13 @@ use tokio::sync::Semaphore;
 use crate::network_utils::build_pinned_client;
 use ferum_application::constants::UNSUBSCRIBE_TOKEN_TTL_SECS;
 use ferum_application::ports::{
-    EmailService, ForumJob, JobQueue, StorageService, TokenService, TransArg, Translator,
+    EmailService, EmailTemplateRenderer, ForumJob, JobQueue, StorageService, TokenService,
     UNSUBSCRIBE_PURPOSE,
 };
 use ferum_application::shared::AppError;
 use ferum_domain::Locale;
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_domain::repositories::webhook_repository::WebhookRepository;
-
-/// Escapes a value for interpolation into an email's HTML body.
-///
-/// Fluent does not escape, so without this an author-controlled string reaches
-/// the recipient's inbox as markup. `&#39;` rather than XML's `&apos;`, which
-/// predates HTML5 and is not defined in HTML 4.
-///
-/// **Body only.** A subject line is plain text, so escaping it would show a
-/// literal `&amp;` in the inbox list.
-fn escape_html(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
 
 pub struct JobExecutor {
     pub email: Arc<dyn EmailService>,
@@ -37,9 +21,9 @@ pub struct JobExecutor {
     pub stored_files: Arc<dyn StoredFileRepository>,
     pub webhooks: Arc<dyn WebhookRepository>,
     /// Optional so the executor can still be constructed in tests and during
-    /// early startup. When absent, emails fall back to their catalog keys rather
-    /// than failing to send.
-    pub translator: Option<Arc<dyn Translator>>,
+    /// early startup. When absent, email jobs are skipped with a warning rather
+    /// than sending an unrendered template.
+    pub emails: Option<Arc<dyn EmailTemplateRenderer>>,
     /// Site name interpolated into email copy.
     pub site_name: String,
     /// Mints the unsubscribe token carried by every notification email.
@@ -47,7 +31,7 @@ pub struct JobExecutor {
     /// Minted here rather than at enqueue time on purpose: a token created when
     /// the event fired would start ageing while the job sat in the queue, and the
     /// job payload would then be carrying a credential around. Optional for the
-    /// same reason as `translator` — the executor is constructible without one,
+    /// same reason as `emails` — the executor is constructible without one,
     /// and a notification email simply is not sent when it is absent, because a
     /// notification email with no working unsubscribe link is the thing that
     /// earns a spam complaint.
@@ -68,14 +52,18 @@ impl JobExecutor {
             storage,
             stored_files,
             webhooks,
-            translator: None,
+            emails: None,
             site_name: "Ferum Board".to_string(),
             tokens: None,
         }
     }
 
-    pub fn with_translator(mut self, translator: Arc<dyn Translator>, site_name: String) -> Self {
-        self.translator = Some(translator);
+    pub fn with_email_templates(
+        mut self,
+        emails: Arc<dyn EmailTemplateRenderer>,
+        site_name: String,
+    ) -> Self {
+        self.emails = Some(emails);
         self.site_name = site_name;
         self
     }
@@ -86,20 +74,30 @@ impl JobExecutor {
         self
     }
 
-    /// Resolves an email string in the recipient's language.
+    /// Renders and sends one templated message.
     ///
-    /// **Interpolates raw — every `-body` caller must pass values through
-    /// [`escape_html`] first.** Fluent performs no escaping of its own, so an
-    /// argument reaches the HTML body exactly as given.
+    /// **Escaping is the renderer's job, per declared variable kind** — callers
+    /// hand over raw values and must not pre-escape, or a thread title arrives
+    /// showing `&amp;lt;`.
     ///
-    /// Degrades to the raw key when no translator is wired rather than refusing
-    /// to send — a verification link the user can still click beats a silent
-    /// failure that locks them out of their new account.
-    fn t(&self, locale: &Locale, key: &str, args: &[(&str, TransArg)]) -> String {
-        match &self.translator {
-            Some(t) => t.translate(locale, key, args),
-            None => key.to_string(),
-        }
+    /// With no renderer wired the message is skipped with a warning rather than
+    /// sent unrendered: the previous behaviour put the raw catalog key in the
+    /// subject line, which reaches the recipient as a bug they cannot act on.
+    async fn send_templated(
+        &self,
+        to: &str,
+        key: &str,
+        locale: &Locale,
+        values: &[(&str, String)],
+    ) -> Result<(), AppError> {
+        let Some(renderer) = &self.emails else {
+            tracing::warn!(template = key, "email skipped: no template renderer wired");
+            return Ok(());
+        };
+        let message = renderer.render(key, locale, values).await?;
+        self.email
+            .send(to, &message.subject, &message.html)
+            .await
     }
 
     pub async fn run(&self, job: ForumJob) -> Result<(), AppError> {
@@ -111,13 +109,16 @@ impl JobExecutor {
                 ..
             } => {
                 let url = format!("{}/verify-email/{}", self.app_url, token);
-                let args: &[(&str, TransArg)] = &[
-                    ("url", TransArg::Str(url)),
-                    ("site_name", TransArg::Str(escape_html(&self.site_name))),
-                ];
-                let subject = self.t(&locale, "email-verify-subject", &[]);
-                let body = self.t(&locale, "email-verify-body", args);
-                self.email.send(&email, &subject, &body).await
+                self.send_templated(
+                    &email,
+                    "email-verify",
+                    &locale,
+                    &[
+                        ("url", url),
+                        ("site_name", self.site_name.clone()),
+                    ],
+                )
+                .await
             }
             ForumJob::SendPasswordResetEmail {
                 email,
@@ -125,10 +126,16 @@ impl JobExecutor {
                 locale,
             } => {
                 let url = format!("{}/reset-password?token={}", self.app_url, token);
-                let args: &[(&str, TransArg)] = &[("url", TransArg::Str(url))];
-                let subject = self.t(&locale, "email-reset-subject", &[]);
-                let body = self.t(&locale, "email-reset-body", args);
-                self.email.send(&email, &subject, &body).await
+                self.send_templated(
+                    &email,
+                    "email-reset",
+                    &locale,
+                    // `site_name` now goes to every message, where the Fluent
+                    // catalog passed it to all but this one — an inconsistency
+                    // that meant the reset email could not name the site.
+                    &[("url", url), ("site_name", self.site_name.clone())],
+                )
+                .await
             }
             ForumJob::SendNotificationEmail {
                 user_id,
@@ -156,34 +163,24 @@ impl JobExecutor {
                 let unsubscribe_url = format!("{}/unsubscribe/{}", self.app_url, token);
                 let settings_url = format!("{}/account", self.app_url);
 
-                let stem = kind.key_stem();
-
-                // Two arg sets because the subject is plain text and the body is
-                // HTML. `thread_title` and `actor` are author-controlled —
-                // `validate_thread_title` checks length only and a title never
-                // passes through ammonia — so unescaped they put arbitrary markup,
-                // including an `<a href>`, in someone else's inbox over the forum's
-                // own verified domain. The URLs are built here from an app_url, a
-                // slugified slug and a minted token, so they carry no user input.
-                let subject_args: &[(&str, TransArg)] = &[
-                    ("site_name", TransArg::Str(self.site_name.clone())),
-                    ("actor", TransArg::Str(actor_username.clone())),
-                    ("thread_title", TransArg::Str(thread_title.clone())),
-                    ("url", TransArg::Str(thread_url.clone())),
-                    ("unsubscribe_url", TransArg::Str(unsubscribe_url.clone())),
-                    ("settings_url", TransArg::Str(settings_url.clone())),
-                ];
-                let body_args: &[(&str, TransArg)] = &[
-                    ("site_name", TransArg::Str(escape_html(&self.site_name))),
-                    ("actor", TransArg::Str(escape_html(&actor_username))),
-                    ("thread_title", TransArg::Str(escape_html(&thread_title))),
-                    ("url", TransArg::Str(thread_url)),
-                    ("unsubscribe_url", TransArg::Str(unsubscribe_url)),
-                    ("settings_url", TransArg::Str(settings_url)),
-                ];
-                let subject = self.t(&locale, &format!("{stem}-subject"), subject_args);
-                let body = self.t(&locale, &format!("{stem}-body"), body_args);
-                self.email.send(&email, &subject, &body).await
+                // Raw values: `thread_title` and `actor` are author-controlled
+                // and the renderer escapes them per their declared kind. Escaping
+                // here as well would double-encode, and the subject — which is
+                // plain text — would show `&amp;` in the inbox list.
+                self.send_templated(
+                    &email,
+                    kind.key_stem(),
+                    &locale,
+                    &[
+                        ("site_name", self.site_name.clone()),
+                        ("actor", actor_username),
+                        ("thread_title", thread_title),
+                        ("url", thread_url),
+                        ("unsubscribe_url", unsubscribe_url),
+                        ("settings_url", settings_url),
+                    ],
+                )
+                .await
             }
             ForumJob::GcStorageKey { key } => self.run_gc_storage_key(&key).await,
             ForumJob::SendWebhook {

@@ -77,6 +77,16 @@ error-invalid-reaction-kind = That's not a reaction you can use.
 error-invalid-status = That's not a valid status.
 error-invalid-smtp-port = The SMTP port must be a whole number between 1 and 65535.
 
+## ─── Email templates ─────────────────────────────────────────────────────────
+
+error-unknown-email-template = That email template doesn't exist.
+error-email-template-logic-unsupported =
+    Email templates only substitute values — { "{% … %}" } tags aren't supported.
+error-email-template-unknown-variable =
+    { "{{" } { $name } { "}}" } isn't available in this email.
+error-email-template-missing-variable =
+    The body must include { "{{" } { $name } { "}}" }.
+
 ## ─── Reports & moderation ────────────────────────────────────────────────────
 
 error-report-target-required = A report must reference a post or a thread.
