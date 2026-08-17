@@ -37,6 +37,9 @@ impl SpyStoredFiles {
 
 #[async_trait::async_trait]
 impl StoredFileRepository for SpyStoredFiles {
+    async fn attachment_keys_before(&self, _: chrono::DateTime<chrono::Utc>) -> Result<Vec<String>, AppError> { Ok(vec![]) }
+    async fn referencing_pointers(&self) -> Result<Vec<String>, AppError> { Ok(vec![]) }
+    async fn ref_counts_for(&self, _: &[String]) -> Result<Vec<(String, i32)>, AppError> { Ok(vec![]) }
     async fn usage_since(&self, _: uuid::Uuid, _: chrono::DateTime<chrono::Utc>) -> Result<UploadUsage, AppError> {
         Ok(UploadUsage { file_count: 0, total_bytes: 0 })
     }
@@ -49,7 +52,6 @@ impl StoredFileRepository for SpyStoredFiles {
         self.dereferenced.lock().unwrap().push(key.to_string());
         Ok(0)
     }
-    async fn delete_by_key(&self, _: &str) -> Result<(), AppError> { Ok(()) }
     async fn delete_if_unreferenced(&self, _: &str) -> Result<bool, AppError> { Ok(true) }
     async fn list_keys_with_prefix(&self, _: &str) -> Result<Vec<String>, AppError> { Ok(vec![]) }
 }

@@ -6,8 +6,8 @@ use sea_orm::DatabaseConnection;
 use crate::tera_engine::TeraEngine;
 use ferum_application::image_pipeline::ImagePipeline;
 use ferum_application::ports::{
-    CacheService, NotificationSubscriber, PermissionResolver, PluginHookRuntime, PluginRpcRuntime,
-    PluginUiRuntime, RateLimiter, StorageService, TokenService, Translator,
+    CacheService, JobQueue, NotificationSubscriber, PermissionResolver, PluginHookRuntime,
+    PluginRpcRuntime, PluginUiRuntime, RateLimiter, StorageService, TokenService, Translator,
 };
 use ferum_application::usecases::admin_stats_usecase::AdminStatsUseCase;
 use ferum_application::usecases::admin_usecase::AdminUseCase;
@@ -24,6 +24,7 @@ use ferum_application::usecases::review_usecase::ReviewUseCase;
 use ferum_application::usecases::role_usecase::RoleUseCase;
 use ferum_application::usecases::search_usecase::SearchUseCase;
 use ferum_application::usecases::setup_usecase::SetupUseCase;
+use ferum_application::usecases::storage_audit_usecase::StorageAuditUseCase;
 use ferum_application::usecases::tag_usecase::TagUseCase;
 use ferum_application::usecases::thread_usecase::ThreadUseCase;
 use ferum_application::usecases::user_usecase::UserUseCase;
@@ -64,6 +65,15 @@ pub struct AppState {
     /// `image_processing_enabled`, and a second path around it would keep
     /// re-encoding after an admin turned processing off.
     pub images: Arc<ImagePipeline>,
+    /// Needed by the handlers that own a CAS reference directly — the site logo,
+    /// the favicon and theme previews all upload from the web layer with no use
+    /// case in between, so this is how they reach `ForumJob::GcStorageKey`.
+    /// Without it they can only delete the `stored_files` row, which strands the
+    /// object under any storage backend that is not the database.
+    pub jobs: Arc<dyn JobQueue>,
+    /// Finds stored objects the database has stopped pointing at. Maintenance
+    /// only — nothing on a request path uses it.
+    pub storage_audit: Arc<StorageAuditUseCase>,
     pub setup: Arc<SetupUseCase>,
     pub auth: Arc<AuthUseCase>,
     pub admin: Arc<AdminUseCase>,

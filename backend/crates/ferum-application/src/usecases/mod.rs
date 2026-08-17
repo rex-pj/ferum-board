@@ -13,6 +13,7 @@ pub mod review_usecase;
 pub mod role_usecase;
 pub mod search_usecase;
 pub mod setup_usecase;
+pub mod storage_audit_usecase;
 pub mod tag_usecase;
 pub mod thread_usecase;
 pub mod user_usecase;

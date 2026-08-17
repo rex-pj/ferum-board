@@ -4,9 +4,13 @@
 //!   - `RETURNING ref_count` in `decrement_ref`
 //!   - `Func::greatest([ref_count - 1, 0])` floor in `decrement_ref`
 //!   - `ON CONFLICT (key) DO UPDATE SET ref_count = ref_count + 1` in `upsert_and_ref`
+//!   - the six-way UNION in `referencing_pointers`, which names five tables and
+//!     six columns in a string literal — every one of them a runtime failure if
+//!     misspelled, and one that only fires when an admin runs the audit
 
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 use ferum_infrastructure::repositories::PgStoredFileRepository;
+use sea_orm::{ConnectionTrait, Statement};
 
 use crate::common::TestDb;
 
@@ -98,25 +102,227 @@ async fn decrement_ref_on_missing_key_returns_zero() {
     db.teardown().await;
 }
 
+/// Inserts a minimal user and returns its id.
+///
+/// Needed because `stored_files.uploaded_by_id` carries a foreign key to
+/// `users` — which is itself worth knowing: the column can never hold an id that
+/// is not a real account, so the production path passing `Some(actor.id)` is
+/// always valid by construction.
+async fn a_user(db: &crate::common::TestDb, name: &str) -> uuid::Uuid {
+    let id = uuid::Uuid::new_v4();
+    db.conn
+        .execute_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            format!(
+                "INSERT INTO users (id, username, email)
+                 VALUES ('{id}', '{name}', '{name}@example.test')"
+            ),
+        ))
+        .await
+        .expect("seed a user");
+    id
+}
+
+/// Reads `uploaded_by_id` back, since no repository method exposes it.
+async fn owner_of(db: &crate::common::TestDb, key: &str) -> Option<uuid::Uuid> {
+    db.conn
+        .query_one_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            format!("SELECT uploaded_by_id FROM stored_files WHERE key = '{key}'"),
+        ))
+        .await
+        .expect("query")
+        .expect("row")
+        .try_get::<Option<uuid::Uuid>>("", "uploaded_by_id")
+        .expect("column")
+}
+
 #[tokio::test]
-async fn delete_by_key_removes_row() {
-    let db = TestDb::new("sfile_delete_by_key").await;
+async fn the_uploader_is_recorded_even_when_the_row_already_exists() {
+    // Under database storage `put` inserts the row before the repository is
+    // asked to reference it, so the upsert always takes its conflict path. While
+    // that path did not name `uploaded_by_id`, the column was NULL for every file
+    // in the system — which silently disabled the per-account upload quota
+    // (`usage_since` filters on it) and made every staged attachment 404 to its
+    // own uploader (`resolve_stored_file` requires a non-NULL owner). Neither
+    // was visible under an object store, where the row does not pre-exist.
+    let db = TestDb::new("sfile_owner_on_conflict").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+    let key = "avatars/deadbeef";
+    let alice = a_user(&db, "alice_owner").await;
+
+    // Stands in for `DatabaseStorageService::put`: the row exists first, with no
+    // owner and ref_count 0.
+    db.conn
+        .execute_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            format!(
+                "INSERT INTO stored_files (key, content_type, size, ref_count)
+                 VALUES ('{key}', 'image/jpeg', 10, 0)"
+            ),
+        ))
+        .await
+        .expect("seed the pre-existing row");
+    assert_eq!(owner_of(&db, key).await, None, "precondition");
+
+    repo.upsert_and_ref(key, "image/jpeg", 10, Some(alice))
+        .await
+        .expect("reference it");
+    assert_eq!(
+        owner_of(&db, key).await,
+        Some(alice),
+        "the conflict path must record the uploader"
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn a_deduplicated_upload_does_not_reassign_the_owner() {
+    // CAS keys are content digests, so two users uploading the same bytes land on
+    // one row. Overwriting the owner would move somebody else's file — and their
+    // quota — onto the second uploader.
+    let db = TestDb::new("sfile_owner_no_steal").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+    let key = "avatars/shared";
+    let alice = a_user(&db, "alice_dedupe").await;
+    let bob = a_user(&db, "bob_dedupe").await;
+
+    repo.upsert_and_ref(key, "image/jpeg", 10, Some(alice))
+        .await
+        .expect("first upload");
+    repo.upsert_and_ref(key, "image/jpeg", 10, Some(bob))
+        .await
+        .expect("identical bytes from someone else");
+
+    assert_eq!(
+        owner_of(&db, key).await,
+        Some(alice),
+        "first named uploader wins"
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn staging_records_the_uploader_and_leaves_ref_count_alone() {
+    // `upsert_staged` used to be DO NOTHING, which skipped the owner too. The
+    // replacement must still not touch `ref_count`: an existing key may already
+    // be referenced by live posts.
+    let db = TestDb::new("sfile_staged_owner").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+    let key = "post-attachments/abcd";
+    let alice = a_user(&db, "alice_staged").await;
+
+    db.conn
+        .execute_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            format!(
+                "INSERT INTO stored_files (key, content_type, size, ref_count)
+                 VALUES ('{key}', 'image/jpeg', 10, 3)"
+            ),
+        ))
+        .await
+        .expect("seed a referenced row");
+
+    repo.upsert_staged(key, "image/jpeg", 10, Some(alice))
+        .await
+        .expect("stage it");
+
+    assert_eq!(owner_of(&db, key).await, Some(alice));
+    // Read the count back through the only method that reports it.
+    assert_eq!(
+        repo.decrement_ref(key).await.expect("decrement"),
+        2,
+        "staging must neither reset nor bump an existing ref_count"
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn referencing_pointers_names_columns_that_actually_exist() {
+    // The point of this test is that the query *runs*. Its SQL is a string
+    // literal naming `user_avatars.file_key`, `user_covers.file_key`,
+    // `thread_thumbnails.file_key`, `product_media.storage_key`,
+    // `themes.preview_url` and `site_config.value` — six chances for a rename to
+    // turn the audit into a 500 nobody sees until they use it.
+    //
+    // This is not a hypothetical. The first draft of that query was written
+    // against the schema block in CLAUDE.md, which claimed `users.avatar_url`
+    // and `threads.thumbnail_url` were columns. They are not — both are side
+    // tables — and this test is what said so, on its first run.
+    //
+    // An empty result on a fresh database is the strongest cheap assertion
+    // available: reaching it means Postgres resolved every table and column.
+    let db = TestDb::new("sfile_referencing_pointers").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+
+    let empty = repo
+        .referencing_pointers()
+        .await
+        .expect("the UNION must resolve against the real schema");
+    assert!(
+        empty.is_empty(),
+        "a database with no uploads references nothing"
+    );
+
+    // And one real pointer, through the branch with a WHERE clause — proof the
+    // filter does not exclude everything. `site_config` is the only referencing
+    // table with no foreign keys, so it needs no fixture scaffolding.
+    // `execute_raw`, not `execute`: in Sea-ORM 2.0 the un-suffixed form takes a
+    // sea-query statement by reference, so a raw `Statement` does not fit it.
+    db.conn
+        .execute_raw(Statement::from_string(
+            db.conn.get_database_backend(),
+            "INSERT INTO site_config (key, value) VALUES ('logo_url', '/files/logos/x.png')
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                .to_string(),
+        ))
+        .await
+        .expect("seed a logo pointer");
+
+    let found = repo.referencing_pointers().await.expect("query runs");
+    assert_eq!(found, ["/files/logos/x.png"]);
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn a_still_referenced_row_survives_collection() {
+    // Replaces the old `delete_by_key_removes_row`. That method is gone: it
+    // deleted the row unconditionally and left the object behind, which is what
+    // stranded logo, favicon and theme-preview files in the bucket. The
+    // surviving path is `delete_if_unreferenced`, and the property worth pinning
+    // is the one the old method could not offer — a row that got re-referenced
+    // between the decrement and the sweep is left completely alone.
+    let db = TestDb::new("sfile_delete_if_referenced").await;
     let repo = PgStoredFileRepository::new(db.conn.clone());
 
     repo.upsert_and_ref("sha256:aabbcc", "image/png", 9, None)
         .await
         .expect("insert");
-
-    repo.delete_by_key("sha256:aabbcc")
+    repo.upsert_and_ref("sha256:aabbcc", "image/png", 9, None)
         .await
-        .expect("delete_by_key executes");
+        .expect("second reference — CAS dedupe on identical content");
+    repo.decrement_ref("sha256:aabbcc").await.expect("release one");
 
-    // Row is gone: decrement returns 0 (no row found → unwrap_or(0))
-    let result = repo
-        .decrement_ref("sha256:aabbcc")
-        .await
-        .expect("decrement after delete");
-    assert_eq!(result, 0, "row must be gone after delete_by_key");
+    assert!(
+        !repo
+            .delete_if_unreferenced("sha256:aabbcc")
+            .await
+            .expect("query runs"),
+        "one reference remains, so nothing may be deleted"
+    );
+
+    let remaining = repo.decrement_ref("sha256:aabbcc").await.expect("release last");
+    assert_eq!(remaining, 0);
+    assert!(
+        repo.delete_if_unreferenced("sha256:aabbcc")
+            .await
+            .expect("query runs"),
+        "the last reference is gone, so the row must go"
+    );
 
     db.teardown().await;
 }

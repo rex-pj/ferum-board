@@ -6,5 +6,6 @@ pub mod products;
 pub mod reports;
 pub mod roles;
 pub mod stats;
+pub mod storage;
 pub mod users;
 pub mod webhooks;

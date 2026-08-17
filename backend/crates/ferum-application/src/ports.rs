@@ -316,6 +316,34 @@ pub trait StorageService: Send + Sync {
     /// silently stops matching, and since this drives ref counting, files get
     /// collected while posts still point at them.
     fn key_from_url(&self, url: &str) -> Option<String>;
+
+    /// Enumerates stored keys in lexical order, starting strictly after `after`.
+    ///
+    /// **Maintenance only — never the request path.** Its one caller is the
+    /// orphan sweep, which needs to know what is in the store that the database
+    /// has forgotten about. Serving a file never needs this and must not use it.
+    ///
+    /// `Ok(None)` means *this backend cannot enumerate*, which is a different
+    /// answer from `Ok(Some(vec![]))` — "enumerated, found nothing". Conflating
+    /// them would let the sweep report a clean store for a backend it never
+    /// actually looked at, which is the worst possible output for a tool whose
+    /// entire job is finding what nobody is tracking.
+    ///
+    /// A key cursor rather than a vendor continuation token: every backend here
+    /// can express "keys greater than this one", the cursor survives a restart,
+    /// and it does not expire.
+    ///
+    /// # Errors
+    /// Backend failures propagate — a sweep that half-listed must not be
+    /// mistaken for one that found nothing.
+    async fn list_keys(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Option<Vec<String>>, AppError> {
+        let _ = (after, limit);
+        Ok(None)
+    }
 }
 
 /// The same-origin resolver path. Every backend must understand it, and

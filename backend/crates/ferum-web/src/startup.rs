@@ -1063,7 +1063,11 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
 
     // ─── Theme system ────────────────────────────────────────────────────────
     let theme_repo = Arc::new(PgThemeRepository::new(pg_write.clone()));
-    let theme = Arc::new(ThemeUseCase::new(theme_repo));
+    let theme = Arc::new(ThemeUseCase::new(theme_repo).with_cas(
+        stored_file_repo.clone(),
+        job_queue.clone(),
+        storage.clone(),
+    ));
 
     let initial_chain = theme
         .resolve_chain(&initial_active_slug)
@@ -1237,6 +1241,16 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         blob_read_permits: Arc::new(tokio::sync::Semaphore::new(BLOB_READ_CONCURRENCY)),
         storage: storage.clone(),
         images: images.clone(),
+        jobs: job_queue.clone(),
+        storage_audit: Arc::new(
+            ferum_application::usecases::storage_audit_usecase::StorageAuditUseCase::new(
+                stored_file_repo.clone(),
+                storage.clone(),
+                job_queue.clone(),
+                Arc::new(PgPluginRepository::new(pg_write.clone())),
+                post_repo.clone(),
+            ),
+        ),
         setup,
         auth,
         admin,

@@ -6,6 +6,25 @@ use crate::AppError;
 
 #[async_trait]
 pub trait PostRepository: Send + Sync {
+    /// `content_md` of posts that embed at least one attachment, paged by id.
+    ///
+    /// For the orphan audit only. Returns bodies rather than extracted keys
+    /// because `post_usecase::extract_attachment_keys` is the authority on what
+    /// counts as an embedded reference — a second implementation in SQL would
+    /// drift from it, and this drives deletion.
+    ///
+    /// **Includes soft-deleted posts.** A removed post still names its
+    /// attachment, and when the image is the violation it is also the evidence.
+    ///
+    /// Costs a sequential scan: the filter is a leading-wildcard `LIKE`, which no
+    /// index can serve. Acceptable for an operation an admin triggers by hand,
+    /// and it is why this is paged rather than one query.
+    async fn bodies_with_attachments(
+        &self,
+        after: Option<Uuid>,
+        limit: u64,
+    ) -> Result<Vec<(Uuid, String)>, AppError>;
+
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Post>, AppError>;
     /// Batch counterpart to [`Self::find_by_id`], for callers holding a page of ids.
     /// Mirrors `ThreadRepository::find_many_by_ids` / `UserRepository::find_many_by_ids`:

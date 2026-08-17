@@ -93,6 +93,21 @@ pub fn admin_api_routes() -> Router<AppState> {
             "/product-categories/auto-assign",
             post(admin::api::products::auto_assign_product_categories),
         )
+        // The method IS the dry-run switch, deliberately. A `?apply=1` on the
+        // GET would be reachable by CSRF: `middleware/csrf.rs` only checks
+        // non-GET requests, and `SameSite=Lax` *does* attach the cookie to a
+        // top-level navigation — so one link an admin clicks would delete
+        // files. POST puts it back behind the Origin allowlist.
+        .route(
+            "/storage/sweep",
+            get(admin::api::storage::report_storage_sweep)
+                .post(admin::api::storage::apply_storage_sweep),
+        )
+        .route(
+            "/storage/audit",
+            get(admin::api::storage::report_storage_audit)
+                .post(admin::api::storage::apply_storage_audit),
+        )
         .route(
             "/product-categories/{id}",
             patch(admin::api::products::update_product_category)
@@ -182,6 +197,7 @@ pub fn admin_page_routes() -> Router<AppState> {
         .route("/plugins/{slug}/uninstall", post(admin::pages::plugins::uninstall_plugin))
         .route("/plugins/{slug}/config", post(admin::pages::plugins::save_config))
         .route("/settings", get(admin::pages::settings::settings))
+        .route("/storage", get(admin::pages::storage::storage))
         .route("/themes", get(admin::pages::themes::themes))
         .route("/languages", get(admin::pages::languages::languages))
         .route("/themes/upload", post(admin::pages::themes::upload_theme))

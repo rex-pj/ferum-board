@@ -86,6 +86,40 @@ impl StorageService for DatabaseStorageService {
         Ok(())
     }
 
+    /// Answers from the same table the sweep compares against, so this backend
+    /// can never report an orphan.
+    ///
+    /// That is not a reason to skip it: the sweep also finds *rows* stuck at
+    /// `ref_count <= 0` after a lost GC job, and those are real here. Returning
+    /// `None` would make the tool claim it could not look, which is worse than
+    /// looking and finding one class of problem instead of two.
+    async fn list_keys(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Option<Vec<String>>, AppError> {
+        use sea_orm::{ColumnTrait, QueryFilter, QueryOrder, QuerySelect};
+
+        let mut query = stored_files::Entity::find()
+            // Never `find()` unfiltered here — the full model includes `data`,
+            // and hydrating it would read every blob in the store to learn its
+            // name. Same trap as `list_keys_with_prefix`.
+            .select_only()
+            .column(stored_files::Column::Key)
+            .order_by_asc(stored_files::Column::Key)
+            .limit(limit as u64);
+        if let Some(cursor) = after {
+            query = query.filter(stored_files::Column::Key.gt(cursor));
+        }
+
+        let keys = query
+            .into_tuple::<String>()
+            .all(&self.db)
+            .await
+            .map_err(|e| AppError::internal(format!("db storage list error: {e}")))?;
+        Ok(Some(keys))
+    }
+
     fn public_url(&self, key: &str) -> String {
         match &self.cdn_base_url {
             Some(base) => format!("{base}{FILES_PREFIX}{key}"),

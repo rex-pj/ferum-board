@@ -89,6 +89,39 @@ impl S3Compatible {
         Ok(())
     }
 
+    /// One page of keys, lexically after `after`.
+    ///
+    /// `start_after` rather than a continuation token: S3 and R2 both accept it,
+    /// and it makes the cursor a plain key the caller can store, log and resume
+    /// from tomorrow. Continuation tokens are opaque and expire.
+    pub(super) async fn list(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<String>, AppError> {
+        let mut request = self
+            .client
+            .list_objects_v2()
+            .bucket(&self.bucket)
+            // The API caps this at 1000 whatever we ask for, so the caller's
+            // limit is clamped rather than trusted.
+            .max_keys(limit.clamp(1, 1000) as i32);
+        if let Some(cursor) = after {
+            request = request.start_after(cursor);
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| AppError::internal(format!("{} list error: {}", self.label, e)))?;
+
+        Ok(response
+            .contents()
+            .iter()
+            .filter_map(|o| o.key().map(str::to_string))
+            .collect())
+    }
+
     pub(super) async fn delete(&self, key: &str) -> Result<(), AppError> {
         self.client
             .delete_object()

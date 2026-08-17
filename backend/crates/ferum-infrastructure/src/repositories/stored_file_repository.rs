@@ -113,10 +113,34 @@ impl StoredFileRepository for PgStoredFileRepository {
                     stored_files::Column::RefCount,
                     Expr::col((stored_files::Entity, stored_files::Column::RefCount)).add(1i32),
                 )
+                // **The conflict path must name the owner too.** Under database
+                // storage `put` inserts this row first, so every upload lands
+                // here rather than on the insert path — and while this clause was
+                // absent, `uploaded_by_id` stayed NULL for every file ever
+                // stored. Two things quietly stopped working: `usage_since`
+                // filters on this column, so the per-account upload quota counted
+                // zero and never triggered; and `resolve_stored_file` requires a
+                // non-NULL owner, so no staged attachment was reachable even by
+                // the person who uploaded it. Both are invisible under an object
+                // store, where the row does not pre-exist.
+                //
+                // `COALESCE` and not an overwrite: CAS dedupes on content, so an
+                // identical upload by a second user must not reassign the file.
+                // First named uploader wins.
+                .value(
+                    stored_files::Column::UploadedById,
+                    Expr::cust(
+                        "COALESCE(stored_files.uploaded_by_id, EXCLUDED.uploaded_by_id)",
+                    ),
+                )
                 .to_owned(),
         )
         .exec(&self.db)
-        .await?;
+        .await
+        // Named rather than `?`: the statement carries a raw `COALESCE(...
+        // EXCLUDED ...)` fragment, so the one thing worth knowing about a
+        // failure here is what Postgres made of it.
+        .map_err(|e| AppError::internal(format!("upsert_and_ref: {e}")))?;
         Ok(())
     }
 
@@ -137,19 +161,33 @@ impl StoredFileRepository for PgStoredFileRepository {
             uploaded_by_id: Set(uploaded_by_id),
             created_at: NotSet,
         })
-        // DO NOTHING, not DO UPDATE: an existing key may already be referenced
-        // by live posts (CAS dedupes identical bytes), and re-staging it must
-        // neither reset its ref_count to 0 nor bump it.
+        // Updates **one** column and nothing else. It used to be DO NOTHING, for
+        // a good reason that this preserves: an existing key may already be
+        // referenced by live posts, so re-staging must neither reset `ref_count`
+        // to 0 nor bump it — and neither is touched here.
+        //
+        // What DO NOTHING also skipped was the owner. Under database storage
+        // `put` inserts the row first, so staging always conflicts, and
+        // `uploaded_by_id` stayed NULL forever — which made
+        // `resolve_stored_file`'s ownership test unsatisfiable and left every
+        // staged attachment 404 to its own uploader. `COALESCE` keeps the first
+        // named owner, so a CAS-deduped re-upload cannot steal a file.
         .on_conflict(
             OnConflict::column(stored_files::Column::Key)
-                .do_nothing()
+                .value(
+                    stored_files::Column::UploadedById,
+                    Expr::cust(
+                        "COALESCE(stored_files.uploaded_by_id, EXCLUDED.uploaded_by_id)",
+                    ),
+                )
                 .to_owned(),
         )
         .exec(&self.db)
         .await;
 
-        // sea-orm surfaces a no-op DO NOTHING as RecordNotInserted rather than
-        // Ok — which is exactly the "key already existed" case we want to allow.
+        // `RecordNotInserted` was the DO NOTHING signal and no longer arises,
+        // but it stays accepted: it is the "key already existed" case, which is
+        // success either way.
         match res {
             Ok(_) | Err(DbErr::RecordNotInserted) => Ok(()),
             Err(e) => Err(e.into()),
@@ -190,11 +228,89 @@ impl StoredFileRepository for PgStoredFileRepository {
         Ok(())
     }
 
-    async fn delete_by_key(&self, key: &str) -> Result<(), AppError> {
-        stored_files::Entity::delete_by_id(key)
-            .exec(&self.db)
+    async fn referencing_pointers(&self) -> Result<Vec<String>, AppError> {
+        // Raw SQL, and one statement rather than six: the six columns live in
+        // five different aggregates, so no entity API expresses this, and a
+        // round trip per column would be five more chances for the set to shift
+        // underneath the audit.
+        //
+        // No user input reaches this — every fragment is a literal — so there is
+        // nothing to parameterise.
+        //
+        // **Two shapes come back, and that is a property of the schema, not an
+        // inconsistency to smooth over here.** The first four columns hold a
+        // bare CAS key and carry a foreign key to `stored_files`; the last two
+        // hold a `/files/{key}` URL and carry nothing. `key_from_url` declines a
+        // bare key, so the caller falls back to the raw value — dropping it
+        // instead would read every avatar and product image as unreferenced.
+        //
+        // Note which two lack the foreign key: `themes.preview_url` and
+        // `site_config`. Those are exactly the two that leaked, and the FK is
+        // why the others did not.
+        const SQL: &str = "
+            SELECT file_key AS ptr   FROM user_avatars
+            UNION SELECT file_key    FROM user_covers
+            UNION SELECT file_key    FROM thread_thumbnails
+            UNION SELECT storage_key FROM product_media
+            UNION SELECT preview_url FROM themes WHERE preview_url IS NOT NULL
+            UNION SELECT value       FROM site_config
+                     WHERE key IN ('logo_url', 'favicon_url') AND value <> ''
+        ";
+        // `e.to_string()` rather than `?`: `From<DbErr>` deliberately discards
+        // the message so database internals never reach a response, but this
+        // query is a string literal naming five tables, so the one thing an
+        // operator needs from a failure here is *which column does not exist*.
+        // `AppError::internal` is logged, not returned.
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_string(
+                self.db.get_database_backend(),
+                SQL.to_string(),
+            ))
+            .await
+            .map_err(|e| AppError::internal(format!("referencing_pointers: {e}")))?;
+        rows.into_iter()
+            .map(|row| {
+                row.try_get::<String>("", "ptr")
+                    .map_err(|e| AppError::internal(format!("referencing_pointers row: {e}")))
+            })
+            .collect()
+    }
+
+    async fn attachment_keys_before(
+        &self,
+        cutoff: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<String>, AppError> {
+        // `LIKE 'post-attachments/%'` on the primary key, so this is an index
+        // range scan rather than a table scan — the `%` is trailing.
+        let keys = stored_files::Entity::find()
+            .select_only()
+            .column(stored_files::Column::Key)
+            .filter(stored_files::Column::Key.starts_with("post-attachments/"))
+            .filter(stored_files::Column::CreatedAt.lt(cutoff.fixed_offset()))
+            .order_by_asc(stored_files::Column::Key)
+            .into_tuple::<String>()
+            .all(&self.db)
             .await?;
-        Ok(())
+        Ok(keys)
+    }
+
+    async fn ref_counts_for(&self, keys: &[String]) -> Result<Vec<(String, i32)>, AppError> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        // `select_only` for the same reason as `list_keys_with_prefix`: the full
+        // model carries `data`, so hydrating it would pull every blob in the
+        // batch across the wire to read two scalar columns.
+        let rows = stored_files::Entity::find()
+            .select_only()
+            .column(stored_files::Column::Key)
+            .column(stored_files::Column::RefCount)
+            .filter(stored_files::Column::Key.is_in(keys.iter().map(String::as_str)))
+            .into_tuple::<(String, i32)>()
+            .all(&self.db)
+            .await?;
+        Ok(rows)
     }
 
     async fn delete_if_unreferenced(&self, key: &str) -> Result<bool, AppError> {

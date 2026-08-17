@@ -10,6 +10,7 @@ mockall::mock! {
 
     #[async_trait]
     impl PostRepository for PostRepository {
+        async fn bodies_with_attachments(&self, after: Option<Uuid>, limit: u64) -> Result<Vec<(Uuid, String)>, AppError>;
         async fn find_by_id(&self, id: Uuid) -> Result<Option<Post>, AppError>;
         async fn find_many_by_ids(&self, ids: &[Uuid]) -> Result<Vec<Post>, AppError>;
         async fn list_by_thread(&self, thread_id: Uuid, viewer_id: Option<Uuid>, page: u64, per_page: u64) -> Result<(Vec<Post>, u64), AppError>;

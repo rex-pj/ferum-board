@@ -82,6 +82,27 @@ fn visibility_condition(viewer_id: Option<Uuid>) -> Condition {
 
 #[async_trait]
 impl PostRepository for PgPostRepository {
+    async fn bodies_with_attachments(
+        &self,
+        after: Option<Uuid>,
+        limit: u64,
+    ) -> Result<Vec<(Uuid, String)>, AppError> {
+        let mut query = posts::Entity::find()
+            .select_only()
+            .column(posts::Column::Id)
+            .column(posts::Column::ContentMd)
+            // Narrows a full scan to the posts that could possibly matter. The
+            // leading wildcard means no index applies either way, but this keeps
+            // the rows *returned* to the few with images.
+            .filter(posts::Column::ContentMd.contains("/post-attachments/"))
+            .order_by_asc(posts::Column::Id)
+            .limit(limit);
+        if let Some(cursor) = after {
+            query = query.filter(posts::Column::Id.gt(cursor));
+        }
+        Ok(query.into_tuple::<(Uuid, String)>().all(&self.db).await?)
+    }
+
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Post>, AppError> {
         Ok(posts::Entity::find_by_id(id)
             .one(&self.db)

@@ -1,0 +1,69 @@
+{% extends "admin/base.html" %}
+
+{# Two tools, deliberately on one page and deliberately not merged: they search
+   in opposite directions and one of them cannot run on every backend. Splitting
+   them across two pages would hide that they are complementary; merging them
+   would hide that a clean sweep says nothing about the audit. #}
+
+{% block title %}{{ t(k="adm-storage") }}{% endblock %}
+{% block nav_storage %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0">{{ t(k="adm-storage") }}</h1>
+</div>
+
+<p class="text-muted small" style="max-width:70ch">{{ t(k="adm-storage-intro") }}</p>
+
+<div class="row g-4">
+
+  {# ── Sweep: store → rows ─────────────────────────────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span class="fw-semibold">{{ t(k="adm-sweep-title") }}</span>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="sweep-scan">
+            <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="adm-scan") }}
+          </button>
+          {# Disabled until a scan finishes: the point of the whole page is that
+             the list gets read first. Enabled by ferum-admin-storage.js. #}
+          <button type="button" class="btn btn-danger btn-sm" id="sweep-apply" disabled>
+            <i class="fa-solid fa-trash me-1"></i>{{ t(k="adm-delete-found") }}
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">{{ t(k="adm-sweep-help") }}</p>
+        <div id="sweep-status" class="small mb-2"></div>
+        <div id="sweep-results"></div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Audit: rows → pointers ──────────────────────────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span class="fw-semibold">{{ t(k="adm-audit-title") }}</span>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="audit-scan">
+            <i class="fa-solid fa-magnifying-glass me-1"></i>{{ t(k="adm-scan") }}
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" id="audit-apply" disabled>
+            <i class="fa-solid fa-trash me-1"></i>{{ t(k="adm-release-found") }}
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">{{ t(k="adm-audit-help") }}</p>
+        <div id="audit-status" class="small mb-2"></div>
+        <div id="audit-results"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/js/ferum-admin-storage.js?v={{ asset_version() }}" defer></script>
+{% endblock %}

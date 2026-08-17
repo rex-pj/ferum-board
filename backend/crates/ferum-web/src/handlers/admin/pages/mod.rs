@@ -6,6 +6,7 @@ pub mod products;
 pub mod reports;
 pub mod roles;
 pub mod settings;
+pub mod storage;
 pub mod themes;
 pub mod threads;
 pub mod users;

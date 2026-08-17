@@ -218,6 +218,14 @@ impl StorageService for R2StorageService {
         self.inner.delete(key).await
     }
 
+    async fn list_keys(
+        &self,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Option<Vec<String>>, AppError> {
+        self.inner.list(after, limit).await.map(Some)
+    }
+
     fn public_url(&self, key: &str) -> String {
         format!("{}/{}", self.public_base, key)
     }

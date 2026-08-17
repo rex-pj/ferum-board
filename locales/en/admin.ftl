@@ -228,6 +228,28 @@ adm-filter-by-name-or-slug = Filter by name or slug…
 adm-forum = Forum
 adm-forum-index = Forum Index
 
+# Storage maintenance (/admin/storage)
+adm-storage = Storage
+adm-scan = Scan
+adm-storage-intro =
+    Uploaded files are reference-counted, and that only holds while every write
+    path plays along. These two tools search in opposite directions for files
+    nothing points at any more. Both report first; deleting is a separate click.
+adm-sweep-title = Objects with no database row
+adm-sweep-help =
+    Lists what is in storage and compares it against the file table. Finds
+    objects stranded by a failed cleanup — nothing can serve or find these again.
+    Paged, so a large bucket takes several passes.
+adm-audit-title = Files nothing references
+adm-audit-help =
+    The opposite direction: rows that still hold a reference, where no avatar,
+    cover, thumbnail, product image, theme preview or site setting actually
+    points at them. Pure database work, so it runs on every storage backend.
+    Post attachments and plugin media are excluded — they are referenced from
+    inside post and plugin markup, which there is no column to check.
+adm-delete-found = Delete found files
+adm-release-found = Release found files
+
 # Image processing (Content Policy tab)
 adm-image-processing = Image Processing
 adm-compress-uploaded-images = Compress uploaded images

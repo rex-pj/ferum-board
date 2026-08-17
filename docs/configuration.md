@@ -303,6 +303,78 @@ Use `release-fast`, not `release`: the latter's fat LTO is the slowest step in
 the build and buys nothing for a measurement. A plain debug build reports times
 several times worse than production and is useless for the latency figures.
 
+### Finding files nothing references
+
+Reference counting is a write-path mechanism, so it holds only while every write
+path plays along. Three did not — logo, favicon and theme previews each dropped
+a reference without collecting the object — and two sources leak by design: a
+post attachment that reaches zero is deliberately never deleted (a soft-deleted
+post still references it, and when the image *is* the violation it is also the
+evidence), and `InlineJobRunner` keeps its queue in memory, so a restart between
+the decrement and the collection loses the job.
+
+No write-path fix reaches any of that retroactively. The sweep does:
+
+```bash
+# Report. Never deletes. Page with ?after= until next_after comes back null.
+curl -s 'https://forum.example.com/api/admin/storage/sweep?limit=500' -b cookies.txt
+
+# Delete what it found. Same scan, re-run server-side.
+curl -sX POST 'https://forum.example.com/api/admin/storage/sweep?limit=500' -b cookies.txt
+```
+
+`GET` reports and `POST` deletes — the **method** is the switch, not a query
+flag. `middleware/csrf.rs` only inspects non-GET requests and `SameSite=Lax`
+attaches the auth cookie to top-level navigations, so a destructive GET would be
+one clicked link away from running.
+
+Two fields to read carefully:
+
+* `enumerable: false` means the configured backend **cannot list itself**, so
+  nothing was examined. GCS is in this state today — it has no `list_keys`
+  implementation. This is deliberately distinct from an empty result: reporting
+  a clean store for a store nobody read would be the worst possible output here.
+* `orphaned_objects` are deleted directly (no row exists, so the GC job would
+  find nothing to check) while `uncollected` go through `GcStorageKey`, whose
+  `ref_count = 0` re-test inside the DELETE is what stops a sweep removing
+  something re-referenced while it ran.
+
+**What it cannot find:** a row sitting at `ref_count = 1` that nothing actually
+points at. That was the shape of the theme-preview leak, and it looks alive to
+any check based on the count. Detecting it needs a per-namespace audit against
+the six tables that hold file URLs — not built.
+
+### Measured end to end
+
+Run against a live instance on database storage, 2026-08-17. The fixtures come
+from a generator so the numbers are reproducible:
+
+```powershell
+$env:FERUM_FIXTURE_OUT = "C:\tmp\ferum-fixtures"
+cd backend
+cargo test -p ferum-infrastructure-tests -- --ignored --nocapture emit_fixtures
+```
+
+| Upload | In | Out | |
+| --- | --- | --- | --- |
+| 4000×3000 photo → avatar | 1,666,986 B | 24,245 B, 512×512 | **1.5%**, EXIF gone |
+| 1600×900, EXIF orientation 6 → attachment | 113,730 B | 144,081 B, **900×1600** | rotated upright, EXIF gone |
+| 2-frame GIF → attachment | 88 B | 88 B | byte-identical, still animates |
+| 600×600 PNG logo | 11,459 B | 12,748 B, 512×512 | PNG, alpha intact |
+| 4000×3000 photo, processing **off** | 1,666,986 B | 1,666,986 B | byte-identical |
+
+**Two of those grew, and both are correct.** The guard that prevents growth only
+applies when nothing about the image had to change; a rotation and a downscale
+are both real changes, so it stands aside and the output wins. The EXIF case
+trades 27% more bytes for an image that is not sideways and carries no GPS. The
+logo case is what moved `LOGO_MAX_LONG_EDGE` from 512 to 1024 — see that
+constant.
+
+> **Uploading a logo replaces the current one, and the old file is deleted.**
+> Replacement drops the last reference, which schedules collection, and the
+> bytes go. Expected behaviour, and worth knowing before you try this on an
+> instance whose logo you want to keep.
+
 ### Latency
 
 Encoding is CPU-bound, so upload endpoints carry their own budget — **p95 <

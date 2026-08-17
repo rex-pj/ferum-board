@@ -12,7 +12,7 @@ use ferum_application::constants::{MAX_FAVICON_BYTES, MAX_LOGO_BYTES};
 use ferum_application::image_pipeline::ImageTarget;
 use ferum_application::permission::PermissionChecker;
 use ferum_application::shared::AppError;
-use ferum_application::storage_utils::{cas_key, validate_favicon_content_type};
+use ferum_application::storage_utils::{cas_key, release_cas_ref, validate_favicon_content_type};
 use ferum_application::validators::validate_favicon_magic;
 
 /// SMTP keys, editable from `/admin/settings` and applied without a restart via
@@ -389,10 +389,7 @@ pub async fn upload_favicon(
     state.site_config_cache.write().await.insert("favicon_url".to_string(), favicon_url.clone());
 
     if let Some(old) = old_key.filter(|k| k != &key) {
-        let remaining = state.stored_files.decrement_ref(&old).await?;
-        if remaining == 0 {
-            let _ = state.stored_files.delete_by_key(&old).await;
-        }
+        release_cas_ref(&state.stored_files, &state.jobs, &old).await;
     }
 
     Ok(Json(
@@ -415,10 +412,7 @@ pub async fn delete_favicon(
         .filter(|url| !url.is_empty())
         .and_then(|url| state.storage.key_from_url(&url))
     {
-        let remaining = state.stored_files.decrement_ref(&key).await?;
-        if remaining == 0 {
-            let _ = state.stored_files.delete_by_key(&key).await;
-        }
+        release_cas_ref(&state.stored_files, &state.jobs, &key).await;
     }
 
     state.site_config.set("favicon_url", "").await?;
@@ -468,10 +462,7 @@ pub async fn upload_logo(
     state.site_config_cache.write().await.insert("logo_url".to_string(), logo_url.clone());
 
     if let Some(old) = old_key.filter(|k| k != &key) {
-        let remaining = state.stored_files.decrement_ref(&old).await?;
-        if remaining == 0 {
-            let _ = state.stored_files.delete_by_key(&old).await;
-        }
+        release_cas_ref(&state.stored_files, &state.jobs, &old).await;
     }
 
     Ok(Json(
@@ -494,10 +485,7 @@ pub async fn delete_logo(
         .filter(|url| !url.is_empty())
         .and_then(|url| state.storage.key_from_url(&url))
     {
-        let remaining = state.stored_files.decrement_ref(&key).await?;
-        if remaining == 0 {
-            let _ = state.stored_files.delete_by_key(&key).await;
-        }
+        release_cas_ref(&state.stored_files, &state.jobs, &key).await;
     }
 
     state.site_config.set("logo_url", "").await?;

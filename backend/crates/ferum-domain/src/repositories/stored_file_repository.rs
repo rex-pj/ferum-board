@@ -82,8 +82,12 @@ pub trait StoredFileRepository: Send + Sync {
     /// loss. Same ordering rule as "bytes before row" on the way in.
     async fn clear_data(&self, key: &str) -> Result<(), AppError>;
 
-    /// Permanently delete the DB row (called by GC after ref_count hits 0).
-    async fn delete_by_key(&self, key: &str) -> Result<(), AppError>;
+    // `delete_by_key` used to live here — an unconditional row delete. It was
+    // removed rather than deprecated: it deleted the row and nothing else, so
+    // under any object store it stranded the bytes AND destroyed the only record
+    // that could have found them again. Three call sites used it that way. Use
+    // `delete_if_unreferenced` (via `ForumJob::GcStorageKey`) instead, which
+    // deletes both and re-checks the count while holding the row lock.
 
     /// Deletes the row only if still unreferenced. **The `ref_count = 0` test
     /// must stay inside the DELETE**: GC is asynchronous and CAS dedupes on
@@ -92,6 +96,53 @@ pub trait StoredFileRepository: Send + Sync {
     ///
     /// `false` means revived or already gone — leave the blob alone.
     async fn delete_if_unreferenced(&self, key: &str) -> Result<bool, AppError>;
+
+    /// Reference counts for whichever of `keys` have a row.
+    ///
+    /// Answers both halves of the orphan sweep in one query: a key the store
+    /// holds but this omits has no row at all (an orphaned object), and one it
+    /// returns at `<= 0` has a row whose collection never happened. Asking per
+    /// key instead would be a round trip per object in the bucket.
+    ///
+    /// Absent keys are simply missing from the result — the caller compares
+    /// against what it asked for rather than expecting a placeholder.
+    async fn ref_counts_for(&self, keys: &[String]) -> Result<Vec<(String, i32)>, AppError>;
+
+    /// Every value that currently points at a stored file, across the columns
+    /// that hold one.
+    ///
+    /// Returned **raw**, as stored, in the two shapes the schema actually uses:
+    /// `user_avatars`, `user_covers`, `thread_thumbnails` and `product_media`
+    /// hold a bare CAS key (and a foreign key to this table); `themes.preview_url`
+    /// and `site_config` hold a `/files/{key}` URL and no constraint at all.
+    /// Those last two are exactly the ones that leaked.
+    ///
+    /// Resolved by the caller through `StorageService::key_from_url`, falling
+    /// back to the raw value when it declines — which it does for a bare key.
+    /// That split is not indirection for its own sake: the URL shape varies by
+    /// backend, and rows written before `ports::file_url` existed can still hold
+    /// an absolute `{cdn}/files/{key}`. Matching in SQL with `LIKE` would miss
+    /// exactly those, and since the caller's next move is releasing whatever it
+    /// did not find, a miss deletes a live image.
+    ///
+    /// Soft-deleted rows count as references — the row still exists and still
+    /// names the file, so a removed thread's thumbnail is not garbage.
+    ///
+    /// Covers the six namespaces with an indexable owner. `post-attachments/`
+    /// lives inside post markdown and `plugin_*/` inside plugin-authored markup;
+    /// neither has a column to read, so neither is audited.
+    async fn referencing_pointers(&self) -> Result<Vec<String>, AppError>;
+
+    /// Post-attachment keys whose row was created before `cutoff`.
+    ///
+    /// **The age floor is load-bearing, not tidiness.** A staged attachment
+    /// seconds old belongs to a composer somebody still has open — it is
+    /// referenced by nothing yet *and never will be until they hit post*.
+    /// Reporting it invites deleting an image out of a live draft.
+    async fn attachment_keys_before(
+        &self,
+        cutoff: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<String>, AppError>;
 
     /// List keys starting with `prefix` — used at plugin uninstall to find every
     /// file it ever uploaded (keys are namespaced `plugin_{slug}/...` by cas_key)
