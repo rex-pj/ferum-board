@@ -1,16 +1,20 @@
 //! What a transactional email is allowed to say, and which values it may name.
 //!
-//! Single source of truth, read by the seeder and by the save-time validator —
+//! Single source of truth, read by the renderer and by the save-time validator —
 //! the same shape `PERMISSIONS` uses. Adding an email is an entry in
 //! [`EMAIL_TEMPLATES`] plus one in [`EMAIL_TEMPLATE_DEFAULTS`] per locale; there
 //! is no migration and no SQL literal that could drift from the key the sender
 //! passes.
 //!
-//! The copy lives here rather than in `locales/*/emails.ftl` because the
-//! database is authoritative at runtime: these are what the seeder writes on a
-//! fresh install and what "restore default" restores to. One consequence, stated
-//! rather than discovered: a translator can no longer contribute email copy by
-//! editing a `.ftl`, and must edit this file or the admin UI.
+//! **These are never written to the database.** `email_templates` holds only what
+//! an admin has edited, which is what makes "a row exists" mean "customised" and
+//! makes "restore default" a plain DELETE. It also means copy improved in a later
+//! release reaches every install that has not overridden it — pre-seeding would
+//! have frozen each install on whatever shipped when it first booted.
+//!
+//! One consequence, stated rather than discovered: a translator can no longer
+//! contribute email copy by editing a `.ftl`, and must edit this file or the
+//! admin UI.
 
 /// How a value is treated on its way into the rendered output.
 ///
@@ -55,6 +59,12 @@ pub struct VarDef {
 /// One editable email.
 pub struct EmailTemplateDef {
     pub key: &'static str,
+    /// What the editor lists it as.
+    ///
+    /// Separate from `key` because the key is an identifier the sender passes and
+    /// the name is for a human choosing between six rows. Nobody administering a
+    /// forum should have to read `email-notify-mention` to find the mention mail.
+    pub name: &'static str,
     /// Shown above the editor. This is the only place the operator learns what
     /// triggers the message, so say that rather than restating the name.
     pub description: &'static str,
@@ -83,6 +93,7 @@ const NOTIFY_VARS: &[VarDef] = &[
 pub const EMAIL_TEMPLATES: &[EmailTemplateDef] = &[
     EmailTemplateDef {
         key: "email-verify",
+        name: "Verify email address",
         description: "Sent on registration and whenever a member asks for a new verification link.",
         vars: &[
             VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
@@ -91,6 +102,7 @@ pub const EMAIL_TEMPLATES: &[EmailTemplateDef] = &[
     },
     EmailTemplateDef {
         key: "email-reset",
+        name: "Password reset",
         description: "Sent when a password reset is requested. The link is valid for one hour.",
         vars: &[
             VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
@@ -99,16 +111,19 @@ pub const EMAIL_TEMPLATES: &[EmailTemplateDef] = &[
     },
     EmailTemplateDef {
         key: "email-notify-reply",
+        name: "New reply",
         description: "Sent to a thread author when someone replies, if they opted in.",
         vars: NOTIFY_VARS,
     },
     EmailTemplateDef {
         key: "email-notify-mention",
+        name: "Mention",
         description: "Sent when someone @-mentions a member, if they opted in.",
         vars: NOTIFY_VARS,
     },
     EmailTemplateDef {
         key: "email-test",
+        name: "Test message",
         description: "Sent only by the \"Send test email\" button, only to the acting admin.",
         vars: &[
             VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
@@ -117,6 +132,7 @@ pub const EMAIL_TEMPLATES: &[EmailTemplateDef] = &[
     },
     EmailTemplateDef {
         key: LAYOUT_KEY,
+        name: "Shared layout",
         description: "Wraps every message above. `content` is the rendered message body.",
         vars: &[
             VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },

@@ -82,12 +82,16 @@ async fn every_element_the_script_drives_is_present() {
 
     for id in [
         "tpl-list",
+        "tpl-list-shared",
+        "tpl-shared-label",
         "tpl-locale",
         "tpl-editor",
+        "tpl-name",
         "tpl-key",
         "tpl-description",
         "tpl-variables",
         "tpl-subject",
+        "tpl-subject-inert",
         "tpl-body",
         "tpl-status",
         "tpl-save-btn",
@@ -98,8 +102,11 @@ async fn every_element_the_script_drives_is_present() {
         "tpl-preview-frame",
         "tpl-preview-subject",
         "tpl-preview-text",
+        "tpl-view-html",
+        "tpl-view-text",
         "tpl-customised",
         "tpl-default",
+        "tpl-dirty",
     ] {
         assert!(
             html.contains(&format!("id=\"{id}\"")),
@@ -132,6 +139,21 @@ async fn the_preview_iframe_is_sandboxed_without_same_origin() {
     );
 }
 
+/// The list holds only the copy strings the script needs; putting them in the JS
+/// would put English in a file the catalog cannot reach.
+#[tokio::test]
+async fn the_scripts_prompt_strings_come_from_the_catalog() {
+    let html = render().await;
+
+    for attr in ["data-edited-text", "data-discard-text"] {
+        assert!(html.contains(attr), "#tpl-list must carry {attr}");
+    }
+    assert!(
+        html.contains("data-saved-text") && html.contains("data-confirm-text"),
+        "the action buttons must carry their result strings"
+    );
+}
+
 #[tokio::test]
 async fn the_locale_picker_lists_the_installed_locales() {
     let html = render().await;
@@ -150,9 +172,14 @@ async fn every_admin_key_resolves_to_real_text() {
     for key in [
         "adm-email-templates-intro",
         "adm-language",
+        "adm-shared",
         "adm-customised",
         "adm-using-default",
+        "adm-unsaved",
+        "adm-layout-has-no-subject",
+        "adm-insert-variable",
         "adm-variables-help",
+        "adm-discard-changes",
         "adm-subject",
         "adm-body-html",
         "adm-preview-help",

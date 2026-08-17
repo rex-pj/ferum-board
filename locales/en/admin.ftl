@@ -236,13 +236,18 @@ adm-email-templates-intro =
     list here is normal.
 adm-template = Template
 adm-language = Language
-adm-customised = Customised
-adm-using-default = Using default
-adm-variables = Variables
+adm-shared = Shared
+adm-customised = Edited
+adm-using-default = Default
+adm-unsaved = Unsaved
+adm-layout-has-no-subject = Not used — each message supplies its own
+adm-insert-variable = Insert:
 adm-variables-help =
-    Write { "{{" } name { "}}" } to insert a value. Text values are escaped, so
-    markup typed by a member arrives as text rather than as HTML. Links are
-    checked and only http(s) is allowed. There are no conditionals or loops.
+    Click a variable to insert it at the cursor. Grey values are escaped, so
+    markup typed by a member arrives as text rather than as HTML; blue ones are
+    links, checked so only http(s) can reach an href. There are no conditionals
+    or loops.
+adm-discard-changes = You have unsaved changes to this template. Discard them?
 adm-required-variable = required
 adm-subject = Subject
 adm-body-html = Body (HTML)

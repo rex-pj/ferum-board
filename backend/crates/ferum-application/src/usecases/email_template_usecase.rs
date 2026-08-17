@@ -28,7 +28,10 @@ pub struct TemplateView {
 /// A template's catalogue entry plus which locales have been edited.
 pub struct TemplateSummary {
     pub key: String,
+    pub name: String,
     pub description: String,
+    /// The layout is chrome, not a message, and the editor groups it apart.
+    pub is_layout: bool,
     pub variables: Vec<VariableView>,
     pub customised_locales: Vec<String>,
 }
@@ -67,7 +70,9 @@ impl EmailTemplateUseCase {
             .iter()
             .map(|def| TemplateSummary {
                 key: def.key.to_string(),
+                name: def.name.to_string(),
                 description: def.description.to_string(),
+                is_layout: def.key == ferum_domain::models::email_template::LAYOUT_KEY,
                 variables: variable_views(def),
                 customised_locales: stored
                     .iter()

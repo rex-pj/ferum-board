@@ -31,7 +31,9 @@ pub struct VariableResponse {
 #[derive(Serialize)]
 pub struct TemplateSummaryResponse {
     pub key: String,
+    pub name: String,
     pub description: String,
+    pub is_layout: bool,
     pub variables: Vec<VariableResponse>,
     pub customised_locales: Vec<String>,
 }
@@ -71,7 +73,9 @@ pub async fn list_templates(
         .into_iter()
         .map(|t| TemplateSummaryResponse {
             key: t.key,
+            name: t.name,
             description: t.description,
+            is_layout: t.is_layout,
             variables: t
                 .variables
                 .into_iter()
