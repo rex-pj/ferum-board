@@ -41,6 +41,7 @@ mod m20260001_000029_create_review_ratings;
 mod m20260001_000030_create_product_rating_stats;
 mod m20260001_000031_create_product_search;
 mod m20260001_000032_index_users_username_lower;
+mod m20260001_000033_create_email_templates;
 /// Re-exported so `ferum-infrastructure` names the same role it drops privileges
 /// to, without a second copy of the literal that could drift out of step with
 /// the migration that creates it.
@@ -84,6 +85,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260001_000030_create_product_rating_stats::Migration),
             Box::new(m20260001_000031_create_product_search::Migration),
             Box::new(m20260001_000032_index_users_username_lower::Migration),
+            Box::new(m20260001_000033_create_email_templates::Migration),
         ]
     }
 }

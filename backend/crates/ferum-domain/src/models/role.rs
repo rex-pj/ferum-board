@@ -104,6 +104,12 @@ pub mod perm {
     /// given language access without also handing them SMTP settings and
     /// registration controls.
     pub const ADMIN_LANGUAGES: &str = "admin.languages";
+    /// Edit the subject and body of transactional emails, per locale.
+    ///
+    /// Separate from `admin.config` for the same reason as `admin.languages`:
+    /// the person who writes the copy does not need the SMTP credentials sitting
+    /// on the settings page next to it.
+    pub const ADMIN_EMAIL_TEMPLATES: &str = "admin.email_templates";
 }
 
 // ── System role / permission definitions ──────────────────────────────────────
@@ -184,6 +190,7 @@ pub const PERMISSIONS: &[PermissionDef] = &[
     PermissionDef { key: perm::ADMIN_WEBHOOKS,      description: "Manage webhooks",                   group_name: "admin", min_trust: TrustLevel::New },
     PermissionDef { key: perm::ADMIN_PLUGINS,       description: "Install and manage plugins",        group_name: "admin", min_trust: TrustLevel::New },
     PermissionDef { key: perm::ADMIN_LANGUAGES,     description: "Manage site languages and translations", group_name: "admin", min_trust: TrustLevel::New },
+    PermissionDef { key: perm::ADMIN_EMAIL_TEMPLATES, description: "Edit transactional email templates",   group_name: "admin", min_trust: TrustLevel::New },
 ];
 
 const MODERATOR_GRANTS: &[&str] = &[

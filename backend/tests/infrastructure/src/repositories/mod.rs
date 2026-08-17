@@ -1,6 +1,7 @@
 #[cfg(test)] mod audit_log_repository;
 #[cfg(test)] mod bookmark_repository;
 #[cfg(test)] mod category_repository;
+#[cfg(test)] mod email_template_repository;
 #[cfg(test)] mod follow_repository;
 #[cfg(test)] mod notification_repository;
 #[cfg(test)] mod permission_repository;

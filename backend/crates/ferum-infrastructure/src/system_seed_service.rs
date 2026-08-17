@@ -27,6 +27,7 @@ use ferum_application::constants::{
     DEFAULT_THEME_SLUG,
 };
 use ferum_application::shared::AppError;
+use ferum_domain::models::email_template::EMAIL_TEMPLATE_DEFAULTS;
 use ferum_domain::models::role::{PERMISSIONS, SYSTEM_ROLES};
 
 use crate::crypto::{
@@ -34,8 +35,8 @@ use crate::crypto::{
     WEBHOOK_SECRET_AAD,
 };
 use crate::entities::{
-    permissions, plugins, product_categories, role_permissions, roles, site_config, themes,
-    webhooks,
+    email_templates, permissions, plugins, product_categories, role_permissions, roles,
+    site_config, themes, webhooks,
 };
 use ferum_domain::models::plugin::secret_config_keys;
 use crate::repositories::user_repository::domain_trust_to_entity;
@@ -134,6 +135,7 @@ impl PgSystemSeedService {
         let new_permission_keys = self.seed_permissions().await?;
         self.seed_grants(&role_ids, &new_slugs, &new_permission_keys).await?;
         self.seed_site_config().await?;
+        self.seed_email_templates().await?;
         self.seed_default_theme().await?;
         self.seed_product_categories().await?;
 
@@ -520,6 +522,40 @@ impl PgSystemSeedService {
 
         if !rows.is_empty() {
             site_config::Entity::insert_many(rows).exec(&self.db).await?;
+        }
+        Ok(())
+    }
+
+    /// Transactional email copy, one row per (template, locale).
+    ///
+    /// **Absent-only, and that is the whole contract.** Re-asserting these on
+    /// every boot would silently revert an admin's edited copy — the same rule
+    /// that keeps default permission grants from undoing a revocation. The
+    /// compiled-in catalogue stays reachable as a last-resort fallback, so a
+    /// template added in a release still sends before this ever runs.
+    async fn seed_email_templates(&self) -> Result<(), AppError> {
+        let existing: HashSet<(String, String)> = email_templates::Entity::find()
+            .all(&self.db)
+            .await?
+            .into_iter()
+            .map(|t| (t.key, t.locale))
+            .collect();
+
+        let now = Utc::now().fixed_offset();
+        let rows: Vec<email_templates::ActiveModel> = EMAIL_TEMPLATE_DEFAULTS
+            .iter()
+            .filter(|d| !existing.contains(&(d.key.to_string(), d.locale.to_string())))
+            .map(|d| email_templates::ActiveModel {
+                key: Set(d.key.to_string()),
+                locale: Set(d.locale.to_string()),
+                subject: Set(d.subject.to_string()),
+                body_html: Set(d.body_html.to_string()),
+                updated_at: Set(now),
+            })
+            .collect();
+
+        if !rows.is_empty() {
+            email_templates::Entity::insert_many(rows).exec(&self.db).await?;
         }
         Ok(())
     }

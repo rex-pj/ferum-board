@@ -7,6 +7,7 @@ pub mod bookmarks;
 pub mod brands;
 pub mod categories;
 pub mod daily_stats;
+pub mod email_templates;
 pub mod materials;
 pub mod notifications;
 pub mod permissions;

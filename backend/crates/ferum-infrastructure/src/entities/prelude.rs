@@ -5,6 +5,7 @@ pub use super::bookmarks::Entity as Bookmarks;
 pub use super::brands::Entity as Brands;
 pub use super::categories::Entity as Categories;
 pub use super::daily_stats::Entity as DailyStats;
+pub use super::email_templates::Entity as EmailTemplates;
 pub use super::materials::Entity as Materials;
 pub use super::notifications::Entity as Notifications;
 pub use super::permissions::Entity as Permissions;

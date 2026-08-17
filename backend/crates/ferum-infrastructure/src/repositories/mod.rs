@@ -1,6 +1,7 @@
 pub mod audit_log_repository;
 pub mod bookmark_repository;
 pub mod brand_repository;
+pub mod email_template_repository;
 pub mod follow_repository;
 pub mod plugin_db_repository;
 pub mod plugin_repository;

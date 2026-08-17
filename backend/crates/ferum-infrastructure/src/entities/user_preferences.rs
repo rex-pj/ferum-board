@@ -19,6 +19,7 @@ pub struct Model {
     pub email_notifications: Json,
     pub updated_at: Option<DateTimeWithTimeZone>,
     pub locale: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
     pub timezone: Option<String>,
     #[sea_orm(
         belongs_to,

@@ -1,6 +1,7 @@
 pub mod audit_log;
 pub mod bookmark;
 pub mod brand;
+pub mod email_template;
 pub mod follow;
 pub mod material;
 pub mod plugin;
@@ -24,6 +25,7 @@ pub mod theme;
 pub use audit_log::AuditLog;
 pub use bookmark::Bookmark;
 pub use brand::{Brand, NewBrand};
+pub use email_template::{EmailTemplate, EmailTemplateDef, VarKind, EMAIL_TEMPLATES, LAYOUT_KEY};
 pub use follow::Follow;
 pub use material::{Material, NewMaterial};
 pub use product::{NewProduct, Product, ProductStatus, ProductType};
