@@ -682,6 +682,24 @@ pub trait EmailTemplateRenderer: Send + Sync {
         locale: &Locale,
         values: &[(&str, String)],
     ) -> Result<RenderedEmail, AppError>;
+
+    /// Renders copy the caller supplies instead of the stored row.
+    ///
+    /// Backs the admin preview, which must show text that has not been saved
+    /// yet. [`Self::render`] resolves and then delegates here, so a preview and
+    /// a real send cannot diverge — the whole value of a preview is that it is
+    /// evidence, and a second rendering path would quietly stop making it so.
+    ///
+    /// The layout still comes from storage: it is chrome the draft does not
+    /// carry, and seeing the message inside it is most of the point.
+    async fn render_draft(
+        &self,
+        key: &str,
+        locale: &Locale,
+        subject: &str,
+        body_html: &str,
+        values: &[(&str, String)],
+    ) -> Result<RenderedEmail, AppError>;
 }
 
 // ─── WebhookDeliveryService ───────────────────────────────────────────────────

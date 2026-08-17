@@ -2,6 +2,7 @@ pub mod admin_stats_usecase;
 pub mod admin_usecase;
 pub mod auth_usecase;
 pub mod bookmark_usecase;
+pub mod email_template_usecase;
 pub mod follow_usecase;
 pub mod category_usecase;
 pub mod moderation_usecase;

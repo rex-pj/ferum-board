@@ -1,0 +1,95 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ t(k="adm-email-templates") }}{% endblock %}
+{% block nav_email_templates %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+  <h1 class="h4 mb-0">{{ t(k="adm-email-templates") }}</h1>
+  <div class="d-flex align-items-center gap-2">
+    <label for="tpl-locale" class="form-label mb-0 small">{{ t(k="adm-language") }}</label>
+    {# The installed roster, from the translator — not a hardcoded list, so a
+       locale added under locales/ becomes editable with no template change. #}
+    <select id="tpl-locale" class="form-select form-select-sm" style="width:auto">
+      {% for tag in template_locales %}
+      <option value="{{ tag }}">{{ tag }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<p class="text-body-secondary">{{ t(k="adm-email-templates-intro") }}</p>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-4">
+    <div class="list-group" id="tpl-list">
+      <div class="list-group-item text-body-secondary small">…</div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-8">
+    <div class="card d-none" id="tpl-editor">
+      <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+          <strong id="tpl-key"></strong>
+          <span class="badge text-bg-secondary ms-1 d-none" id="tpl-customised">{{ t(k="adm-customised") }}</span>
+          <span class="badge text-bg-light ms-1 d-none" id="tpl-default">{{ t(k="adm-using-default") }}</span>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="tpl-preview-btn">{{ t(k="adm-preview") }}</button>
+          {# Strings the script shows after an action come through data- attributes
+             so they stay in the catalog rather than being frozen into the JS. #}
+          <button type="button" class="btn btn-sm btn-primary" id="tpl-save-btn"
+                  data-saved-text="{{ t(k='adm-template-saved') }}">{{ t(k="adm-save") }}</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="text-body-secondary small" id="tpl-description"></p>
+
+        <div class="mb-3">
+          <div class="form-label small mb-1">{{ t(k="adm-variables") }}</div>
+          <div id="tpl-variables" class="d-flex flex-wrap gap-1 mb-1"></div>
+          <div class="form-text">{{ t(k="adm-variables-help") }}</div>
+        </div>
+
+        <div class="mb-3">
+          <label for="tpl-subject" class="form-label">{{ t(k="adm-subject") }}</label>
+          <input type="text" class="form-control" id="tpl-subject" maxlength="500">
+        </div>
+
+        <div class="mb-3">
+          <label for="tpl-body" class="form-label">{{ t(k="adm-body-html") }}</label>
+          <textarea class="form-control font-monospace" id="tpl-body" rows="14" spellcheck="false"></textarea>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="tpl-test-btn">{{ t(k="adm-send-test") }}</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="tpl-reset-btn"
+                  data-confirm-text="{{ t(k='adm-reset-confirm') }}"
+                  data-reset-text="{{ t(k='adm-template-reset') }}">{{ t(k="adm-reset-to-default") }}</button>
+        </div>
+        <div class="mt-2 small" id="tpl-status" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div class="card mt-3 d-none" id="tpl-preview-card">
+      <div class="card-header">
+        {{ t(k="adm-preview") }} — <span id="tpl-preview-subject" class="fw-semibold"></span>
+      </div>
+      <div class="card-body">
+        <p class="form-text mt-0">{{ t(k="adm-preview-help") }}</p>
+        {# Sandboxed with no allow-same-origin: the document is admin-authored
+           HTML, and rendering it with this origin's privileges would turn the
+           editor into a self-XSS surface. srcdoc is filled from JS. #}
+        <iframe id="tpl-preview-frame" sandbox title="{{ t(k='adm-preview') }}"
+                class="w-100 border rounded" style="height:420px;background:#fff"></iframe>
+        <details class="mt-2">
+          <summary class="small">{{ t(k="adm-plain-text-part") }}</summary>
+          <pre class="small bg-body-tertiary p-2 rounded mt-2 mb-0" id="tpl-preview-text" style="white-space:pre-wrap"></pre>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/ferum-admin-email-templates.js?v={{ asset_version() }}" defer></script>
+{% endblock %}

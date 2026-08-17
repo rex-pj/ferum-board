@@ -94,6 +94,7 @@ error-invalid-smtp-port = Cổng SMTP phải là số nguyên từ 1 đến 6553
 ## ─── Mẫu email ───────────────────────────────────────────────────────────────
 
 error-unknown-email-template = Mẫu email đó không tồn tại.
+error-invalid-locale = Đây không phải là mã ngôn ngữ hợp lệ.
 error-email-template-logic-unsupported =
     Mẫu email chỉ thay giá trị — không hỗ trợ thẻ { "{% … %}" }.
 error-email-template-unknown-variable =

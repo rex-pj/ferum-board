@@ -17,6 +17,7 @@ use ferum_application::usecases::auth_usecase::AuthUseCase;
 use ferum_application::usecases::bookmark_usecase::BookmarkUseCase;
 use ferum_application::usecases::follow_usecase::FollowUseCase;
 use ferum_application::usecases::category_usecase::CategoryUseCase;
+use ferum_application::usecases::email_template_usecase::EmailTemplateUseCase;
 use ferum_application::usecases::moderation_usecase::ModerationUseCase;
 use ferum_application::usecases::notification_usecase::NotificationUseCase;
 use ferum_application::usecases::post_usecase::PostUseCase;
@@ -83,6 +84,7 @@ pub struct AppState {
     /// Read and written directly by the admin editor, which has no business
     /// logic beyond the save-time validation in `email_template`.
     pub email_templates: Arc<dyn EmailTemplateRepository>,
+    pub email_templates_uc: Arc<EmailTemplateUseCase>,
     pub setup: Arc<SetupUseCase>,
     pub auth: Arc<AuthUseCase>,
     pub admin: Arc<AdminUseCase>,

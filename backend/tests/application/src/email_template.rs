@@ -19,9 +19,9 @@ fn values(pairs: &[(&'static str, &str)]) -> HashMap<&'static str, String> {
 }
 
 const DEFS: &[VarDef] = &[
-    VarDef { name: "text", kind: VarKind::Text, required_in_body: false },
-    VarDef { name: "link", kind: VarKind::Url, required_in_body: false },
-    VarDef { name: "raw", kind: VarKind::Raw, required_in_body: false },
+    VarDef { name: "text", kind: VarKind::Text, required_in_body: false, sample: "sample text" },
+    VarDef { name: "link", kind: VarKind::Url,  required_in_body: false, sample: "https://example.test" },
+    VarDef { name: "raw",  kind: VarKind::Raw,  required_in_body: false, sample: "<p>raw</p>" },
 ];
 
 // ─── Substitution and escaping ────────────────────────────────────────────────

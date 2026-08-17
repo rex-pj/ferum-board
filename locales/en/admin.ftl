@@ -228,6 +228,37 @@ adm-filter-by-name-or-slug = Filter by name or slug…
 adm-forum = Forum
 adm-forum-index = Forum Index
 
+# Email templates (/admin/email-templates)
+adm-email-templates = Email templates
+adm-email-templates-intro =
+    The subject and body of every message the forum sends, per language. Copy
+    you have not edited falls back to what ships with the release, so an empty
+    list here is normal.
+adm-template = Template
+adm-language = Language
+adm-customised = Customised
+adm-using-default = Using default
+adm-variables = Variables
+adm-variables-help =
+    Write { "{{" } name { "}}" } to insert a value. Text values are escaped, so
+    markup typed by a member arrives as text rather than as HTML. Links are
+    checked and only http(s) is allowed. There are no conditionals or loops.
+adm-required-variable = required
+adm-subject = Subject
+adm-body-html = Body (HTML)
+adm-preview = Preview
+adm-preview-help =
+    Rendered with sample values, in the same code that sends for real. Nothing
+    is saved until you press Save.
+adm-plain-text-part = Plain-text part
+adm-send-test = Send test to me
+adm-reset-to-default = Reset to default
+adm-reset-confirm =
+    Discard your edits for this language and go back to the copy that ships with
+    the release?
+adm-template-saved = Saved.
+adm-template-reset = Reset to the default copy.
+
 # Storage maintenance (/admin/storage)
 adm-storage = Storage
 adm-scan = Scan

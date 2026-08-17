@@ -84,13 +84,25 @@ impl EmailTemplateRenderer for DbEmailTemplateRenderer {
             .await
             .ok_or_else(|| AppError::internal(format!("no copy for email template {key}")))?;
 
+        self.render_draft(key, locale, &copy.subject, &copy.body_html, values)
+            .await
+    }
+
+    async fn render_draft(
+        &self,
+        key: &str,
+        locale: &Locale,
+        subject_tpl: &str,
+        body_tpl: &str,
+        values: &[(&str, String)],
+    ) -> Result<RenderedEmail, AppError> {
         let def = template_def(key)
             .ok_or_else(|| AppError::internal(format!("unknown email template {key}")))?;
         let map: HashMap<&str, String> = values.iter().cloned().collect();
 
         // Subject unescaped, body escaped per variable kind — see `substitute`.
-        let subject = substitute(&copy.subject, &map, def.vars, false);
-        let body = substitute(&copy.body_html, &map, def.vars, true);
+        let subject = substitute(subject_tpl, &map, def.vars, false);
+        let body = substitute(body_tpl, &map, def.vars, true);
 
         // From the message body, not the wrapped document: the layout is chrome,
         // and its markup adds nothing a plain-text reader wants.

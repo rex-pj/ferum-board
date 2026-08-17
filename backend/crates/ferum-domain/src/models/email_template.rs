@@ -44,6 +44,12 @@ pub struct VarDef {
     /// `unsubscribe_url` would be nonsense, and requiring `url` in one would
     /// forbid the perfectly good "Verify your email".
     pub required_in_body: bool,
+    /// Stand-in shown by the admin preview.
+    ///
+    /// Lives beside the declaration so the variable names exist in exactly one
+    /// place. A preview that built its own samples would be a second list to
+    /// keep in step, and the first one to fall behind.
+    pub sample: &'static str,
 }
 
 /// One editable email.
@@ -62,14 +68,16 @@ pub struct EmailTemplateDef {
 pub const LAYOUT_KEY: &str = "email-layout";
 
 const NOTIFY_VARS: &[VarDef] = &[
-    VarDef { name: "site_name",       kind: VarKind::Text, required_in_body: false },
-    VarDef { name: "actor",           kind: VarKind::Text, required_in_body: false },
-    VarDef { name: "thread_title",    kind: VarKind::Text, required_in_body: false },
-    VarDef { name: "url",             kind: VarKind::Url,  required_in_body: true },
+    VarDef { name: "site_name",       kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
+    VarDef { name: "actor",           kind: VarKind::Text, required_in_body: false, sample: "alice" },
+    // Carries markup on purpose: the preview is the one place an admin can see
+    // that an author-controlled title arrives escaped rather than rendered.
+    VarDef { name: "thread_title",    kind: VarKind::Text, required_in_body: false, sample: "Sofa <b>hay nhất</b> 2026?" },
+    VarDef { name: "url",             kind: VarKind::Url,  required_in_body: true,  sample: "https://example.test/forum/t/a-thread" },
     // A notification with no working opt-out is the message people report as
     // spam rather than mute, and that cost lands on the sending domain.
-    VarDef { name: "unsubscribe_url", kind: VarKind::Url,  required_in_body: true },
-    VarDef { name: "settings_url",    kind: VarKind::Url,  required_in_body: false },
+    VarDef { name: "unsubscribe_url", kind: VarKind::Url,  required_in_body: true,  sample: "https://example.test/unsubscribe/TOKEN" },
+    VarDef { name: "settings_url",    kind: VarKind::Url,  required_in_body: false, sample: "https://example.test/account" },
 ];
 
 pub const EMAIL_TEMPLATES: &[EmailTemplateDef] = &[
@@ -77,16 +85,16 @@ pub const EMAIL_TEMPLATES: &[EmailTemplateDef] = &[
         key: "email-verify",
         description: "Sent on registration and whenever a member asks for a new verification link.",
         vars: &[
-            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false },
-            VarDef { name: "url",       kind: VarKind::Url,  required_in_body: true },
+            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
+            VarDef { name: "url",       kind: VarKind::Url,  required_in_body: true,  sample: "https://example.test/verify-email/TOKEN" },
         ],
     },
     EmailTemplateDef {
         key: "email-reset",
         description: "Sent when a password reset is requested. The link is valid for one hour.",
         vars: &[
-            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false },
-            VarDef { name: "url",       kind: VarKind::Url,  required_in_body: true },
+            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
+            VarDef { name: "url",       kind: VarKind::Url,  required_in_body: true,  sample: "https://example.test/reset-password?token=TOKEN" },
         ],
     },
     EmailTemplateDef {
@@ -103,16 +111,16 @@ pub const EMAIL_TEMPLATES: &[EmailTemplateDef] = &[
         key: "email-test",
         description: "Sent only by the \"Send test email\" button, only to the acting admin.",
         vars: &[
-            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false },
-            VarDef { name: "provider",  kind: VarKind::Text, required_in_body: false },
+            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
+            VarDef { name: "provider",  kind: VarKind::Text, required_in_body: false, sample: "SMTP" },
         ],
     },
     EmailTemplateDef {
         key: LAYOUT_KEY,
         description: "Wraps every message above. `content` is the rendered message body.",
         vars: &[
-            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false },
-            VarDef { name: "content",   kind: VarKind::Raw,  required_in_body: true },
+            VarDef { name: "site_name", kind: VarKind::Text, required_in_body: false, sample: "Ferum Board" },
+            VarDef { name: "content",   kind: VarKind::Raw,  required_in_body: true,  sample: "<p>The message body appears here.</p>" },
         ],
     },
 ];

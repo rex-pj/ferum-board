@@ -357,6 +357,18 @@ impl PermissionChecker {
         }
     }
 
+    /// Deliberately not `ADMIN_CONFIG`: email copy is written by whoever owns
+    /// the site's voice, and that need not be whoever holds the SMTP password
+    /// sitting on the same settings page.
+    pub fn can_manage_email_templates(user: &AuthUser) -> Result<(), AppError> {
+        Self::require_not_banned(user)?;
+        if user.has_perm(perm::ADMIN_EMAIL_TEMPLATES) {
+            Ok(())
+        } else {
+            Err(AppError::forbidden("permission_denied"))
+        }
+    }
+
     pub fn can_manage_webhooks(user: &AuthUser) -> Result<(), AppError> {
         Self::require_not_banned(user)?;
         if user.has_perm(perm::ADMIN_WEBHOOKS) {

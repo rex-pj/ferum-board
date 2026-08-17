@@ -138,6 +138,26 @@ pub fn admin_api_routes() -> Router<AppState> {
         // Carries its own 30s per-admin cooldown, since each call costs money.
         .route("/email/test", post(admin::api::email::test_email))
         .route(
+            "/email-templates",
+            get(admin::api::email_templates::list_templates),
+        )
+        .route(
+            "/email-templates/{key}/{locale}",
+            get(admin::api::email_templates::get_template)
+                .put(admin::api::email_templates::save_template)
+                .delete(admin::api::email_templates::reset_template),
+        )
+        // POST, not GET: the copy being rendered is the unsaved draft in the
+        // request body, which a GET cannot carry.
+        .route(
+            "/email-templates/{key}/{locale}/preview",
+            post(admin::api::email_templates::preview_template),
+        )
+        .route(
+            "/email-templates/{key}/{locale}/test",
+            post(admin::api::email_templates::test_send_template),
+        )
+        .route(
             "/webhooks",
             get(admin::api::webhooks::list_webhooks).post(admin::api::webhooks::create_webhook),
         )
@@ -198,6 +218,10 @@ pub fn admin_page_routes() -> Router<AppState> {
         .route("/plugins/{slug}/config", post(admin::pages::plugins::save_config))
         .route("/settings", get(admin::pages::settings::settings))
         .route("/storage", get(admin::pages::storage::storage))
+        .route(
+            "/email-templates",
+            get(admin::pages::email_templates::email_templates),
+        )
         .route("/themes", get(admin::pages::themes::themes))
         .route("/languages", get(admin::pages::languages::languages))
         .route("/themes/upload", post(admin::pages::themes::upload_theme))

@@ -80,6 +80,7 @@ error-invalid-smtp-port = The SMTP port must be a whole number between 1 and 655
 ## ─── Email templates ─────────────────────────────────────────────────────────
 
 error-unknown-email-template = That email template doesn't exist.
+error-invalid-locale = That's not a valid language tag.
 error-email-template-logic-unsupported =
     Email templates only substitute values — { "{% … %}" } tags aren't supported.
 error-email-template-unknown-variable =

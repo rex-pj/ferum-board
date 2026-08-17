@@ -27,7 +27,7 @@ use crate::view_models::{DataResponse, HandlerResult};
 /// a webhook test hits the operator's own server, while a mail test costs money
 /// per message and spends the sending domain's reputation. A held-down button is
 /// not a threat model, it is a Tuesday.
-const TEST_EMAIL_COOLDOWN: Duration = Duration::from_secs(30);
+pub(crate) const TEST_EMAIL_COOLDOWN: Duration = Duration::from_secs(30);
 
 pub async fn test_email(
     State(state): State<AppState>,

@@ -3,6 +3,7 @@
 #[cfg(test)] mod error_catalog;
 #[cfg(test)] mod handlers;
 #[cfg(test)] mod middleware;
+#[cfg(test)] mod admin_email_templates_render;
 #[cfg(test)] mod admin_storage_render;
 #[cfg(test)] mod cropper_page_render;
 #[cfg(test)] mod search_page_render;
