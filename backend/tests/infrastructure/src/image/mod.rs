@@ -5,6 +5,7 @@
 #![cfg(test)]
 
 mod bench;
+mod emit_fixtures;
 mod fast_path;
 mod frame;
 mod no_growth;

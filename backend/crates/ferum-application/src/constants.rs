@@ -69,8 +69,18 @@ pub const AVATAR_FRAME: (u32, u32) = (512, 512);
 pub const COVER_FRAME: (u32, u32) = (1600, 400);
 pub const THUMBNAIL_FRAME: (u32, u32) = (1280, 720);
 
-/// Long-edge ceilings for the two lossless/admin paths.
-pub const LOGO_MAX_LONG_EDGE: u32 = 512;
+/// Long-edge ceiling for the site logo.
+///
+/// **1024, not 512, and the end-to-end run is why.** A 600×600 PNG logo hit the
+/// old cap, got resized to 512 — and came out *larger*: 11.4 KB in, 12.7 KB out.
+/// Flat colour is what PNG is best at, and Lanczos replaces a hard edge with a
+/// band of anti-aliased pixels, each a new colour for the palette to carry. The
+/// resize was real, so the no-growth guard correctly declined to help.
+///
+/// At 1024 an ordinary logo passes through untouched and the guard *does* apply,
+/// which is the outcome worth having. The cap still exists to stop a 6000px
+/// upload being served as the header image on every page.
+pub const LOGO_MAX_LONG_EDGE: u32 = 1024;
 pub const THEME_PREVIEW_MAX_LONG_EDGE: u32 = 1200;
 
 /// IANA name defining the day boundary for daily aggregations. Never a fixed
