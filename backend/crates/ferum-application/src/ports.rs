@@ -650,9 +650,32 @@ pub trait NotificationBus: Send + Sync {
 
 // ─── EmailService ─────────────────────────────────────────────────────────────
 
+/// One message to hand to a provider.
+///
+/// A struct rather than four positional `&str`s: `html` and `text` have the same
+/// type, and swapping them sends the markup as the plain-text part with nothing
+/// failing anywhere. Named fields make that mistake unwriteable.
+pub struct OutgoingEmail<'a> {
+    pub to: &'a str,
+    pub subject: &'a str,
+    pub html: &'a str,
+    /// The `text/plain` alternative, sent alongside the HTML.
+    ///
+    /// **Not optional.** Every message here is rendered by
+    /// [`EmailTemplateRenderer`], which always derives one, and a mail with no
+    /// text part scores worse with spam filters for no benefit. A caller with
+    /// nothing better can pass the HTML stripped, but not an empty string.
+    pub text: &'a str,
+}
+
 #[async_trait]
 pub trait EmailService: Send + Sync {
-    async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError>;
+    /// Sends `message` as `multipart/alternative`.
+    ///
+    /// # Errors
+    /// Provider failures propagate with the provider's own words, because the
+    /// admin test-send surfaces them. No adapter may put a credential in one.
+    async fn send(&self, message: OutgoingEmail<'_>) -> Result<(), AppError>;
 }
 
 // ─── EmailTemplateRenderer ────────────────────────────────────────────────────

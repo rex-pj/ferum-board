@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use ferum_application::ports::EmailService;
+use ferum_application::ports::{EmailService, OutgoingEmail};
 use ferum_application::shared::AppError;
 
 use super::LettreEmailService;
@@ -286,12 +286,12 @@ impl ReloadableEmailService {
 
 #[async_trait]
 impl EmailService for ReloadableEmailService {
-    async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError> {
+    async fn send(&self, message: OutgoingEmail<'_>) -> Result<(), AppError> {
         // Clone the Arc out under a short read lock, then send without holding
         // it, so a concurrent reload never waits on an in-flight round-trip.
         let active = self.state.read().await.active.clone();
         match active {
-            Some(p) => p.send(to, subject, html_body).await,
+            Some(p) => p.send(message).await,
             None => Err(AppError::internal("mail_not_configured")),
         }
     }

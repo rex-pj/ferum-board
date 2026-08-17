@@ -197,11 +197,7 @@ pub async fn test_send_template(
     // `/api/admin/email/test`: the request succeeded, and a 500 would let the
     // browser's generic handling swallow the provider's own message — which is
     // the one thing the admin pressed the button for.
-    let outcome = match state
-        .email
-        .send(&user.email, &rendered.subject, &rendered.html)
-        .await
-    {
+    let outcome = match state.email.send(rendered.to(&user.email)).await {
         Ok(()) => serde_json::json!({
             "success": true, "sent_to": user.email, "error": null,
         }),

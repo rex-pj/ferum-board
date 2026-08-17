@@ -12,7 +12,7 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use ferum_application::ports::EmailService;
+use ferum_application::ports::{EmailService, OutgoingEmail};
 use ferum_infrastructure::email::{
     MailProvider, MailReload, ReloadableEmailService, SelectedProvider, SmtpEndpoint,
 };
@@ -24,6 +24,17 @@ const SMTP_PORT: u16 = 587;
 
 fn recording() -> Arc<RecordingEmailService> {
     Arc::new(RecordingEmailService::new())
+}
+
+/// These tests are about which provider a send reaches, not about rendering, so
+/// the parts carry fixed text.
+fn msg<'a>(to: &'a str, subject: &'a str, html: &'a str) -> OutgoingEmail<'a> {
+    OutgoingEmail {
+        to,
+        subject,
+        html,
+        text: "plain",
+    }
 }
 
 fn endpoint() -> SmtpEndpoint {
@@ -217,7 +228,7 @@ async fn send_goes_to_the_selected_provider() {
     .await
     .unwrap();
 
-    svc.send("member@example.com", "Subject", "<p>Body</p>")
+    svc.send(msg("member@example.com", "Subject", "<p>Body</p>"))
         .await
         .unwrap();
 
@@ -240,7 +251,7 @@ async fn a_provider_that_is_no_longer_selected_stops_receiving_sends() {
     ))
     .await
     .unwrap();
-    svc.send("a@example.com", "s", "b").await.unwrap();
+    svc.send(msg("a@example.com", "s", "b")).await.unwrap();
 
     // Switching to Off must take the previous provider out of the send path
     // entirely — the Arc is still alive in this test, which is exactly why the
@@ -248,7 +259,7 @@ async fn a_provider_that_is_no_longer_selected_stops_receiving_sends() {
     svc.reload(reload_with(SelectedProvider::Off, Some(endpoint()), Some(recorder.clone())))
         .await
         .unwrap();
-    assert!(svc.send("b@example.com", "s", "b").await.is_err());
+    assert!(svc.send(msg("b@example.com", "s", "b")).await.is_err());
     assert_eq!(recorder.sent().len(), 1, "no send may reach a deselected provider");
 }
 
@@ -256,7 +267,7 @@ async fn a_provider_that_is_no_longer_selected_stops_receiving_sends() {
 async fn send_without_any_provider_fails_fast() {
     let svc = ReloadableEmailService::new(FROM);
     // Rather than timing out against a placeholder host.
-    let err = svc.send("member@example.com", "s", "b").await;
+    let err = svc.send(msg("member@example.com", "s", "b")).await;
     assert!(err.is_err());
 }
 
@@ -273,7 +284,7 @@ async fn a_failing_provider_propagates_its_message() {
     .await
     .unwrap();
 
-    let err = svc.send("member@example.com", "s", "b").await.unwrap_err();
+    let err = svc.send(msg("member@example.com", "s", "b")).await.unwrap_err();
     assert!(err.to_string().contains("domain not verified"));
 }
 

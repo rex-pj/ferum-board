@@ -1,11 +1,10 @@
 use async_trait::async_trait;
-use lettre::message::header::ContentType;
-use lettre::message::Mailbox;
+use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use std::net::IpAddr;
 
-use ferum_application::ports::EmailService;
+use ferum_application::ports::{EmailService, OutgoingEmail};
 use ferum_application::shared::AppError;
 use ferum_domain::net::normalize_host;
 
@@ -143,21 +142,40 @@ impl LettreEmailService {
     }
 }
 
+/// Assembles the MIME message.
+///
+/// Factored out of `send` and `pub` for the reason `resend_service::payload`
+/// gives: the message *shape* is the part that can be wrong, and `send` cannot
+/// be exercised without an SMTP server. Nothing else about a mail is checkable
+/// from outside this adapter.
+///
+/// # Errors
+/// A malformed sender (which startup already validated) or recipient address.
+pub fn build_message(from: &str, message: &OutgoingEmail<'_>) -> Result<Message, AppError> {
+    Message::builder()
+        // The same parse `validate_from_address` ran at startup, so reaching a
+        // failure here means the value changed under a running process rather
+        // than an operator typo that slipped through.
+        .from(parse_from(from)?)
+        .to(message
+            .to
+            .parse()
+            .map_err(|_| AppError::internal("invalid to address"))?)
+        .subject(message.subject)
+        // `alternative_plain_html` emits the plain part first, which is the
+        // order RFC 2046 §5.1.4 requires: a client picks the *last* part it can
+        // render, so reversing them would serve plain text to everyone.
+        .multipart(MultiPart::alternative_plain_html(
+            message.text.to_string(),
+            message.html.to_string(),
+        ))
+        .map_err(|e| AppError::internal(format!("email build error: {}", e)))
+}
+
 #[async_trait]
 impl EmailService for LettreEmailService {
-    async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError> {
-        let email = Message::builder()
-            // The same parse `validate_from_address` ran at startup, so reaching a
-            // failure here means the value changed under a running process rather
-            // than an operator typo that slipped through.
-            .from(parse_from(&self.from)?)
-            .to(to
-                .parse()
-                .map_err(|_| AppError::internal("invalid to address"))?)
-            .subject(subject)
-            .header(ContentType::TEXT_HTML)
-            .body(html_body.to_string())
-            .map_err(|e| AppError::internal(format!("email build error: {}", e)))?;
+    async fn send(&self, message: OutgoingEmail<'_>) -> Result<(), AppError> {
+        let email = build_message(&self.from, &message)?;
 
         self.transport
             .send(email)

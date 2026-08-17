@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 
 use ferum_application::ports::{
-    EmailService, ForumJob, NotificationEmailKind, StorageService,
+    EmailService, ForumJob, NotificationEmailKind, OutgoingEmail, StorageService,
 };
 use ferum_application::shared::AppError;
 use ferum_domain::models::webhook::Webhook;
@@ -32,7 +32,7 @@ use ferum_test_support::mocks::token_service::MockTokenService;
 struct NullEmail;
 #[async_trait]
 impl EmailService for NullEmail {
-    async fn send(&self, _: &str, _: &str, _: &str) -> Result<(), AppError> {
+    async fn send(&self, _: OutgoingEmail<'_>) -> Result<(), AppError> {
         Ok(())
     }
 }
@@ -493,5 +493,45 @@ async fn the_subject_keeps_its_punctuation_unescaped() {
         sent.subject.contains("Bells & Whistles"),
         "the subject is plain text and must not be HTML-escaped: {}",
         sent.subject
+    );
+}
+
+/// A text part that is really the HTML would satisfy any check that only asked
+/// whether one was present, and would hand a plain-text reader a page of tags.
+#[tokio::test]
+async fn the_plain_text_part_is_actually_plain() {
+    let sent = send_notification("A thread", "alice").await;
+
+    assert!(!sent.text_body.is_empty(), "a text alternative must be sent");
+    assert_ne!(sent.text_body, sent.html_body);
+    assert!(
+        !sent.text_body.contains('<') && !sent.text_body.contains('>'),
+        "no markup may survive into the text part: {}",
+        sent.text_body
+    );
+    // The link is the entire point of a notification mail, so it has to be
+    // reachable without an HTML renderer.
+    assert!(
+        sent.text_body.contains("http://localhost:5173/forum/t/a-thread"),
+        "the text part must carry the link target: {}",
+        sent.text_body
+    );
+}
+
+/// Escaping is per part, so the two can disagree — and only the HTML one may
+/// carry entities.
+#[tokio::test]
+async fn the_text_part_shows_a_title_unescaped() {
+    let sent = send_notification("Bells & Whistles", "alice").await;
+
+    assert!(
+        sent.text_body.contains("Bells & Whistles"),
+        "plain text needs no entities: {}",
+        sent.text_body
+    );
+    assert!(
+        sent.html_body.contains("Bells &amp; Whistles"),
+        "the HTML part still escapes: {}",
+        sent.html_body
     );
 }

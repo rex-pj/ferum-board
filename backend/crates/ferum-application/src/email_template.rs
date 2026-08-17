@@ -29,6 +29,22 @@ pub struct RenderedEmail {
     pub text: String,
 }
 
+impl RenderedEmail {
+    /// Addresses this message, for handing straight to
+    /// [`EmailService::send`](crate::ports::EmailService::send).
+    ///
+    /// Exists so no call site spells out which field is the HTML and which the
+    /// text — the pairing is decided once, here.
+    pub fn to<'a>(&'a self, recipient: &'a str) -> crate::ports::OutgoingEmail<'a> {
+        crate::ports::OutgoingEmail {
+            to: recipient,
+            subject: &self.subject,
+            html: &self.html,
+            text: &self.text,
+        }
+    }
+}
+
 /// Escapes a value for an HTML text node.
 ///
 /// `&#39;` rather than XML's `&apos;`, which predates HTML5 and is not defined

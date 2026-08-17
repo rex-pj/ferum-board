@@ -6,19 +6,35 @@
 
 use reqwest::StatusCode;
 
+use ferum_application::ports::OutgoingEmail;
 use ferum_infrastructure::email::resend_service::{error_from_status, payload};
 use ferum_infrastructure::email::ResendEmailService;
 
 const KEY: &str = "re_TESTKEY_do_not_use";
 const FROM: &str = "noreply@example.com";
 
+fn message() -> OutgoingEmail<'static> {
+    OutgoingEmail {
+        to: "member@example.com",
+        subject: "Subject",
+        html: "<p>Body</p>",
+        text: "Body",
+    }
+}
+
 #[test]
-fn payload_carries_exactly_the_four_fields_and_to_is_an_array() {
-    let body = payload(FROM, "member@example.com", "Subject", "<p>Body</p>");
+fn payload_carries_exactly_the_five_fields_and_to_is_an_array() {
+    let body = payload(FROM, &message());
 
     assert_eq!(body["from"], FROM);
     assert_eq!(body["subject"], "Subject");
     assert_eq!(body["html"], "<p>Body</p>");
+
+    // Both parts, and not the same string: Resend builds
+    // multipart/alternative from them, and sending the markup twice would give
+    // a plain-text reader a page of tags.
+    assert_eq!(body["text"], "Body");
+    assert_ne!(body["text"], body["html"]);
 
     // `to` must be an array even for one recipient — the API rejects a bare
     // string, and nothing below the HTTP boundary would reveal that.
@@ -28,13 +44,13 @@ fn payload_carries_exactly_the_four_fields_and_to_is_an_array() {
 
     // No stray fields: an unexpected key is a 422 from Resend rather than being
     // ignored.
-    assert_eq!(body.as_object().unwrap().len(), 4);
+    assert_eq!(body.as_object().unwrap().len(), 5);
 }
 
 #[test]
 fn payload_does_not_include_the_api_key() {
     // The key travels in the Authorization header, never the body.
-    let body = payload(FROM, "member@example.com", "s", "b").to_string();
+    let body = payload(FROM, &message()).to_string();
     assert!(!body.contains(KEY));
     assert!(!body.to_lowercase().contains("authorization"));
 }

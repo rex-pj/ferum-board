@@ -92,11 +92,7 @@ pub async fn test_email(
     // That makes "no adapter's error message contains a credential" a hard
     // invariant rather than a nicety. `resend_service::error_from_status` has a
     // test for exactly this, and the SMTP adapter never formats its password.
-    let outcome = match state
-        .email
-        .send(&user.email, &message.subject, &message.html)
-        .await
-    {
+    let outcome = match state.email.send(message.to(&user.email)).await {
         Ok(()) => serde_json::json!({
             "success": true,
             "provider": provider.label(),

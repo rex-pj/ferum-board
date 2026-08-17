@@ -95,9 +95,7 @@ impl JobExecutor {
             return Ok(());
         };
         let message = renderer.render(key, locale, values).await?;
-        self.email
-            .send(to, &message.subject, &message.html)
-            .await
+        self.email.send(message.to(to)).await
     }
 
     pub async fn run(&self, job: ForumJob) -> Result<(), AppError> {

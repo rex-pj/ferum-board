@@ -13,7 +13,7 @@ use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use std::time::Duration;
 
-use ferum_application::ports::EmailService;
+use ferum_application::ports::{EmailService, OutgoingEmail};
 use ferum_application::shared::AppError;
 
 use crate::network_utils::truncate_for_log;
@@ -73,12 +73,14 @@ impl ResendEmailService {
 /// it without a network: `to` must be an **array** even for a single recipient,
 /// which the API rejects otherwise, and that is not visible from any test that
 /// stops at the `EmailService` boundary.
-pub fn payload(from: &str, to: &str, subject: &str, html_body: &str) -> serde_json::Value {
+pub fn payload(from: &str, message: &OutgoingEmail<'_>) -> serde_json::Value {
     serde_json::json!({
         "from": from,
-        "to": [to],
-        "subject": subject,
-        "html": html_body,
+        "to": [message.to],
+        "subject": message.subject,
+        "html": message.html,
+        // Resend assembles multipart/alternative itself when both are present.
+        "text": message.text,
     })
 }
 
@@ -111,13 +113,13 @@ impl EmailService for ResendEmailService {
     // `skip_all` and then only `subject` back in. `to` is deliberately absent:
     // unlike a webhook URL it is a member's email address, and a log line is not
     // where that belongs.
-    #[tracing::instrument(skip_all, fields(subject = %subject))]
-    async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError> {
+    #[tracing::instrument(skip_all, fields(subject = %message.subject))]
+    async fn send(&self, message: OutgoingEmail<'_>) -> Result<(), AppError> {
         let response = self
             .http
             .post(RESEND_ENDPOINT)
             .bearer_auth(&self.api_key)
-            .json(&payload(&self.from, to, subject, html_body))
+            .json(&payload(&self.from, &message))
             .send()
             .await
             .map_err(|e| AppError::internal(format!("Resend request failed: {e}")))?;

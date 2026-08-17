@@ -1,11 +1,15 @@
-//! How the SMTP connection is secured.
+//! How the SMTP connection is secured, and how a message is assembled.
 //!
 //! `AsyncSmtpTransport` exposes no getter for the TLS mode it was built with,
 //! which is why `security_for` exists as a named function rather than inline at
 //! the call site: it is the only way the decision can be observed at all.
+//! `build_message` is factored out for the same reason — `send` needs a live
+//! relay, so the MIME structure would otherwise be checkable only by receiving
+//! a real email.
 
+use ferum_application::ports::OutgoingEmail;
 use ferum_infrastructure::email::{
-    security_for, validate_from_address, LettreEmailService, SmtpSecurity,
+    build_message, security_for, validate_from_address, LettreEmailService, SmtpSecurity,
 };
 
 #[test]
@@ -230,4 +234,74 @@ fn describe_never_echoes_the_password() {
     let described = svc.describe();
     assert!(!described.contains("SUPER-SECRET-VALUE"));
     assert!(!described.contains("apikey"));
+}
+
+// ─── MIME assembly ────────────────────────────────────────────────────────────
+
+fn sample() -> OutgoingEmail<'static> {
+    OutgoingEmail {
+        to: "member@example.com",
+        subject: "Bells & Whistles",
+        html: "<p>Hello &amp; welcome</p>",
+        text: "Hello & welcome",
+    }
+}
+
+fn formatted(message: &OutgoingEmail<'_>) -> String {
+    let built = build_message("noreply@example.com", message).expect("the message must build");
+    String::from_utf8_lossy(&built.formatted()).into_owned()
+}
+
+#[test]
+fn a_message_carries_both_alternatives() {
+    let raw = formatted(&sample());
+
+    assert!(
+        raw.contains("multipart/alternative"),
+        "both parts must travel as alternatives, not as two unrelated bodies:\n{raw}"
+    );
+    assert!(raw.contains("text/plain"), "missing the plain part:\n{raw}");
+    assert!(raw.contains("text/html"), "missing the HTML part:\n{raw}");
+}
+
+/// The ordering claim in `build_message`'s comment, asserted rather than trusted.
+///
+/// RFC 2046 §5.1.4: a client renders the **last** part it understands. Emitting
+/// HTML first would serve plain text to every graphical client — a regression
+/// with no error anywhere, visible only in a received message.
+#[test]
+fn the_plain_part_comes_before_the_html_part() {
+    let raw = formatted(&sample());
+
+    let plain = raw.find("text/plain").expect("plain part present");
+    let html = raw.find("text/html").expect("html part present");
+    assert!(
+        plain < html,
+        "plain must precede html, or clients show the wrong one:\n{raw}"
+    );
+}
+
+/// The two parts are escaped differently, and the transport must not normalise
+/// that away.
+#[test]
+fn each_part_keeps_its_own_escaping() {
+    let raw = formatted(&sample());
+
+    assert!(raw.contains("Hello &amp; welcome"), "the HTML part's entity is gone:\n{raw}");
+    // The plain part may be transfer-encoded, so look for either form.
+    assert!(
+        raw.contains("Hello & welcome") || raw.contains("Hello =26 welcome") || raw.contains("SGVsbG8g"),
+        "the plain part must not be entity-escaped:\n{raw}"
+    );
+}
+
+#[test]
+fn a_malformed_recipient_is_refused_rather_than_sent() {
+    let bad = OutgoingEmail {
+        to: "not an address",
+        subject: "s",
+        html: "<p>h</p>",
+        text: "h",
+    };
+    assert!(build_message("noreply@example.com", &bad).is_err());
 }

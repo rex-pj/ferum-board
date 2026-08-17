@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 
-use ferum_application::ports::EmailService;
+use ferum_application::ports::{EmailService, OutgoingEmail};
 use ferum_domain::AppError;
 
 /// One captured message.
@@ -11,12 +11,16 @@ pub struct SentEmail {
     pub to: String,
     pub subject: String,
     pub html_body: String,
+    /// Captured too, so a test can assert the plain-text alternative is really
+    /// plain — sending the HTML twice would satisfy any check that only looked
+    /// at whether a text part existed.
+    pub text_body: String,
 }
 
 /// Records what was sent instead of sending it.
 ///
 /// Hand-written rather than `mockall`, for the reason `InMemorySiteConfig` gives:
-/// `EmailService::send` takes three `&str` parameters, which is the case mockall's
+/// `EmailService::send` takes a borrowed struct, which is the case mockall's
 /// lifetime handling makes awkward.
 ///
 /// `std::sync::Mutex`, not tokio's: nothing is awaited while the lock is held, so a
@@ -71,14 +75,15 @@ impl Default for RecordingEmailService {
 
 #[async_trait]
 impl EmailService for RecordingEmailService {
-    async fn send(&self, to: &str, subject: &str, html_body: &str) -> Result<(), AppError> {
-        if let Some(message) = &self.fail_with {
-            return Err(AppError::internal(message.clone()));
+    async fn send(&self, message: OutgoingEmail<'_>) -> Result<(), AppError> {
+        if let Some(failure) = &self.fail_with {
+            return Err(AppError::internal(failure.clone()));
         }
         self.sent.lock().unwrap().push(SentEmail {
-            to: to.to_string(),
-            subject: subject.to_string(),
-            html_body: html_body.to_string(),
+            to: message.to.to_string(),
+            subject: message.subject.to_string(),
+            html_body: message.html.to_string(),
+            text_body: message.text.to_string(),
         });
         Ok(())
     }
