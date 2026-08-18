@@ -21,6 +21,9 @@ pub enum StoredFiles {
     RefCount,
     UploadedById,
     CreatedAt,
+    /// Added by migration 000034 — see that file for why `CreatedAt` cannot
+    /// stand in for it.
+    StagedAt,
 }
 
 #[derive(Iden)]

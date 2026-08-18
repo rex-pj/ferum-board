@@ -21,6 +21,13 @@ pub struct Model {
     pub ref_count: i32,
     pub uploaded_by_id: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
+    /// When this key was last *staged*, which `created_at` cannot tell you.
+    ///
+    /// CAS dedupes on content, so re-uploading identical bytes reuses this row and
+    /// leaves `created_at` at whenever the bytes first landed. Both cleanup tools
+    /// grant unreferenced attachments a grace period, and this is the column that
+    /// period is measured against. See migration 000034.
+    pub staged_at: DateTimeWithTimeZone,
     #[sea_orm(has_many)]
     pub thread_thumbnails: HasMany<super::thread_thumbnails::Entity>,
     #[sea_orm(has_many)]

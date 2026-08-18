@@ -10,6 +10,15 @@ use ferum_domain::repositories::stored_file_repository::{
     StoredFileRef, StoredFileRepository, UploadUsage,
 };
 
+/// CAS namespace for post attachments, re-exported from the use case that owns
+/// the concept so this file holds no third copy of the literal.
+///
+/// It has to appear here at all because `attachment_keys_before` narrows on it in
+/// SQL, and migration 000034's index is partial on the same prefix — if the two
+/// spellings ever diverge the query silently stops using the index and
+/// sequentially scans the table on every audit.
+pub use ferum_application::usecases::storage_audit_usecase::ATTACHMENT_NAMESPACE as ATTACHMENT_KEY_PREFIX;
+
 pub struct PgStoredFileRepository {
     db: DatabaseConnection,
 }
@@ -108,6 +117,11 @@ impl StoredFileRepository for PgStoredFileRepository {
             ref_count: Set(1),
             uploaded_by_id: Set(uploaded_by_id),
             created_at: NotSet,
+            // `NotSet` so the column DEFAULT fills it on insert and the conflict
+            // path leaves it alone. This is the *referencing* path — nothing here
+            // is staged, and moving `staged_at` would restart the grace period of
+            // an attachment that a post is publishing rather than abandoning.
+            staged_at: NotSet,
         })
         .on_conflict(
             OnConflict::column(stored_files::Column::Key)
@@ -162,8 +176,15 @@ impl StoredFileRepository for PgStoredFileRepository {
             ref_count: Set(0),
             uploaded_by_id: Set(uploaded_by_id),
             created_at: NotSet,
+            // `NotSet` so the column DEFAULT (`now()`) supplies it, matching the
+            // `now()` in the conflict clause below. Both paths therefore read the
+            // **database** clock — as does every other timestamp in this schema.
+            // Setting it from `chrono::Utc::now()` here worked, but left one column
+            // fed by two clocks, which is the kind of detail that costs an hour
+            // during an incident.
+            staged_at: NotSet,
         })
-        // Updates **one** column and nothing else. It used to be DO NOTHING, for
+        // Updates **two** columns and nothing else. It used to be DO NOTHING, for
         // a good reason that this preserves: an existing key may already be
         // referenced by live posts, so re-staging must neither reset `ref_count`
         // to 0 nor bump it — and neither is touched here.
@@ -174,6 +195,16 @@ impl StoredFileRepository for PgStoredFileRepository {
         // `resolve_stored_file`'s ownership test unsatisfiable and left every
         // staged attachment 404 to its own uploader. `COALESCE` keeps the first
         // named owner, so a CAS-deduped re-upload cannot steal a file.
+        //
+        // **`staged_at` moves forward here, and unlike the owner it is NOT
+        // COALESCEd.** That asymmetry is the whole point of the column. CAS keys
+        // are content digests, so re-uploading a byte-identical image lands on an
+        // existing row — possibly one whose original post was deleted years ago.
+        // Both cleanup tools give an unreferenced attachment a grace period before
+        // acting, and while they measured it from `created_at` this row read as
+        // long-abandoned the instant it was re-staged: the sweep offered it for
+        // manual deletion and the audit's apply pass released it, deleting the
+        // image out of the composer that had just uploaded it.
         .on_conflict(
             OnConflict::column(stored_files::Column::Key)
                 .value(
@@ -182,6 +213,11 @@ impl StoredFileRepository for PgStoredFileRepository {
                         "COALESCE(stored_files.uploaded_by_id, EXCLUDED.uploaded_by_id)",
                     ),
                 )
+                // `now()`, not `EXCLUDED.staged_at`. The latter would work —
+                // `EXCLUDED` carries the defaults the proposed row would have got —
+                // but it makes this clause's correctness depend on that Postgres
+                // subtlety instead of stating the intent.
+                .value(stored_files::Column::StagedAt, Expr::cust("now()"))
                 .to_owned(),
         )
         .exec(&self.db)
@@ -288,8 +324,12 @@ impl StoredFileRepository for PgStoredFileRepository {
         let keys = stored_files::Entity::find()
             .select_only()
             .column(stored_files::Column::Key)
-            .filter(stored_files::Column::Key.starts_with("post-attachments/"))
-            .filter(stored_files::Column::CreatedAt.lt(cutoff.fixed_offset()))
+            .filter(stored_files::Column::Key.starts_with(ATTACHMENT_KEY_PREFIX))
+            // `StagedAt`, never `CreatedAt` — see the note on `upsert_staged`'s
+            // conflict clause. A re-staged CAS key keeps its original
+            // `created_at`, so filtering on that released images out of live
+            // composers.
+            .filter(stored_files::Column::StagedAt.lt(cutoff.fixed_offset()))
             .order_by_asc(stored_files::Column::Key)
             .into_tuple::<String>()
             .all(&self.db)
@@ -303,29 +343,36 @@ impl StoredFileRepository for PgStoredFileRepository {
         }
         // `select_only` for the same reason as `list_keys_with_prefix`: the full
         // model carries `data`, so hydrating it would pull every blob in the
-        // batch across the wire to read three scalar columns.
+        // batch across the wire to read four scalar columns.
         let rows = stored_files::Entity::find()
             .select_only()
             .column(stored_files::Column::Key)
             .column(stored_files::Column::RefCount)
             .column(stored_files::Column::CreatedAt)
+            .column(stored_files::Column::StagedAt)
             .filter(stored_files::Column::Key.is_in(keys.iter().map(String::as_str)))
             // Leading `::`, and both halves spelled out. `sea_orm::prelude::*`
             // binds `DateTime` to chrono's *naive* type, so the bare name drops
             // the offset — and `sea_orm::*` also brings its own `chrono` into
             // scope, so even `chrono::DateTime` resolves to the naive one. Only
             // an absolute path reaches the real crate.
-            .into_tuple::<(String, i32, ::chrono::DateTime<::chrono::FixedOffset>)>()
+            .into_tuple::<(
+                String,
+                i32,
+                ::chrono::DateTime<::chrono::FixedOffset>,
+                ::chrono::DateTime<::chrono::FixedOffset>,
+            )>()
             .all(&self.db)
             .await?;
         Ok(rows
             .into_iter()
-            .map(|(key, ref_count, created_at)| StoredFileRef {
+            .map(|(key, ref_count, created_at, staged_at)| StoredFileRef {
                 key,
                 ref_count,
                 // Normalised here rather than passed on: `FixedOffset` must not
                 // leave a repository.
                 created_at: created_at.with_timezone(&::chrono::Utc),
+                staged_at: staged_at.with_timezone(&::chrono::Utc),
             })
             .collect())
     }

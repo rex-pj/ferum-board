@@ -22,6 +22,14 @@ pub struct StoredFileRef {
     /// CAS dedupes on content, so re-uploading an identical image keeps the
     /// original timestamp. Treat it as a floor on age, never as "last touched".
     pub created_at: DateTime<Utc>,
+    /// When this key was last staged, which is what an attachment's grace period
+    /// must be measured against.
+    ///
+    /// **Never substitute `created_at` here.** A byte-identical re-upload reuses
+    /// the existing row, so a key whose original post was deleted long ago is
+    /// indistinguishable by `created_at` from one a member has open in a composer
+    /// — and both cleanup tools treat "old and unreferenced" as actionable.
+    pub staged_at: DateTime<Utc>,
 }
 
 #[async_trait]

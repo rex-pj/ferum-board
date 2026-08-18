@@ -9,6 +9,7 @@
 //!     misspelled, and one that only fires when an admin runs the audit
 
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
+use ferum_infrastructure::repositories::stored_file_repository::ATTACHMENT_KEY_PREFIX;
 use ferum_infrastructure::repositories::PgStoredFileRepository;
 use sea_orm::{ConnectionTrait, Statement};
 
@@ -608,7 +609,7 @@ async fn the_age_floor_excludes_a_recently_staged_row() {
     db.conn
         .execute_raw(Statement::from_sql_and_values(
             db.conn.get_database_backend(),
-            "UPDATE stored_files SET created_at = now() - interval '48 hours' WHERE key = $1",
+            "UPDATE stored_files SET staged_at = now() - interval '48 hours' WHERE key = $1",
             [stale.into()],
         ))
         .await
@@ -697,16 +698,240 @@ async fn refs_for_reports_an_aged_row_as_aged() {
     db.conn
         .execute_raw(Statement::from_sql_and_values(
             db.conn.get_database_backend(),
-            "UPDATE stored_files SET created_at = now() - interval '48 hours' WHERE key = $1",
+            "UPDATE stored_files SET created_at = now() - interval '48 hours', \
+                                     staged_at  = now() - interval '48 hours' \
+             WHERE key = $1",
             [key.into()],
         ))
         .await
         .expect("age the row");
 
+    // Both columns, because both cross a repository boundary as
+    // `DateTime<FixedOffset>` and are converted by hand. Checking only one leaves
+    // the other free to lose its offset, and `staged_at` is the one the grace
+    // window reads.
     let rows = repo.refs_for(&[key.to_string()]).await.expect("refs_for");
-    let age = chrono::Utc::now() - rows[0].created_at;
-    assert!(
-        age > chrono::Duration::hours(47) && age < chrono::Duration::hours(49),
-        "a row aged 48h in SQL came back {age} old — the sweep would treat it as a live draft"
+    for (label, at) in [
+        ("created_at", rows[0].created_at),
+        ("staged_at", rows[0].staged_at),
+    ] {
+        let age = chrono::Utc::now() - at;
+        assert!(
+            age > chrono::Duration::hours(47) && age < chrono::Duration::hours(49),
+            "{label} aged 48h in SQL came back {age} old — the sweep would treat this \
+             row as a live draft"
+        );
+    }
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn re_staging_a_deduplicated_key_restarts_its_grace_period() {
+    // THE regression test for the `staged_at` column.
+    //
+    // CAS keys are content digests, so re-uploading a byte-identical image lands
+    // on the existing row — possibly one whose original post was deleted long ago
+    // and whose `ref_count` is therefore 0. While both cleanup tools measured the
+    // grace period from `created_at`, that row read as long-abandoned the instant
+    // it was re-staged: the sweep offered it for manual deletion and the audit's
+    // apply pass RELEASED it, deleting the image out of the composer that had just
+    // uploaded it. Nothing about the sequence errors, and the loss is silent.
+    let db = TestDb::new("sfile_restage_grace").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+    let key = "post-attachments/reposted-meme.png";
+
+    // A key from a post deleted long ago: old bytes, no references.
+    repo.upsert_staged(key, "image/png", 6, None).await.expect("original stage");
+    db.conn
+        .execute_raw(Statement::from_sql_and_values(
+            db.conn.get_database_backend(),
+            "UPDATE stored_files SET created_at = now() - interval '400 days', \
+                                     staged_at  = now() - interval '400 days' \
+             WHERE key = $1",
+            [key.into()],
+        ))
+        .await
+        .expect("age the row into the distant past");
+
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(24);
+    assert_eq!(
+        repo.attachment_keys_before(cutoff).await.expect("before"),
+        vec![key.to_string()],
+        "precondition: while nobody is using it, it is reportable"
     );
+
+    // Somebody uploads the same image again — this is the whole scenario.
+    repo.upsert_staged(key, "image/png", 6, None).await.expect("re-stage");
+
+    assert!(
+        repo.attachment_keys_before(cutoff)
+            .await
+            .expect("after")
+            .is_empty(),
+        "a just-re-staged attachment must be protected again — it is in an open composer"
+    );
+
+    let row = &repo.refs_for(&[key.to_string()]).await.expect("refs_for")[0];
+    assert_eq!(row.ref_count, 0, "re-staging must not touch the reference count");
+    assert!(
+        chrono::Utc::now() - row.staged_at < chrono::Duration::minutes(5),
+        "staged_at must move to now, got {}",
+        row.staged_at
+    );
+    assert!(
+        chrono::Utc::now() - row.created_at > chrono::Duration::days(399),
+        "created_at must NOT move — it is the age of the bytes, and the quota and \
+         the audit trail both read it"
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn referencing_a_key_does_not_restart_its_grace_period() {
+    // The other half: `upsert_and_ref` is the *publishing* path. Bumping
+    // `staged_at` there would restart the grace period of an attachment a post is
+    // adopting rather than abandoning — harmless today, since a referenced row is
+    // filtered out by `ref_count` first, but it would silently shield the row for
+    // 24h the moment that post were deleted.
+    let db = TestDb::new("sfile_ref_keeps_staged_at").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+    let key = "post-attachments/published.png";
+
+    repo.upsert_staged(key, "image/png", 6, None).await.expect("stage");
+    db.conn
+        .execute_raw(Statement::from_sql_and_values(
+            db.conn.get_database_backend(),
+            "UPDATE stored_files SET staged_at = now() - interval '72 hours' WHERE key = $1",
+            [key.into()],
+        ))
+        .await
+        .expect("age");
+
+    repo.upsert_and_ref(key, "image/png", 6, None).await.expect("publish");
+
+    let row = &repo.refs_for(&[key.to_string()]).await.expect("refs_for")[0];
+    let age = chrono::Utc::now() - row.staged_at;
+    assert!(
+        age > chrono::Duration::hours(71),
+        "staged_at moved on the referencing path; age is {age}"
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn staged_at_is_not_null_with_a_default() {
+    // `upsert_and_ref` passes `staged_at: NotSet`, so the column DEFAULT is what
+    // fills it on the insert path — and `refs_for` deserializes it into a
+    // non-`Option`. If migration 000034's `modify_column` failed to apply either
+    // property, the first would insert NULL and the second would then fail to
+    // decode, on the hot path, for every upload.
+    let db = TestDb::new("sfile_staged_at_shape").await;
+
+    let row = db
+        .conn
+        .query_one_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            "SELECT is_nullable, column_default FROM information_schema.columns \
+             WHERE table_name = 'stored_files' AND column_name = 'staged_at'"
+                .to_owned(),
+        ))
+        .await
+        .expect("query information_schema")
+        .expect("staged_at must exist");
+
+    assert_eq!(
+        row.try_get::<String>("", "is_nullable").expect("is_nullable"),
+        "NO"
+    );
+    assert!(
+        row.try_get::<Option<String>>("", "column_default")
+            .expect("column_default")
+            .is_some(),
+        "no DEFAULT — `upsert_and_ref` inserts with NotSet and would write NULL"
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
+async fn the_age_floor_query_actually_uses_its_partial_index() {
+    // Migration 000034 creates `idx_stored_files_staged_at` partial on
+    // `key LIKE 'post-attachments/%'`, and its comment claims the audit's age
+    // query is an index range scan rather than a table scan. That claim was
+    // written without checking, and it is exactly the kind that fails silently:
+    // Postgres uses a partial index only when the query predicate *implies* the
+    // index predicate, so a change in how the prefix filter is spelled costs a
+    // sequential scan of `stored_files` on every audit, with no error anywhere.
+    //
+    // `enable_seqscan = off` does not force an index — it prices sequential scans
+    // absurdly high. A plan that still seq-scans under it cannot use the index at
+    // all, which is the failure being ruled out. The same technique guards
+    // `idx_posts_fts` in the search service.
+    let db = TestDb::new("sfile_staged_at_index").await;
+    let repo = PgStoredFileRepository::new(db.conn.clone());
+
+    // A few rows so the planner has something to reason about.
+    for i in 0..20 {
+        repo.upsert_staged(
+            &format!("post-attachments/{i:032x}.png"),
+            "image/png",
+            4,
+            None,
+        )
+        .await
+        .expect("stage");
+    }
+
+    // The query `attachment_keys_before` builds, taken from the same constant its
+    // filter uses so the prefix cannot drift between them. The shape (`SELECT key
+    // … WHERE key LIKE $prefix% AND staged_at < …`) is mirrored here rather than
+    // captured, which is this test's one weakness: it proves the predicate *can*
+    // use the index, not that the repository still writes that predicate.
+    let sql = format!(
+        "EXPLAIN SELECT key FROM stored_files \
+         WHERE key LIKE '{ATTACHMENT_KEY_PREFIX}%' AND staged_at < now() ORDER BY key",
+    );
+
+    db.conn
+        .execute_raw(Statement::from_string(
+            sea_orm::DbBackend::Postgres,
+            "SET enable_seqscan = off".to_owned(),
+        ))
+        .await
+        .expect("disable seqscan");
+
+    let rows = db
+        .conn
+        .query_all_raw(Statement::from_string(sea_orm::DbBackend::Postgres, sql))
+        .await
+        .expect("EXPLAIN");
+    let plan = rows
+        .iter()
+        .map(|r| r.try_get::<String>("", "QUERY PLAN").unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Three claims, because the weakest of them passes on its own — measured, not
+    // assumed. Pointing the index at `size` while keeping its name leaves the
+    // partial predicate satisfied, so Postgres still scans it end to end and the
+    // plan still *names* it; only the age bound quietly degrades from an index
+    // condition to a per-row filter. A name-only assertion passed that mutation.
+    assert!(
+        !plan.contains("Seq Scan"),
+        "the age floor query falls back to a table scan. Plan was:\n{plan}"
+    );
+    assert!(
+        plan.contains("Index Scan using idx_stored_files_staged_at"),
+        "the partial index is not used at all. Plan was:\n{plan}"
+    );
+    assert!(
+        plan.contains("Index Cond: (staged_at"),
+        "the index is scanned but the age bound is only a Filter, so every \
+         attachment row is read and discarded. Plan was:\n{plan}"
+    );
+
+    db.teardown().await;
 }

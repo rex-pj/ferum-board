@@ -241,7 +241,10 @@ impl StorageAuditUseCase {
                 // have this tool delete moderation evidence on `?apply=1`, which
                 // is what it did before this branch existed.
                 Some(row) if row.ref_count <= 0 && key.starts_with(ATTACHMENT_NAMESPACE) => {
-                    if row.created_at < attachment_cutoff {
+                    // `staged_at`, not `created_at`: a byte-identical re-upload
+                    // reuses the row, so `created_at` can be years old while the
+                    // image sits in a composer that uploaded it a minute ago.
+                    if row.staged_at < attachment_cutoff {
                         report.retained_attachments.push(key.clone());
                     } else {
                         report.active_attachments += 1;

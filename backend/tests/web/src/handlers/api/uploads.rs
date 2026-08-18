@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use ferum_domain::models::role::perm;
 use ferum_domain::models::user::TrustLevel;
 use ferum_domain::AuthUser;
 use ferum_web::handlers::api::uploads::{
@@ -14,14 +15,18 @@ use ferum_web::handlers::api::uploads::{
 };
 use uuid::Uuid;
 
-/// A moderator or admin. There is no constructor for this on `Viewer` on purpose
-/// — production must build it from a resolved permission set via
-/// `Viewer::from_auth`, never by asserting staff-ness at a call site.
+/// A moderator, built the only way anything can build one: from a resolved
+/// permission set.
+///
+/// `Viewer`'s fields are private precisely so this cannot be spelled
+/// `Viewer { is_staff: true, .. }` — not even here. The upside for the tests is
+/// that every staff case below exercises `from_auth` too, so a change to which
+/// permissions count as staff cannot pass by leaving the disposition tests
+/// asserting against a hand-set flag.
 fn staff(id: Uuid) -> Viewer {
-    Viewer {
-        id: Some(id),
-        is_staff: true,
-    }
+    let mut user = auth_user(&[], &[perm::MOD_VIEW_REPORTS]);
+    user.id = id;
+    Viewer::from_auth(Some(&user))
 }
 
 /// Exactly the shapes `storage_utils::cas_key` emits: `{prefix}/{hex}.{ext}`,
@@ -363,7 +368,7 @@ fn a_category_scoped_moderator_counts_as_staff() {
     // endpoint has only a CAS key — nothing in it names the category — so the
     // check has to be `has_perm_any_category`.
     let user = auth_user(&[], &["moderation.view_reports"]);
-    assert!(Viewer::from_auth(Some(&user)).is_staff);
+    assert!(Viewer::from_auth(Some(&user)).is_staff());
 }
 
 #[test]
@@ -371,7 +376,7 @@ fn an_admin_holding_only_config_counts_as_staff() {
     // `/admin/storage` is gated on `admin.config`, so whoever can open the page
     // must be able to see the thumbnails on it.
     let user = auth_user(&["admin.config"], &[]);
-    assert!(Viewer::from_auth(Some(&user)).is_staff);
+    assert!(Viewer::from_auth(Some(&user)).is_staff());
 }
 
 #[test]
@@ -380,8 +385,8 @@ fn an_ordinary_member_is_not_staff() {
     // filing a report is something every member may do.
     let user = auth_user(&["post.create", "report.create", "file.upload"], &[]);
     let viewer = Viewer::from_auth(Some(&user));
-    assert!(!viewer.is_staff);
-    assert_eq!(viewer.id, Some(user.id));
+    assert!(!viewer.is_staff());
+    assert_eq!(viewer.id(), Some(user.id));
 }
 
 #[test]
@@ -390,14 +395,52 @@ fn from_auth_on_none_is_a_guest() {
 }
 
 #[test]
+fn a_banned_moderator_holds_no_staff_powers() {
+    // CLAUDE.md's permission flow puts the ban check *before* any permission
+    // test, and every use case follows it. `/files/` skipped it entirely, so a
+    // moderator banned for abusing exactly this access kept it until the role was
+    // also revoked.
+    let mut user = auth_user(&[], &[perm::MOD_VIEW_REPORTS]);
+    assert!(Viewer::from_auth(Some(&user)).is_staff(), "precondition");
+
+    user.is_banned = true;
+    user.banned_until = None; // permanent
+    assert!(!Viewer::from_auth(Some(&user)).is_staff());
+
+    // ...and while a temporary ban is still running.
+    user.banned_until = Some(chrono::Utc::now() + chrono::Duration::hours(1));
+    assert!(!Viewer::from_auth(Some(&user)).is_staff());
+
+    // An *expired* temporary ban is not a ban — `is_currently_banned` is what
+    // decides, so this must not lock out a moderator whose suspension is over.
+    user.banned_until = Some(chrono::Utc::now() - chrono::Duration::hours(1));
+    assert!(Viewer::from_auth(Some(&user)).is_staff());
+}
+
+#[test]
+fn a_banned_member_still_reaches_their_own_staged_attachment() {
+    // Their own upload is not a power, and refusing it would break the composer
+    // for someone who may still be reading their own drafts. Only staff-ness is
+    // withdrawn.
+    let mut user = auth_user(&[], &[]);
+    user.is_banned = true;
+    let viewer = Viewer::from_auth(Some(&user));
+    assert_eq!(viewer.id(), Some(user.id));
+    assert_eq!(
+        resolve_stored_file(STAGED, 0, Some(user.id), true, viewer),
+        FileDisposition::StagedBytes
+    );
+}
+
+#[test]
 fn a_guest_is_never_staff() {
     // `is_staff` is derived, never passed in from a request. A guest has no
     // permission set to read, so the only correct answer is `false` — and the
     // `Default` impl is what guarantees it rather than a branch that could be
     // reordered.
-    assert!(!Viewer::guest().is_staff);
-    assert_eq!(Viewer::guest().id, None);
-    assert!(!Viewer::member(Uuid::new_v4()).is_staff);
+    assert!(!Viewer::guest().is_staff());
+    assert_eq!(Viewer::guest().id(), None);
+    assert!(!Viewer::member(Uuid::new_v4()).is_staff());
 }
 
 #[test]

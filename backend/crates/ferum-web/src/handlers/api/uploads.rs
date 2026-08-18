@@ -156,12 +156,18 @@ pub fn may_be_staged(key: &str) -> bool {
 /// already takes an `Option<Uuid>` and a `bool`, and a second pair of those in a
 /// six-argument call is a transposition waiting to happen — on the one function
 /// here where a transposition publishes a private file.
+///
+/// **The fields are private and there is no way to set `is_staff` except
+/// [`Viewer::from_auth`].** They were briefly `pub`, which made
+/// `Viewer { id: None, is_staff: true }` writable at any call site — on the one
+/// type whose entire job is gating access to private files. Staff-ness is derived
+/// from a resolved permission set or it is not derived at all.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Viewer {
-    pub id: Option<uuid::Uuid>,
-    /// Cleared for guests, so an unauthenticated request can never be staff.
+    id: Option<uuid::Uuid>,
+    /// Cleared for guests and for banned accounts.
     /// See [`Viewer::from_auth`] for which permissions set it.
-    pub is_staff: bool,
+    is_staff: bool,
 }
 
 impl Viewer {
@@ -176,6 +182,14 @@ impl Viewer {
             id: Some(id),
             is_staff: false,
         }
+    }
+
+    pub fn id(&self) -> Option<uuid::Uuid> {
+        self.id
+    }
+
+    pub fn is_staff(&self) -> bool {
+        self.is_staff
     }
 
     /// Reads staff-ness off the resolved permission set.
@@ -194,14 +208,20 @@ impl Viewer {
     /// `admin.config` is accepted too, so whoever can open `/admin/storage` can
     /// see the thumbnails on it. Stock `admin` holds both; a custom role need
     /// only hold one.
+    /// A **banned** account holds no powers, so `is_staff` is cleared before any
+    /// permission is consulted — the same "ban check first" order every use case
+    /// follows, which this endpoint previously skipped entirely. Their own id is
+    /// kept: reading back a file they uploaded themselves is not a power, and
+    /// revoking it would break nothing an abuser can exploit.
     pub fn from_auth(auth: Option<&AuthUser>) -> Self {
         let Some(user) = auth else {
             return Self::guest();
         };
         Self {
             id: Some(user.id),
-            is_staff: user.has_perm_any_category(perm::MOD_VIEW_REPORTS)
-                || user.has_perm(perm::ADMIN_CONFIG),
+            is_staff: !user.is_currently_banned()
+                && (user.has_perm_any_category(perm::MOD_VIEW_REPORTS)
+                    || user.has_perm(perm::ADMIN_CONFIG)),
         }
     }
 }
@@ -425,7 +445,13 @@ pub async fn serve(
             };
 
             match disposition {
-                // Unreachable: `cache_policy` returned `None` for it above.
+                // Already handled by the `else` above, which is the only path a
+                // refusal takes. Kept rather than collapsed into a `_` arm: this
+                // match is what forces a new `FileDisposition` variant to be given
+                // an HTTP meaning here, and a catch-all would silently hand one
+                // the byte-serving branch. Redundant by construction and identical
+                // to the live path either way, so the duplication costs nothing
+                // that the exhaustiveness check does not repay.
                 FileDisposition::NotFound => StatusCode::NOT_FOUND.into_response(),
 
                 // Bytes are in the object store. This endpoint can decline to
@@ -464,7 +490,38 @@ pub async fn serve(
                         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                     };
 
-                    let mut headers = vec![
+                    // The revalidation the ETag invites, answered here rather than
+                    // only at the top of this function.
+                    //
+                    // That early short-circuit is gated on `!may_be_staged`,
+                    // because staged-ness cannot be known without the row — which
+                    // meant a *published* `post-attachments/` key advertised an
+                    // ETag nothing ever compared: the client sent `If-None-Match`
+                    // and got 200 with the whole image every time. `cache.etag` is
+                    // the same flag that decides whether the header goes out below,
+                    // so the promise and the honouring cannot diverge.
+                    //
+                    // **What this saves is the response body, not the query.** The
+                    // row above is already fetched, blob included, and the permit is
+                    // already held. Deciding earlier would need a metadata-only
+                    // query first — and that is a bad trade, not an unfinished one:
+                    // under database storage (the default) every attachment byte
+                    // serve would pay a second round trip, while the hydration it
+                    // avoids only ever happens on a revalidation of an attachment.
+                    // Under an object store there is nothing to hydrate anyway,
+                    // since promoted rows carry `data IS NULL`.
+                    if cache.etag && crate::utils::if_none_match_hits(&headers, &file.key) {
+                        return (
+                            StatusCode::NOT_MODIFIED,
+                            crate::utils::etag_headers(&file.key),
+                        )
+                            .into_response();
+                    }
+
+                    // Named apart from the `headers` request map above, which the
+                    // revalidation check reads. One name for both invited a
+                    // misreading of which side of the shadow a use sat on.
+                    let mut out_headers = vec![
                         (header::CONTENT_TYPE, file.content_type.clone()),
                         (header::CACHE_CONTROL, cache.cache_control),
                         (header::CONTENT_DISPOSITION, "attachment".to_string()),
@@ -480,7 +537,7 @@ pub async fn serve(
                         //
                         // Never for a staged row: `cache_policy` clears this flag
                         // there, so the two decisions cannot drift apart.
-                        headers.push((header::ETAG, crate::utils::etag_for(&file.key)));
+                        out_headers.push((header::ETAG, crate::utils::etag_for(&file.key)));
                     }
 
                     // `AppendHeaders` rather than an array literal: the two arms
@@ -489,7 +546,7 @@ pub async fn serve(
                     // whole header set per arm.
                     (
                         StatusCode::OK,
-                        axum::response::AppendHeaders(headers),
+                        axum::response::AppendHeaders(out_headers),
                         bytes,
                     )
                         .into_response()

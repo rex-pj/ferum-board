@@ -155,10 +155,17 @@ impl StoredFileRepository for FakeRows {
         Ok(keys
             .iter()
             .filter_map(|k| {
-                self.counts.get(k).map(|c| StoredFileRef {
-                    key: k.clone(),
-                    ref_count: *c,
-                    created_at: self.ages.get(k).copied().unwrap_or(aged),
+                self.counts.get(k).map(|c| {
+                    let at = self.ages.get(k).copied().unwrap_or(aged);
+                    StoredFileRef {
+                        key: k.clone(),
+                        ref_count: *c,
+                        // The double keeps them equal; the sweep must read
+                        // `staged_at`, and a fixture that differed would only
+                        // prove which field the double set.
+                        created_at: at,
+                        staged_at: at,
+                    }
                 })
             })
             .collect())
