@@ -11,9 +11,12 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use ferum_application::ports::EmailService;
+use ferum_infrastructure::email::MailProvider;
 
 use crate::app_state::AppState;
-use crate::handlers::admin::api::email::TEST_EMAIL_COOLDOWN;
+use crate::handlers::admin::api::email::{
+    delivery_error, MAIL_NOT_CONFIGURED, TEST_EMAIL_COOLDOWN,
+};
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::view_models::{DataResponse, HandlerResult};
 use ferum_application::shared::AppError;
@@ -191,6 +194,15 @@ pub async fn test_send_template(
         .preview(actor, &key, &locale, &body.subject, &body.body_html)
         .await?;
 
+    // Before the cooldown as well as before the transport: refusing to send is
+    // not a send, so it must not spend the window either.
+    let provider = state.email.provider().await;
+    if provider == MailProvider::Disabled {
+        return Ok(Json(DataResponse::new(serde_json::json!({
+            "success": false, "sent_to": null, "error": MAIL_NOT_CONFIGURED,
+        }))));
+    }
+
     let cooldown_key = format!("admin:email-test:{}", actor.id);
     if !state
         .cache
@@ -217,7 +229,7 @@ pub async fn test_send_template(
         Err(e) => {
             tracing::warn!(actor_id = %actor.id, template = key, "test send failed: {e}");
             serde_json::json!({
-                "success": false, "sent_to": user.email, "error": e.to_string(),
+                "success": false, "sent_to": user.email, "error": delivery_error(&e),
             })
         }
     };

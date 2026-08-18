@@ -1,4 +1,5 @@
 mod categories;
+mod email;
 mod config;
 mod plugins;
 mod reports;
