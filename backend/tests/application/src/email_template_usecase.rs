@@ -1,9 +1,9 @@
 //! Tests for [`EmailTemplateUseCase`].
 //!
 //! The properties worth pinning are the ones a passing build would not reveal:
-//! that every entry point checks the permission, that `get` shows the *shipped*
-//! copy rather than a sibling locale's, and that a locale tag which no recipient
-//! resolves to is refused instead of stored.
+//! that every entry point checks the permission, that `get` shows the copy that
+//! would actually be sent — naming the locale it came from when this one ships
+//! none — and that a locale tag no recipient resolves to is refused, not stored.
 
 use std::sync::{Arc, Mutex};
 
@@ -290,4 +290,59 @@ async fn list_marks_which_locales_have_been_edited() {
 
     let reset = items.iter().find(|t| t.key == "email-reset").unwrap();
     assert!(reset.customised_locales.is_empty());
+}
+
+// ─── Regressions found in review ──────────────────────────────────────────────
+
+/// An installed locale that ships no copy of its own used to render two empty
+/// boxes labelled "Default", while a real send fell through the chain and
+/// delivered English. The editor must show what would actually be sent, and say
+/// where it came from.
+#[tokio::test]
+async fn a_locale_with_no_shipped_copy_shows_what_would_be_sent() {
+    let uc = use_case(Arc::new(FakeTemplates::default()));
+
+    let view = uc.get(&editor(), "email-verify", "de").await.unwrap();
+
+    assert!(!view.subject.is_empty(), "blank is never the honest answer");
+    assert_eq!(view.subject, "Verify your email");
+    assert_eq!(view.inherited_from.as_deref(), Some("en"));
+    assert!(!view.customised, "inherited copy is not an edit of this locale");
+    assert_eq!(view.locale, "de", "saving must still target the locale asked for");
+}
+
+#[tokio::test]
+async fn a_locale_with_its_own_copy_reports_no_inheritance() {
+    let uc = use_case(Arc::new(FakeTemplates::default()));
+
+    let view = uc.get(&editor(), "email-verify", "vi").await.unwrap();
+    assert_eq!(view.inherited_from, None);
+    assert_eq!(view.subject, "Xác minh địa chỉ email của bạn");
+}
+
+/// `save` canonicalised the tag and `get` did not, so `PUT …/VI` wrote `vi`
+/// while `GET …/VI` read nothing and answered with the default.
+#[tokio::test]
+async fn get_and_save_agree_on_the_locale_form() {
+    let templates = FakeTemplates::with_row("email-verify", "vi", "Đã sửa");
+    let uc = use_case(templates);
+
+    let view = uc.get(&editor(), "email-verify", "VI").await.unwrap();
+    assert!(
+        view.customised,
+        "a non-canonical tag must reach the same row save would write"
+    );
+    assert_eq!(view.subject, "Đã sửa");
+}
+
+#[tokio::test]
+async fn reset_refuses_a_key_that_is_not_in_the_catalogue() {
+    let templates = Arc::new(FakeTemplates::default());
+    let uc = use_case(templates.clone());
+
+    assert!(
+        uc.reset(&editor(), "email-nope", "en").await.is_err(),
+        "deleting nothing and reporting success hides a broken caller"
+    );
+    assert!(templates.deletes.lock().unwrap().is_empty());
 }

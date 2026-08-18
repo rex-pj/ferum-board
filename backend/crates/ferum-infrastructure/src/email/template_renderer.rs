@@ -108,24 +108,34 @@ impl EmailTemplateRenderer for DbEmailTemplateRenderer {
         // and its markup adds nothing a plain-text reader wants.
         let text = html_to_text(&body);
 
-        let html = match self.resolve(LAYOUT_KEY, locale).await {
-            Some(layout) => {
-                let layout_def = template_def(LAYOUT_KEY).ok_or_else(|| {
-                    AppError::internal("the layout is missing from the template catalogue")
-                })?;
-                let mut layout_values: HashMap<&str, String> = HashMap::new();
-                if let Some(site_name) = map.get("site_name") {
-                    layout_values.insert("site_name", site_name.clone());
+        // **The layout is never wrapped in itself.** It is an editable template
+        // like any other, and the admin editor previews it through this same
+        // path — wrapping produced a document nested inside a second copy of the
+        // same document, two `<html>` roots, which is not what any message looks
+        // like. Rendering it alone is also the honest preview: what the admin is
+        // editing *is* the outer document.
+        let html = if key == LAYOUT_KEY {
+            body
+        } else {
+            match self.resolve(LAYOUT_KEY, locale).await {
+                Some(layout) => {
+                    let layout_def = template_def(LAYOUT_KEY).ok_or_else(|| {
+                        AppError::internal("the layout is missing from the template catalogue")
+                    })?;
+                    let mut layout_values: HashMap<&str, String> = HashMap::new();
+                    if let Some(site_name) = map.get("site_name") {
+                        layout_values.insert("site_name", site_name.clone());
+                    }
+                    // `content` is declared `Raw`, so the already-escaped body is
+                    // inserted verbatim. Escaping again would show the recipient
+                    // the markup of their own email.
+                    layout_values.insert("content", body);
+                    substitute(&layout.body_html, &layout_values, layout_def.vars, true)
                 }
-                // `content` is declared `Raw`, so the already-escaped body is
-                // inserted verbatim. Escaping again would show the recipient the
-                // markup of their own email.
-                layout_values.insert("content", body);
-                substitute(&layout.body_html, &layout_values, layout_def.vars, true)
+                // A missing layout must not cost the message. The body alone is a
+                // complete, if unbranded, email.
+                None => body,
             }
-            // A missing layout must not cost the message. The body alone is a
-            // complete, if unbranded, email.
-            None => body,
         };
 
         Ok(RenderedEmail {

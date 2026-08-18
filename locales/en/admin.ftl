@@ -240,6 +240,7 @@ adm-shared = Shared
 adm-customised = Edited
 adm-using-default = Default
 adm-unsaved = Unsaved
+adm-inherited-from = Inherited from
 adm-layout-has-no-subject = Not used — each message supplies its own
 adm-insert-variable = Insert:
 adm-variables-help =

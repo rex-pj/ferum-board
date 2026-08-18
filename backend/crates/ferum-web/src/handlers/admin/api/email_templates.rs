@@ -45,6 +45,9 @@ pub struct TemplateResponse {
     pub subject: String,
     pub body_html: String,
     pub customised: bool,
+    /// The locale this copy actually came from, when the requested one ships
+    /// none. `null` means the copy belongs to the locale asked for.
+    pub inherited_from: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -106,6 +109,7 @@ pub async fn get_template(
         subject: t.subject,
         body_html: t.body_html,
         customised: t.customised,
+        inherited_from: t.inherited_from,
     })))
 }
 
@@ -177,6 +181,16 @@ pub async fn test_send_template(
     body.validate()
         .map_err(|e| AppError::UnprocessableEntity(e.to_string()))?;
 
+    // **Rendered before the cooldown is taken.** `preview` is also where the
+    // template is validated, and spending the 30s window on a draft that was
+    // never going to send means a typo'd variable costs half a minute before it
+    // can be corrected. The window still bounds real sends: `set_nx` is atomic,
+    // so two valid requests racing here still leave only one holding it.
+    let rendered = state
+        .email_templates_uc
+        .preview(actor, &key, &locale, &body.subject, &body.body_html)
+        .await?;
+
     let cooldown_key = format!("admin:email-test:{}", actor.id);
     if !state
         .cache
@@ -191,11 +205,6 @@ pub async fn test_send_template(
         .find_by_id(actor.id)
         .await?
         .ok_or(AppError::NotFound)?;
-
-    let rendered = state
-        .email_templates_uc
-        .preview(actor, &key, &locale, &body.subject, &body.body_html)
-        .await?;
 
     // A failed delivery is a 200 carrying the diagnosis, matching
     // `/api/admin/email/test`: the request succeeded, and a 500 would let the

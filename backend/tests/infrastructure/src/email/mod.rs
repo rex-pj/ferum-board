@@ -9,3 +9,4 @@
 #[cfg(test)] mod lettre_service;
 #[cfg(test)] mod reloadable_service;
 #[cfg(test)] mod resend_service;
+#[cfg(test)] mod template_renderer;

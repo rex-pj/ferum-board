@@ -163,7 +163,14 @@
     });
   }
 
+  // Bumped by every select. A GET that finishes after a newer one started is
+  // discarded: without this, clicking A then B quickly could land A's copy in
+  // the textarea while the header — and `current` — say B, and Save would then
+  // write A's body under B's key.
+  var loadSeq = 0;
+
   async function select(t) {
+    var seq = ++loadSeq;
     current = t;
     editor.classList.remove('d-none');
     previewCard.classList.add('d-none');
@@ -180,16 +187,30 @@
 
     try {
       var data = await request('GET', base());
+      if (seq !== loadSeq) return;
       subjectInput.value = data.subject;
       bodyInput.value = data.body_html;
       markClean();
       document.getElementById('tpl-customised').classList.toggle('d-none', !data.customised);
       document.getElementById('tpl-default').classList.toggle('d-none', data.customised);
+      // Says which language the copy on screen actually belongs to. Without it
+      // the editor shows English under a Vietnamese heading and calls it the
+      // default, which is what a locale shipping no copy of its own produces.
+      var inherited = document.getElementById('tpl-inherited');
+      if (data.inherited_from) {
+        inherited.textContent =
+          (inherited.dataset.label || 'Inherited from') + ' ' + data.inherited_from;
+        inherited.classList.remove('d-none');
+      } else {
+        inherited.classList.add('d-none');
+      }
       // Reset only means something when there is a stored row to drop.
       document.getElementById('tpl-reset-btn').disabled = !data.customised;
     } catch (e) {
+      if (seq !== loadSeq) return;
       status('text-danger', e.message);
     }
+    if (seq !== loadSeq) return;
     renderList();
   }
 
