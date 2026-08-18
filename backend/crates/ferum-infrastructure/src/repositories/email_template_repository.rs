@@ -113,41 +113,6 @@ impl EmailTemplateRepository for PgEmailTemplateRepository {
         Ok(())
     }
 
-    async fn insert_if_absent(
-        &self,
-        key: &str,
-        locale: &str,
-        subject: &str,
-        body_html: &str,
-    ) -> Result<bool, AppError> {
-        let model = email_templates::ActiveModel {
-            key: Set(key.to_string()),
-            locale: Set(locale.to_string()),
-            subject: Set(subject.to_string()),
-            body_html: Set(body_html.to_string()),
-            updated_at: Set(Utc::now().fixed_offset()),
-        };
-        // `do_nothing` makes the whole statement a no-op on conflict, which
-        // sea-orm surfaces as `DbErr::RecordNotInserted` rather than Ok — the
-        // row already existing is the expected case on every boot after the
-        // first, so it is a `false`, not an error.
-        match email_templates::Entity::insert(model)
-            .on_conflict(
-                OnConflict::columns([
-                    email_templates::Column::Key,
-                    email_templates::Column::Locale,
-                ])
-                .do_nothing()
-                .to_owned(),
-            )
-            .exec(&self.db)
-            .await
-        {
-            Ok(_) => Ok(true),
-            Err(sea_orm::DbErr::RecordNotInserted) => Ok(false),
-            Err(e) => Err(e.into()),
-        }
-    }
 
     async fn delete(&self, key: &str, locale: &str) -> Result<(), AppError> {
         email_templates::Entity::delete_by_id((key.to_string(), locale.to_string()))

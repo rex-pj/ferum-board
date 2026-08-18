@@ -65,15 +65,6 @@ impl EmailTemplateRepository for FakeTemplates {
             .push((key.to_string(), locale.to_string()));
         Ok(())
     }
-    async fn insert_if_absent(
-        &self,
-        _: &str,
-        _: &str,
-        _: &str,
-        _: &str,
-    ) -> Result<bool, AppError> {
-        Ok(true)
-    }
     async fn delete(&self, key: &str, locale: &str) -> Result<(), AppError> {
         self.deletes
             .lock()

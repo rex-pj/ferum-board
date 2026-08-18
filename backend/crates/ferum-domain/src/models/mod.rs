@@ -25,7 +25,6 @@ pub mod theme;
 pub use audit_log::AuditLog;
 pub use bookmark::Bookmark;
 pub use brand::{Brand, NewBrand};
-pub use email_template::{EmailTemplate, EmailTemplateDef, VarKind, EMAIL_TEMPLATES, LAYOUT_KEY};
 pub use follow::Follow;
 pub use material::{Material, NewMaterial};
 pub use product::{NewProduct, Product, ProductStatus, ProductType};

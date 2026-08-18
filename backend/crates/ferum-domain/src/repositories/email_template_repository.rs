@@ -39,19 +39,6 @@ pub trait EmailTemplateRepository: Send + Sync {
         body_html: &str,
     ) -> Result<(), AppError>;
 
-    /// Inserts only when absent, reporting whether it wrote.
-    ///
-    /// What the startup seeder uses. Never an upsert: re-asserting defaults on
-    /// every boot would silently discard an admin's edits, the same rule that
-    /// governs default permission grants.
-    async fn insert_if_absent(
-        &self,
-        key: &str,
-        locale: &str,
-        subject: &str,
-        body_html: &str,
-    ) -> Result<bool, AppError>;
-
     /// Drops one locale's copy, which is what "restore default" does — the
     /// compiled-in catalogue is then what resolves, so nothing has to store a
     /// second pristine copy to restore from.

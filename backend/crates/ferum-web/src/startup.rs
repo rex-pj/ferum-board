@@ -1254,7 +1254,6 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         images: images.clone(),
         jobs: job_queue.clone(),
         email_renderer: email_renderer.clone(),
-        email_templates: email_template_repo.clone(),
         email_templates_uc: Arc::new(
             ferum_application::usecases::email_template_usecase::EmailTemplateUseCase::new(
                 email_template_repo.clone(),

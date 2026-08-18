@@ -1,10 +1,9 @@
-//! Integration tests for [`PgEmailTemplateRepository`] and the seeding that
-//! fills it.
+//! Integration tests for [`PgEmailTemplateRepository`].
 //!
 //! Two things here the compiler cannot check, and both are how the feature
 //! silently stops being multilingual: that `resolve` honours the *chain's*
-//! order rather than the planner's, and that the startup seeder never
-//! overwrites copy an admin has edited.
+//! order rather than the planner's, and that the startup seeder never writes to
+//! this table at all — a row here means "an admin edited this".
 
 use ferum_domain::models::email_template::{EMAIL_TEMPLATES, EMAIL_TEMPLATE_DEFAULTS, LAYOUT_KEY};
 use ferum_domain::repositories::email_template_repository::EmailTemplateRepository;
@@ -56,8 +55,6 @@ async fn every_declared_template_has_english_copy() {
 /// The property that keeps this multilingual. A regional locale with no row of
 /// its own must inherit its base language, and only then the default — picked
 /// in the chain's order, never the order the rows came back in.
-/// The property that keeps this multilingual, and the one a naive
-/// `WHERE locale = $1` destroys.
 #[tokio::test]
 async fn resolve_takes_the_first_locale_in_chain_order() {
     let db = TestDb::new("email_tpl_chain").await;
@@ -130,26 +127,6 @@ async fn the_startup_seeder_leaves_this_table_alone() {
     );
 }
 
-#[tokio::test]
-async fn insert_if_absent_reports_whether_it_wrote() {
-    let db = TestDb::new("email_tpl_absent").await;
-    let repo = PgEmailTemplateRepository::new(db.conn.clone());
-
-    let wrote = repo
-        .insert_if_absent("email-verify", "fr", "Vérifiez", "<p>{{ url }}</p>")
-        .await
-        .expect("first insert runs");
-    assert!(wrote, "a locale with no row must be written");
-
-    let wrote = repo
-        .insert_if_absent("email-verify", "fr", "Autre chose", "<p>{{ url }}</p>")
-        .await
-        .expect("second insert runs");
-    assert!(!wrote, "an existing row must be reported as not written");
-
-    let row = repo.find("email-verify", "fr").await.unwrap().unwrap();
-    assert_eq!(row.subject, "Vérifiez", "the original must survive");
-}
 
 /// "Restore default" is a DELETE, so nothing has to store a second pristine
 /// copy — the compiled-in catalogue is what resolves afterwards.

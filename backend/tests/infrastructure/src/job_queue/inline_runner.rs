@@ -399,15 +399,6 @@ impl EmailTemplateRepository for NoStoredTemplates {
     async fn upsert(&self, _: &str, _: &str, _: &str, _: &str) -> Result<(), AppError> {
         Ok(())
     }
-    async fn insert_if_absent(
-        &self,
-        _: &str,
-        _: &str,
-        _: &str,
-        _: &str,
-    ) -> Result<bool, AppError> {
-        Ok(true)
-    }
     async fn delete(&self, _: &str, _: &str) -> Result<(), AppError> {
         Ok(())
     }

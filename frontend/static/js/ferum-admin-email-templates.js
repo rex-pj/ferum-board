@@ -135,14 +135,24 @@
     sharedList.classList.toggle('d-none', !anyShared);
   }
 
+  // Which field a variable click lands in. Not always the body: subjects use
+  // variables too — the reply notification's is
+  // `{{ actor }} replied to "{{ thread_title }}"` — so a fixed target put the
+  // token in the wrong box and moved the caret out of the field being edited.
+  var insertTarget = bodyInput;
+  subjectInput.addEventListener('focus', function () { insertTarget = subjectInput; });
+  bodyInput.addEventListener('focus', function () { insertTarget = bodyInput; });
+
   function insertAtCursor(text) {
-    var start = bodyInput.selectionStart;
-    var end = bodyInput.selectionEnd;
-    var value = bodyInput.value;
-    bodyInput.value = value.slice(0, start) + text + value.slice(end);
+    // The layout disables its subject, and a disabled field cannot take a caret.
+    var field = insertTarget.disabled ? bodyInput : insertTarget;
+    var start = field.selectionStart;
+    var end = field.selectionEnd;
+    var value = field.value;
+    field.value = value.slice(0, start) + text + value.slice(end);
     var caret = start + text.length;
-    bodyInput.setSelectionRange(caret, caret);
-    bodyInput.focus();
+    field.setSelectionRange(caret, caret);
+    field.focus();
     onInput();
   }
 
@@ -172,6 +182,9 @@
   async function select(t) {
     var seq = ++loadSeq;
     current = t;
+    // A fresh template starts with the body as the insert target, or a badge
+    // click would still aim at the previous template's subject field.
+    insertTarget = bodyInput;
     editor.classList.remove('d-none');
     previewCard.classList.add('d-none');
     document.getElementById('tpl-name').textContent = t.name;
