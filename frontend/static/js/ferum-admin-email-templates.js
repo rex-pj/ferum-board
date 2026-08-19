@@ -81,12 +81,18 @@
     dirtyBadge.classList.add('d-none');
   }
 
-  /// Returns false when the user chose to keep editing.
-  function mayLeave() {
+  /// Resolves false when the user chose to keep editing.
+  ///
+  /// `Ferum.showConfirm` — the shared Bootstrap dialog in `ferum-utils.js` that
+  /// every other admin surface uses — rather than `window.confirm`. It is a
+  /// promise, not a blocking call, so every caller has to await it.
+  async function mayLeave() {
     if (!isDirty()) return true;
-    var msg = list.dataset.discardText ||
-      'You have unsaved changes to this template. Discard them?';
-    return window.confirm(msg);
+    return Ferum.showConfirm(
+      list.dataset.discardTitle || 'Unsaved changes',
+      list.dataset.discardText || 'You have unsaved changes to this template. Discard them?',
+      list.dataset.discardOk || 'Discard'
+    );
   }
 
   function base() {
@@ -123,9 +129,9 @@
         row.appendChild(mark);
       }
       item.appendChild(row);
-      item.onclick = function () {
+      item.onclick = async function () {
         if (current && current.key === t.key) return;
-        if (!mayLeave()) return;
+        if (!(await mayLeave())) return;
         select(t);
       };
       target.appendChild(item);
@@ -293,9 +299,12 @@
 
   async function reset() {
     var btn = document.getElementById('tpl-reset-btn');
-    if (!window.confirm(btn.dataset.confirmText || 'Discard your edits for this language?')) {
-      return;
-    }
+    var ok = await Ferum.showConfirm(
+      btn.dataset.confirmTitle || 'Reset to default',
+      btn.dataset.confirmText || 'Discard your edits for this language?',
+      btn.dataset.confirmOk || 'Reset'
+    );
+    if (!ok) return;
     status('text-muted', '…');
     try {
       await request('DELETE', base());
@@ -321,8 +330,8 @@
   document.getElementById('tpl-view-text').onclick = function () { showPreviewPane('text'); };
 
   var lastLocale = localeSelect.value;
-  localeSelect.onchange = function () {
-    if (current && !mayLeave()) {
+  localeSelect.onchange = async function () {
+    if (current && !(await mayLeave())) {
       localeSelect.value = lastLocale;
       return;
     }

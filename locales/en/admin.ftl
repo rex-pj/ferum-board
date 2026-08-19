@@ -249,6 +249,11 @@ adm-variables-help =
     links, checked so only http(s) can reach an href. There are no conditionals
     or loops.
 adm-discard-changes = You have unsaved changes to this template. Discard them?
+# Title and button label for the shared confirmation dialog, which takes all
+# three separately rather than one blob of prose.
+adm-unsaved-changes = Unsaved changes
+adm-discard = Discard
+adm-reset = Reset
 adm-required-variable = required
 adm-subject = Subject
 adm-body-html = Body (HTML)

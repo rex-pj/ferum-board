@@ -145,13 +145,24 @@ async fn the_preview_iframe_is_sandboxed_without_same_origin() {
 async fn the_scripts_prompt_strings_come_from_the_catalog() {
     let html = render().await;
 
-    for attr in ["data-edited-text", "data-discard-text"] {
+    // The shared dialog takes a title, a body and a button label separately, so
+    // all three have to reach the script.
+    for attr in [
+        "data-edited-text",
+        "data-discard-title",
+        "data-discard-text",
+        "data-discard-ok",
+    ] {
         assert!(html.contains(attr), "#tpl-list must carry {attr}");
     }
-    assert!(
-        html.contains("data-saved-text") && html.contains("data-confirm-text"),
-        "the action buttons must carry their result strings"
-    );
+    for attr in [
+        "data-saved-text",
+        "data-confirm-title",
+        "data-confirm-text",
+        "data-confirm-ok",
+    ] {
+        assert!(html.contains(attr), "the action buttons must carry {attr}");
+    }
 }
 
 #[tokio::test]
@@ -176,6 +187,8 @@ async fn every_admin_key_resolves_to_real_text() {
         "adm-customised",
         "adm-using-default",
         "adm-unsaved",
+        "adm-unsaved-changes",
+        "adm-discard",
         "adm-layout-has-no-subject",
         "adm-insert-variable",
         "adm-variables-help",

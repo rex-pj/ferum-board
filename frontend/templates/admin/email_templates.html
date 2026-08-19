@@ -25,7 +25,9 @@
 
     <div class="list-group mb-2" id="tpl-list"
          data-edited-text="{{ t(k='adm-customised') }}"
-         data-discard-text="{{ t(k='adm-discard-changes') }}">
+         data-discard-title="{{ t(k='adm-unsaved-changes') }}"
+         data-discard-text="{{ t(k='adm-discard-changes') }}"
+         data-discard-ok="{{ t(k='adm-discard') }}">
       <div class="list-group-item text-body-secondary small">…</div>
     </div>
     {# The layout is chrome rather than a message, so it is listed apart —
@@ -95,7 +97,9 @@
             {{ t(k="adm-send-test") }}
           </button>
           <button type="button" class="btn btn-sm btn-outline-danger" id="tpl-reset-btn"
+                  data-confirm-title="{{ t(k='adm-reset-to-default') }}"
                   data-confirm-text="{{ t(k='adm-reset-confirm') }}"
+                  data-confirm-ok="{{ t(k='adm-reset') }}"
                   data-reset-text="{{ t(k='adm-template-reset') }}">{{ t(k="adm-reset-to-default") }}</button>
           <span class="small ms-auto" id="tpl-status" role="status" aria-live="polite"></span>
         </div>
