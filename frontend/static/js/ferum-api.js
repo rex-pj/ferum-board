@@ -299,8 +299,8 @@
       revokeRole: function (userId, roleId) {
         return del('/api/admin/users/' + userId + '/roles/' + roleId);
       },
-      lookupUsers: function (q) {
-        return get('/api/admin/lookups/users?q=' + encodeURIComponent(q) + '&per_page=5');
+      listModerators: function (categoryId) {
+        return get('/api/admin/categories/' + categoryId + '/moderators');
       },
       assignModerator: function (categoryId, userId) {
         return post('/api/admin/categories/' + categoryId + '/moderators', { user_id: userId });

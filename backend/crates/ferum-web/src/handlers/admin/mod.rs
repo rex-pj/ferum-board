@@ -184,13 +184,3 @@ pub struct SelectOptionCtx {
     pub id: String,
     pub name: String,
 }
-
-#[derive(Serialize)]
-pub struct ModeratorCtx {
-    pub assignment_id: String,
-    pub user_id: String,
-    pub username: String,
-    pub display_name: String,
-    pub avatar_url: Option<String>,
-    pub granted_at: String,
-}

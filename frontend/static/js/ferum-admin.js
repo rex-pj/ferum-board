@@ -651,39 +651,154 @@
     }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
   };
 
-  // ── Moderators page ───────────────────────────────────────────────
-  window.revokeModerator = async function (categoryId, userId, displayName) {
-    var ok = await Ferum.showConfirm('Remove Moderator', 'Remove ' + displayName + ' as moderator for this category?', 'Remove');
-    if (!ok) return;
-    FerumApi.admin.revokeModerator(categoryId, userId).then(function (r) {
-      if (r.ok) location.reload();
-      else r.json().then(function (d) { Ferum.toast(Ferum.errorMessage(d) || 'Failed to remove moderator.', true); }).catch(function () { Ferum.toast('Failed to remove moderator.', true); });
-    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); });
-  };
+  // ── Category moderators modal (on /admin/categories) ──────────────
+  //
+  // Assignment posts a user_id picked from /api/admin/lookups/users. It used to
+  // post a typed username, resolved client-side by matching `sublabel` against
+  // '@' + what was typed — against ONE page of an `ilike '%q%'` search. Both
+  // halves failed silently on a user that exists: different case never matched
+  // the string compare, and an exact match ranked past the first page was never
+  // in the array to compare. Both reported "user not found".
+  (function () {
+    var modal = document.getElementById('moderatorsModal');
+    if (!modal) return;
 
-  window.assignModerator = function (btn) {
-    var categoryId = btn.dataset.categoryId;
-    var input = btn.closest('.card-body').querySelector('input[name=username]');
-    var username = input && input.value.trim();
-    if (!username) { Ferum.toast('Username is required.', true); return; }
-    btn.disabled = true;
-    FerumApi.admin.lookupUsers(username).then(function (r) {
-      return r.json();
-    }).then(function (d) {
-      var users = d.data || [];
-      // Match on exact @username via sublabel (e.g. "@alice")
-      var user = users.find(function (u) { return u.sublabel === '@' + username; });
-      if (!user) {
-        Ferum.toast('User "@' + username + '" not found.', true);
-        btn.disabled = false;
+    var tbody   = modal.querySelector('#moderators-tbody');
+    var titleEl = modal.querySelector('#mod-modal-category');
+    var picker  = modal.querySelector('ferum-remote-select');
+
+    // `showFeedback` has no counterpart that hides the alert, and calling it
+    // with an empty message renders an empty one instead.
+    function clearFeedback() {
+      var el = document.getElementById('moderators-feedback');
+      if (el) el.classList.add('d-none');
+    }
+
+    function note(text) {
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">' +
+                        Ferum.escapeHtml(text) + '</td></tr>';
+    }
+
+    function render(rows) {
+      if (!rows.length) { note(tbody.dataset.emptyText); return; }
+      tbody.innerHTML = rows.map(function (m) {
+        var name = m.display_name || m.username;
+        return '<tr>' +
+          '<td><div class="fw-semibold">' + Ferum.escapeHtml(name) + '</div>' +
+              '<div class="text-muted small">@' + Ferum.escapeHtml(m.username) + '</div></td>' +
+          '<td class="align-middle text-muted small text-nowrap">' +
+              '<time data-abs data-style="date" datetime="' + Ferum.escapeHtml(m.created_at) + '">' +
+              Ferum.escapeHtml(m.created_at) + '</time></td>' +
+          '<td class="align-middle text-end">' +
+              '<button class="btn btn-sm btn-outline-danger" type="button" ' +
+                      'data-admin-action="revoke-moderator" ' +
+                      'data-user-id="' + Ferum.escapeHtml(m.user_id) + '" ' +
+                      'data-display-name="' + Ferum.escapeHtml(name) + '">' +
+              Ferum.escapeHtml(tbody.dataset.removeLabel) + '</button></td>' +
+        '</tr>';
+      }).join('');
+      Ferum.initTimestamps();
+    }
+
+    function load() {
+      note(tbody.dataset.loadingText);
+      FerumApi.admin.listModerators(modal._categoryId).then(function (r) {
+        if (!r.ok) { note('Could not load moderators.'); return; }
+        return r.json().then(function (d) { render(d.data || []); });
+      }).catch(function () { note(Ferum.t('js-network-error')); });
+    }
+
+    // The widget owns its own selected state, so clearing the hidden input
+    // would leave the chosen name still showing. Re-creating the element from
+    // its attributes is what actually resets it.
+    function resetPicker() {
+      if (!picker) return;
+      var fresh = picker.cloneNode(false);
+      picker.replaceWith(fresh);
+      picker = fresh;
+    }
+
+    modal.addEventListener('show.bs.modal', function (e) {
+      var btn = e.relatedTarget;
+      modal._categoryId   = btn && btn.dataset.id;
+      modal._categoryName = (btn && btn.dataset.name) || '';
+      titleEl.textContent = modal._categoryName;
+      clearFeedback();
+      resetPicker();
+      load();
+    });
+
+    window.assignModerator = async function (btn) {
+      var hidden = picker && picker.querySelector('input[name=moderator_user_id]');
+      var userId = hidden && hidden.value;
+      if (!userId) {
+        Ferum.showFeedback('moderators-feedback', 'warning', 'Pick a user to assign.');
         return;
       }
-      return FerumApi.admin.assignModerator(categoryId, user.value).then(function (r2) {
-        if (r2.ok) location.reload();
-        else r2.json().then(function (d2) { Ferum.toast(Ferum.errorMessage(d2) || 'Failed to assign moderator.', true); btn.disabled = false; }).catch(function () { Ferum.toast('Failed to assign moderator.', true); btn.disabled = false; });
+      var label = picker.querySelector('.rs-value');
+      var name  = (label && label.textContent) || 'this user';
+
+      // Granting is confirmed as well as revoking: this hands out the moderator
+      // role's whole permission set inside the category, and the picker sits one
+      // click away from the wrong row.
+      var ok = await Ferum.showConfirm(
+        'Assign Moderator',
+        'Give ' + name + ' the moderator role in "' + modal._categoryName + '"? ' +
+        'They will be able to pin, lock, move and delete threads and posts here, ' +
+        'and warn or temporarily ban members.',
+        'Assign');
+      if (!ok) return;
+
+      var spinner = btn.querySelector('.fa-spinner');
+      btn.disabled = true;
+      if (spinner) spinner.classList.remove('d-none');
+      FerumApi.admin.assignModerator(modal._categoryId, userId).then(function (r) {
+        if (r.ok) {
+          resetPicker();
+          Ferum.showFeedback('moderators-feedback', 'success', 'Moderator assigned.');
+          load();
+          return;
+        }
+        return r.json().then(function (d) {
+          Ferum.showFeedback('moderators-feedback', 'danger', modMsgFromError(d));
+        });
+      }).catch(function () {
+        Ferum.showFeedback('moderators-feedback', 'danger', Ferum.t('js-network-error'));
+      }).finally(function () {
+        btn.disabled = false;
+        if (spinner) spinner.classList.add('d-none');
       });
-    }).catch(function () { Ferum.toast(Ferum.t('js-network-error'), true); btn.disabled = false; });
-  };
+    };
+
+    window.revokeModerator = async function (userId, displayName) {
+      var ok = await Ferum.showConfirm(
+        'Remove Moderator',
+        'Remove ' + displayName + ' as moderator of "' + modal._categoryName + '"?',
+        'Remove');
+      if (!ok) return;
+      FerumApi.admin.revokeModerator(modal._categoryId, userId).then(function (r) {
+        if (r.ok) {
+          Ferum.showFeedback('moderators-feedback', 'success', 'Moderator removed.');
+          load();
+          return;
+        }
+        return r.json().then(function (d) {
+          Ferum.showFeedback('moderators-feedback', 'danger', modMsgFromError(d));
+        });
+      }).catch(function () {
+        Ferum.showFeedback('moderators-feedback', 'danger', Ferum.t('js-network-error'));
+      });
+    };
+
+    // Every code this endpoint can return — permission_denied,
+    // cannot_grant_permissions_you_lack, role_already_assigned, not_found — is
+    // already phrased in locales/*/errors.ftl and translated by the
+    // translate_errors middleware, so re-stating them here would only add an
+    // English-only copy that drifts.
+    function modMsgFromError(d) {
+      return Ferum.errorMessage(d) || 'The action failed.';
+    }
+  }());
 
   window.deleteRole = async function (id, name, memberCount) {
     var count = parseInt(memberCount, 10) || 0;
@@ -1009,7 +1124,7 @@
       case 'unban-user':       window.unbanUser(btn.dataset.userId);                                           break;
       case 'revoke-role':      window.revokeRole(btn.dataset.userId, btn.dataset.roleId, btn.dataset.roleName); break;
       case 'assign-moderator': window.assignModerator(btn);                             break;
-      case 'revoke-moderator': window.revokeModerator(btn.dataset.categoryId, btn.dataset.userId, btn.dataset.displayName); break;
+      case 'revoke-moderator': window.revokeModerator(btn.dataset.userId, btn.dataset.displayName); break;
       case 'create-role':      window.createRole(btn);                  break;
       case 'save-role':        window.saveRole(btn);                    break;
       case 'delete-role':      window.deleteRole(btn.dataset.roleId, btn.dataset.roleName, btn.dataset.memberCount); break;

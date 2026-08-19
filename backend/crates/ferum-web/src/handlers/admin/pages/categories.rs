@@ -1,9 +1,9 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use axum::Extension;
 use tera::Context;
 
-use super::super::{render_admin, require_admin, site_ctx, ModeratorCtx, PageQuery};
+use super::super::{render_admin, require_admin, site_ctx, PageQuery};
 use crate::app_state::AppState;
 use crate::handlers::pages::{PageError, require_page_auth};
 use crate::middleware::AuthUser;
@@ -92,46 +92,4 @@ pub async fn categories(
     ctx.insert("search_query", &search);
 
     render_admin(&state, &req_locale, "admin/categories/list.html", ctx).await
-}
-
-pub async fn category_moderators(
-    State(state): State<AppState>,
-    Extension(auth_user): Extension<Option<AuthUser>>,
-    Extension(req_locale): Extension<crate::middleware::locale::RequestLocale>,
-    Path(id): Path<uuid::Uuid>,
-) -> Result<impl IntoResponse, PageError> {
-    let auth_user = require_page_auth(auth_user)?;
-    require_admin(&auth_user)?;
-
-    let categories = state.admin.list_categories(&auth_user).await?;
-    let category_name = categories
-        .iter()
-        .find(|c| c.id == id)
-        .map(|c| c.name.clone())
-        .unwrap_or_else(|| id.to_string());
-
-    let raw_mods = state.admin.list_category_moderators(&auth_user, id).await?;
-    let moderators: Vec<ModeratorCtx> = raw_mods
-        .into_iter()
-        .map(|(a, u)| ModeratorCtx {
-            assignment_id: a.id.to_string(),
-            user_id: u.id.to_string(),
-            username: u.username.clone(),
-            display_name: u.display_name.clone().unwrap_or_else(|| u.username.clone()),
-            avatar_url: u.avatar_url.clone(),
-            granted_at: a.created_at.to_rfc3339(),
-        })
-        .collect();
-
-    let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
-    ctx.insert(
-        "current_user",
-        &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
-    );
-    ctx.insert("category_id", &id.to_string());
-    ctx.insert("category_name", &category_name);
-    ctx.insert("moderators", &moderators);
-
-    render_admin(&state, &req_locale, "admin/categories/moderators.html", ctx).await
 }

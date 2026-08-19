@@ -95,9 +95,19 @@
           {# ACTIONS #}
           <td class="align-middle">
             <div class="d-flex gap-1">
-              <a href="/admin/categories/{{ cat.id }}/moderators" class="btn btn-sm btn-outline-secondary" title="{{ t(k='adm-moderators') }}">
-                <i class="fa-solid fa-user-shield"></i>
-              </a>
+              {# Assigning a moderator needs `admin.users`, not the `admin.categories`
+                 the rest of this row needs — hiding it keeps a categories-only
+                 admin from clicking straight into a 403. #}
+              {% if current_user.is_admin %}
+                <button class="btn btn-sm btn-outline-secondary"
+                        data-bs-toggle="modal"
+                        data-bs-target="#moderatorsModal"
+                        data-id="{{ cat.id }}"
+                        data-name="{{ cat.name }}"
+                        title="{{ t(k='adm-moderators') }}">
+                  <i class="fa-solid fa-user-shield"></i>
+                </button>
+              {% endif %}
               <button class="btn btn-sm btn-outline-secondary"
                       data-bs-toggle="modal"
                       data-bs-target="#editCategoryModal"
@@ -282,6 +292,56 @@
         <button type="button" class="btn btn-primary" data-admin-action="save-category">
           {{ t(k="adm-save-changes") }} <i class="fa-solid fa-spinner fa-spin d-none ms-1"></i>
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Moderators live in a modal rather than their own page: the row's other two
+   actions already are one, and the list is the only place an admin can see
+   which categories are staff-gated while deciding who moderates them.
+   Rows are fetched from /api/admin/categories/:id/moderators on show — the
+   permission check is the endpoint's, not this template's `{% if %}`. #}
+<div class="modal fade" id="moderatorsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          {{ t(k="adm-moderators") }} — <span id="mod-modal-category" class="fw-normal text-muted"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t(k='adm-close') }}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">{{ t(k="adm-moderator-scope-hint") }}</p>
+
+        <div class="table-responsive mb-3">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-active">
+              <tr>
+                <th>{{ t(k="adm-user") }}</th>
+                <th style="width:30%">{{ t(k="adm-assigned") }}</th>
+                <th style="width:1%"></th>
+              </tr>
+            </thead>
+            {# The strings the JS-rendered rows need ride on the element, so they
+               stay in the catalog instead of becoming literals in ferum-admin.js. #}
+            <tbody id="moderators-tbody"
+                   data-empty-text="{{ t(k='adm-no-moderators-assigned') }}"
+                   data-remove-label="{{ t(k='adm-remove') }}"
+                   data-loading-text="{{ t(k='adm-loading') }}"></tbody>
+          </table>
+        </div>
+
+        <label class="form-label fw-semibold">{{ t(k="adm-assign-moderator") }}</label>
+        <div class="d-flex gap-2 align-items-start flex-wrap">
+          <ferum-remote-select name="moderator_user_id"
+                               endpoint="/api/admin/lookups/users"
+                               placeholder="{{ t(k='adm-search-for-a-user') }}"></ferum-remote-select>
+          <button type="button" class="btn btn-sm btn-primary" data-admin-action="assign-moderator">
+            {{ t(k="adm-assign") }} <i class="fa-solid fa-spinner fa-spin d-none ms-1"></i>
+          </button>
+        </div>
+        <div id="moderators-feedback" class="d-none mt-3"></div>
       </div>
     </div>
   </div>

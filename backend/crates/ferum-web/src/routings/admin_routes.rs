@@ -201,7 +201,6 @@ pub fn admin_page_routes() -> Router<AppState> {
         .route("/users", get(admin::pages::users::users))
         .route("/users/{id}", get(admin::pages::users::user_detail))
         .route("/categories", get(admin::pages::categories::categories))
-        .route("/categories/{id}/moderators", get(admin::pages::categories::category_moderators))
         .route("/products", get(admin::pages::products::products))
         .route("/roles", get(admin::pages::roles::roles))
         .route("/roles/{id}", get(admin::pages::roles::role_detail))
