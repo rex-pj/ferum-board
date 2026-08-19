@@ -915,6 +915,9 @@ js-cropper-hint = Drag to reposition, scroll or pinch to zoom. Arrow keys pan.
 js-image-invalid-type = Images must be JPEG, PNG, WebP, or GIF.
 js-image-too-large = That image is too large.
 js-cancel = Cancel
+# The shared confirmation dialog's close button. `ui-close` exists but JS can
+# only read the `js-` namespace, so it needs its own entry.
+js-close = Close
 js-save = Save
 
 ## ─── Search filters ──────────────────────────────────────────────────────────

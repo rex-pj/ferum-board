@@ -1,6 +1,7 @@
 #[cfg(test)] mod admin_plugin_detail_render;
 #[cfg(test)] mod admin_settings_render;
 #[cfg(test)] mod error_catalog;
+#[cfg(test)] mod js_conventions;
 #[cfg(test)] mod handlers;
 #[cfg(test)] mod middleware;
 #[cfg(test)] mod admin_email_templates_render;

@@ -15,29 +15,14 @@
   } : undefined;
 
   // ── Generic confirmation modal ───────────────────────────────────
-  var _confirmResolve = null;
-
+  // Delegates to Ferum.showConfirm (ferum-utils.js) — single implementation
+  // site, the same way showToast below delegates to Ferum.toast. The local copy
+  // this replaces also required `#confirmModal` markup in the template, so a
+  // theme overriding thread.html without it broke every confirmation on the
+  // page; the shared one injects its own.
   function showConfirm(title, body, okLabel, okVariant) {
-    okLabel   = okLabel   || Ferum.t('js-confirm');
-    okVariant = okVariant || 'danger';
-    return new Promise(function (resolve) {
-      document.getElementById('confirmModalTitle').textContent = title;
-      document.getElementById('confirmModalBody').textContent  = body;
-      var okBtn = document.getElementById('confirmModalOk');
-      okBtn.textContent = okLabel;
-      okBtn.className   = 'btn btn-' + okVariant + ' btn-sm';
-      _confirmResolve   = resolve;
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('confirmModal')).show();
-    });
+    return Ferum.showConfirm(title, body, okLabel, okVariant);
   }
-
-  document.getElementById('confirmModalOk').addEventListener('click', function () {
-    bootstrap.Modal.getInstance(document.getElementById('confirmModal'))?.hide();
-    if (_confirmResolve) { _confirmResolve(true); _confirmResolve = null; }
-  });
-  document.getElementById('confirmModal').addEventListener('hidden.bs.modal', function () {
-    if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
-  });
 
   // ── Toast notifications ──────────────────────────────────────────
   // Delegates to Ferum.toast (ferum-utils.js) — single implementation site.

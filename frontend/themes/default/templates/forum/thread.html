@@ -415,22 +415,10 @@
   </a>
 {% endif %}
 
-{# ── Generic confirmation modal (replaces all window.confirm calls) ──────── #}
-<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-sm">
-    <div class="modal-content">
-      <div class="modal-header border-0 pb-1">
-        <h5 class="modal-title fs-6 fw-semibold" id="confirmModalTitle">{{ t(k="ui-confirm") }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body pt-1 small text-muted" id="confirmModalBody"></div>
-      <div class="modal-footer border-0 pt-1 gap-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{ t(k="ui-cancel") }}</button>
-        <button type="button" class="btn btn-sm" id="confirmModalOk">{{ t(k="ui-confirm") }}</button>
-      </div>
-    </div>
-  </div>
-</div>
+{# The confirmation modal used to be declared here. It now comes from
+   `Ferum.showConfirm`, which injects its own into <body> on first use — so a
+   theme overriding this template no longer has to carry the markup, and cannot
+   silently break every confirmation on the page by omitting it. #}
 
 {# ── Report Modal ─────────────────────────────────────────────────────── #}
 <div class="modal fade" id="reportModal" tabindex="-1" aria-hidden="true">

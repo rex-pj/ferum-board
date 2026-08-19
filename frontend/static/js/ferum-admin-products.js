@@ -204,7 +204,16 @@
     tbody.querySelectorAll('[data-edit]').forEach(function (b) { b.addEventListener('click', function () { var p = products.find(function (x) { return x.id === b.getAttribute('data-edit'); }); if (p) openProduct(p); }); });
     tbody.querySelectorAll('[data-del]').forEach(function (b) { b.addEventListener('click', function () { deleteProduct(b.getAttribute('data-del'), b.getAttribute('data-name')); }); });
     tbody.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { setProductStatus(b.getAttribute('data-approve'), 'published', 'Product published.'); }); });
-    tbody.querySelectorAll('[data-reject]').forEach(function (b) { b.addEventListener('click', function () { if (confirm('Reject "' + b.getAttribute('data-name') + '"?')) setProductStatus(b.getAttribute('data-reject'), 'archived', 'Product archived.'); }); });
+    tbody.querySelectorAll('[data-reject]').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        var ok = await Ferum.showConfirm(
+          'Reject Product',
+          'Reject "' + b.getAttribute('data-name') + '"? It will be archived rather than deleted.',
+          'Reject'
+        );
+        if (ok) setProductStatus(b.getAttribute('data-reject'), 'archived', 'Product archived.');
+      });
+    });
   }
 
   // Numbered pagination mirroring the server `paginate` macro (first · left
@@ -711,7 +720,12 @@
     loadMaterials();
   }
   async function deleteMaterial(id, name) {
-    if (!confirm('Delete material "' + name + '"? Products will be unlinked from it.')) return;
+    var ok = await Ferum.showConfirm(
+      'Delete Material',
+      'Delete material "' + name + '"? Products will be unlinked from it.',
+      'Delete'
+    );
+    if (!ok) return;
     var res = await FerumApi.http.del('/api/admin/materials/' + id);
     if (!res.ok && res.status !== 204) { showStatus(await readError(res), 'danger'); return; }
     showStatus('Material deleted.', 'success'); loadMaterials();
@@ -794,7 +808,12 @@
     loadBrands();
   }
   async function deleteBrand(id, name) {
-    if (!confirm('Delete brand "' + name + '"? Products will be unlinked from it.')) return;
+    var ok = await Ferum.showConfirm(
+      'Delete Brand',
+      'Delete brand "' + name + '"? Products will be unlinked from it.',
+      'Delete'
+    );
+    if (!ok) return;
     var res = await FerumApi.http.del('/api/admin/brands/' + id);
     if (!res.ok && res.status !== 204) { showStatus(await readError(res), 'danger'); return; }
     showStatus('Brand deleted.', 'success'); loadBrands();
@@ -845,10 +864,25 @@
 
     // Guard against losing a half-filled form to a stray backdrop click or Esc.
     // `hide.bs.modal` is cancellable; `hidden` is not, so the check has to run here.
+    //
+    // **The close is cancelled unconditionally and re-issued.** The shared dialog
+    // is a promise, and this handler has already returned by the time it
+    // resolves — so `preventDefault` would come too late to stop the close, and
+    // the edits would be gone before the question was answered. Clearing
+    // `_productDirty` before the second `hide()` is what lets it through without
+    // asking again; no extra flag is needed.
     $('productModal').addEventListener('hide.bs.modal', function (e) {
       if (!_productDirty) return;
-      if (!confirm('Discard your unsaved changes to this product?')) e.preventDefault();
-      else _productDirty = false;
+      e.preventDefault();
+      Ferum.showConfirm(
+        'Discard changes',
+        'Discard your unsaved changes to this product?',
+        'Discard'
+      ).then(function (ok) {
+        if (!ok) return;
+        _productDirty = false;
+        modal('productModal').hide();
+      });
     });
     $('productModal').addEventListener('shown.bs.modal', function () {
       _productDirty = false;
@@ -1053,7 +1087,12 @@
   async function deletePcat(id, name) {
     // Products are not deleted with the category — they fall back to unfiled —
     // so the confirmation says so rather than implying data loss.
-    if (!confirm('Delete "' + name + '"? Products filed here become uncategorised.')) return;
+    var ok = await Ferum.showConfirm(
+      'Delete Category',
+      'Delete "' + name + '"? Products filed here become uncategorised.',
+      'Delete'
+    );
+    if (!ok) return;
     var res = await FerumApi.http.del('/api/admin/product-categories/' + id);
     if (!res.ok) { showStatus(await readError(res), 'danger'); return; }
     showStatus('Category deleted.', 'success');

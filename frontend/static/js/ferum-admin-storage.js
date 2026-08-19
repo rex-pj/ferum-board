@@ -226,12 +226,15 @@
 
   // ── Wiring ───────────────────────────────────────────────────────────────
 
-  function confirmThen(count, what, fn) {
-    if (!window.confirm(
-      'Permanently delete ' + count + ' ' + what + '?\n\n' +
-      'This cannot be undone. The files are removed from storage.'
-    )) return;
-    fn();
+  // `Ferum.showConfirm` rather than `window.confirm`: the shared Bootstrap
+  // dialog every other admin surface uses. It is a promise, so this is async.
+  async function confirmThen(count, what, fn) {
+    var ok = await Ferum.showConfirm(
+      'Delete ' + count + ' ' + what + '?',
+      'This cannot be undone. The files are removed from storage.',
+      'Delete'
+    );
+    if (ok) fn();
   }
 
   document.getElementById('sweep-scan').onclick = function () { runSweep(false); };

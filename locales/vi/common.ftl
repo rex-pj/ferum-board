@@ -899,6 +899,7 @@ js-cropper-hint = Kéo để di chuyển, lăn chuột hoặc chụm hai ngón �
 js-image-invalid-type = Ảnh phải ở định dạng JPEG, PNG, WebP hoặc GIF.
 js-image-too-large = Ảnh này quá lớn.
 js-cancel = Huỷ
+js-close = Đóng
 js-save = Lưu
 
 ## ─── Bộ lọc tìm kiếm ─────────────────────────────────────────────────────────

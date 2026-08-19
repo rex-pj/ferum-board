@@ -355,16 +355,25 @@
           '<div class="modal-content">' +
             '<div class="modal-header border-0 pb-1">' +
               '<h5 class="modal-title fs-6 fw-semibold" id="fr-confirm-title"></h5>' +
-              '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
+              '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="' +
+                escapeHtml(Ferum.t('js-close')) + '"></button>' +
             '</div>' +
             '<div class="modal-body pt-1 small text-muted" id="fr-confirm-body"></div>' +
             '<div class="modal-body pt-0 pb-2 d-none" id="fr-confirm-type-wrap">' +
               '<label class="form-label small fw-semibold mb-1" id="fr-confirm-type-label"></label>' +
               '<input type="text" class="form-control form-control-sm font-monospace" id="fr-confirm-type-input" autocomplete="off">' +
             '</div>' +
+            // Translated, not hardcoded: this dialog is reachable from public
+            // pages, where an English "Cancel" under Vietnamese body text is the
+            // bug. The OK label is overwritten per call; Cancel never is, so it
+            // is the one that has to be right here.
             '<div class="modal-footer border-0 pt-1 gap-2">' +
-              '<button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>' +
-              '<button type="button" class="btn btn-sm" id="fr-confirm-ok">Confirm</button>' +
+              '<button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">' +
+                escapeHtml(Ferum.t('js-cancel')) +
+              '</button>' +
+              '<button type="button" class="btn btn-sm" id="fr-confirm-ok">' +
+                escapeHtml(Ferum.t('js-confirm')) +
+              '</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
