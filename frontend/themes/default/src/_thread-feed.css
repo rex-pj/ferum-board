@@ -266,15 +266,6 @@
   letter-spacing: 0.02em;
 }
 
-/* The mobile stand-in for the label above. Purely visual — the group already
-   carries aria-label="Filter", so nothing is lost to a screen reader. */
-.fr-filter-chips__icon {
-  display: none;
-  align-items: center;
-  color: var(--bs-tertiary-color);
-  font-size: 0.75rem;
-}
-
 .fr-filter-chip {
   display: inline-flex;
   align-items: center;
@@ -338,8 +329,15 @@
    Row 2 stays detached pills. A connected, full-width bar against separate
    floating pills is a stronger read of "pick one" vs "toggle each" than the
    underline-plus-pills pairing was, which is what lets the uppercase FILTER
-   label become a funnel glyph here — the word was carrying that distinction
-   on its own before and the shape now carries it. */
+   label drop entirely here — the word was carrying that distinction on its
+   own before and the shape now carries it.
+
+   It is dropped, NOT swapped for a funnel glyph. A funnel reads as "opens a
+   filter panel", so a decorative aria-hidden one sitting flush against two
+   real controls invites a tap that does nothing; and spending width on a
+   group label here contradicts the line above, which hides each tab's own
+   icon to buy width for its label. If the filter set ever outgrows one row,
+   the funnel comes back as a real <button> opening a sheet, with a count. */
 @media (max-width: 575.98px) {
   .fr-feed-controls { justify-content: flex-start; }
 
@@ -384,7 +382,6 @@
      three left edges agree. */
   .fr-filter-chips { width: 100%; padding: 0.5rem 1rem; }
   .fr-filter-chips__label { display: none; }
-  .fr-filter-chips__icon { display: inline-flex; }
 }
 
 
