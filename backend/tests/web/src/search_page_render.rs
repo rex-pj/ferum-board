@@ -99,6 +99,7 @@ fn base_ctx() -> Context {
     ctx.insert("theme_bs_theme", "auto");
     ctx.insert("locale", "en");
     ctx.insert("current_path", "/search");
+    ctx.insert("default_locale", "en");
     ctx.insert("js_strings", &json!({}));
     ctx.insert("available_locales", &json!(["en", "vi"]));
     ctx

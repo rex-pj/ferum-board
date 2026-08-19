@@ -108,6 +108,7 @@ fn ctx(active_theme: &str) -> Context {
     c.insert("theme_bs_theme", "dark");
     c.insert("locale", "en");
     c.insert("current_path", "/");
+    c.insert("default_locale", "en");
     c.insert("js_strings", &json!({ "js-loading": "Loading" }));
     c.insert("available_locales", &json!(["en", "vi"]));
     c

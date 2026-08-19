@@ -7,6 +7,7 @@
 #[cfg(test)] mod admin_email_templates_render;
 #[cfg(test)] mod admin_storage_render;
 #[cfg(test)] mod cropper_page_render;
+#[cfg(test)] mod hreflang;
 #[cfg(test)] mod search_page_render;
 #[cfg(test)] mod settings_template_contract;
 #[cfg(test)] mod startup;

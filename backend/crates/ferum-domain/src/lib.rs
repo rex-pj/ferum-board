@@ -5,6 +5,7 @@ pub mod locale;
 pub mod models;
 pub mod net;
 pub mod repositories;
+pub mod site_text;
 
 mod auth_user;
 pub use auth_user::AuthUser;

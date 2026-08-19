@@ -14,6 +14,7 @@ use ferum_application::permission::PermissionChecker;
 use ferum_application::shared::AppError;
 use ferum_application::storage_utils::{cas_key, release_cas_ref, validate_favicon_content_type};
 use ferum_application::validators::validate_favicon_magic;
+use ferum_domain::site_text;
 
 /// SMTP keys, editable from `/admin/settings` and applied without a restart via
 /// `AppState::email`. Named once so the writable list, the reload path and the
@@ -259,11 +260,36 @@ pub async fn get_config(
     Ok(Json(DataResponse::new(readable_only(all))))
 }
 
-/// Strips every key not on [`CONFIG_READABLE_KEYS`], so internal/infra keys and
+/// True when `update_config` will persist `key`.
+///
+/// A key is writable if it is named in [`CONFIG_WRITABLE_KEYS`] or is a per-locale
+/// form of a `site_text` key (`site_tagline:vi`). Locale suffixes cannot be listed
+/// statically — the roster is runtime config — so they are recognised by shape
+/// instead, and `split_localized_key` only accepts a canonical tag, which is what
+/// keeps `site_tagline:vi` and `site_tagline:VI` from becoming two rows for one
+/// language.
+///
+/// Shape, not membership: copy for a locale that is not installed is accepted and
+/// simply never resolves. That is deliberate — it lets copy be written ahead of a
+/// language pack, and the alternative would need the translator here, which the
+/// tests that call this cannot construct.
+pub fn is_writable_config_key(key: &str) -> bool {
+    CONFIG_WRITABLE_KEYS.contains(&key) || site_text::is_writable_localized_key(key)
+}
+
+/// True when `get_config` will return `key`. Same locale rule as
+/// [`is_writable_config_key`]; the two must stay in step for the localized family,
+/// since a field the page can save but not read back looks like a save that was
+/// discarded.
+fn is_readable_config_key(key: &str) -> bool {
+    CONFIG_READABLE_KEYS.contains(&key) || site_text::is_writable_localized_key(key)
+}
+
+/// Strips every key `is_readable_config_key` rejects, so internal/infra keys and
 /// `smtp_pass` never leave the process through this endpoint.
 fn readable_only(all: HashMap<String, String>) -> HashMap<String, String> {
     all.into_iter()
-        .filter(|(k, _)| CONFIG_READABLE_KEYS.contains(&k.as_str()))
+        .filter(|(k, _)| is_readable_config_key(k))
         .collect()
 }
 
@@ -277,7 +303,7 @@ pub async fn update_config(
 
     let mut filtered: HashMap<String, String> = body
         .into_iter()
-        .filter(|(k, _)| CONFIG_WRITABLE_KEYS.contains(&k.as_str()))
+        .filter(|(k, _)| is_writable_config_key(k))
         .collect();
 
     // Store the timezone exactly as validated. Validating a trimmed value and
@@ -385,8 +411,7 @@ pub async fn upload_favicon(
     // Persisted into site_config, so it must name the file rather than its
     // current location — see `ports::file_url`.
     let favicon_url = ferum_application::ports::file_url(&key);
-    state.site_config.set("favicon_url", &favicon_url).await?;
-    state.site_config_cache.write().await.insert("favicon_url".to_string(), favicon_url.clone());
+    state.set_site_config("favicon_url", &favicon_url).await?;
 
     if let Some(old) = old_key.filter(|k| k != &key) {
         release_cas_ref(&state.stored_files, &state.jobs, &old).await;
@@ -415,8 +440,7 @@ pub async fn delete_favicon(
         release_cas_ref(&state.stored_files, &state.jobs, &key).await;
     }
 
-    state.site_config.set("favicon_url", "").await?;
-    state.site_config_cache.write().await.insert("favicon_url".to_string(), String::new());
+    state.set_site_config("favicon_url", "").await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -458,8 +482,7 @@ pub async fn upload_logo(
 
     // Persisted into site_config — see `ports::file_url`.
     let logo_url = ferum_application::ports::file_url(&key);
-    state.site_config.set("logo_url", &logo_url).await?;
-    state.site_config_cache.write().await.insert("logo_url".to_string(), logo_url.clone());
+    state.set_site_config("logo_url", &logo_url).await?;
 
     if let Some(old) = old_key.filter(|k| k != &key) {
         release_cas_ref(&state.stored_files, &state.jobs, &old).await;
@@ -488,8 +511,7 @@ pub async fn delete_logo(
         release_cas_ref(&state.stored_files, &state.jobs, &key).await;
     }
 
-    state.site_config.set("logo_url", "").await?;
-    state.site_config_cache.write().await.insert("logo_url".to_string(), String::new());
+    state.set_site_config("logo_url", "").await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -40,7 +40,7 @@ pub async fn login(
 
     let active = active_theme(&state).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &Option::<CurrentUserCtx>::None);
     ctx.insert("active_theme", &active);
     ctx.insert("error", &q.error);
@@ -68,7 +68,7 @@ pub async fn register(
 
     let active = active_theme(&state).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &Option::<CurrentUserCtx>::None);
     ctx.insert("active_theme", &active);
     ctx.insert("registration_open", &registration_open);
@@ -89,7 +89,7 @@ pub async fn forgot_password(
 
     let active = active_theme(&state).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &Option::<CurrentUserCtx>::None);
     ctx.insert("active_theme", &active);
 
@@ -110,7 +110,7 @@ pub async fn reset_password(
 
     let active = active_theme(&state).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &Option::<CurrentUserCtx>::None);
     ctx.insert("active_theme", &active);
     ctx.insert("token", &q.token.unwrap_or_default());

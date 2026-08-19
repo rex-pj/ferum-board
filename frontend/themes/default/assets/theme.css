@@ -3024,6 +3024,42 @@ html, body { height: 100%; margin: 0; }
   background-color: var(--bs-secondary-bg);
 }
 
+/* ── Site Copy language sub-tabs ────────────────────────────
+   Pills inside a card header, sized down so they read as a scope switch for the
+   fields below rather than as navigation competing with the page's own tab strip.
+   `--bs-nav-pills-*` rather than element selectors so Bootstrap's own active,
+   hover and focus states still apply untouched. */
+
+.adm-copy-langs {
+  --bs-nav-link-font-size: .8125rem;
+  --bs-nav-link-padding-y: .3rem;
+  --bs-nav-link-padding-x: .7rem;
+  --bs-nav-pills-border-radius: 2rem;
+  gap: .25rem;
+  flex-wrap: wrap;
+}
+
+/* 44px tap target on touch without inflating the pills on a mouse-driven
+   desktop, where they sit in a dense header. */
+
+@media (pointer: coarse) {
+  .adm-copy-langs { --bs-nav-link-padding-y: .6rem; }
+}
+
+/* The "fallback" badge, styled here rather than with utility classes so the active
+   state can win on specificity instead of `!important`: on a filled pill the muted
+   token would land under the contrast floor against the accent. */
+
+.adm-copy-langs .nav-link .badge {
+  background-color: var(--bs-secondary-bg);
+  color: var(--bs-secondary-color);
+}
+
+.adm-copy-langs .nav-link.active .badge {
+  background-color: rgba(255, 255, 255, .22);
+  color: #fff;
+}
+
 /* ── Subcategory pill link ─────────────────────────────────── */
 
 .fr-subcat-pill { color: var(--bs-secondary-color); }

@@ -22,18 +22,34 @@ use crate::app_state::AppState;
 /// has to travel *with* the request, not be applied by script afterwards.
 pub const LOCALE_COOKIE: &str = "ferum_locale";
 
+/// `site_config` key naming the locale served to a visitor with no preference.
+///
+/// Absent means [`Locale::default_locale`] — the source locale. Deliberately not
+/// seeded, because "unset" and "explicitly English" want to stay distinguishable.
+pub const DEFAULT_LOCALE_KEY: &str = "default_locale";
+
 /// The locale resolved for this request, plus the path stripped of any locale
 /// prefix.
 ///
 /// Page handlers take this as an extension and hand it to `render_with_theme_in`.
-/// The canonical path is carried alongside the locale because `hreflang`
-/// alternates have to point at *this same page* in every other language, and by
-/// the time rendering happens the original URI is long gone.
+/// The canonical path is carried alongside the locale because `hreflang` alternates
+/// and `rel=canonical` both have to point at *this same page*, and by the time
+/// rendering happens the original URI is long gone.
 #[derive(Clone, Debug)]
 pub struct RequestLocale {
     pub locale: Locale,
     /// Language-neutral path, always starting with `/`: `/vi/forum/x` → `/forum/x`.
+    ///
+    /// Carries the pagination query when there is one (`/forum?page=3`) and nothing
+    /// else — see [`canonical_query`].
     pub canonical_path: String,
+    /// The locale served on **unprefixed** URLs, from `site_config.default_locale`.
+    ///
+    /// Carried per request rather than looked up at render time so `hreflang` can
+    /// tell which alternate is the unprefixed one without a second config read —
+    /// and so the answer cannot differ between the negotiation that chose the
+    /// locale and the markup that describes it.
+    pub site_default: Locale,
 }
 
 impl Default for RequestLocale {
@@ -41,15 +57,60 @@ impl Default for RequestLocale {
         RequestLocale {
             locale: Locale::default_locale(),
             canonical_path: "/".to_string(),
+            site_default: Locale::default_locale(),
         }
     }
 }
 
+/// The part of a query string that belongs in a canonical URL: `?page=N` for N > 1,
+/// and nothing else.
+///
+/// **Dropping the whole query would be worse than emitting none at all.** A canonical
+/// of `/forum` on `/forum?page=3` tells a crawler page 3 is a duplicate of page 1, so
+/// every thread that appears only on a later page drops out of the index — the exact
+/// opposite of what the tag is for.
+///
+/// Everything else is dropped on purpose. `utm_*` and friends are what `rel=canonical`
+/// primarily exists to collapse; `?lang=` names a language the URL prefix already
+/// carries; and sort/filter params produce the same set of items in a different order,
+/// which is a duplicate. `page=1` is dropped because it and a bare path are the same
+/// page, and self-canonicalising both spellings would leave the duplicate standing.
+pub fn canonical_query(query: Option<&str>) -> Option<String> {
+    let page = query?
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        // `rfind`, so a repeated key resolves the way `serde_urlencoded` resolves it
+        // for the handler's `page` field: last wins. A canonical naming a different
+        // page than the one rendered would have that page report itself a duplicate.
+        .rfind(|(k, _)| *k == "page")?
+        .1
+        .parse::<u32>()
+        .ok()?;
+    (page > 1).then(|| format!("?page={page}"))
+}
+
+/// The site's default locale, given the raw `site_config` value and the installed
+/// roster.
+///
+/// Falls back to [`Locale::default_locale`] when the value is absent, unparseable,
+/// or names a locale that is **not installed**. That last case is the one worth
+/// being deliberate about: honouring it would serve a language with no catalog, so
+/// every string on the page would render as a raw key. `startup.rs` logs a WARN for
+/// it, since a silently ignored setting is what made this key inert to begin with.
+///
+/// Pure, and separate from [`negotiate_locale`] for that reason — the decision is
+/// what needs testing, and an `AppState` cannot be constructed in the test suite.
+pub fn site_default_locale(raw: Option<&str>, installed: &[Locale]) -> Locale {
+    raw.and_then(Locale::parse)
+        .filter(|l| installed.contains(l))
+        .unwrap_or_else(Locale::default_locale)
+}
+
 /// Resolves the request's locale and attaches it as an extension.
 ///
-/// Precedence: path prefix > `?lang=` > cookie > `Accept-Language` > site
-/// default. A signed-in user's stored preference is applied later by the auth
-/// layer and overrides only the last three, so a `/vi/` link always wins.
+/// Precedence: path prefix > `?lang=` > cookie > `Accept-Language` > site default.
+/// A signed-in user's stored preference is applied later by the auth layer and
+/// overrides only the last three, so a `/vi/` link always wins.
 ///
 /// Unrecognised values fall through rather than 400 — a stale cookie naming a
 /// disabled locale must not lock the visitor out.
@@ -59,6 +120,18 @@ pub async fn negotiate_locale(
     next: Next,
 ) -> Response {
     let enabled = state.translator.available_locales();
+    // The in-memory config cache, not a query: this runs on every request, and
+    // `update_config` writes the cache in the same request that writes the row, so
+    // it cannot go stale.
+    let site_default = site_default_locale(
+        state
+            .site_config_cache
+            .read()
+            .await
+            .get(DEFAULT_LOCALE_KEY)
+            .map(String::as_str),
+        &enabled,
+    );
 
     let from_path = locale_from_path(req.uri().path(), &enabled);
     let locale = from_path
@@ -66,7 +139,7 @@ pub async fn negotiate_locale(
         .or_else(|| locale_from_query(req.uri().query(), &enabled))
         .or_else(|| locale_from_cookie(&req, &enabled))
         .or_else(|| locale_from_accept_language(&req, &enabled))
-        .unwrap_or_default();
+        .unwrap_or_else(|| site_default.clone());
 
     // Strip the prefix before the router sees the path, so every route is
     // declared once. Without this each route would need a duplicate `/{locale}/…`
@@ -79,15 +152,19 @@ pub async fn negotiate_locale(
 
     // Captured *after* stripping, so it is the language-neutral path regardless
     // of how the visitor arrived.
-    let canonical_path = req.uri().path().to_string();
+    let canonical_path = match canonical_query(req.uri().query()) {
+        Some(q) => format!("{}{q}", req.uri().path()),
+        None => req.uri().path().to_string(),
+    };
 
     // Both are inserted: `translate_errors` only needs the locale, while page
-    // handlers need the path too. Keeping the bare `Locale` avoids making the
-    // error path depend on a web-layer struct.
+    // handlers need the path and the unprefixed locale too. Keeping the bare
+    // `Locale` avoids making the error path depend on a web-layer struct.
     req.extensions_mut().insert(locale.clone());
     req.extensions_mut().insert(RequestLocale {
         locale,
         canonical_path,
+        site_default,
     });
     next.run(req).await
 }

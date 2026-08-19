@@ -70,7 +70,7 @@ pub async fn user_profile(
     let nav_categories = nav_categories_ctx(&state, auth_user.as_ref()).await;
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     ctx.insert("profile", &profile);

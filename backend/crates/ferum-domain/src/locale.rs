@@ -25,11 +25,21 @@ const MAX_TAG_LEN: usize = 12;
 pub struct Locale(String);
 
 impl Locale {
-    /// The fallback every other locale ultimately resolves through. Also the
-    /// locale whose catalog defines the canonical key set used for coverage
-    /// reporting in the admin UI.
+    /// The **source locale** — the language the shipped `.ftl` catalogs and
+    /// `EMAIL_TEMPLATE_DEFAULTS` are written in, the fallback every other locale
+    /// ultimately resolves through, and the catalog whose key set defines coverage
+    /// in the admin UI.
+    ///
+    /// **Not the site default.** Which language a visitor with no preference gets
+    /// is runtime config (`site_config.default_locale`, resolved by
+    /// `middleware::locale::site_default_locale`) and may be any installed locale.
+    /// Conflating the two breaks something whichever way it is done: a resolution
+    /// chain ending at the site default renders a raw key for every string only the
+    /// source catalog carries, and negotiation pinned to the source locale is the
+    /// bug that made `default_locale` inert for as long as it existed.
     pub const DEFAULT_TAG: &'static str = "en";
 
+    /// The source locale. See [`Self::DEFAULT_TAG`] — this is not the site default.
     pub fn default_locale() -> Locale {
         Locale(Self::DEFAULT_TAG.to_string())
     }
@@ -89,9 +99,12 @@ impl Locale {
         &self.0
     }
 
-    /// True when this is the site-wide default. The default locale is served on
-    /// unprefixed URLs, so routing needs to ask this often.
-    pub fn is_default(&self) -> bool {
+    /// True when this is the source locale ([`Self::DEFAULT_TAG`]).
+    ///
+    /// This is **not** "is served on unprefixed URLs" — that is the site default,
+    /// which is configurable. Use it for storage and resolution rules anchored on
+    /// the shipped catalogs, never for routing.
+    pub fn is_source_locale(&self) -> bool {
         self.0 == Self::DEFAULT_TAG
     }
 

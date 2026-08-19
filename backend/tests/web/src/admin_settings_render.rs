@@ -12,7 +12,10 @@
 use std::path::PathBuf;
 
 use ferum_domain::Locale;
-use ferum_web::handlers::admin::api::config::{CONFIG_SECRET_KEYS, CONFIG_WRITABLE_KEYS};
+use ferum_domain::site_text::{localized_key, LOCALIZED_CONFIG_KEYS};
+use ferum_web::handlers::admin::api::config::{
+    is_writable_config_key, CONFIG_SECRET_KEYS, CONFIG_WRITABLE_KEYS,
+};
 use ferum_web::view_models::page_context::{CurrentUserCtx, SiteCtx};
 use serde_json::json;
 use tera::Context;
@@ -116,6 +119,10 @@ fn ctx_with_host(
     config.insert("smtp_port".into(), json!("587"));
     config.insert("smtp_user".into(), json!("apikey"));
     ctx.insert("config", &serde_json::Value::Object(config));
+    // `site_copy` — one pane per installed locale, built by the handler from
+    // `site_text::localized_key`. Two locales exercise the language tab strip;
+    // `a_single_language_install_shows_no_language_tabs` covers the other branch.
+    ctx.insert("site_copy", &site_copy_ctx(&["en", "vi"]));
     ctx.insert("smtp_pass_set", &smtp_pass_set);
     // Presence flag, never the key: env-only, and the panel only needs to know
     // whether selecting Resend would send anything.
@@ -266,12 +273,12 @@ async fn the_smtp_password_state_is_carried_by_a_badge_not_the_placeholder() {
     // something — and it renders as the faintest text on the form, so state
     // moved to a badge beside the label.
     let set = render("smtp", true, false).await;
-    let set_label = label_for(&set, "smtp_pass");
+    let set_label = label_for(&set, "cfg-smtp_pass");
     assert!(set_label.contains("Saved"), "a stored password must be reported");
     assert!(!set_label.contains("Not set"));
 
     let unset = render("smtp", false, false).await;
-    let unset_label = label_for(&unset, "smtp_pass");
+    let unset_label = label_for(&unset, "cfg-smtp_pass");
     assert!(unset_label.contains("Not set"));
     assert!(!unset_label.contains("Saved"));
 
@@ -312,14 +319,17 @@ fn input_tag<'a>(html: &'a str, field: &str) -> &'a str {
     &html[open..=close]
 }
 
-/// Returns the `<label …>…</label>` bound to `cfg-{field}`, without its closing
-/// tag. Scoped for the same reason as [`input_tag`]: "Saved" and "Not set" are
-/// short enough to appear in unrelated copy on one of the other tabs.
-fn label_for<'a>(html: &'a str, field: &str) -> &'a str {
-    let needle = format!("for=\"cfg-{field}\"");
+/// Returns the `<label …>…</label>` bound to element `id`, without its closing tag.
+/// Scoped for the same reason as [`input_tag`]: "Saved" and "Not set" are short enough
+/// to appear in unrelated copy on one of the other tabs.
+///
+/// Takes the full id, not a `cfg-` suffix — not every labelled control on this page is
+/// a config field (`primary-color-hex` is a view over one).
+fn label_for<'a>(html: &'a str, id: &str) -> &'a str {
+    let needle = format!("for=\"{id}\"");
     let at = html
         .find(&needle)
-        .unwrap_or_else(|| panic!("no label bound to cfg-{field}"));
+        .unwrap_or_else(|| panic!("no label bound to {id}"));
     let open = html[..at].rfind("<label").expect("label tag start");
     let close = at + html[at..].find("</label>").expect("label tag end");
     &html[open..close]
@@ -371,4 +381,284 @@ async fn the_secrets_at_rest_posture_is_reported_both_ways() {
 
     let plaintext = render("smtp", true, false).await;
     assert!(plaintext.contains("plaintext"));
+}
+
+/// `site_copy` as the settings handler builds it: one pane per installed locale,
+/// source locale first, each holding a field per localized key.
+///
+/// Keys go through `site_text::localized_key` rather than being spelled out, so this
+/// fixture cannot drift from the rule the handler and the writability check share.
+fn site_copy_ctx(tags: &[&str]) -> serde_json::Value {
+    let panes: Vec<serde_json::Value> = tags
+        .iter()
+        .map(|tag| {
+            let locale = Locale::parse(tag).expect("test tags are valid");
+            let is_source = locale.is_source_locale();
+            let fields: serde_json::Map<String, serde_json::Value> = LOCALIZED_CONFIG_KEYS
+                .iter()
+                .map(|base| {
+                    (
+                        (*base).to_string(),
+                        json!({
+                            "key": localized_key(base, &locale),
+                            "value": "",
+                            // The source pane has no fallback of its own; a
+                            // translation pane shows the source text as placeholder.
+                            "fallback": if is_source { "" } else { FALLBACK_HINT },
+                        }),
+                    )
+                })
+                .collect();
+            json!({
+                "tag": tag,
+                "name": tag,
+                "is_source": is_source,
+                "fields": serde_json::Value::Object(fields),
+            })
+        })
+        .collect();
+    json!(panes)
+}
+
+/// Stands in for the source-locale copy on a translation pane's placeholder.
+const FALLBACK_HINT: &str = "a modern self-hosted forum";
+/// Every `cfg-*` id the *rendered* page carries, in document order.
+fn rendered_cfg_ids(html: &str) -> Vec<&str> {
+    html.match_indices("id=\"cfg-")
+        .map(|(at, _)| {
+            let rest = &html[at + "id=\"cfg-".len()..];
+            let end = rest.find('"').expect("unterminated id attribute");
+            &rest[..end]
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn every_rendered_cfg_field_is_writable() {
+    // `settings_template_contract.rs` scans the template source, which cannot see
+    // through `cfg-{{ f.key }}` in the copy_field macro. Only a real render can, and
+    // the failure it guards against is the worst kind available here: a translation
+    // field whose key `update_config` drops, so the save returns 200 and changes
+    // nothing.
+    let html = render("smtp", true, false).await;
+    let ids = rendered_cfg_ids(&html);
+
+    assert!(
+        ids.contains(&"site_tagline:vi"),
+        "the language panes rendered no per-locale field; ids were {ids:?}"
+    );
+    for id in &ids {
+        assert!(
+            is_writable_config_key(id),
+            "cfg-{id} is rendered but `update_config` would drop it"
+        );
+    }
+
+    // The translation input must carry the same cap as the field it translates, or
+    // one locale can be typed longer than another and only that save fails.
+    assert_eq!(
+        length_cap(&html, "site_tagline:vi"),
+        length_cap(&html, "site_tagline"),
+        "a translation field's maxlength differs from the field it translates"
+    );
+}
+
+#[tokio::test]
+async fn a_label_passed_into_the_macro_survives() {
+    // A Tera macro does NOT inherit the render context, so a label the macro looked up
+    // itself would render empty. These are passed in as arguments; the failure mode is
+    // a field with no visible label at all, which no other test would notice.
+    let html = render("smtp", true, false).await;
+    for label in ["Slogan", "Tagline"] {
+        assert!(html.contains(label), "the copy field lost its {label} label");
+    }
+}
+
+#[tokio::test]
+async fn a_translation_pane_offers_the_fallback_text_as_its_placeholder() {
+    // A blank translation falls back to the source copy, and the placeholder is where
+    // that is visible — an empty field with no hint reads as "this language has no
+    // tagline", which is the opposite of what happens.
+    let html = render("smtp", true, false).await;
+    let translated = input_tag(&html, "site_tagline:vi");
+    assert!(
+        translated.contains(&format!("placeholder=\"{FALLBACK_HINT}\"")),
+        "the translation field does not show the fallback copy: {translated}"
+    );
+    // …and the source field keeps its own example placeholder rather than echoing
+    // itself.
+    let source = input_tag(&html, "site_tagline");
+    assert!(
+        !source.contains(FALLBACK_HINT),
+        "the source field is using the fallback hint as a placeholder: {source}"
+    );
+}
+
+#[tokio::test]
+async fn every_installed_language_gets_a_tab_and_exactly_one_pane_is_open() {
+    // Two panes open at once stacks both languages' fields on top of each other; none
+    // open leaves the card looking empty. Bootstrap picks the pane by `show active`,
+    // so that has to land on exactly one — the first, which is the source locale.
+    let html = render("smtp", true, false).await;
+    for tag in ["en", "vi"] {
+        assert_eq!(
+            html.matches(&format!("id=\"copy-pane-{tag}\"")).count(),
+            1,
+            "expected exactly one pane for {tag}"
+        );
+        assert!(
+            html.contains(&format!("data-bs-target=\"#copy-pane-{tag}\"")),
+            "no language tab targets the {tag} pane"
+        );
+    }
+    assert_eq!(
+        html.matches("copy-pane-").count(),
+        // one button target + one pane id per locale, and one `show active` marker
+        // that is counted by neither.
+        4,
+        "the language tab strip and the panes are out of step"
+    );
+}
+
+#[tokio::test]
+async fn a_single_language_install_shows_no_language_tabs() {
+    // One installed language means there is nothing to switch between, and a lone
+    // pill labelled "English" beside a "Fallback" badge is noise that implies a
+    // choice the operator does not have.
+    let mut c = ctx("smtp", true, false);
+    c.insert("site_copy", &site_copy_ctx(&["en"]));
+    let html = engine()
+        .await
+        .render(&Locale::default_locale(), TEMPLATE, c)
+        .await
+        .expect("rendering a single-language install must succeed");
+
+    for id in rendered_cfg_ids(&html) {
+        assert!(
+            !id.contains(':'),
+            "cfg-{id} is a per-locale field on a single-language install"
+        );
+    }
+    assert!(
+        !html.contains("adm-copy-langs"),
+        "the language tab strip must not render for a single language"
+    );
+    // …nor the rule explaining a fallback there is nothing to fall back from.
+    assert!(
+        !html.contains("Fallback where its own text is blank"),
+        "the fallback rule must not render for a single language"
+    );
+    // The fields themselves must still be there — hiding the strip must not hide the
+    // pane it switches.
+    assert!(
+        html.contains("id=\"cfg-site_tagline\""),
+        "the source copy fields disappeared with the tab strip"
+    );
+}
+
+/// The `maxlength` on `cfg-{field}`.
+fn length_cap<'a>(html: &'a str, field: &str) -> &'a str {
+    let tag = input_tag(html, field);
+    let at = tag
+        .find("maxlength=\"")
+        .unwrap_or_else(|| panic!("cfg-{field} has no maxlength: {tag}"));
+    let rest = &tag[at + "maxlength=\"".len()..];
+    &rest[..rest.find('"').expect("unterminated maxlength")]
+}
+
+
+#[tokio::test]
+async fn the_fallback_rule_is_stated_once_beside_the_language_pills() {
+    // It says the same thing whichever pane is open, so it belongs to the section, not
+    // to a pane. Repeating it per pane also made the card resize on every switch — the
+    // source pane's wording was a line shorter, so the fields jumped under the pointer.
+    let html = render("smtp", true, false).await;
+    assert_eq!(
+        html.matches("Fallback where its own text is blank").count(),
+        1,
+        "the fallback rule must be stated exactly once"
+    );
+}
+
+#[tokio::test]
+async fn slogan_and_tagline_share_a_row_in_every_language() {
+    // The two are read together and written together, so they sit side by side rather
+    // than stacked. Asserted between the two ids so it holds per language, rather than
+    // wherever a `col-md-6` happens to appear elsewhere on the page.
+    let html = render("smtp", true, false).await;
+    for suffix in ["", ":vi"] {
+        let from = html
+            .find(&format!("cfg-site_slogan{suffix}\""))
+            .unwrap_or_else(|| panic!("no slogan field for {suffix:?}"));
+        let to = html
+            .find(&format!("cfg-site_tagline{suffix}\""))
+            .unwrap_or_else(|| panic!("no tagline field for {suffix:?}"));
+        assert!(from < to, "the fields are out of order for {suffix:?}");
+        assert!(
+            html[from..to].contains("col-md-6"),
+            "slogan and tagline are not half-width siblings for {suffix:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_accent_colour_sits_inside_the_branding_grid() {
+    // It used to be a full-width row of its own below the two upload columns, which
+    // left two voids at once: the favicon column ended a block early, and a 220px
+    // control had the rest of a 12-wide row to itself. Placing it in the shorter column
+    // closes both. Pinned because the row it came from is one edit away from returning.
+    let html = render("smtp", true, false).await;
+
+    let color = html
+        .find("id=\"cfg-primary_color\"")
+        .expect("the colour control must render");
+    let favicon = html
+        .find("id=\"favicon-file-input\"")
+        .expect("the favicon upload must render");
+    // The next card. Everything between the favicon upload and it is still Branding.
+    let next_card = html
+        .find("id=\"cfg-reporting_timezone\"")
+        .expect("the Localization card must follow Branding");
+
+    assert!(
+        favicon < color && color < next_card,
+        "the colour control is not inside the Branding card, after the favicon block"
+    );
+    // The full-width row it came from was introduced by an `<hr>`. Its absence between
+    // the two is what says the colour is a cell in the grid rather than a row below it.
+    assert!(
+        !html[favicon..color].contains("<hr"),
+        "an <hr> between the favicon block and the colour means the colour is back in a \
+         full-width row of its own"
+    );
+}
+
+#[tokio::test]
+async fn the_two_second_row_branding_blocks_are_built_identically() {
+    // Logo URL and the accent colour sit opposite each other as each column's second
+    // block, so they have to start on the same line. That is purely a function of their
+    // wrapper and label classes being the same, and they had already drifted — one
+    // bordered and one not, one `form-control-sm` and one not — which reads as a
+    // misaligned card at a glance and is invisible to every other test here.
+    let html = render("smtp", true, false).await;
+
+    for field in ["cfg-logo_url", "primary-color-hex"] {
+        let label = label_for(&html, field);
+        assert!(
+            label.contains("adm-section-label") && label.contains("text-uppercase"),
+            "cfg-{field}'s block label is not the shared section-label style: {label}"
+        );
+        assert!(
+            html[..html.find(&format!("id=\"{field}\"")).expect("field renders")]
+                .rfind("border-top pt-3 mt-4")
+                .is_some_and(|at| at > html.find("class=\"row g-4\"").expect("branding row")),
+            "cfg-{field}'s block is not opened by the shared `border-top pt-3 mt-4` wrapper"
+        );
+    }
+
+    // Neither may be a small control while the other is full size.
+    assert!(
+        !input_tag(&html, "logo_url").contains("form-control-sm"),
+        "the logo URL input is a size the accent colour beside it is not"
+    );
 }

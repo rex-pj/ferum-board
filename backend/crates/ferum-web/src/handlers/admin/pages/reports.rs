@@ -56,7 +56,7 @@ pub async fn reports(
         .collect();
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert(
         "current_user",
         &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
@@ -310,7 +310,7 @@ pub async fn audit_log(
         .collect();
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert(
         "current_user",
         &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,

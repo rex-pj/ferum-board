@@ -76,7 +76,7 @@ pub async fn account(
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &current_user);
     ctx.insert("active_theme", &active);
     ctx.insert("preferences", &prefs);
@@ -122,7 +122,7 @@ pub async fn notifications(
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, Some(&auth_user)).await);
     ctx.insert("active_theme", &active);
     ctx.insert("notifications", &notif_ctx);
@@ -190,7 +190,7 @@ pub async fn bookmarks(
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, Some(&auth_user)).await);
     ctx.insert("active_theme", &active);
     ctx.insert("threads", &threads);

@@ -73,7 +73,7 @@ pub async fn new_thread(
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, Some(&auth_user)).await);
     ctx.insert("active_theme", &active);
     ctx.insert("categories", &categories_ctx);
@@ -152,7 +152,7 @@ pub async fn edit_thread(
     let active = active_theme(&state).await;
     let nav_categories = nav_categories_ctx(&state, Some(&auth_user)).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, Some(&auth_user)).await);
     ctx.insert("active_theme", &active);
     // No `thread_id`: /api/threads/* identifies threads by slug, so the edit

@@ -42,10 +42,18 @@ impl Default for FieldLimitsCtx {
 }
 
 /// Minimal site info injected into every page.
+///
+/// **Request-scoped, not site-wide.** `slogan` and `tagline` are resolved for the
+/// requesting visitor's locale by `site_ctx`, so a value cached across requests
+/// would serve one reader's language to everyone — `tagline` is every page's
+/// `<meta name="description">`.
 #[derive(Serialize, Clone)]
 pub struct SiteCtx {
     pub name: String,
+    /// Short copy beside the logo. Per-locale; see `site_text`.
     pub slogan: String,
+    /// Meta description, and the fallback subtitle on several CTA blocks.
+    /// Per-locale; see `site_text`.
     pub tagline: String,
     pub logo_url: Option<String>,
     pub favicon_url: Option<String>,

@@ -20,6 +20,7 @@ use ferum_domain::Locale;
 use super::super::{render_admin, site_ctx};
 use crate::app_state::AppState;
 use crate::handlers::pages::{require_page_auth, PageError};
+use crate::middleware::locale::{site_default_locale, DEFAULT_LOCALE_KEY};
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::CurrentUserCtx;
 
@@ -27,8 +28,6 @@ use crate::view_models::page_context::CurrentUserCtx;
 /// Absent means "everything installed is enabled", which is the right default
 /// for a site that has just dropped in a language pack.
 pub const ENABLED_LOCALES_KEY: &str = "enabled_locales";
-/// `site_config` key holding the tag served to visitors with no preference.
-pub const DEFAULT_LOCALE_KEY: &str = "default_locale";
 
 #[derive(Serialize)]
 struct LocaleRow {
@@ -93,7 +92,7 @@ pub async fn languages(
         .collect();
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert(
         "current_user",
         &crate::handlers::pages::with_viewer_timezone(&state, &auth_user, CurrentUserCtx::from(&auth_user)).await,
@@ -132,8 +131,7 @@ pub async fn update_locale(
         // Making a locale the default implies enabling it — a default nobody can
         // be served is a broken state, so don't allow the UI to produce it.
         state
-            .site_config
-            .set(DEFAULT_LOCALE_KEY, locale.as_str())
+            .set_site_config(DEFAULT_LOCALE_KEY, locale.as_str())
             .await?;
         let mut enabled = enabled_locales(&state)
             .await
@@ -174,8 +172,17 @@ pub async fn update_locale(
 
 /// Enabled locales, or `None` when the admin has never restricted the set —
 /// which means "all installed".
+///
+/// Read from the in-memory config cache rather than the table, so it cannot
+/// disagree with `negotiate_locale`, which reads the same map. `write_enabled`
+/// keeps the two in step.
 async fn enabled_locales(state: &AppState) -> Option<Vec<Locale>> {
-    let raw = state.site_config.get(ENABLED_LOCALES_KEY).await.ok()??;
+    let raw = state
+        .site_config_cache
+        .read()
+        .await
+        .get(ENABLED_LOCALES_KEY)
+        .cloned()?;
     let parsed: Vec<Locale> = raw
         .split(',')
         .map(str::trim)
@@ -193,16 +200,23 @@ async fn write_enabled(state: &AppState, locales: &[Locale]) -> Result<(), ferum
         .map(|l| l.to_string())
         .collect::<Vec<_>>()
         .join(",");
-    state.site_config.set(ENABLED_LOCALES_KEY, &joined).await
+    state.set_site_config(ENABLED_LOCALES_KEY, &joined).await
 }
 
+/// The site default, resolved exactly as `negotiate_locale` resolves it.
+///
+/// Shares [`site_default_locale`] rather than re-reading the key, because this page
+/// is where an admin *sees* which locale is default: a second implementation could
+/// show a checkmark on a locale visitors are never served. The installed check lives
+/// in that function, which is why an uninstalled tag reads back as the source locale
+/// here too.
 async fn configured_default(state: &AppState) -> Locale {
-    state
-        .site_config
-        .get(DEFAULT_LOCALE_KEY)
+    let installed = state.translator.available_locales();
+    let raw = state
+        .site_config_cache
+        .read()
         .await
-        .ok()
-        .flatten()
-        .and_then(|t| Locale::parse(&t))
-        .unwrap_or_default()
+        .get(DEFAULT_LOCALE_KEY)
+        .cloned();
+    site_default_locale(raw.as_deref(), &installed)
 }

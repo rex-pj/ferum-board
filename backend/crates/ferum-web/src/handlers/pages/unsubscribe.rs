@@ -37,7 +37,7 @@ pub async fn unsubscribe(
 
     let active = active_theme(&state).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     // Renders for a signed-in reader and a stranger alike — the token is what
     // authorises the change, so the nav simply reflects whoever is looking.
     match &auth_user {

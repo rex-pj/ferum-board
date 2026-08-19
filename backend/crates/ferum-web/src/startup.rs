@@ -804,6 +804,31 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
         }),
     ));
 
+    // A `default_locale` naming a locale with no catalog installed is silently
+    // ignored by `negotiate_locale` — it has to be, or every string on the page
+    // would render as a raw key. Say so at boot: a setting that quietly does
+    // nothing is precisely how this key stayed decorative for as long as it did.
+    {
+        let installed = translator.available_locales();
+        let configured = site_config_cache
+            .read()
+            .await
+            .get(crate::middleware::locale::DEFAULT_LOCALE_KEY)
+            .cloned();
+        if let Some(raw) = configured.as_deref().filter(|r| !r.trim().is_empty()) {
+            let effective = crate::middleware::locale::site_default_locale(Some(raw), &installed);
+            if effective.as_str() != raw {
+                tracing::warn!(
+                    configured = raw,
+                    effective = effective.as_str(),
+                    "site_config.default_locale names a locale that is not installed; \
+                     visitors with no preference are served {effective} instead. Add a \
+                     directory under locales/ or change it at /admin/languages."
+                );
+            }
+        }
+    }
+
     // ─── Image processing ────────────────────────────────────────────────────
     // Same adapter/fallback shape as storage, with one difference worth stating:
     // passthrough is not a degraded mode to apologise for. It is exactly what

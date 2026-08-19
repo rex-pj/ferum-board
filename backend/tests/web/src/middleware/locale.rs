@@ -5,8 +5,8 @@ use axum::http::Request as HttpRequest;
 
 use ferum_domain::Locale;
 use ferum_web::middleware::locale::{
-    locale_from_accept_language, locale_from_cookie, locale_from_path, locale_from_query,
-    strip_locale_prefix,
+    canonical_query, locale_from_accept_language, locale_from_cookie, locale_from_path,
+    locale_from_query, site_default_locale, strip_locale_prefix,
 };
 
 fn enabled() -> Vec<Locale> {
@@ -152,5 +152,99 @@ fn malformed_accept_language_does_not_panic() {
     for raw in ["", ";;;", "q=", "en;q=notanumber", "????"] {
         let req = req_with(header::ACCEPT_LANGUAGE, raw);
         let _ = locale_from_accept_language(&req, &enabled());
+    }
+}
+
+#[test]
+fn the_site_default_is_the_last_fallback_and_must_be_installed() {
+    // The setting exists so a Vietnamese forum can serve Vietnamese at `/`. It went
+    // unread for its whole life — `negotiate_locale` used `Locale::default()` — so
+    // "set as default" on /admin/languages changed nothing a visitor could see.
+    let installed = enabled();
+    assert_eq!(site_default_locale(Some("vi"), &installed), Locale::parse("vi").unwrap());
+
+    // Not installed → the source locale, never the configured tag. Honouring it
+    // would serve a language with no catalog, rendering every string as a raw key.
+    assert_eq!(site_default_locale(Some("de"), &installed), Locale::default_locale());
+    // Unset, blank and unparseable all mean "use the source locale".
+    for raw in [None, Some(""), Some("not-a-locale"), Some("../etc/passwd")] {
+        assert_eq!(
+            site_default_locale(raw, &installed),
+            Locale::default_locale(),
+            "{raw:?} must fall back to the source locale"
+        );
+    }
+}
+
+#[test]
+fn a_non_canonical_default_still_resolves() {
+    // `Locale::parse` canonicalises, so a hand-edited row saying `VI` names the same
+    // language as `vi` and must not read as "not installed".
+    assert_eq!(
+        site_default_locale(Some("VI"), &enabled()),
+        Locale::parse("vi").unwrap()
+    );
+}
+
+#[test]
+fn the_site_default_does_not_override_an_expressed_preference() {
+    // The site default is the LAST link in the precedence chain, so every explicit
+    // signal still wins. Pinned here on the readers themselves: a change that made
+    // the default outrank a cookie would silently ignore what a visitor chose.
+    let installed = enabled();
+    let vi = Locale::parse("vi").unwrap();
+    assert_eq!(locale_from_path("/ja/forum", &installed), Locale::parse("ja"));
+    assert_eq!(locale_from_query(Some("lang=ja"), &installed), Locale::parse("ja"));
+    assert_eq!(
+        locale_from_cookie(&req_with(header::COOKIE, "ferum_locale=ja"), &installed),
+        Locale::parse("ja")
+    );
+    // …and none of them is affected by what the site default happens to be.
+    assert_eq!(site_default_locale(Some("vi"), &installed), vi);
+}
+
+#[test]
+fn a_canonical_url_keeps_pagination_and_drops_everything_else() {
+    // `rel=canonical` exists to collapse the several URLs that reach one page, so the
+    // query has to be filtered rather than kept or dropped wholesale. Keeping it lets
+    // `?utm_source=x` mint a fresh canonical per campaign; dropping it points page 3
+    // of a listing at page 1, which takes every thread that only appears later out of
+    // the index.
+    assert_eq!(canonical_query(Some("page=3")), Some("?page=3".to_string()));
+    assert_eq!(
+        canonical_query(Some("sort=hot&page=12&utm_source=x")),
+        Some("?page=12".to_string())
+    );
+    // A repeated key resolves the way `serde_urlencoded` resolves it for the handler:
+    // last wins. Otherwise the canonical could name a different page than the one
+    // actually rendered.
+    assert_eq!(
+        canonical_query(Some("page=2&page=3")),
+        Some("?page=3".to_string())
+    );
+
+    for dropped in [
+        None,
+        // Page 1 and a bare path are the same page; self-canonicalising both spellings
+        // would leave the duplicate standing.
+        Some("page=1"),
+        Some("page=0"),
+        Some("utm_source=newsletter&utm_medium=email"),
+        // A sort or filter reorders the same items — a duplicate, not a page of its own.
+        Some("sort=hot&tag=rust"),
+        // The locale is carried by the URL prefix; a `?lang=` copy is the duplicate.
+        Some("lang=vi"),
+        // Unparseable rather than absent: fall back to the bare path, never emit
+        // `?page=` with a value a crawler cannot follow.
+        Some("page=abc"),
+        Some("page="),
+        Some("page"),
+        Some(""),
+    ] {
+        assert_eq!(
+            canonical_query(dropped),
+            None,
+            "{dropped:?} must not reach the canonical URL"
+        );
     }
 }

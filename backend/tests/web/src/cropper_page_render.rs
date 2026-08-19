@@ -105,6 +105,7 @@ async fn account_page_offers_a_cropper_for_both_avatar_and_cover() {
     let mut ctx = shell();
     ctx.insert("current_user", &viewer());
     ctx.insert("current_path", "/account");
+    ctx.insert("default_locale", "en");
     // Built from the real struct, not a hand-written JSON blob: a field renamed
     // on `UserProfileCtx` then breaks this file instead of silently diverging
     // from what the handler actually inserts.
@@ -170,6 +171,7 @@ async fn edit_thread_offers_a_cropper_when_the_author_may_upload() {
     let mut ctx = shell();
     ctx.insert("current_user", &viewer());
     ctx.insert("current_path", "/edit-thread/sofa-2y");
+    ctx.insert("default_locale", "en");
     ctx.insert("thread_slug", "sofa-2y");
     ctx.insert("thread_title", "Sofa after 2 years");
     ctx.insert("thread_thumbnail_url", &json!(null));
@@ -199,6 +201,7 @@ async fn edit_thread_hides_the_cropper_from_an_author_who_may_not_upload() {
     let mut ctx = shell();
     ctx.insert("current_user", &viewer());
     ctx.insert("current_path", "/edit-thread/sofa-2y");
+    ctx.insert("default_locale", "en");
     ctx.insert("thread_slug", "sofa-2y");
     ctx.insert("thread_title", "Sofa after 2 years");
     ctx.insert("thread_thumbnail_url", &json!(null));

@@ -1,0 +1,26 @@
+{# Admin-panel macros.
+
+   Separate from `default/templates/macros.html` — that file belongs to the theme
+   and a child theme may override it, which would take an admin macro with it. #}
+
+{# One localized copy field inside a Site Copy language pane.
+
+   `f` is `loc.fields.<base_key>` from the settings handler, which composes the
+   storage key. The id must be `cfg-{{ f.key }}` and nothing else: `saveSettings`
+   collects `[id^="cfg-"]` and strips the prefix to recover the key, which is what
+   lets every language save in one request with no JS of its own — including panes
+   that are hidden, since a hidden input is still collected while a disabled one
+   is not.
+
+   On a translation pane the placeholder is the source-locale text rather than an
+   example, so a blank field shows what it will actually fall back to. #}
+{% macro copy_field(f, label, help, placeholder, maxlength, is_source, lang) %}
+<label class="form-label" for="cfg-{{ f.key }}">{{ label }}</label>
+{# `lang` on the input, not on the pane: the pane also holds English labels, and
+   telling the browser they are Vietnamese would mis-hyphenate and mis-spellcheck
+   them. Only the value typed here is in that language. #}
+<input type="text" id="cfg-{{ f.key }}" class="form-control" lang="{{ lang }}"
+       value="{{ f.value }}" maxlength="{{ maxlength }}"
+       placeholder="{% if is_source %}{{ placeholder }}{% else %}{{ f.fallback }}{% endif %}">
+<div class="form-text">{{ help }}</div>
+{% endmacro copy_field %}

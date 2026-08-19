@@ -24,13 +24,37 @@
   <meta name="twitter:description" content="{{ site.tagline }}">
   {% endblock %}
 
+  {# ── Canonical URL ───────────────────────────────────────────────
+     One address per page, so the several that reach the same content collapse into
+     it. There are always at least two: the site default is served both unprefixed
+     and under its own prefix, so `/forum` and `/vi/forum` are the same page when
+     `vi` is the default. Add tracking parameters and the count is unbounded.
+
+     Built from the RESOLVED locale, not the alternates loop: when `locale` is the
+     site default the prefix is omitted, which is what points `/vi/forum` at
+     `/forum`. `current_path` carries `?page=N` for N > 1 and nothing else — see
+     `middleware::locale::canonical_query`; collapsing a paginated list onto page 1
+     would drop every later page out of the index.
+
+     Wrapped in a block so a page with a genuinely different canonical — content
+     reachable under more than one route — can override it rather than emitting a
+     second tag beside this one. #}
+  {% block canonical %}
+  <link rel="canonical"
+        href="{{ site.url | default(value='') }}{% if locale != default_locale %}/{{ locale }}{% endif %}{{ current_path | default(value='/') }}">
+  {% endblock %}
+
   {# hreflang alternates — only emitted when the site actually speaks more than
-     one language, so a single-language forum keeps a clean head. The default
-     locale is served unprefixed and is also the x-default target. #}
+     one language, so a single-language forum keeps a clean head.
+
+     `default_locale` is the SITE default from site_config, not the source locale:
+     it is the one served on unprefixed URLs, and it is the x-default target. This
+     used to be a literal 'en', so a site whose default was Vietnamese advertised
+     `/` as English to every crawler. #}
   {% if available_locales and available_locales | length > 1 %}
     {% for alt in available_locales %}
       <link rel="alternate" hreflang="{{ alt }}"
-            href="{{ site.url | default(value='') }}{% if alt != 'en' %}/{{ alt }}{% endif %}{{ current_path | default(value='/') }}">
+            href="{{ site.url | default(value='') }}{% if alt != default_locale %}/{{ alt }}{% endif %}{{ current_path | default(value='/') }}">
     {% endfor %}
     <link rel="alternate" hreflang="x-default"
           href="{{ site.url | default(value='') }}{{ current_path | default(value='/') }}">

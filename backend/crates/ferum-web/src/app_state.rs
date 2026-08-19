@@ -36,6 +36,7 @@ use ferum_application::usecases::theme_usecase::ThemeUseCase;
 use ferum_infrastructure::email::ReloadableEmailService;
 use ferum_domain::repositories::{SiteConfigRepository, StoredFileRepository, UserRoleRepository};
 use ferum_domain::repositories::user_repository::UserRepository;
+use ferum_domain::AppError;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -183,4 +184,25 @@ pub struct AppState {
     /// skip a `SELECT COUNT(admins)` DB round-trip on every HTML page load — setup
     /// can never revert to "needed" within a process lifetime.
     pub setup_complete: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl AppState {
+    /// Writes one `site_config` row **and** the in-memory cache, in that order.
+    ///
+    /// `site_config_cache` is the read path for `site_ctx`, `negotiate_locale` and the
+    /// rate-limit middleware, so a write that skips it takes effect only on the next
+    /// restart — a setting that appears to save and does nothing until someone
+    /// reboots the process, which is worse to diagnose than one that plainly fails.
+    /// `update_config` does the same thing inline for its batch.
+    ///
+    /// Row first: the cache is what serves requests, so populating it before the row
+    /// is durable would serve a value a crash could lose.
+    pub async fn set_site_config(&self, key: &str, value: &str) -> Result<(), AppError> {
+        self.site_config.set(key, value).await?;
+        self.site_config_cache
+            .write()
+            .await
+            .insert(key.to_string(), value.to_string());
+        Ok(())
+    }
 }

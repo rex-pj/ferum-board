@@ -11,6 +11,8 @@ use crate::handlers::pages::PageError;
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::SiteCtx;
 use ferum_application::constants::DEFAULT_THEME_SLUG;
+use ferum_domain::site_text;
+use ferum_domain::Locale;
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -25,7 +27,16 @@ fn hex_to_rgb(hex: &str) -> Option<String> {
     Some(format!("{r}, {g}, {b}"))
 }
 
-pub async fn site_ctx(state: &AppState) -> SiteCtx {
+/// Site-wide template context, with `slogan` and `tagline` resolved in `locale`.
+///
+/// Takes the locale rather than reading a site-wide default because these two are
+/// the only visitor-facing copy an admin writes: the tagline is every page's
+/// `<meta name="description">`, and serving one language's to every reader is the
+/// one place a translated site would still leak English into search results.
+///
+/// Resolution is `site_text::resolve` over the in-memory config cache — a handful
+/// of `HashMap` lookups, no query, because this runs on every render.
+pub async fn site_ctx(state: &AppState, locale: &Locale) -> SiteCtx {
     let _lat = crate::telemetry::Latency::start("site_ctx");
     let configs = state.site_config_cache.read().await;
     crate::telemetry::record_cache_result("site_ctx", "rwlock", true);
@@ -38,8 +49,8 @@ pub async fn site_ctx(state: &AppState) -> SiteCtx {
             .filter(|v| !v.is_empty())
             .cloned()
             .unwrap_or_else(|| "Ferum Board".to_string()),
-        slogan: configs.get("site_slogan").cloned().unwrap_or_default(),
-        tagline: configs.get("site_tagline").cloned().unwrap_or_default(),
+        slogan: site_text::resolve(&configs, "site_slogan", locale),
+        tagline: site_text::resolve(&configs, "site_tagline", locale),
         logo_url: non_empty("logo_url"),
         favicon_url: non_empty("favicon_url"),
         primary_color,
@@ -71,6 +82,10 @@ pub async fn render_admin(
     let locale = &req_locale.locale;
     ctx.insert("default_theme_slug", DEFAULT_THEME_SLUG);
     ctx.insert("locale", locale.as_str());
+    // Which locale is served on unprefixed URLs. Templates need it to build
+    // `hreflang` alternates — the unprefixed one is the site default, and hardcoding
+    // `en` there was how the setting stayed decorative.
+    ctx.insert("default_locale", req_locale.site_default.as_str());
     ctx.insert("current_path", &req_locale.canonical_path);
     // Drives the header's language switcher; the template hides it entirely when
     // only one language is installed, so a single-language site sees no control.

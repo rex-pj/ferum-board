@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% import "admin/macros.html" as adm %}
 {% block title %}Settings{% endblock %}
 {% block page_title %}Site Settings{% endblock %}
 {% block nav_settings %}active fw-semibold{% endblock %}
@@ -43,7 +44,99 @@
   <div class="tab-pane fade show active" id="tab-general" role="tabpanel">
     <div class="row g-4">
 
-      {# ── Branding ─────────────────────────────────────────────── #}
+      {# ── Site Identity ─────────────────────────────────────────────
+         The name, then the two lines of prose that appear beside it.
+
+         Three space decisions worth keeping. The name is `col-md-6`, not `col-md-8`:
+         nothing sits beside it, and a wider field only makes the empty half read as a
+         missing column. The section divider is a `border-top` on the label row rather
+         than an `<hr>`, which spends no row of its own. And the fallback note is
+         stated ONCE next to that label instead of once per pane — it says the same
+         thing in every pane, and per-pane copy also made the card resize on switch
+         because the source pane's line was shorter. #}
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header fw-semibold">{{ t(k="adm-site-identity") }}</div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="cfg-site_name">{{ t(k="adm-site-name") }}</label>
+                <input type="text" id="cfg-site_name" class="form-control"
+                       value="{{ config.site_name | default(value='') }}" required maxlength="100">
+                <div class="form-text">{{ t(k="adm-site-name-help") }}</div>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between
+                        border-top pt-3 mt-4 mb-3">
+              <div class="d-flex flex-wrap align-items-baseline gap-2">
+                <h6 class="mb-0 text-body-secondary text-uppercase adm-section-label">
+                  {{ t(k="adm-slogan-and-tagline") }}
+                </h6>
+                {% if site_copy | length > 1 %}
+                <span class="form-text mb-0">
+                  {{ t(k="adm-languages-fall-back-to-the-one-marked-fallback") }}
+                </span>
+                {% endif %}
+              </div>
+              {% if site_copy | length > 1 %}
+              <ul class="nav nav-pills adm-copy-langs" role="tablist">
+                {% for loc in site_copy %}
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link{% if loop.first %} active{% endif %}" type="button" role="tab"
+                          data-bs-toggle="tab" data-bs-target="#copy-pane-{{ loc.tag }}">
+                    {{ loc.name }}
+                    {% if loc.is_source %}
+                    <span class="badge rounded-pill fw-normal ms-1">{{ t(k="adm-fallback") }}</span>
+                    {% endif %}
+                  </button>
+                </li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+            </div>
+
+            {# Every pane's inputs exist in the DOM at all times, so `saveSettings`
+               writes every language in one request and switching tabs never discards
+               an edit. Panes hold nothing but the field row, so they are all the same
+               height and switching language moves nothing. #}
+            <div class="tab-content">
+              {% for loc in site_copy %}
+              <div class="tab-pane fade{% if loop.first %} show active{% endif %}"
+                   id="copy-pane-{{ loc.tag }}" role="tabpanel">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    {{ adm::copy_field(f=loc.fields.site_slogan,
+                                       label=t(k="adm-slogan"),
+                                       help=t(k="adm-short-text-shown-beside-the-logo"),
+                                       placeholder=t(k="adm-your-space-your-rules"),
+                                       maxlength=100, is_source=loc.is_source, lang=loc.tag) }}
+                  </div>
+                  <div class="col-md-6">
+                    {{ adm::copy_field(f=loc.fields.site_tagline,
+                                       label=t(k="adm-tagline"),
+                                       help=t(k="adm-shown-in-page-meta-descriptions-seo"),
+                                       placeholder=t(k="adm-a-modern-self-hosted-forum"),
+                                       maxlength=255, is_source=loc.is_source, lang=loc.tag) }}
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Branding ─────────────────────────────────────────────────
+         Two columns, two blocks deep each: the wordmark on the left (upload, then the
+         URL it wrote), the small marks on the right (favicon, then the accent colour).
+
+         The colour used to sit in a full-width row of its own below both, which left
+         two voids at once — the favicon column ended a block early, and the colour's
+         220px control had the rest of a 12-wide row to itself. Filling the shorter
+         column with it closes both and costs no row. Its `adm-section-label` puts it at
+         the same level as LOGO and FAVICON, so it reads as a third peer rather than as
+         something belonging to the favicon above it. #}
       <div class="col-12">
         <div class="card">
           <div class="card-header fw-semibold">{{ t(k="adm-branding") }}</div>
@@ -86,9 +179,15 @@
                   </div>
                 </div>
 
-                <div>
-                  <label class="form-label fw-semibold small" for="cfg-logo_url">{{ t(k="adm-logo-url") }}</label>
-                  <input type="text" id="cfg-logo_url" class="form-control form-control-sm"
+                {# Second block of the left column. Its wrapper and label classes are
+                   identical to the accent colour's in the right column — that is what
+                   makes the two second-row blocks start on the same line. They drifted
+                   once already (one bordered and one not, one `form-control-sm` and one
+                   not), and the misalignment is visible at a glance. #}
+                <div class="border-top pt-3 mt-4">
+                  <label class="form-label text-body-secondary text-uppercase adm-section-label mb-3"
+                         for="cfg-logo_url">{{ t(k="adm-logo-url") }}</label>
+                  <input type="text" id="cfg-logo_url" class="form-control"
                          value="{{ config.logo_url | default(value='') }}"
                          placeholder="https://example.com/logo.png or /files/…">
                   <div class="form-text">{{ t(k="adm-set-automatically-on-upload-or-enter") }}</div>
@@ -130,6 +229,24 @@
                     <div id="favicon-status" class="small mt-1"></div>
                   </div>
                 </div>
+                {# Second block of the right column — same wrapper and label classes as the
+                   logo URL opposite it, so the two start on the same line. #}
+                <div class="border-top pt-3 mt-4">
+                  <label class="form-label text-body-secondary text-uppercase adm-section-label mb-3"
+                         for="primary-color-hex">{{ t(k="adm-primary-color") }}</label>
+                  <div class="input-group" style="max-width:220px">
+                    <input type="color" id="cfg-primary_color" aria-label="{{ t(k='adm-color-picker') }}"
+                           class="form-control form-control-color flex-shrink-0"
+                           style="width:42px;padding:4px 6px;"
+                           value="{{ config.primary_color | default(value='#0d6efd') }}">
+                    {# No `aria-label` here: the `<label for>` above already names it, and a
+                       redundant one would override the visible text for a screen reader. #}
+                    <input type="text" id="primary-color-hex" class="form-control font-monospace"
+                           maxlength="7" placeholder="#0d6efd"
+                           value="{{ config.primary_color | default(value='#0d6efd') }}">
+                  </div>
+                  <div class="form-text">{{ t(k="adm-applied-as-the-primary-accent-color") }}</div>
+                </div>
               </div>
 
             </div>{# /row #}
@@ -140,49 +257,6 @@
       {# The "Homepage hero" panel that used to sit here is gone. The homepage
          masthead is now the `home-hero` plugin, edited at
          Admin → Plugins → Home Hero → Configuration. #}
-
-      {# ── Site Identity ─────────────────────────────────────────── #}
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header fw-semibold">{{ t(k="adm-site-identity") }}</div>
-          <div class="card-body">
-            <div class="row g-3">
-              <div class="col-md-5">
-                <label class="form-label" for="cfg-site_name">{{ t(k="adm-site-name") }}</label>
-                <input type="text" id="cfg-site_name" class="form-control"
-                       value="{{ config.site_name | default(value='') }}" required maxlength="100">
-              </div>
-              <div class="col-md-7">
-                <label class="form-label" for="cfg-site_slogan">{{ t(k="adm-slogan") }}</label>
-                <input type="text" id="cfg-site_slogan" class="form-control"
-                       value="{{ config.site_slogan | default(value='') }}"
-                       placeholder="{{ t(k='adm-your-space-your-rules') }}" maxlength="100">
-                <div class="form-text">{{ t(k="adm-short-text-shown-beside-the-logo") }}</div>
-              </div>
-              <div class="col-md-8">
-                <label class="form-label" for="cfg-site_tagline">{{ t(k="adm-tagline") }}</label>
-                <input type="text" id="cfg-site_tagline" class="form-control"
-                       value="{{ config.site_tagline | default(value='') }}"
-                       placeholder="{{ t(k='adm-a-modern-self-hosted-forum') }}" maxlength="255">
-                <div class="form-text">{{ t(k="adm-shown-in-page-meta-descriptions-seo") }}</div>
-              </div>
-              <div class="col-md-4">
-                <label class="form-label" for="cfg-primary_color_hex">{{ t(k="adm-primary-color") }}</label>
-                <div class="input-group">
-                  <input type="color" id="cfg-primary_color" aria-label="{{ t(k='adm-color-picker') }}"
-                         class="form-control form-control-color flex-shrink-0"
-                         style="width:42px;padding:4px 6px;"
-                         value="{{ config.primary_color | default(value='#0d6efd') }}">
-                  <input type="text" id="primary-color-hex" class="form-control font-monospace"
-                         maxlength="7" placeholder="#0d6efd"
-                         value="{{ config.primary_color | default(value='#0d6efd') }}">
-                </div>
-                <div class="form-text">{{ t(k="adm-applied-as-the-primary-accent-color") }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {# ── Localization ──────────────────────────────────────────── #}
       <div class="col-12">

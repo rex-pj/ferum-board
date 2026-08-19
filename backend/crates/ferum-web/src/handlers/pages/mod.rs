@@ -238,6 +238,10 @@ pub async fn render_with_theme_in(
     ctx.insert("plugin_assets", &plugin_assets);
     ctx.insert("theme_bs_theme", &theme_bs_theme);
     ctx.insert("locale", locale.as_str());
+    // Which locale is served on unprefixed URLs. Templates need it to build
+    // `hreflang` alternates — the unprefixed one is the site default, and hardcoding
+    // `en` there was how the setting stayed decorative.
+    ctx.insert("default_locale", req_locale.site_default.as_str());
     ctx.insert("current_path", &req_locale.canonical_path);
     ctx.insert("js_strings", &js_strings_for(state, locale));
     // Field limits the server enforces, so a `maxlength` attribute cannot drift
@@ -399,7 +403,7 @@ pub async fn render_404_page(
 ) -> Response {
     let active = active_theme(state).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &crate::handlers::admin::site_ctx(state).await);
+    ctx.insert("site", &crate::handlers::admin::site_ctx(state, &req_locale.locale).await);
     ctx.insert("active_theme", &active);
     ctx.insert("current_user", &user_ctx(state, auth_user).await);
     match render_with_theme_in(state, req_locale, &active, "errors/404.html", ctx).await {
@@ -415,7 +419,7 @@ pub async fn render_error_page(
 ) -> Response {
     let active = active_theme(state).await;
     let mut ctx = Context::new();
-    ctx.insert("site", &crate::handlers::admin::site_ctx(state).await);
+    ctx.insert("site", &crate::handlers::admin::site_ctx(state, &req_locale.locale).await);
     ctx.insert("active_theme", &active);
     ctx.insert("current_user", &user_ctx(state, auth_user).await);
     match render_with_theme_in(state, req_locale, &active, "errors/error.html", ctx).await {

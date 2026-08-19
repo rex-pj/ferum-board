@@ -249,7 +249,7 @@ pub async fn home(
     };
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     let thread_ratings = review_overall_map(&state, &threads).await;
@@ -331,7 +331,7 @@ pub async fn forum_index(
         groups.iter().map(|g| 1 + g.children.len()).sum();
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     ctx.insert("groups", &groups);
@@ -454,7 +454,7 @@ pub async fn category(
     });
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     ctx.insert("category", &category_ctx);
@@ -694,7 +694,7 @@ pub async fn thread_detail(
     };
 
     let mut ctx = Context::new();
-    ctx.insert("site", &site_ctx(&state).await);
+    ctx.insert("site", &site_ctx(&state, &req_locale.locale).await);
     ctx.insert("current_user", &user_ctx(&state, auth_user.as_ref()).await);
     ctx.insert("active_theme", &active);
     ctx.insert("thread", &thread_ctx);
