@@ -1,4 +1,5 @@
 pub mod constants;
+pub mod digest;
 pub mod dto;
 pub mod email_template;
 pub mod event_bus;

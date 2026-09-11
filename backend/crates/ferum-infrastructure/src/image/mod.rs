@@ -93,8 +93,13 @@ impl ImageProcessor for RealImageProcessor {
                     bytes_in,
                     bytes_out = processed.data.len(),
                     // Integer percent rather than a float: this is read in log
-                    // aggregation, where a ratio of `0.23178` is noise.
-                    percent_of_original = processed.data.len() * 100 / bytes_in.max(1),
+                    // aggregation, where a ratio of `0.23178` is noise. `.max(1)`
+                    // is what keeps a zero-byte input from dividing by zero.
+                    percent_of_original = {
+                        #[allow(clippy::integer_division)]
+                        let pct = processed.data.len() * 100 / bytes_in.max(1);
+                        pct
+                    },
                     duration_ms,
                     content_type = %processed.content_type,
                     "image processed"

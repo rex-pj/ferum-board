@@ -2,10 +2,13 @@
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
-use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
+use ferum_application::constants::{as_mb, MAX_PLUGIN_PACKAGE_BYTES};
 use ferum_application::shared::AppError;
 
-const MAX_EXTRACTED_SIZE: u64 = 200 * 1024 * 1024; // 200 MB
+/// The figure the error message quotes. `MAX_EXTRACTED_SIZE` is derived from it
+/// rather than divided back down, so the limit and the message cannot drift.
+const MAX_EXTRACTED_MB: u64 = 200;
+const MAX_EXTRACTED_SIZE: u64 = MAX_EXTRACTED_MB * 1024 * 1024;
 const MAX_FILES: usize = 1000;
 
 /// Extract a .fpkg (ZIP archive) into `plugins_dir/{slug}/`.
@@ -20,7 +23,7 @@ pub fn extract(
     if package_bytes.len() > MAX_PLUGIN_PACKAGE_BYTES {
         return Err(AppError::invalid_with(
             "package_too_large",
-            [("limit_mb", (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into())],
+            [("limit_mb", as_mb(MAX_PLUGIN_PACKAGE_BYTES).into())],
         ));
     }
 
@@ -103,7 +106,7 @@ pub fn extract(
                 let _ = std::fs::remove_dir_all(&plugin_dir);
                 return Err(AppError::unprocessable(&format!(
                     "Extracted size exceeds maximum ({}MB)",
-                    MAX_EXTRACTED_SIZE / 1024 / 1024
+                    MAX_EXTRACTED_MB
                 )));
             }
             total_extracted += content.len() as u64;

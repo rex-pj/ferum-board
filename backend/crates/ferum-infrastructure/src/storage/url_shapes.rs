@@ -19,8 +19,9 @@ use ferum_application::ports::FILES_PREFIX;
 /// buster. None of that is part of the key, and leaving it attached turns a
 /// URL we minted into one we no longer recognise.
 pub(super) fn without_query_or_fragment(url: &str) -> &str {
-    let end = url.find(['?', '#']).unwrap_or(url.len());
-    &url[..end]
+    // `split` rather than `find` + slice: the first piece always exists, so
+    // there is no index for a reader to bounds-check.
+    url.split(['?', '#']).next().unwrap_or(url)
 }
 
 /// The bare resolver path `/files/{key}` — **anchored at the start of the URL**.

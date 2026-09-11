@@ -31,7 +31,7 @@ impl WebhookDeliveryService for ReqwestWebhookDeliveryService {
             .body(body_str.clone());
 
         if let Some(s) = secret {
-            let sig = hmac_sha256(s, &body_str);
+            let sig = hmac_sha256(s, &body_str)?;
             req = req.header("X-Ferum-Signature", format!("sha256={}", sig));
         }
 

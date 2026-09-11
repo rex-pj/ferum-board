@@ -48,6 +48,10 @@ pub fn clamp_crop(rect: CropRect, width: u32, height: u32) -> Result<CropRect, A
 ///
 /// # Errors
 /// `image_decode_failed` if the resize itself fails.
+// Integer division throughout, deliberately: the cross-multiplication below
+// exists precisely so this branch and the dimensions computed after it cannot
+// disagree the way two float roundings would.
+#[allow(clippy::integer_division)]
 pub fn fit_frame(img: &DynamicImage, target_w: u32, target_h: u32) -> Result<DynamicImage, AppError> {
     let (sw, sh) = (img.width(), img.height());
     if sw == 0 || sh == 0 || target_w == 0 || target_h == 0 {
@@ -77,6 +81,9 @@ pub fn fit_frame(img: &DynamicImage, target_w: u32, target_h: u32) -> Result<Dyn
 ///
 /// # Errors
 /// `image_decode_failed` if the resize fails.
+// Pixel counts are whole numbers; `.max(1)` below is what keeps the divisor and
+// the result non-zero.
+#[allow(clippy::integer_division)]
 pub fn limit_long_edge(img: DynamicImage, max: u32) -> Result<DynamicImage, AppError> {
     let long = img.width().max(img.height());
     if max == 0 || long <= max {

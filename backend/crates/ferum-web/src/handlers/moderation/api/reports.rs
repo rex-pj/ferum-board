@@ -95,7 +95,11 @@ pub async fn resolve_report(
     let status = match body.status.as_str() {
         "resolved"  => ReportStatus::Resolved,
         "dismissed" => ReportStatus::Dismissed,
-        _           => unreachable!("validated above"),
+        // `valid_report_status` in view_models/validators.rs already rejected
+        // anything else. Restating it here rather than `unreachable!()` keeps the
+        // invariant local: widening that validator can no longer turn
+        // attacker-supplied JSON into a panic on this endpoint.
+        _           => return Err(AppError::invalid("invalid_status").into()),
     };
     state
         .moderation

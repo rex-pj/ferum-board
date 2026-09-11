@@ -4,7 +4,7 @@ use bytes::Bytes;
 
 use std::time::Duration;
 
-use crate::constants::{MAX_AVATAR_BYTES, MAX_COVER_BYTES};
+use crate::constants::{as_mb, MAX_AVATAR_BYTES, MAX_COVER_BYTES};
 use crate::image_pipeline::{apply as apply_image, ImagePipeline, ImageTarget};
 use crate::permission::PermissionChecker;
 use crate::ports::{
@@ -249,7 +249,7 @@ impl UserUseCase {
             return Err(AppError::invalid("avatar_invalid_type"));
         }
         if data.len() > MAX_AVATAR_BYTES {
-            return Err(AppError::invalid_with("avatar_too_large", [("limit_mb", (MAX_AVATAR_BYTES / (1024 * 1024)).into())]));
+            return Err(AppError::invalid_with("avatar_too_large", [("limit_mb", as_mb(MAX_AVATAR_BYTES).into())]));
         }
 
         // Before the key is derived, and before the size is measured: both
@@ -312,7 +312,7 @@ impl UserUseCase {
             return Err(AppError::invalid("cover_invalid_type"));
         }
         if data.len() > MAX_COVER_BYTES {
-            return Err(AppError::invalid_with("cover_too_large", [("limit_mb", (MAX_COVER_BYTES / (1024 * 1024)).into())]));
+            return Err(AppError::invalid_with("cover_too_large", [("limit_mb", as_mb(MAX_COVER_BYTES).into())]));
         }
 
         let (data, content_type) =

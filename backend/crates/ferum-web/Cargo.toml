@@ -98,3 +98,6 @@ zip = { workspace = true }
 # to the system allocator on MSVC (Windows dev), so behaviour there is unchanged.
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true }
+
+[lints]
+workspace = true

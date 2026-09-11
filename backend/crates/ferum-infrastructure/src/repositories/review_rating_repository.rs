@@ -285,8 +285,14 @@ impl ReviewRatingRepository for PgReviewRatingRepository {
             .await?;
 
         for (overall, cnt) in rows {
-            if (1..=5).contains(&overall) {
-                dist[(overall - 1) as usize] = cnt as i32;
+            // `get_mut` subsumes the 1..=5 range check: `dist` has five slots, so
+            // a rating outside the range is skipped rather than panicking on a
+            // row the DB constraint failed to reject.
+            if let Some(slot) = usize::try_from(overall - 1)
+                .ok()
+                .and_then(|i| dist.get_mut(i))
+            {
+                *slot = cnt as i32;
             }
         }
         Ok(dist)

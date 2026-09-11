@@ -9,7 +9,7 @@ use crate::app_state::AppState;
 use crate::handlers::pages::{client_facing_error, PageError, require_page_auth};
 use crate::middleware::AuthUser;
 use crate::view_models::page_context::{CurrentUserCtx, PluginDetailCtx, PluginLogCtx};
-use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
+use ferum_application::constants::{as_mb, MAX_PLUGIN_PACKAGE_BYTES};
 use ferum_infrastructure::plugins::package_extractor;
 
 #[derive(Serialize)]
@@ -91,7 +91,7 @@ pub async fn upload_plugin(
                     locale,
                     ferum_application::shared::AppError::invalid_with(
                         "package_too_large",
-                        [("limit_mb", (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into())],
+                        [("limit_mb", as_mb(MAX_PLUGIN_PACKAGE_BYTES).into())],
                     ),
                 ));
             }
@@ -234,7 +234,7 @@ pub async fn install_plugin(
                         locale,
                         ferum_application::shared::AppError::invalid_with(
                             "package_too_large",
-                            [("limit_mb", (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into())],
+                            [("limit_mb", as_mb(MAX_PLUGIN_PACKAGE_BYTES).into())],
                         ),
                     ));
                 }

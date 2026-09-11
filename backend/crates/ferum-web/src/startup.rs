@@ -503,15 +503,19 @@ pub async fn build_app_state(config: &Config) -> anyhow::Result<AppState> {
     // ─── Search ──────────────────────────────────────────────────────────────
     #[cfg(feature = "meilisearch")]
     let search_svc: Arc<dyn SearchService> = match &config.meilisearch_url {
-        Some(url) => {
-            tracing::info!("MEILISEARCH_URL set — using Meilisearch");
-            Arc::new(MeilisearchService::new(
-                url,
-                config.meilisearch_key.as_deref(),
-                &config.meilisearch_index,
-                &config.meilisearch_product_index,
-            ))
-        }
+        Some(url) => match MeilisearchService::new(
+            url,
+            config.meilisearch_key.as_deref(),
+            &config.meilisearch_index,
+            &config.meilisearch_product_index,
+        ) {
+            Some(svc) => {
+                tracing::info!("MEILISEARCH_URL set — using Meilisearch");
+                Arc::new(svc)
+            }
+            // `new` has already logged what was wrong with the URL.
+            None => Arc::new(PostgresFtsService::new(pg_read.clone())),
+        },
         None => Arc::new(PostgresFtsService::new(pg_read.clone())),
     };
     #[cfg(not(feature = "meilisearch"))]

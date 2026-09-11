@@ -480,7 +480,7 @@ pub async fn catalog_detail(
     let dist_rows: Vec<serde_json::Value> = (1..=5)
         .rev()
         .map(|star| {
-            let count = rating_distribution[star - 1];
+            let count = rating_distribution.get(star - 1).copied().unwrap_or(0);
             let pct = if dist_total > 0 {
                 (count as f64 / dist_total as f64 * 100.0).round() as i32
             } else {

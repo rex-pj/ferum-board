@@ -59,17 +59,13 @@ pub async fn login(
         .await?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::SET_COOKIE,
-        crate::utils::refresh_token_cookie(&state, &result.refresh_token)
-            .parse()
-            .unwrap(),
+    crate::utils::set_cookie(
+        &mut headers,
+        &crate::utils::refresh_token_cookie(&state, &result.refresh_token),
     );
-    headers.append(
-        header::SET_COOKIE,
-        crate::utils::access_token_cookie(&state, &result.access_token)
-            .parse()
-            .unwrap(),
+    crate::utils::append_cookie(
+        &mut headers,
+        &crate::utils::access_token_cookie(&state, &result.access_token),
     );
 
     // Refresh the locale cookie from the account's stored preference, so signing
@@ -82,7 +78,7 @@ pub async fn login(
                 Some(locale) => crate::utils::locale_cookie(&state, locale.as_str()),
                 None => crate::utils::clear_locale_cookie(&state),
             };
-            headers.append(header::SET_COOKIE, cookie.parse().unwrap());
+            crate::utils::append_cookie(&mut headers, &cookie);
         }
         // A preferences read failure must not block a valid login; the user just
         // keeps whatever language the cookie already said.
@@ -116,13 +112,13 @@ pub async fn logout(
     }
 
     let mut resp_headers = HeaderMap::new();
-    resp_headers.insert(
-        header::SET_COOKIE,
-        crate::utils::clear_access_token_cookie(&state).parse().unwrap(),
+    crate::utils::set_cookie(
+        &mut resp_headers,
+        &crate::utils::clear_access_token_cookie(&state),
     );
-    resp_headers.append(
-        header::SET_COOKIE,
-        crate::utils::clear_refresh_token_cookie(&state).parse().unwrap(),
+    crate::utils::append_cookie(
+        &mut resp_headers,
+        &crate::utils::clear_refresh_token_cookie(&state),
     );
 
     Ok((StatusCode::NO_CONTENT, resp_headers))
@@ -195,11 +191,9 @@ pub async fn refresh(
     let RefreshResult { access_token } = state.auth.refresh_access_token(&refresh_token).await?;
 
     let mut resp_headers = HeaderMap::new();
-    resp_headers.insert(
-        header::SET_COOKIE,
-        crate::utils::access_token_cookie(&state, &access_token)
-            .parse()
-            .unwrap(),
+    crate::utils::set_cookie(
+        &mut resp_headers,
+        &crate::utils::access_token_cookie(&state, &access_token),
     );
 
     // Access token is delivered only via httpOnly cookie — never in the body.

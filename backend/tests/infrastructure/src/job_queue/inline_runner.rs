@@ -202,29 +202,39 @@ fn make_executor(
 
 #[test]
 fn hmac_sha256_produces_64_char_hex() {
-    let digest = hmac_sha256("mysecret", r#"{"event":"post.created"}"#);
+    let digest = hmac_sha256("mysecret", r#"{"event":"post.created"}"#).unwrap();
     assert_eq!(digest.len(), 64, "SHA-256 hex digest is always 64 chars");
 }
 
 #[test]
 fn hmac_sha256_is_deterministic() {
-    let a = hmac_sha256("key", "payload");
-    let b = hmac_sha256("key", "payload");
+    let a = hmac_sha256("key", "payload").unwrap();
+    let b = hmac_sha256("key", "payload").unwrap();
     assert_eq!(a, b);
 }
 
 #[test]
 fn hmac_sha256_differs_on_different_secret() {
-    let a = hmac_sha256("secret1", "payload");
-    let b = hmac_sha256("secret2", "payload");
+    let a = hmac_sha256("secret1", "payload").unwrap();
+    let b = hmac_sha256("secret2", "payload").unwrap();
     assert_ne!(a, b);
 }
 
 #[test]
 fn hmac_sha256_only_hex_chars() {
-    let digest = hmac_sha256("test", "{}");
+    let digest = hmac_sha256("test", "{}").unwrap();
     assert!(!digest.is_empty());
     assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));
+}
+
+/// HMAC accepts a key of any length — short keys are zero-padded, long ones
+/// hashed. The signature returns `Result` so a delivery that cannot be signed
+/// fails instead of going out unsigned, not because these inputs can fail.
+#[test]
+fn hmac_sha256_accepts_any_secret_length() {
+    for secret in ["", "k", &"x".repeat(1000)] {
+        assert!(hmac_sha256(secret, "payload").is_ok(), "rejected {} bytes", secret.len());
+    }
 }
 
 // ─── run_gc_storage_key ───────────────────────────────────────────────────────

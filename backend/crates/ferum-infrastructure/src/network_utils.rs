@@ -75,19 +75,24 @@ pub use ferum_domain::net::is_private_ip;
 /// Here rather than beside its first caller because that one is behind
 /// `--features gcs` and the mail adapters are unconditional.
 ///
-/// Cuts on a `char` boundary, so a multi-byte body cannot panic the slice.
+/// Cuts on a `char` boundary, so a multi-byte body cannot panic.
+///
+/// `MAX` is a byte budget, but the cut is chosen character by character — the
+/// only way a byte index into a `str` is safe without a proof at the call site.
 pub(crate) fn truncate_for_log(body: &str) -> String {
     const MAX: usize = 512;
     if body.len() <= MAX {
         return body.to_string();
     }
-    let cut = body
-        .char_indices()
-        .take_while(|(i, _)| *i <= MAX)
-        .last()
-        .map(|(i, _)| i)
-        .unwrap_or(0);
-    format!("{}…", &body[..cut])
+    let mut out = String::with_capacity(MAX + '…'.len_utf8());
+    for c in body.chars() {
+        if out.len() + c.len_utf8() > MAX {
+            break;
+        }
+        out.push(c);
+    }
+    out.push('…');
+    out
 }
 
 /// Concrete `HostResolver` backed by the tokio resolver. Used only for the

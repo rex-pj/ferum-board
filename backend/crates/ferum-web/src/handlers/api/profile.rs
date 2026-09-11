@@ -1,5 +1,5 @@
 use axum::extract::{Extension, Multipart, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::Deserialize;
@@ -42,10 +42,7 @@ fn refreshed_token_cookie_at(
     };
     let token = state.token_service.mint_access_token(&claims)?;
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::SET_COOKIE,
-        crate::utils::access_token_cookie(state, &token).parse().unwrap(),
-    );
+    crate::utils::set_cookie(&mut headers, &crate::utils::access_token_cookie(state, &token));
     Ok(headers)
 }
 
@@ -264,7 +261,7 @@ pub async fn update_preferences(
         None => crate::utils::clear_locale_cookie(&state),
     };
     let mut headers = axum::http::HeaderMap::new();
-    headers.insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
+    crate::utils::set_cookie(&mut headers, &cookie);
 
     Ok((axum::http::StatusCode::NO_CONTENT, headers))
 }

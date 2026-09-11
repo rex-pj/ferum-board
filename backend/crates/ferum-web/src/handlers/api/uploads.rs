@@ -317,6 +317,23 @@ pub struct CachePolicy {
 /// One authority for all three places that answer a `/files/` request: both
 /// redirect arms, the byte-serving arm, and the object-store fast path that skips
 /// the database entirely.
+/// The policy for a redirect to a published object.
+///
+/// Named rather than inlined into the `match` below so `serve`'s object-store
+/// fast path — which knows its key is published without asking the database —
+/// can reach the same definition directly. A second literal there is how the
+/// fast path and the slow path come to disagree about caching for one key, and
+/// going through `cache_policy` for it meant unwrapping an `Option` that only
+/// exists because `NotFound` carries no headers.
+pub fn published_redirect_policy() -> CachePolicy {
+    // A location moves when the backend, bucket or CDN changes, so this is
+    // bounded rather than `immutable` — see `REDIRECT_MAX_AGE_SECS`.
+    CachePolicy {
+        cache_control: redirect_cache_control(),
+        etag: false,
+    }
+}
+
 pub fn cache_policy(disposition: FileDisposition) -> Option<CachePolicy> {
     let policy = match disposition {
         FileDisposition::NotFound => return None,
@@ -327,12 +344,7 @@ pub fn cache_policy(disposition: FileDisposition) -> Option<CachePolicy> {
             cache_control: "private, no-store".to_string(),
             etag: false,
         },
-        // A location moves when the backend, bucket or CDN changes, so this is
-        // bounded rather than `immutable` — see `REDIRECT_MAX_AGE_SECS`.
-        FileDisposition::PublishedRedirect => CachePolicy {
-            cache_control: redirect_cache_control(),
-            etag: false,
-        },
+        FileDisposition::PublishedRedirect => published_redirect_policy(),
         // Content-addressed and public: the bytes behind this key can never
         // change, so it may be cached forever and revalidated by ETag.
         FileDisposition::PublishedBytes => CachePolicy {
@@ -389,12 +401,9 @@ pub async fn serve(
         // Relative means database storage, where `public_url` returns this very
         // path — redirecting to it would loop.
         if location.contains("://") {
-            // A key that cannot be staged is by definition published, so this
-            // reads the same policy the database path would have reached. Sharing
-            // it is the point: a second literal here is how the fast path and the
-            // slow path come to disagree about caching for the same key.
-            let cache = cache_policy(FileDisposition::PublishedRedirect)
-                .expect("PublishedRedirect always has a policy");
+            // A key that cannot be staged is by definition published, so this is
+            // the same policy the database path would have reached.
+            let cache = published_redirect_policy();
             return (
                 StatusCode::TEMPORARY_REDIRECT,
                 [

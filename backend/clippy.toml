@@ -1,0 +1,26 @@
+# Configuration VALUES for lints that read them. Levels are NOT set here — a
+# clippy.toml cannot enable, warn or deny anything. That is `[workspace.lints]`
+# in Cargo.toml, which every production crate opts into with `[lints] workspace
+# = true`. The two files are complementary, not alternatives.
+
+msrv = "1.97"
+
+# The test-harness crates under `tests/` do not opt into the workspace lints at
+# all, so these are belt-and-braces: they cover `#[test]` functions and
+# `#[cfg(test)]` modules living inside a production crate. Unwrapping in a test
+# IS the assertion — `?` there reports a failure as a silent early return
+# instead of a red line.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+
+# ─── Conventions the compiler can enforce ────────────────────────────────────
+# Resolved as paths, so an alias or a re-export cannot slip past — unlike the
+# source-scanning convention tests in tests/domain, which match on text.
+# `chrono::Local` covers `Local::now()` and `DateTime<Local>` alike: banning the
+# type is what makes the rule airtight, since `disallowed-types` matches the
+# type path and ignores generic arguments.
+disallowed-types = [
+  { path = "chrono::Local", reason = "timezone rules 1-2: instants are DateTime<Utc>; nothing reads the ambient process timezone" },
+]

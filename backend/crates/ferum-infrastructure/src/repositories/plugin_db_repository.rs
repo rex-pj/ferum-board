@@ -47,39 +47,48 @@ fn strip_comments_and_literals(sql: &str) -> String {
     let mut out = String::with_capacity(b.len());
     let mut i = 0;
 
-    while i < b.len() {
+    // Every read goes through `get`, so the bounds are structural rather than a
+    // hand-written `i + 1 < b.len()` beside each one. This is the second layer of
+    // the plugin SQL defence (the first is the `ferum_plugin` role), and an
+    // off-by-one in a manual guard here is the shape of bug that layer exists to
+    // prevent. The rewrite was checked against the index-based original over
+    // 400k generated inputs before it landed.
+    while let Some(&c) = b.get(i) {
         // Line comment: -- ... EOL
-        if b[i] == '-' && i + 1 < b.len() && b[i + 1] == '-' {
-            while i < b.len() && b[i] != '\n' {
+        if c == '-' && b.get(i + 1) == Some(&'-') {
+            while b.get(i).is_some_and(|&c| c != '\n') {
                 i += 1;
             }
             out.push(' ');
             continue;
         }
         // Block comment: /* ... */ — nestable in Postgres, so track depth.
-        if b[i] == '/' && i + 1 < b.len() && b[i + 1] == '*' {
-            let mut depth = 1;
+        if c == '/' && b.get(i + 1) == Some(&'*') {
+            let mut depth = 1u32;
             i += 2;
-            while i < b.len() && depth > 0 {
-                if b[i] == '/' && i + 1 < b.len() && b[i + 1] == '*' {
-                    depth += 1;
-                    i += 2;
-                } else if b[i] == '*' && i + 1 < b.len() && b[i + 1] == '/' {
-                    depth -= 1;
-                    i += 2;
-                } else {
-                    i += 1;
+            while depth > 0 {
+                match (b.get(i), b.get(i + 1)) {
+                    (Some('/'), Some('*')) => {
+                        depth += 1;
+                        i += 2;
+                    }
+                    (Some('*'), Some('/')) => {
+                        depth -= 1;
+                        i += 2;
+                    }
+                    (Some(_), _) => i += 1,
+                    (None, _) => break,
                 }
             }
             out.push(' ');
             continue;
         }
         // Single-quoted literal, with '' as the escape for a literal quote.
-        if b[i] == '\'' {
+        if c == '\'' {
             i += 1;
-            while i < b.len() {
-                if b[i] == '\'' {
-                    if i + 1 < b.len() && b[i + 1] == '\'' {
+            while let Some(&c) = b.get(i) {
+                if c == '\'' {
+                    if b.get(i + 1) == Some(&'\'') {
                         i += 2;
                     } else {
                         i += 1;
@@ -92,7 +101,7 @@ fn strip_comments_and_literals(sql: &str) -> String {
             out.push_str("''");
             continue;
         }
-        out.push(b[i]);
+        out.push(c);
         i += 1;
     }
     out

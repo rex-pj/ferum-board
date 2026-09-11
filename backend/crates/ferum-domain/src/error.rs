@@ -200,7 +200,9 @@ impl axum::response::IntoResponse for AppError {
         if let Some(secs) = retry_after {
             res.headers_mut().insert(
                 axum::http::header::RETRY_AFTER,
-                axum::http::HeaderValue::from_str(&secs.to_string()).unwrap(),
+                // `From<u64>` rather than `from_str`: infallible, so there is no
+                // unwrap to justify, and it skips the intermediate String.
+                axum::http::HeaderValue::from(secs),
             );
         }
         if let Some(payload) = payload {

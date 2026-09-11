@@ -260,9 +260,7 @@ impl AuthUseCase {
 
     #[tracing::instrument(skip_all)]
     pub async fn login(&self, cmd: LoginCmd) -> Result<LoginResult, AppError> {
-        let user_opt = self.users.find_by_email(&cmd.email.to_lowercase()).await?;
-
-        if user_opt.is_none() {
+        let Some(mut user) = self.users.find_by_email(&cmd.email.to_lowercase()).await? else {
             let _ = self
                 .hasher
                 .verify(&cmd.password, "$2b$12$invalidhashpaddinginvalidhashpa")
@@ -272,8 +270,7 @@ impl AuthUseCase {
             // `email_log_key`.
             tracing::warn!(email = %email_log_key(&cmd.email), "login failed: unknown email");
             return Err(AppError::Unauthorized);
-        }
-        let mut user = user_opt.unwrap();
+        };
 
         if user.is_account_locked() {
             let _ = self

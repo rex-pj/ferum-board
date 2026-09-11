@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
 use validator::Validate;
@@ -61,17 +61,13 @@ pub async fn run(
         .await?;
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::SET_COOKIE,
-        crate::utils::refresh_token_cookie(&state, &result.refresh_token)
-            .parse()
-            .unwrap(),
+    crate::utils::set_cookie(
+        &mut headers,
+        &crate::utils::refresh_token_cookie(&state, &result.refresh_token),
     );
-    headers.append(
-        header::SET_COOKIE,
-        crate::utils::access_token_cookie(&state, &result.access_token)
-            .parse()
-            .unwrap(),
+    crate::utils::append_cookie(
+        &mut headers,
+        &crate::utils::access_token_cookie(&state, &result.access_token),
     );
 
     Ok((

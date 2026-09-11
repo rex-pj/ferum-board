@@ -2,8 +2,8 @@ use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 
 use axum::extract::Multipart;
-use axum::http::HeaderMap;
-use ferum_application::constants::MAX_PAGE;
+use axum::http::{header, HeaderMap, HeaderValue};
+use ferum_application::constants::{as_mb, MAX_PAGE};
 use ferum_application::ports::CropRect;
 use ferum_application::shared::AppError;
 
@@ -78,11 +78,13 @@ pub async fn read_image_field_with_crop(
             // A malformed number is treated as absent, which drops the whole
             // rectangle below. Failing the upload instead would turn a stale
             // client into an outage for everyone using it.
-            parts[slot] = field
-                .text()
-                .await
-                .ok()
-                .and_then(|raw| raw.trim().parse::<u32>().ok());
+            if let Some(part) = parts.get_mut(slot) {
+                *part = field
+                    .text()
+                    .await
+                    .ok()
+                    .and_then(|raw| raw.trim().parse::<u32>().ok());
+            }
         }
     }
 
@@ -141,7 +143,7 @@ pub fn validate_upload_image(
     if data.len() > max_bytes {
         return Err(AppError::invalid_with(
             kind.too_large,
-            [("limit_mb", (max_bytes / (1024 * 1024)).into())],
+            [("limit_mb", as_mb(max_bytes).into())],
         ));
     }
     // Checked last and deliberately: it is the only one that looks at the bytes
@@ -256,6 +258,46 @@ pub fn if_none_match_hits(headers: &HeaderMap, key: &str) -> bool {
         let candidate = candidate.trim();
         candidate == "*" || candidate.trim_start_matches("W/") == want
     })
+}
+
+/// First 8 hex characters of a UUID, for a log line that shows what was acted on
+/// without carrying 36 characters of it.
+///
+/// Character-wise rather than `&s[..8]`: the input is always ASCII hex, but a
+/// byte slice makes the reader verify that, and the two audit-log pages had the
+/// same expression written out twice.
+pub fn short_id(id: &uuid::Uuid) -> String {
+    id.simple().to_string().chars().take(8).collect()
+}
+
+// ─── Emitting cookies ─────────────────────────────────────────────────────────
+
+/// Puts a `Set-Cookie` value on `headers`, replacing any already there.
+///
+/// A string that cannot become a `HeaderValue` is logged and dropped rather
+/// than panicking. Every caller builds its cookie from a JWT, a locale tag
+/// already checked against the enabled set, or a literal — so a rejection here
+/// means a bug upstream, and aborting a request that has otherwise succeeded (a
+/// completed login, a persisted preference) is the worst available answer to
+/// one. The value is never logged: it carries the auth token.
+pub fn set_cookie(headers: &mut HeaderMap, cookie: &str) {
+    match cookie.parse::<HeaderValue>() {
+        Ok(v) => {
+            headers.insert(header::SET_COOKIE, v);
+        }
+        Err(e) => tracing::warn!(error = %e, "cookie rejected as a header value; not sent"),
+    }
+}
+
+/// As [`set_cookie`], but keeps `Set-Cookie` headers already present — a
+/// response setting several cookies needs one header line per cookie.
+pub fn append_cookie(headers: &mut HeaderMap, cookie: &str) {
+    match cookie.parse::<HeaderValue>() {
+        Ok(v) => {
+            headers.append(header::SET_COOKIE, v);
+        }
+        Err(e) => tracing::warn!(error = %e, "cookie rejected as a header value; not sent"),
+    }
 }
 
 // ─── Auth cookies ─────────────────────────────────────────────────────────────

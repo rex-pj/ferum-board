@@ -163,7 +163,6 @@ redis = { version = "0.27", default-features = false, features = [
     "connection-manager",
     "keep-alive",
 ] }
-regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rust_decimal = { version = "1", features = ["serde"] }
 sea-orm = { version = "2", features = [
@@ -225,6 +224,104 @@ validator = { version = "0.19", features = ["derive"] }
 # (if narrow) capability loss — re-enable the specific feature if a user ever
 # needs it, rather than restoring the whole default set.
 zip = { version = "2.1", default-features = false, features = ["deflate"] }
+
+# ─── Lints ────────────────────────────────────────────────────────────────────
+# The panic-shaped "cheat codes": constructs that turn a runtime condition into a
+# process abort, or into a silently wrong number, without appearing in any type
+# signature. A web server should convert a bad condition into a 4xx/5xx, not into
+# a dead worker.
+#
+# OPT-IN PER MEMBER: a crate gets none of this unless it writes `[lints]
+# workspace = true`. The four production crates and `migration` do. The five
+# harness crates under `tests/` deliberately do NOT — unwrapping in a test is the
+# assertion, and there are ~1,600 of them.
+#
+# Levels live here because this is the ONLY place that can set them; `clippy.toml`
+# supplies configuration values to lints and cannot enable or deny anything.
+# Not RUSTFLAGS: setting that variable at all makes cargo ignore
+# `target.<triple>.rustflags`, which is where .cargo/config.toml pins the linker.
+#
+# NOTE the `--workspace` trap above still applies. This table does not lint a
+# crate that `cargo clippy` never selected.
+
+[workspace.lints.rust]
+# A rustc lint, so this fails `cargo build`, not merely `cargo clippy`. One
+# legitimate `unsafe fn` exists (plugins/script_runtime.rs, boa native-function
+# registration); it carries a local `#[allow]` with a SAFETY note, which is the
+# point — the exception becomes conspicuous rather than ambient.
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+# NEVER enable the `restriction` GROUP wholesale — clippy documents that as a
+# mistake; it holds mutually contradictory lints. Every entry below is chosen.
+
+# NOTE ON `warn` VS `deny` IN THIS REPO: there is no difference. CI runs
+# `cargo clippy --workspace --all-targets -- -D warnings`, so a `warn` here fails
+# the build exactly as a `deny` does. A lint you do not intend to satisfy
+# everywhere therefore has to be `allow` with a local `#[warn]`, or `deny` with a
+# local `#[allow]` carrying the reason — and the second is better, because the
+# reason ends up beside the code it excuses. Everything below is `deny`.
+
+# Explicit panics.
+unwrap_used = "deny"
+# Eight sites survive, each with a scoped `#[allow]` stating why it cannot fail:
+# a fixed regex literal, HMAC's any-length key, a column count matching a literal
+# three lines above, the startup signal handlers. Rewriting those into Result
+# plumbing would report a programming error as a runtime one.
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+exit = "deny"
+get_unwrap = "deny"
+option_env_unwrap = "deny"
+panic_in_result_fn = "deny"
+fallible_impl_from = "deny"
+
+# Implicit panics — the ones that do not look like a panic at the call site.
+# `string_slice` matters here specifically: content is Vietnamese, so a byte
+# index into a `str` lands mid-codepoint on live data, not just in theory.
+indexing_slicing = "deny"
+string_slice = "deny"
+
+# Silently wrong answers, which are worse than a panic because nothing reports
+# them. `integer_division` was 28 findings and not worth it until `as_mb`/`as_kb`
+# absorbed 24 of them; what is left is three definitions and one page
+# calculation, each with a scoped `#[allow]`. It now catches a NEW ad-hoc
+# division rather than re-reporting the same expression two dozen times.
+integer_division = "deny"
+float_cmp = "deny"
+
+# Diagnostics that must not reach production output. This service logs through
+# `tracing`; a `println!` bypasses the JSON formatter and the request_id.
+print_stdout = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"
+mem_forget = "deny"
+
+# NOT enabled, deliberately, and each for a stated reason:
+#   cast_possible_truncation / cast_sign_loss / cast_precision_loss
+#     — ~125 sites, most of them `i64 -> u64` on COUNT(*) results that are fine.
+#       Turning them on now would bury everything above in noise and train the
+#       reflex of adding `#[allow]` without reading. Enable per crate later,
+#       starting with image_pipeline.rs, where the input is attacker-supplied.
+#   arithmetic_side_effects
+#     — fires on essentially every `+`. The debug-panic/release-wrap split is
+#       real, but the answer is checked arithmetic at the few sites that take
+#       untrusted magnitudes, not a workspace-wide ban on addition.
+#   as_conversions
+#     — a blanket ban on `as`; the cast lints above are the targeted form.
+#   let_underscore_must_use
+#     — 51 findings. Each was READ rather than counted, and four were hiding a
+#       real inconsistency with no trace: two failed thread rollbacks, a dropped
+#       GC enqueue that leaks a blob permanently, a theme reload that leaves the
+#       panel rendering a deleted theme. Those now log. The other 47 are
+#       deliberate best-effort calls where `let _ =` IS the acknowledgement this
+#       lint asks for — and rustc's `unused_must_use` (denied above) already
+#       catches the accidental form, a bare `fallible();` binding nothing. The
+#       audit was the value here, not the lint.
 
 [profile.dev]
 debug = "line-tables-only"

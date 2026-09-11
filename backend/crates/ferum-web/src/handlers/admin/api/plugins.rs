@@ -23,7 +23,7 @@ use crate::view_models::{DataResponse, HandlerResult};
 use crate::view_models::plugin::{DebugHookRequest, DebugHookResponse};
 #[cfg(debug_assertions)]
 use ferum_application::ports::{HookContext, HookDecision};
-use ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES;
+use ferum_application::constants::{as_mb, MAX_PLUGIN_PACKAGE_BYTES};
 use ferum_application::shared::AppError;
 use ferum_domain::models::plugin::PluginLogQuery;
 use ferum_infrastructure::plugins::{manifest_loader, package_extractor};
@@ -62,7 +62,7 @@ pub async fn upload_plugin(
             "package_too_large",
             [(
                 "limit_mb",
-                (MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)).into(),
+                as_mb(MAX_PLUGIN_PACKAGE_BYTES).into(),
             )],
         )
         .into());

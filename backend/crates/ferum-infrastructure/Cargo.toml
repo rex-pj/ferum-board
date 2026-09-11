@@ -127,3 +127,6 @@ fast_image_resize = { workspace = true, optional = true }
 imagesize = { workspace = true, optional = true }
 kamadak-exif = { workspace = true, optional = true }
 oxipng = { workspace = true, optional = true }
+
+[lints]
+workspace = true

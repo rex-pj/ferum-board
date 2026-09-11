@@ -285,8 +285,15 @@ pub async fn create_thread(
         Ok(p) => p,
         Err(e) => {
             // Compensate: mark the thread as deleted so it does not appear in feeds
-            // with zero posts. Best-effort — we still return the original error.
-            let _ = state.thread.soft_delete(actor, thread.id).await;
+            // with zero posts. The caller still gets the original error — but a
+            // compensation that itself fails leaves a live thread with no posts,
+            // and that has to be findable.
+            if let Err(rollback) = state.thread.soft_delete(actor, thread.id).await {
+                tracing::error!(
+                    thread_id = %thread.id, error = ?rollback,
+                    "could not roll back a thread whose opening post failed; it is live with zero posts"
+                );
+            }
             return Err(e.into());
         }
     };
@@ -306,7 +313,12 @@ pub async fn create_thread(
             verified_purchase,
         };
         if let Err(e) = state.review.submit_rating(actor, thread.id, rating).await {
-            let _ = state.thread.soft_delete(actor, thread.id).await;
+            if let Err(rollback) = state.thread.soft_delete(actor, thread.id).await {
+                tracing::error!(
+                    thread_id = %thread.id, error = ?rollback,
+                    "could not roll back a review thread whose rating failed; it is live without one"
+                );
+            }
             return Err(e.into());
         }
     }

@@ -54,7 +54,9 @@ pub fn validate_image_magic(data: &[u8]) -> bool {
         return true;
     }
     // WebP: RIFF????WEBP
-    if data.starts_with(b"RIFF") && &data[8..12] == b"WEBP" {
+    // `get` rather than `data[8..12]`: the length guard above is 20 lines away,
+    // and a bounds proof that lives at a distance is one edit from being wrong.
+    if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP".as_slice()) {
         return true;
     }
     false
@@ -64,7 +66,7 @@ pub fn validate_image_magic(data: &[u8]) -> bool {
 /// used for favicon uploads, which allow ICO in addition to the raster
 /// formats `validate_image_magic` already covers.
 pub fn validate_favicon_magic(data: &[u8]) -> bool {
-    if data.len() >= 4 && data[0..4] == [0x00, 0x00, 0x01, 0x00] {
+    if data.starts_with(&[0x00, 0x00, 0x01, 0x00]) {
         return true;
     }
     validate_image_magic(data)
@@ -117,7 +119,7 @@ fn generate_slug(title: &str) -> String {
 /// Example: "how-to-install-postgresql-3f9a2b8c"
 pub fn generate_thread_slug(title: &str, id: &Uuid) -> String {
     let base = generate_slug(title);
-    let short_id = &id.simple().to_string()[..8];
+    let short_id: String = id.simple().to_string().chars().take(8).collect();
     if base.is_empty() {
         short_id.to_string()
     } else {

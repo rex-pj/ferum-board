@@ -148,7 +148,7 @@ pub async fn log(
                     }
                 }
                 "report" => {
-                    let short = &l.target_id.to_string()[..8];
+                    let short = crate::utils::short_id(&l.target_id);
                     (Some(format!("#{}", short)), None)
                 }
                 _ => (None, None),

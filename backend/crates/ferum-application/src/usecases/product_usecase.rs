@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use bytes::Bytes;
 
+use crate::constants::as_mb;
 use crate::permission::PermissionChecker;
 use crate::ports::{ForumJob, JobQueue, StorageService};
 use crate::shared::AppError;
@@ -337,7 +338,8 @@ impl ProductUseCase {
             return Ok(base);
         }
         for _ in 0..5 {
-            let cand = format!("{base}-{}", &Uuid::new_v4().simple().to_string()[..6]);
+            let suffix: String = Uuid::new_v4().simple().to_string().chars().take(6).collect();
+            let cand = format!("{base}-{suffix}");
             if self.products.find_by_slug(&cand).await?.is_none() {
                 return Ok(cand);
             }
@@ -501,7 +503,7 @@ impl ProductUseCase {
             return Err(AppError::invalid("image_invalid_type"));
         }
         if data.len() > MAX_PRODUCT_IMAGE_BYTES {
-            return Err(AppError::invalid_with("image_too_large", [("limit_mb", (MAX_PRODUCT_IMAGE_BYTES / (1024 * 1024)).into())]));
+            return Err(AppError::invalid_with("image_too_large", [("limit_mb", as_mb(MAX_PRODUCT_IMAGE_BYTES).into())]));
         }
 
         let existing = self.products.list_media(product_id).await?;

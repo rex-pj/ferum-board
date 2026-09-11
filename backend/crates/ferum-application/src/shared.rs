@@ -1,8 +1,6 @@
 pub use ferum_domain::AppError;
 pub use ferum_domain::OptionExt;
 
-use sha2::{Digest, Sha256};
-
 /// How many hex characters of the digest reach the log. 12 is 48 bits — far more
 /// than enough to tell two probed addresses apart in a log window, and far too
 /// few to be worth a reversal attempt against a value nothing else corroborates.
@@ -36,8 +34,7 @@ const EMAIL_DIGEST_HEX_LEN: usize = 12;
 /// nothing recognisable survives.
 pub fn email_log_key(email: &str) -> String {
     let normalized = email.trim().to_lowercase();
-    let digest = hex::encode(Sha256::digest(normalized.as_bytes()));
-    let short = &digest[..EMAIL_DIGEST_HEX_LEN];
+    let short = crate::digest::short_hex(normalized.as_bytes(), EMAIL_DIGEST_HEX_LEN);
 
     // `rsplit_once` rather than `split_once`: an address may legally quote an `@`
     // in its local part, and the domain is what follows the LAST one. Anything

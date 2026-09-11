@@ -185,3 +185,22 @@ pub const MAX_WEBHOOKS_PER_EVENT: u64 = 50;
 /// two reviews is four empty rows — so the panel falls back to the headline
 /// score plus plain chips.
 pub const MIN_REVIEWS_FOR_RATING_BREAKDOWN: i64 = 5;
+
+/// A byte limit rendered for an error message, in whole MB.
+///
+/// One definition because the expression `LIMIT / (1024 * 1024)` was written out
+/// at eleven call sites, each re-deriving the same magic number next to a
+/// different constant. Truncating is intentional: these feed copy like "at most
+/// 8 MB", where a fractional part would be noise.
+#[must_use]
+#[allow(clippy::integer_division)] // truncation is the feature; see above
+pub const fn as_mb(bytes: usize) -> usize {
+    bytes / (1024 * 1024)
+}
+
+/// As [`as_mb`], for limits small enough that MB would round to zero.
+#[must_use]
+#[allow(clippy::integer_division)]
+pub const fn as_kb(bytes: usize) -> usize {
+    bytes / 1024
+}

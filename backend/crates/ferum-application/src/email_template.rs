@@ -9,6 +9,12 @@
 //! breaks the whole bundle; Tera would hand the admin `{% include %}` against
 //! the template directory. Neither can express the rule that actually matters
 //! here — that a thread title and an href need *different* escaping.
+//!
+//! The scanners below walk `&str` by `str::find` offsets, which are always char
+//! boundaries — but they read through `get` rather than `[..]` so that stays a
+//! property of the code instead of a claim in a comment. Every `else { break }`
+//! in them is unreachable, and each degrades to "stop parsing, emit what we
+//! have", which is what the unclosed-`{{` branch already did deliberately.
 
 use std::collections::HashMap;
 
@@ -79,13 +85,16 @@ pub fn placeholders(template: &str) -> Vec<String> {
     let mut found = Vec::new();
     let mut rest = template;
     while let Some(start) = rest.find("{{") {
-        let after = &rest[start + 2..];
+        let Some(after) = rest.get(start + 2..) else { break };
         let Some(end) = after.find("}}") else { break };
-        let name = after[..end].trim();
+        let (Some(name), Some(next)) = (after.get(..end), after.get(end + 2..)) else {
+            break;
+        };
+        let name = name.trim();
         if !name.is_empty() && !found.iter().any(|f: &String| f == name) {
             found.push(name.to_string());
         }
-        rest = &after[end + 2..];
+        rest = next;
     }
     found
 }
@@ -110,14 +119,21 @@ pub fn substitute(
     let mut rest = template;
 
     while let Some(start) = rest.find("{{") {
-        out.push_str(&rest[..start]);
-        let after = &rest[start + 2..];
+        let Some(after) = rest.get(start + 2..) else { break };
         let Some(end) = after.find("}}") else {
             // An unclosed `{{` is the rest of the template, verbatim.
-            out.push_str(&rest[start..]);
+            out.push_str(rest);
             return out;
         };
-        let name = after[..end].trim();
+        // Read before anything is emitted, so a `break` leaves `rest` intact for
+        // the tail push below rather than half-copying it.
+        let (Some(head), Some(name), Some(next)) =
+            (rest.get(..start), after.get(..end), after.get(end + 2..))
+        else {
+            break;
+        };
+        let name = name.trim();
+        out.push_str(head);
 
         match values.get(name) {
             Some(value) if html => {
@@ -141,7 +157,7 @@ pub fn substitute(
                 out.push_str(" }}");
             }
         }
-        rest = &after[end + 2..];
+        rest = next;
     }
 
     out.push_str(rest);
@@ -158,18 +174,27 @@ pub fn html_to_text(html: &str) -> String {
     let mut rest = html;
 
     while let Some(start) = rest.find('<') {
-        out.push_str(&decode_entities(&rest[..start]));
-        let after = &rest[start..];
+        let Some(after) = rest.get(start..) else { break };
         let Some(end) = after.find('>') else { break };
-        let tag = &after[..=end];
+        let (Some(head), Some(tag), Some(body)) =
+            (rest.get(..start), after.get(..=end), after.get(end + 1..))
+        else {
+            break;
+        };
+        out.push_str(&decode_entities(head));
         let lowered = tag.to_ascii_lowercase();
 
         if lowered.starts_with("<a ") {
             if let Some(href) = attr_value(tag, "href") {
-                // Emitted after the label, so the sentence still reads.
-                let label_end = after[end + 1..].find("</a>").map(|i| end + 1 + i);
-                if let Some(label_end) = label_end {
-                    let label = html_to_text(&after[end + 1..label_end]);
+                // Offsets relative to `body` rather than absolute into `after`:
+                // the same two slices, with no arithmetic to get wrong.
+                if let Some(close) = body.find("</a>") {
+                    let (Some(inner), Some(next)) = (body.get(..close), body.get(close + 4..))
+                    else {
+                        break;
+                    };
+                    // Emitted after the label, so the sentence still reads.
+                    let label = html_to_text(inner);
                     let label = label.trim();
                     if label == href {
                         out.push_str(&href);
@@ -179,7 +204,7 @@ pub fn html_to_text(html: &str) -> String {
                         out.push_str(&href);
                         out.push(')');
                     }
-                    rest = &after[label_end + 4..];
+                    rest = next;
                     continue;
                 }
             }
@@ -192,7 +217,7 @@ pub fn html_to_text(html: &str) -> String {
             out.push('\n');
         }
 
-        rest = &after[end + 1..];
+        rest = body;
     }
     out.push_str(&decode_entities(rest));
 
@@ -229,9 +254,9 @@ fn decode_entities(s: &str) -> String {
 fn attr_value(tag: &str, attr: &str) -> Option<String> {
     let lowered = tag.to_ascii_lowercase();
     let at = lowered.find(&format!("{attr}=\""))?;
-    let start = at + attr.len() + 2;
-    let end = tag[start..].find('"')? + start;
-    Some(decode_entities(&tag[start..end]))
+    let value = tag.get(at + attr.len() + 2..)?;
+    let end = value.find('"')?;
+    Some(decode_entities(value.get(..end)?))
 }
 
 /// Checks a template an admin is trying to save.

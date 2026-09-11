@@ -262,7 +262,10 @@ async fn extract_theme(
     // upload could otherwise decompress far past the 10 MB raw-upload cap
     // and exhaust disk space. Mirrors the limit already enforced for plugin
     // .fpkg extraction in package_extractor.rs.
-    const MAX_EXTRACTED_SIZE: u64 = 50 * 1024 * 1024; // 50 MB
+    // The message quotes `MAX_EXTRACTED_MB`; the byte limit is derived from it so
+    // the two cannot drift.
+    const MAX_EXTRACTED_MB: u64 = 50;
+    const MAX_EXTRACTED_SIZE: u64 = MAX_EXTRACTED_MB * 1024 * 1024;
     let mut total_extracted: u64 = 0;
 
     for i in 0..archive.len() {
@@ -308,7 +311,7 @@ async fn extract_theme(
                 let _ = std::fs::remove_dir_all(&theme_dir);
                 return Err(UploadFailure::Rejected(format!(
                     "Theme zip decompresses beyond the {}MB limit.",
-                    MAX_EXTRACTED_SIZE / 1024 / 1024
+                    MAX_EXTRACTED_MB
                 )));
             }
             total_extracted += content.len() as u64;
@@ -353,7 +356,10 @@ pub async fn delete_theme(
         }
     }
 
-    let _ = state.tera.reload_themes().await;
+    // A failed reload leaves the panel rendering the theme that was just deleted.
+    if let Err(e) = state.tera.reload_themes().await {
+        tracing::warn!(theme = %slug, error = ?e, "theme deleted but templates could not be reloaded");
+    }
 
     Ok(axum::response::Redirect::to("/admin/themes?success=Theme+deleted"))
 }

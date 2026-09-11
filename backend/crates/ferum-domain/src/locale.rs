@@ -121,9 +121,12 @@ impl Locale {
         let mut chain = vec![self.clone()];
 
         // Strip trailing subtags one at a time: zh-Hant-TW → zh-Hant → zh.
+        // `rsplit_once` rather than `rfind` + slice: the index from `rfind` is a
+        // char boundary, but nothing in the types says so, and a tag is arbitrary
+        // user input from Accept-Language.
         let mut current = self.0.as_str();
-        while let Some(idx) = current.rfind('-') {
-            current = &current[..idx];
+        while let Some((head, _)) = current.rsplit_once('-') {
+            current = head;
             let candidate = Locale(current.to_string());
             if !chain.contains(&candidate) {
                 chain.push(candidate);
@@ -154,9 +157,17 @@ impl Locale {
 /// as a region.
 fn canonical_subtag(subtag: &str) -> Option<String> {
     if subtag.len() == 4 && subtag.bytes().all(|b| b.is_ascii_alphabetic()) {
-        let mut s = subtag.to_ascii_lowercase();
-        s[..1].make_ascii_uppercase();
-        return Some(s);
+        // Built from the char iterator rather than by uppercasing `s[..1]`: the
+        // guard above already proves byte 0 is a whole char, but proving it to
+        // the reader of one line is worse than writing a line that cannot panic.
+        let mut chars = subtag.chars();
+        if let Some(first) = chars.next() {
+            return Some(format!(
+                "{}{}",
+                first.to_ascii_uppercase(),
+                chars.as_str().to_ascii_lowercase()
+            ));
+        }
     }
     canonical_region(subtag)
 }

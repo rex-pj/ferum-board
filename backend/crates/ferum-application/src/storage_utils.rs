@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use sha2::{Digest, Sha256};
-
 use crate::ports::{ForumJob, JobQueue};
 use ferum_domain::repositories::stored_file_repository::StoredFileRepository;
 
@@ -48,8 +46,8 @@ pub async fn release_cas_ref(
 /// Generates a content-addressed storage key.
 /// Format: `{prefix}/{sha256_hex_16}.{ext}`
 pub fn cas_key(prefix: &str, data: &[u8], content_type: &str) -> String {
-    let hash = Sha256::digest(data);
-    let hex = hex::encode(&hash[..16]);
+    // 32 hex characters = the first 16 digest bytes.
+    let hex = crate::digest::short_hex(data, 32);
     let ext = content_type_to_ext(content_type);
     format!("{}/{}.{}", prefix, hex, ext)
 }

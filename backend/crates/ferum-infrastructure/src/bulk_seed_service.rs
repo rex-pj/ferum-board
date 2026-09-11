@@ -26,6 +26,16 @@ use crate::entities::{
 use ferum_application::ports::BulkSeedService;
 use ferum_application::shared::AppError;
 
+/// `table[n % table.len()]` — the cycling lookup every generator below uses.
+///
+/// `None` only for an empty table, which is also the `% 0` that would panic on
+/// the *division* before any bounds check could speak. One call reports both
+/// hazards as the same absence, and callers turn it into "generate one fewer
+/// demo row" rather than into a panicked setup wizard.
+fn cycle<T>(table: &[T], n: usize) -> Option<&T> {
+    table.get(n.checked_rem(table.len())?)
+}
+
 // Fixed UUIDs for example seed users (moderator, alice, bob).
 // The admin user's real ID is passed in at runtime.
 const MOD_ID: Uuid = uuid!("00000000-0000-0000-0000-000000000002");
@@ -744,16 +754,16 @@ impl PgBulkSeedService {
         ];
 
         let rows: Vec<users::ActiveModel> = (1usize..=1000)
-            .map(|i| users::ActiveModel {
+            .filter_map(|i| Some(users::ActiveModel {
                 username: Set(format!("user_{i}")),
                 email: Set(format!("user_{i}@ferum.local")),
                 is_email_verified: Set(true),
                 display_name: Set(Some(format!("User {i}"))),
                 password_hash: Set(Some(hash.into())),
-                trust_level: Set(trust_levels[(i - 1) % 5].clone()),
+                trust_level: Set(cycle(&trust_levels, i - 1)?.clone()),
                 trust_score: Set(((i * 7) % 100) as i32),
                 ..Default::default()
-            })
+            }))
             .collect();
 
         insert_in_chunks::<users::Entity, _>(&self.db, rows, 200).await
@@ -803,8 +813,13 @@ impl PgBulkSeedService {
             .map(|u| u.id)
             .collect();
 
-        let nc = pub_cat_ids.len();
-        let nu = all_user_ids.len();
+        // `cycle` would return `None` for either of these and silently seed zero
+        // rows. Say why instead — an empty forum after ticking the wizard's box
+        // is exactly the moment an operator needs a log line.
+        if pub_cat_ids.is_empty() || all_user_ids.is_empty() {
+            tracing::warn!("no seeded categories or users found; skipping bulk threads");
+            return Ok(());
+        }
         let statuses = [
             ThreadStatus::Open,
             ThreadStatus::Open,
@@ -815,25 +830,25 @@ impl PgBulkSeedService {
         let now = Utc::now().fixed_offset();
 
         let rows: Vec<threads::ActiveModel> = (1usize..=5000)
-            .map(|i| {
+            .filter_map(|i| {
                 let ts = now - Duration::minutes((i * 2) as i64);
-                threads::ActiveModel {
-                    category_id: Set(pub_cat_ids[(i - 1) % nc]),
-                    author_id: Set(all_user_ids[(i - 1) % nu]),
+                Some(threads::ActiveModel {
+                    category_id: Set(*cycle(&pub_cat_ids, i - 1)?),
+                    author_id: Set(*cycle(&all_user_ids, i - 1)?),
                     title: Set(format!(
                         "{} topic {}",
-                        BULK_THREAD_TITLE_PREFIXES[(i - 1) % 10],
+                        cycle(&BULK_THREAD_TITLE_PREFIXES, i - 1)?,
                         (i - 1) % 50 + 1
                     )),
                     slug: Set(format!("bulk-thread-{i}")),
-                    status: Set(statuses[(i - 1) % 5].clone()),
+                    status: Set(cycle(&statuses, i - 1)?.clone()),
                     view_count: Set(((i * 13) % 900) as i32),
                     reply_count: Set(0),
                     last_post_at: Set(Some(ts)),
                     created_at: Set(ts),
                     custom_fields: Set(serde_json::Value::Object(Default::default())),
                     ..Default::default()
-                }
+                })
             })
             .collect();
 
@@ -863,7 +878,10 @@ impl PgBulkSeedService {
             .map(|u| u.id)
             .collect();
 
-        let nu = all_user_ids.len();
+        if all_user_ids.is_empty() {
+            tracing::warn!("no seeded users found; skipping bulk posts");
+            return Ok(());
+        }
         let posts_per_thread: usize = 18;
         let now = Utc::now().fixed_offset();
 
@@ -884,9 +902,14 @@ impl PgBulkSeedService {
                 let author_id = if pi == 0 {
                     *thread_author_id
                 } else {
-                    all_user_ids[(i - 1) % nu]
+                    match cycle(&all_user_ids, i - 1) {
+                        Some(id) => *id,
+                        None => continue,
+                    }
                 };
-                let body = BULK_POST_BODIES[(i - 1) % 10];
+                let Some(body) = cycle(&BULK_POST_BODIES, i - 1) else {
+                    continue;
+                };
                 let content = if pi == 0 {
                     format!("This is the opening post for this discussion. {body}")
                 } else {
@@ -983,8 +1006,10 @@ impl PgBulkSeedService {
             .map(|u| u.id)
             .collect();
 
-        let np = bulk_post_ids.len();
-        let nu = all_user_ids.len();
+        if bulk_post_ids.is_empty() || all_user_ids.is_empty() {
+            tracing::warn!("no seeded posts or users found; skipping bulk reactions");
+            return Ok(());
+        }
         let kinds = [
             ReactionKind::Like,
             ReactionKind::Helpful,
@@ -995,14 +1020,15 @@ impl PgBulkSeedService {
         let mut seen: std::collections::HashSet<(Uuid, Uuid, u8)> = std::collections::HashSet::new();
         let rows: Vec<reactions::ActiveModel> = (1usize..=5000)
             .filter_map(|i| {
-                let post_id = bulk_post_ids[(i * 7) % np];
-                let user_id = all_user_ids[(i * 11) % nu];
+                let post_id = *cycle(&bulk_post_ids, i * 7)?;
+                let user_id = *cycle(&all_user_ids, i * 11)?;
                 let kind_idx = ((i - 1) % 4) as u8;
+                let kind = cycle(&kinds, i - 1)?.clone();
                 if seen.insert((post_id, user_id, kind_idx)) {
                     Some(reactions::ActiveModel {
                         post_id: Set(post_id),
                         user_id: Set(user_id),
-                        kind: Set(kinds[kind_idx as usize].clone()),
+                        kind: Set(kind),
                         ..Default::default()
                     })
                 } else {
@@ -1025,7 +1051,10 @@ impl PgBulkSeedService {
             .map(|u| u.id)
             .collect();
 
-        let nu = all_user_ids.len();
+        if all_user_ids.is_empty() {
+            tracing::warn!("no seeded users found; skipping bulk notifications");
+            return Ok(());
+        }
         let kinds = [
             NotificationKind::Reply,
             NotificationKind::Mention,
@@ -1045,10 +1074,10 @@ impl PgBulkSeedService {
         let reaction_names: [&str; 4] = ["like", "helpful", "insightful", "funny"];
 
         let rows: Vec<notifications::ActiveModel> = (1usize..=2000)
-            .map(|i| {
-                let kind = kinds[(i - 1) % 4].clone();
-                let (thread_slug, thread_title) = thread_refs[i % 5];
-                let actor = actor_names[i % 3];
+            .filter_map(|i| {
+                let kind = cycle(&kinds, i - 1)?.clone();
+                let (thread_slug, thread_title) = *cycle(&thread_refs, i)?;
+                let actor = *cycle(&actor_names, i)?;
                 let payload = match kind {
                     NotificationKind::Reply | NotificationKind::Mention => serde_json::json!({
                         "thread_slug":   thread_slug,
@@ -1059,18 +1088,18 @@ impl PgBulkSeedService {
                         "thread_slug":   thread_slug,
                         "thread_title":  thread_title,
                         "actor_username": actor,
-                        "reaction":      reaction_names[i % 4],
+                        "reaction":      cycle(&reaction_names, i)?,
                     }),
                     // System notifications are used for "user followed you" events.
                     _ => serde_json::json!({ "actor_username": actor }),
                 };
-                notifications::ActiveModel {
-                    user_id: Set(all_user_ids[(i * 3) % nu]),
+                Some(notifications::ActiveModel {
+                    user_id: Set(*cycle(&all_user_ids, i * 3)?),
                     kind: Set(kind),
                     payload: Set(payload),
                     is_read: Set(i % 3 == 0),
                     ..Default::default()
-                }
+                })
             })
             .collect();
 

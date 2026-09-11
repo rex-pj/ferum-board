@@ -255,7 +255,7 @@ async fn dispatch_webhook(
         .body(body.clone());
 
     if let Some(ref s) = secret {
-        let sig = hmac_sha256(s, &body);
+        let sig = hmac_sha256(s, &body)?;
         req = req.header("X-Ferum-Signature", format!("sha256={}", sig));
     }
 
@@ -284,13 +284,22 @@ async fn dispatch_webhook(
 }
 
 
-pub fn hmac_sha256(secret: &str, payload: &str) -> String {
+/// `X-Ferum-Signature` body, without the `sha256=` prefix.
+///
+/// # Errors
+/// Only if the MAC rejects the key. HMAC is defined for a key of any length —
+/// short keys are zero-padded, long ones hashed — so no secret reaches this
+/// branch; the `Result` belongs to the fixed-size MAC constructions that share
+/// the trait. It is propagated rather than unwrapped because the alternative
+/// failure mode is the one that matters: a receiver validates this header, so a
+/// delivery that cannot be signed must fail, never go out unsigned.
+pub fn hmac_sha256(secret: &str, payload: &str) -> Result<String, AppError> {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
-    let mut mac =
-        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
+        .map_err(|e| AppError::internal(format!("webhook secret rejected by HMAC: {e}")))?;
     mac.update(payload.as_bytes());
-    hex::encode(mac.finalize().into_bytes())
+    Ok(hex::encode(mac.finalize().into_bytes()))
 }
 
 /// How many *outbound-network* jobs may run at once.

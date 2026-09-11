@@ -151,7 +151,9 @@ pub fn build_router(
     //   plugin package (.fpkg) = 50 MB, cover = 8 MB, avatar = 5 MB.
     // Per-handler limits remain the real, per-type enforcement.
     let plugin_package_ceiling_mb =
-        (ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES / (1024 * 1024)) as u64;
+        ferum_application::constants::as_mb(
+            ferum_application::constants::MAX_PLUGIN_PACKAGE_BYTES,
+        ) as u64;
     let body_cap_bytes = (max_upload_size_mb.max(plugin_package_ceiling_mb) as usize)
         .saturating_mul(1024 * 1024)
         .saturating_add(1024 * 1024); // multipart envelope/field overhead

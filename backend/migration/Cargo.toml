@@ -29,3 +29,6 @@ cli = ["sea-orm-migration/cli"]
 [dependencies]
 sea-orm-migration = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

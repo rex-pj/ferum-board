@@ -16,15 +16,24 @@ use ferum_domain::Locale;
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
+/// `#RRGGBB` → `"r, g, b"`, for the CSS variable injected on every page.
+///
+/// The hex-digit test is not cosmetic. `len()` counts BYTES, so a six-byte value
+/// of multi-byte characters ("aébcd") passed the old length check and then
+/// panicked slicing mid-codepoint — and `primary_color` is admin-supplied text
+/// that reaches this on every render.
 fn hex_to_rgb(hex: &str) -> Option<String> {
     let h = hex.trim_start_matches('#');
-    if h.len() != 6 {
+    if h.len() != 6 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
-    let r = u8::from_str_radix(&h[0..2], 16).ok()?;
-    let g = u8::from_str_radix(&h[2..4], 16).ok()?;
-    let b = u8::from_str_radix(&h[4..6], 16).ok()?;
-    Some(format!("{r}, {g}, {b}"))
+    let channel = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
+    Some(format!(
+        "{}, {}, {}",
+        channel(0)?,
+        channel(2)?,
+        channel(4)?
+    ))
 }
 
 /// Site-wide template context, with `slogan` and `tagline` resolved in `locale`.

@@ -182,12 +182,18 @@ impl PostRepository for PgPostRepository {
             .await?
             .ok_or(AppError::NotFound)?;
 
+        // Read the counter off the Model, not back out of the ActiveModel:
+        // `ActiveValue::unwrap` panics on `NotSet`, a different failure from
+        // `Option::unwrap` and one that a change in how this ActiveModel is
+        // built would introduce silently.
+        let next_edit_count = model.edit_count.saturating_add(1);
+
         let mut active: posts::ActiveModel = model.into();
         active.content_md = Set(content_md);
         active.content_html = Set(content_html);
         active.edited_at = Set(Some(Utc::now().fixed_offset()));
         active.edited_by_id = Set(Some(edited_by_id));
-        active.edit_count = Set(active.edit_count.clone().unwrap() + 1);
+        active.edit_count = Set(next_edit_count);
 
         let updated = active.update(&self.db).await?;
         Ok(entity_to_domain(updated))

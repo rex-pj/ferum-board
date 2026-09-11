@@ -80,11 +80,15 @@ impl PermissionChecker {
         // Category post_policy provides the trust gate (admin-configurable per category).
         // Staff (users with moderation permissions in this category) bypass the trust gate.
         // Moderated behaves like Members for access; post status is determined after entry.
+        //
+        // `Closed` returned above; restating it as an arm rather than
+        // `unreachable!()` keeps the match exhaustive, so a new `PostPolicy`
+        // variant becomes a compile error instead of a panic on a live request.
         let category_min = match category.post_policy {
             PostPolicy::Members | PostPolicy::Moderated => TrustLevel::Basic,
             PostPolicy::Trusted => TrustLevel::Member,
             PostPolicy::StaffOnly => TrustLevel::Leader,
-            PostPolicy::Closed => unreachable!(),
+            PostPolicy::Closed => return Err(AppError::forbidden("category_closed")),
         };
         if !user.has_perm_in(perm::MOD_WARN, category.id) && !user.meets_trust(category_min) {
             return Err(AppError::forbidden("trust_level_insufficient"));

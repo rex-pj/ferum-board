@@ -43,13 +43,32 @@ pub struct MeilisearchService {
 }
 
 impl MeilisearchService {
-    pub fn new(url: &str, api_key: Option<&str>, thread_index: &str, product_index: &str) -> Self {
-        let client = Client::new(url, api_key).expect("valid Meilisearch URL");
-        Self {
+    /// `None` when `url` is not a usable Meilisearch endpoint.
+    ///
+    /// Search then degrades to `PostgresFtsService`. Every other capability in
+    /// the toggle matrix warns and falls back; this one used to `expect` and
+    /// abort the process, so a typo in `MEILISEARCH_URL` took down a forum whose
+    /// only degraded feature would have been typo-tolerant search.
+    pub fn new(
+        url: &str,
+        api_key: Option<&str>,
+        thread_index: &str,
+        product_index: &str,
+    ) -> Option<Self> {
+        let client = Client::new(url, api_key)
+            .inspect_err(|e| {
+                tracing::warn!(
+                    error = %e,
+                    url,
+                    "MEILISEARCH_URL is not a valid endpoint — falling back to PostgreSQL FTS"
+                );
+            })
+            .ok()?;
+        Some(Self {
             client,
             thread_index: thread_index.to_string(),
             product_index: product_index.to_string(),
-        }
+        })
     }
 }
 

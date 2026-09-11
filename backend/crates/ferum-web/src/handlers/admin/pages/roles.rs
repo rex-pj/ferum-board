@@ -108,7 +108,10 @@ pub async fn role_detail(
     let permission_groups: Vec<PermGroupCtx> = group_order
         .into_iter()
         .map(|name| PermGroupCtx {
-            permissions: group_map[&name].iter().map(|p| (*p).clone()).collect(),
+            permissions: group_map
+                .get(&name)
+                .map(|g| g.iter().map(|p| (*p).clone()).collect())
+                .unwrap_or_default(),
             name,
         })
         .collect();

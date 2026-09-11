@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use uuid::Uuid;
 
-use crate::constants::MAX_PLUGIN_MEDIA_BYTES;
+use crate::constants::{as_mb, MAX_PLUGIN_MEDIA_BYTES};
 use crate::permission::PermissionChecker;
 use crate::ports::{ForumJob, JobQueue, PluginLifecycle, StorageService};
 use crate::shared::{AppError, OptionExt};
@@ -359,7 +359,12 @@ impl PluginUseCase {
                 for key in keys {
                     match self.stored_files.decrement_ref(&key).await {
                         Ok(0) => {
-                            let _ = self.jobs.enqueue(ForumJob::GcStorageKey { key }).await;
+                            // Last reference gone. A dropped enqueue leaks the blob
+                            // permanently: this loop is the only thing that ever
+                            // references plugin media, and it will not run again.
+                            if let Err(e) = self.jobs.enqueue(ForumJob::GcStorageKey { key: key.clone() }).await {
+                                tracing::warn!(plugin = %slug, key = %key, error = ?e, "could not enqueue plugin media for collection; blob is orphaned");
+                            }
                         }
                         Ok(_) => {}
                         Err(e) => tracing::warn!(plugin = %slug, key = %key, error = ?e, "Failed to dereference plugin media during uninstall"),
@@ -440,7 +445,7 @@ impl PluginUseCase {
         if data.len() > MAX_PLUGIN_MEDIA_BYTES {
             return Err(AppError::unprocessable(&format!(
                 "media exceeds {} MB limit",
-                MAX_PLUGIN_MEDIA_BYTES / (1024 * 1024)
+                as_mb(MAX_PLUGIN_MEDIA_BYTES)
             )));
         }
 

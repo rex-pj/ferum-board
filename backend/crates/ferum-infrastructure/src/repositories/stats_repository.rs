@@ -358,7 +358,8 @@ impl StatsRepository for PgStatsRepository {
                     daily_stats::Column::Metric,
                     daily_stats::Column::Value,
                 ]);
-            seed_ins.select_from(seed_row).expect("3 columns");
+            seed_ins.select_from(seed_row)
+                .map_err(|e| AppError::internal(format!("daily_stats INSERT ... SELECT column mismatch: {e}")))?;
             seed_ins.on_conflict(
                 OnConflict::columns([daily_stats::Column::Date, daily_stats::Column::Metric])
                     .target_and_where(Expr::col(daily_stats::Column::CategoryId).is_null())
@@ -464,7 +465,8 @@ impl StatsRepository for PgStatsRepository {
             daily_stats::Column::Metric,
             daily_stats::Column::Value,
         ]);
-        ins.select_from(rows).expect("3 columns selected");
+        ins.select_from(rows)
+            .map_err(|e| AppError::internal(format!("daily_stats INSERT ... SELECT column mismatch: {e}")))?;
         ins.on_conflict(
             OnConflict::columns([daily_stats::Column::Date, daily_stats::Column::Metric])
                 .target_and_where(Expr::col(daily_stats::Column::CategoryId).is_null())
@@ -491,21 +493,22 @@ impl StatsRepository for PgStatsRepository {
         //
         // ON CONFLICT DO NOTHING means this only FILLS GAPS — re-running after a
         // zone change leaves the old rows as they were.
-        let build = |day_select: SelectStatement| -> (String, Values) {
+        let build = |day_select: SelectStatement| -> Result<(String, Values), AppError> {
             let mut ins = Query::insert();
             ins.into_table(daily_stats::Entity).columns([
                 daily_stats::Column::Date,
                 daily_stats::Column::Metric,
                 daily_stats::Column::Value,
             ]);
-            ins.select_from(day_select).expect("3 columns selected");
+            ins.select_from(day_select)
+                .map_err(|e| AppError::internal(format!("daily_stats INSERT ... SELECT column mismatch: {e}")))?;
             ins.on_conflict(
                 OnConflict::columns([daily_stats::Column::Date, daily_stats::Column::Metric])
                     .target_and_where(Expr::col(daily_stats::Column::CategoryId).is_null())
                     .do_nothing()
                     .to_owned(),
             );
-            ins.build(PostgresQueryBuilder)
+            Ok(ins.build(PostgresQueryBuilder))
         };
 
         // The bucket expression is reused in SELECT, WHERE and GROUP BY, and
@@ -523,7 +526,7 @@ impl StatsRepository for PgStatsRepository {
                 .and_where(Expr::expr(day.clone()).lt(today(tz)))
                 .add_group_by([group_by_first_column()])
                 .to_owned(),
-        );
+        )?;
         let threads_stmt = build(
             Query::select()
                 .expr(day.clone())
@@ -536,7 +539,7 @@ impl StatsRepository for PgStatsRepository {
                 )
                 .add_group_by([group_by_first_column()])
                 .to_owned(),
-        );
+        )?;
         let posts_stmt = build(
             Query::select()
                 .expr(day.clone())
@@ -547,7 +550,7 @@ impl StatsRepository for PgStatsRepository {
                 .and_where(Expr::col(posts::Column::IsDeleted).eq(false))
                 .add_group_by([group_by_first_column()])
                 .to_owned(),
-        );
+        )?;
         let reactions_stmt = build(
             Query::select()
                 .expr(day.clone())
@@ -557,7 +560,7 @@ impl StatsRepository for PgStatsRepository {
                 .and_where(Expr::expr(day.clone()).lt(today(tz)))
                 .add_group_by([group_by_first_column()])
                 .to_owned(),
-        );
+        )?;
 
         for (sql, values) in [users_stmt, threads_stmt, posts_stmt, reactions_stmt] {
             self.db

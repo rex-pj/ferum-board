@@ -58,8 +58,10 @@ pub fn delivery_error(e: &AppError) -> String {
     // process, and labelling it as ours sends the admin looking in the wrong
     // place.
     let text = text.strip_prefix("internal error: ").unwrap_or(&text);
-    match (text.rfind(" ["), text.ends_with(']')) {
-        (Some(at), true) => text[..at].to_string(),
+    // `rsplit_once` rather than `rfind` + slice: `tail` is a suffix of `text`, so
+    // testing it for `]` is the same condition, with no index to bounds-check.
+    match text.rsplit_once(" [") {
+        Some((head, tail)) if tail.ends_with(']') => head.to_string(),
         _ => text.to_string(),
     }
 }

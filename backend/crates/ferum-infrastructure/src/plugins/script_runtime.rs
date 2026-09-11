@@ -14,8 +14,7 @@ mod inner {
     use std::time::Duration;
 
     use boa_engine::{
-        Context, JsArgs, JsNativeError,
-        JsValue, NativeFunction, Source,
+        gc as boa_gc, Context, JsArgs, JsNativeError, JsValue, NativeFunction, Source,
     };
     use tokio::sync::oneshot;
     use uuid::Uuid;
@@ -204,38 +203,65 @@ var __ferum_rpc = {};
 
     // ─── Register native functions into boa_engine Context ────────────────────────
 
+    /// What every `__ferum_*` native is handed instead of capturing it.
+    ///
+    /// `NativeFunction::from_copy_closure_with_captures` requires the closure
+    /// itself to be `Copy` — so it can capture nothing — and takes the state as a
+    /// traced argument. That is what makes the registrations below safe calls:
+    /// a closure that captured a `JsValue` or `JsObject` (invisible to boa's
+    /// tracer, and freed while still held) is now a compile error rather than
+    /// something a reviewer has to notice fifteen times.
+    #[derive(Clone)]
+    struct Captures(Arc<JsThreadState>);
+
+    impl boa_gc::Finalize for Captures {}
+
+    // SAFETY: the one obligation this whole module used to spread across fifteen
+    // closures. `JsThreadState` holds a `Uuid`, `String`s, a `serde_json::Value`,
+    // a `PluginLogSink`, `Arc<dyn …>` port objects, `Vec<String>`, `bool`s and a
+    // `tokio::runtime::Handle` — none of which is a boa type or can transitively
+    // contain a `Gc` pointer, so there is nothing for the collector to trace.
+    // Adding a boa-owned field to `JsThreadState` is what would break it.
+    #[allow(unsafe_code)]
+    unsafe impl boa_gc::Trace for Captures {
+        boa_gc::empty_trace!();
+    }
+
     /// Registers the `__ferum_*` natives backing the `Ferum.*` JS API.
     ///
-    /// # Safety
-    /// Every closure registered here must capture only `Arc<JsThreadState>`,
-    /// which holds no GC-managed objects. Capturing a `JsValue` or `JsObject`
-    /// would hide it from boa's tracer, which can then collect it while the
-    /// closure still holds it.
-    unsafe fn register_natives(ctx: &mut Context, state: Arc<JsThreadState>) {
+    /// # Errors
+    /// Whatever `register_global_callable` rejects. A failure leaves the plugin's
+    /// `Ferum.*` API incomplete, which `run_js_thread` treats exactly as it
+    /// treats a failed bootstrap or bundle load: log, and abandon this plugin's
+    /// thread. The forum keeps running with that one plugin inert — the same
+    /// fail-open posture the rest of `plugins/` takes.
+    fn register_natives(
+        ctx: &mut Context,
+        state: Arc<JsThreadState>,
+    ) -> boa_engine::JsResult<()> {
         // __ferum_get_config() → String
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_get_config".into(),
                 0,
-                NativeFunction::from_closure(move |_, _, _| {
+                NativeFunction::from_copy_closure_with_captures(|_, _, caps: &Captures, _| {
+                    let s = &caps.0;
                     Ok(JsValue::from(
                         boa_engine::JsString::from(
                             serde_json::to_string(&s.config).unwrap_or_else(|_| "{}".into()),
                         ),
                     ))
-                }),
-            )
-            .expect("register __ferum_get_config");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_log(level, message, contextJson?)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_log".into(),
                 3,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let level = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let message = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
                     let context_str = args.get_or_undefined(2).to_string(ctx)?.to_std_string_escaped();
@@ -269,18 +295,17 @@ var __ferum_rpc = {};
                     });
 
                     Ok(JsValue::undefined())
-                }),
-            )
-            .expect("register __ferum_log");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_cache_get(key) → String | null
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_cache_get".into(),
                 1,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let namespaced = format!("plugin:{}:{}", s.plugin_id, key);
                     let cache = s.cache.clone();
@@ -289,18 +314,17 @@ var __ferum_rpc = {};
                         Some(v) => Ok(JsValue::from(boa_engine::JsString::from(v))),
                         None => Ok(JsValue::null()),
                     }
-                }),
-            )
-            .expect("register __ferum_cache_get");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_cache_set(key, value, ttlSecs)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_cache_set".into(),
                 3,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let key   = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let value = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
                     let ttl_secs = args.get_or_undefined(2)
@@ -312,35 +336,33 @@ var __ferum_rpc = {};
                         cache.set(&namespaced, &value, Duration::from_secs(ttl_secs))
                     );
                     Ok(JsValue::undefined())
-                }),
-            )
-            .expect("register __ferum_cache_set");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_cache_del(key)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_cache_del".into(),
                 1,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let namespaced = format!("plugin:{}:{}", s.plugin_id, key);
                     let cache = s.cache.clone();
                     let _ = s.rt_handle.block_on(cache.del(&namespaced));
                     Ok(JsValue::undefined())
-                }),
-            )
-            .expect("register __ferum_cache_del");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_storage_get(key) → String (JSON) | null
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_storage_get".into(),
                 1,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let storage = s.storage.clone();
                     let plugin_id = s.plugin_id;
@@ -351,18 +373,17 @@ var __ferum_rpc = {};
                         ))),
                         _ => Ok(JsValue::null()),
                     }
-                }),
-            )
-            .expect("register __ferum_storage_get");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_storage_set(key, valueJson)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_storage_set".into(),
                 2,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let value_json = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
                     let value: serde_json::Value =
@@ -371,35 +392,33 @@ var __ferum_rpc = {};
                     let plugin_id = s.plugin_id;
                     let _ = s.rt_handle.block_on(storage.set(plugin_id, &key, value));
                     Ok(JsValue::undefined())
-                }),
-            )
-            .expect("register __ferum_storage_set");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_storage_del(key)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_storage_del".into(),
                 1,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let key = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let storage = s.storage.clone();
                     let plugin_id = s.plugin_id;
                     let _ = s.rt_handle.block_on(storage.delete(plugin_id, &key));
                     Ok(JsValue::undefined())
-                }),
-            )
-            .expect("register __ferum_storage_del");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_storage_list(prefix, limit) → String (JSON array of keys)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_storage_list".into(),
                 2,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let prefix = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let limit = args.get_or_undefined(1).to_u32(ctx).unwrap_or(100) as u64;
                     let storage = s.storage.clone();
@@ -410,18 +429,17 @@ var __ferum_rpc = {};
                     Ok(JsValue::from(boa_engine::JsString::from(
                         serde_json::to_string(&keys).unwrap_or_else(|_| "[]".into()),
                     )))
-                }),
-            )
-            .expect("register __ferum_storage_list");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_http_get(url, headersJson) → responseJson | null
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_http_get".into(),
                 2,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let url = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let headers_json = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
                     let headers: HashMap<String, String> =
@@ -445,18 +463,17 @@ var __ferum_rpc = {};
                         ))),
                         Err(e) => Err(JsNativeError::error().with_message(e).into()),
                     }
-                }),
-            )
-            .expect("register __ferum_http_get");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_http_post(url, bodyJson, headersJson) → responseJson | null
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_http_post".into(),
                 3,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     let url = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let body_json = args.get_or_undefined(1).to_string(ctx)?.to_std_string_escaped();
                     let headers_json = args.get_or_undefined(2).to_string(ctx)?.to_std_string_escaped();
@@ -484,9 +501,8 @@ var __ferum_rpc = {};
                         ))),
                         Err(e) => Err(JsNativeError::error().with_message(e).into()),
                     }
-                }),
-            )
-            .expect("register __ferum_http_post");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_sha256(input) → hex string
@@ -494,23 +510,23 @@ var __ferum_rpc = {};
             ctx.register_global_callable(
                 "__ferum_sha256".into(),
                 1,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                // No captures: hashing an argument needs nothing from the plugin.
+                NativeFunction::from_copy_closure(|_, args, ctx| {
                     use sha2::{Digest, Sha256};
                     let input = args.get_or_undefined(0).to_string(ctx)?.to_std_string_escaped();
                     let hash = hex::encode(Sha256::digest(input.as_bytes()));
                     Ok(JsValue::from(boa_engine::JsString::from(hash)))
                 }),
-            )
-            .expect("register __ferum_sha256");
+            )?;
         }
 
         // __ferum_forum_get_user_public(userId) → String (JSON) | null
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_forum_get_user_public".into(),
                 1,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     if !s.granted_api.iter().any(|a| a == "forum.getUserPublic") {
                         return Err(JsNativeError::error()
                             .with_message("Capability 'forum.getUserPublic' is not granted for this plugin")
@@ -537,18 +553,17 @@ var __ferum_rpc = {};
                         }
                         _ => Ok(JsValue::null()),
                     }
-                }),
-            )
-            .expect("register __ferum_forum_get_user_public");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_forum_create_notification(userId, message)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_forum_create_notification".into(),
                 2,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     if !s.granted_api.iter().any(|a| a == "forum.createNotification") {
                         return Err(JsNativeError::error()
                             .with_message("Capability 'forum.createNotification' is not granted for this plugin")
@@ -571,18 +586,17 @@ var __ferum_rpc = {};
                         notification_repo.create(user_id, NotificationKind::System, payload)
                     );
                     Ok(JsValue::undefined())
-                }),
-            )
-            .expect("register __ferum_forum_create_notification");
+                }, Captures(state.clone())),
+            )?;
         }
 
         // __ferum_db_query(sql, paramsJson) → String (JSON)
         {
-            let s = state.clone();
             ctx.register_global_callable(
                 "__ferum_db_query".into(),
                 2,
-                NativeFunction::from_closure(move |_, args, ctx| {
+                NativeFunction::from_copy_closure_with_captures(|_, args, caps: &Captures, ctx| {
+                    let s = &caps.0;
                     if !s.db_enabled {
                         return Err(JsNativeError::error()
                             .with_message("Capability 'db' is not granted for this plugin")
@@ -605,10 +619,11 @@ var __ferum_rpc = {};
                             .with_message(format!("{e}"))
                             .into()),
                     }
-                }),
-            )
-            .expect("register __ferum_db_query");
+                }, Captures(state.clone())),
+            )?;
         }
+
+        Ok(())
     }
 
     // ─── Hook execution helpers ───────────────────────────────────────────────────
@@ -779,9 +794,10 @@ var __ferum_rpc = {};
     ) {
         let mut ctx = Context::default();
 
-        // SAFETY: `state` is an `Arc<JsThreadState>` and the closures inside
-        // capture nothing else, satisfying `register_natives`' contract.
-        unsafe { register_natives(&mut ctx, state) };
+        if let Err(e) = register_natives(&mut ctx, state) {
+            tracing::error!(plugin = %slug, "Ferum native registration failed: {:?}", e);
+            return;
+        }
 
         // Bootstrap Ferum.* globals
         if let Err(e) = ctx.eval(Source::from_bytes(FERUM_API_BOOTSTRAP)) {

@@ -1,5 +1,7 @@
 ﻿use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
+
+use super::poison::LockUnpoisoned;
 use std::time::{Duration, Instant};
 
 /// Per-plugin circuit breaker.
@@ -29,7 +31,7 @@ impl CircuitBreaker {
 
     /// Returns true if the circuit is open (plugin should be skipped).
     pub fn is_open(&self) -> bool {
-        let opened_at = self.circuit_opened_at.lock().unwrap();
+        let opened_at = self.circuit_opened_at.lock_unpoisoned();
         if let Some(t) = *opened_at {
             // Auto-reset after reset_secs — next call becomes a probe
             if t.elapsed() < self.reset {
@@ -42,14 +44,14 @@ impl CircuitBreaker {
     /// Record a successful hook call.
     pub fn record_success(&self) {
         self.failure_count.store(0, Ordering::SeqCst);
-        *self.last_failure_at.lock().unwrap() = None;
-        *self.circuit_opened_at.lock().unwrap() = None;
+        *self.last_failure_at.lock_unpoisoned() = None;
+        *self.circuit_opened_at.lock_unpoisoned() = None;
     }
 
     /// Record a failed hook call. Returns true if the circuit just opened.
     pub fn record_failure(&self) -> bool {
         let now = Instant::now();
-        let mut last = self.last_failure_at.lock().unwrap();
+        let mut last = self.last_failure_at.lock_unpoisoned();
 
         // Reset counter if failures are outside the window
         if last.is_none_or(|t: Instant| t.elapsed() > self.window) {
@@ -62,7 +64,7 @@ impl CircuitBreaker {
         let count = self.failure_count.fetch_add(1, Ordering::SeqCst) + 1;
 
         if count >= self.threshold {
-            let mut opened = self.circuit_opened_at.lock().unwrap();
+            let mut opened = self.circuit_opened_at.lock_unpoisoned();
             if opened.is_none() {
                 *opened = Some(now);
                 tracing::warn!(

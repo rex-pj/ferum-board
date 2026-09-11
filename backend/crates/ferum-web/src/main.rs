@@ -103,14 +103,7 @@ async fn main() -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.bind_addr, config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-    println!(
-        "\n  {}  {}\n",
-        "▶  Server ready:".bold(),
-        format!("http://localhost:{}", config.port)
-            .bold()
-            .bright_cyan()
-            .underline()
-    );
+    print_ready_banner(config.port);
 
     axum::serve(
         listener,
@@ -122,27 +115,64 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The one line a developer reads off their terminal after `cargo run`.
+///
+/// Deliberately not `tracing`: the JSON formatter would strip the colour and
+/// bury it among the startup records. Written through a locked handle rather
+/// than `println!` so the one thing that can go wrong — a closed or full stdout,
+/// which `println!` would panic on — is visibly ignored instead. A banner is
+/// never worth failing a boot over.
+fn print_ready_banner(port: u16) {
+    use std::io::Write;
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(
+        out,
+        "\n  {}  {}\n",
+        "▶  Server ready:".bold(),
+        format!("http://localhost:{port}")
+            .bold()
+            .bright_cyan()
+            .underline()
+    );
+    let _ = out.flush();
+}
+
 /// Resolves when the process is asked to stop, so `axum::serve` can drain
 /// in-flight requests (NF-OP-03).
 ///
 /// **SIGTERM is the one that matters**: `docker stop`, Compose restarts and pod
 /// evictions all send it, and nothing in a container ever sends SIGINT. Watching
 /// Ctrl-C alone cut in-flight requests on every deploy.
+///
+/// **A handler that cannot be installed disables that branch; it does not stop
+/// the server.** This future is polled by `with_graceful_shutdown`, so it runs
+/// inside the serving task rather than before it — a panic here would take down
+/// an instance that is already answering requests. If both branches fail,
+/// nothing resolves, graceful drain never fires, and `docker stop` escalates to
+/// SIGKILL after its grace period. Degraded shutdown beats no server.
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to install CTRL+C handler");
-        "SIGINT"
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => "SIGINT",
+            Err(e) => {
+                tracing::error!(error = %e, "cannot listen for Ctrl-C; that branch is disabled");
+                std::future::pending().await
+            }
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install SIGTERM handler")
-            .recv()
-            .await;
-        "SIGTERM"
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+                "SIGTERM"
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "cannot install SIGTERM handler; that branch is disabled");
+                std::future::pending().await
+            }
+        }
     };
     // Windows has no SIGTERM. `pending()` never resolves, so the `select!` below
     // reduces to waiting on Ctrl-C alone — the previous behaviour, which is the

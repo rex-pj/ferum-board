@@ -8,7 +8,7 @@ use crate::app_state::AppState;
 use crate::middleware::{AuthUser, AuthUserExt};
 use crate::utils::{read_image_field, validate_upload_image, ImageKind};
 use crate::view_models::{DataResponse, HandlerResult};
-use ferum_application::constants::{MAX_FAVICON_BYTES, MAX_LOGO_BYTES};
+use ferum_application::constants::{as_kb, MAX_FAVICON_BYTES, MAX_LOGO_BYTES};
 use ferum_application::image_pipeline::ImageTarget;
 use ferum_application::permission::PermissionChecker;
 use ferum_application::shared::AppError;
@@ -388,7 +388,7 @@ pub async fn upload_favicon(
     if data.len() > MAX_FAVICON_BYTES {
         return Err(AppError::invalid_with(
             "favicon_too_large",
-            [("limit_kb", (MAX_FAVICON_BYTES / 1024).into())],
+            [("limit_kb", as_kb(MAX_FAVICON_BYTES).into())],
         )
         .into());
     }

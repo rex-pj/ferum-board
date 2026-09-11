@@ -7,7 +7,7 @@ use dashmap::DashMap;
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::constants::{DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS, MAX_TAGS_PER_THREAD, MAX_THUMBNAIL_BYTES};
+use crate::constants::{as_mb, DEFAULT_MAX_THREADS_PER_PAGE, DEFAULT_POST_EDIT_WINDOW_HOURS, MAX_TAGS_PER_THREAD, MAX_THUMBNAIL_BYTES};
 use crate::event_bus::EventPublisher;
 use crate::image_pipeline::{ImagePipeline, ImageTarget};
 use crate::permission::PermissionChecker;
@@ -1195,7 +1195,7 @@ impl ThreadUseCase {
             return Err(AppError::invalid("thumbnail_invalid_type"));
         }
         if data.len() > MAX_THUMBNAIL_BYTES {
-            return Err(AppError::invalid_with("thumbnail_too_large", [("limit_mb", (MAX_THUMBNAIL_BYTES / (1024 * 1024)).into())]));
+            return Err(AppError::invalid_with("thumbnail_too_large", [("limit_mb", as_mb(MAX_THUMBNAIL_BYTES).into())]));
         }
 
         let thread = self.find_live_thread(thread_id).await?;

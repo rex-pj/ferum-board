@@ -7,7 +7,7 @@
 
 use axum::extract::State;
 use axum::response::IntoResponse;
-use axum::{http::header, http::HeaderMap, http::StatusCode, Json};
+use axum::{http::HeaderMap, http::StatusCode, Json};
 use serde::Deserialize;
 
 use ferum_domain::{AppError, AuthUser, Locale};
@@ -54,7 +54,7 @@ pub async fn set_locale(
         None => crate::utils::clear_locale_cookie(&state),
     };
     let mut headers = HeaderMap::new();
-    headers.insert(header::SET_COOKIE, cookie.parse().unwrap());
+    crate::utils::set_cookie(&mut headers, &cookie);
 
     Ok((StatusCode::NO_CONTENT, headers))
 }

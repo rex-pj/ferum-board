@@ -487,7 +487,11 @@ fn compute_asset_version(static_dir: &std::path::Path, themes_dir: &std::path::P
 fn group_thousands(n: i64, sep: &str) -> String {
     let neg = n < 0;
     let digits = n.unsigned_abs().to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    // One separator per three digits — a capacity hint, so truncation is exactly
+    // the estimate wanted.
+    #[allow(clippy::integer_division)]
+    let cap = digits.len() + digits.len() / 3 + 1;
+    let mut out = String::with_capacity(cap);
     let bytes = digits.as_bytes();
     for (i, b) in bytes.iter().enumerate() {
         if i > 0 && (bytes.len() - i).is_multiple_of(3) {

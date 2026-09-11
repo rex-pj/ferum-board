@@ -82,9 +82,11 @@ pub fn extract_client_ip(headers: &axum::http::HeaderMap, trusted_proxy_count: u
         {
             let parts: Vec<&str> = xff.split(',').map(str::trim).collect();
             let n = trusted_proxy_count as usize;
-            if parts.len() >= n {
-                let idx = parts.len() - n;
-                return parts[idx].to_string();
+            // `checked_sub` + `get` rather than a length test and an index: this
+            // is the input that decides whose rate-limit bucket a request lands
+            // in, and it is header text a client controls.
+            if let Some(client) = parts.len().checked_sub(n).and_then(|idx| parts.get(idx)) {
+                return (*client).to_string();
             }
             // Fewer entries than expected proxy count — use the first (leftmost) entry
             if let Some(first) = parts.first() {

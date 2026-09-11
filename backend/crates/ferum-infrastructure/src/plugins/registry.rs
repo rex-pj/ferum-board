@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
 #[cfg(feature = "script_plugins")]
 use std::time::Duration;
 
@@ -14,6 +15,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use super::circuit_breaker::CircuitBreaker;
+use super::poison::LockUnpoisoned;
 use ferum_application::ports::{
     CacheService, HookContext, HookDecision, PluginHookRuntime, PluginLifecycle, PluginRpcRuntime,
     PluginUiRuntime, UiSlotEntry,
@@ -154,7 +156,7 @@ impl PluginRegistry {
             }
         }
 
-        *self.dispatch_table.lock().unwrap() = table;
+        *self.dispatch_table.lock_unpoisoned() = table;
         tracing::info!("Plugin registry loaded from DB");
         Ok(())
     }
@@ -242,7 +244,7 @@ impl PluginHookRuntime for PluginRegistry {
         // Snapshot entries without holding the lock across await points.
         // hook_id is stored in HookEntry to avoid a DB query per hook execution.
         let entries: Vec<(Uuid, Uuid, String, PluginTier, Arc<CircuitBreaker>)> = {
-            let table = self.dispatch_table.lock().unwrap();
+            let table = self.dispatch_table.lock_unpoisoned();
             table
                 .get(hook)
                 .map(|v| {
@@ -346,7 +348,7 @@ impl PluginHookRuntime for PluginRegistry {
         {
             // Collect Script plugins subscribed to this event_type
             let runtimes: Vec<(String, Arc<ScriptPluginRuntime>)> = {
-                let table = self.dispatch_table.lock().unwrap();
+                let table = self.dispatch_table.lock_unpoisoned();
                 table
                     .get(_event_type)
                     .map(|entries| {
@@ -488,7 +490,7 @@ impl PluginLifecycle for PluginRegistry {
 
         // Step 2: Update dispatch table (lock held briefly, no await inside)
         {
-            let mut table = self.dispatch_table.lock().unwrap();
+            let mut table = self.dispatch_table.lock_unpoisoned();
             for entries in table.values_mut() {
                 entries.retain(|e| e.plugin_id != plugin_id);
             }

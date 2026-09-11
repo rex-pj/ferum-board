@@ -28,11 +28,12 @@ pub mod theme_usecase;
 /// Stored as `refresh:<user_id>:<first-16-bytes-hex>` to avoid putting raw
 /// tokens in cache keys while keeping the mapping collision-resistant.
 pub(crate) fn refresh_token_key(user_id: uuid::Uuid, token: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(token.as_bytes());
-    let digest = h.finalize();
-    format!("{}{}", refresh_token_prefix(user_id), hex::encode(&digest[..16]))
+    // 32 hex characters = the first 16 digest bytes.
+    format!(
+        "{}{}",
+        refresh_token_prefix(user_id),
+        crate::digest::short_hex(token.as_bytes(), 32)
+    )
 }
 
 /// The key prefix covering *every* refresh token held for `user_id`.
