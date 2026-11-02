@@ -6,15 +6,16 @@
 //!
 //! One asymmetry: role → permission grants are written only for keys this run
 //! created. Re-asserting them each boot would silently undo an admin's
-//! revocation on the next restart.
+//! revocation on the next restart. The catalogue taxonomy goes further: it is
+//! written only into an empty table, so a deleted or re-slugged category stays gone.
 
 use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    TransactionTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait,
+    PaginatorTrait, QueryFilter, TransactionTrait,
 };
 use uuid::{uuid, Uuid};
 
@@ -564,19 +565,17 @@ impl PgSystemSeedService {
         Ok(())
     }
 
+    /// First install only. Filling in missing slugs instead would resurrect a
+    /// category the admin deleted, and duplicate one they re-slugged, on every boot.
     async fn seed_product_categories(&self) -> Result<(), AppError> {
-        let existing: HashSet<String> = product_categories::Entity::find()
-            .all(&self.db)
-            .await?
-            .into_iter()
-            .map(|c| c.slug)
-            .collect();
+        if product_categories::Entity::find().count(&self.db).await? > 0 {
+            return Ok(());
+        }
 
         let now = Utc::now().fixed_offset();
         let rows: Vec<product_categories::ActiveModel> = PRODUCT_CATEGORIES
             .iter()
             .enumerate()
-            .filter(|(_, (slug, ..))| !existing.contains(*slug))
             .map(|(i, (slug, name, icon, keywords))| product_categories::ActiveModel {
                 id: Set(Uuid::new_v4()),
                 slug: Set((*slug).to_string()),

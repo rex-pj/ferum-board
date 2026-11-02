@@ -175,6 +175,41 @@ async fn does_not_restore_a_revoked_grant() {
 }
 
 #[tokio::test]
+async fn does_not_restore_a_deleted_or_reslugged_product_category() {
+    let db = TestDb::new("sys_seed_keeps_taxonomy_edits").await;
+
+    // What an admin does at /admin/products → Categories.
+    db.conn
+        .execute_unprepared(
+            "DELETE FROM product_categories WHERE slug = 'trang-tri'; \
+             UPDATE product_categories SET slug = 'ghe-ngoi' WHERE slug = 'ghe'",
+        )
+        .await
+        .expect("edit taxonomy");
+
+    PgSystemSeedService::new(db.conn.clone())
+        .seed_system()
+        .await
+        .expect("reseed after taxonomy edits");
+
+    assert_eq!(
+        count(
+            &db.conn,
+            "SELECT count(*)::bigint AS n FROM product_categories WHERE slug IN ('trang-tri', 'ghe')"
+        )
+        .await,
+        0,
+        "a deleted or re-slugged category must not come back on restart"
+    );
+    assert_eq!(
+        count(&db.conn, "SELECT count(*)::bigint AS n FROM product_categories").await,
+        6
+    );
+
+    db.teardown().await;
+}
+
+#[tokio::test]
 async fn does_not_overwrite_an_admin_edited_role_or_active_theme() {
     let db = TestDb::new("sys_seed_keeps_role_edits").await;
 

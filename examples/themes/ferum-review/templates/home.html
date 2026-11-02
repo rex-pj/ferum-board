@@ -36,7 +36,8 @@
    moved because its headline borrowed `site.tagline`, which is also this page's
    meta description, and because a theme-local masthead was lost on theme switch.
    Nothing renders when the plugin is absent — deliberate. #}
-{% if not active_tag %}
+{# `total_products` too: on an empty catalogue every tile leads to "no products". #}
+{% if not active_tag and total_products %}
 
 {# ── Browse by type ───────────────────────────────────────────────────────────
    Only these three: `product_type` is the sole facet `/catalog?type=` accepts,
